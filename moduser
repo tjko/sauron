@@ -1,6 +1,6 @@
 #!/usr/bin/perl -I/usr/local/sauron
 #
-# moduser - utility to modify user rights
+# moduser - utility to modify user/group rights
 #
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000-2004.
 # $Id$
@@ -25,7 +25,7 @@ $SAURON_PWD_MODE = 0 unless (defined($SAURON_PWD_MODE));
 $user = (getpwuid($<))[0];
 $mdate = time;
 
-%addmodes=('server'=>1,'zone'=>2,'net'=>3,'host'=>4,'ipmask'=>5,
+%addmodes=('group'=>0,'server'=>1,'zone'=>2,'net'=>3,'host'=>4,'ipmask'=>5,
 	   'level'=>6,'elimit'=>7,'defdept'=>8,'tmplmask'=>9,
 	   'grpmask'=>10,'delmask'=>11,'rhf'=>12);
 
@@ -569,10 +569,16 @@ if (defined $opt_add) {
   }
 
   fatal("invalid parameter '$opt_add' for add option!")
-    unless ($opt_add =~ /^(server|zone|net|host|ipmask|level|elimit|defdept|tmplmask|grpmask|delmask|rhf|flag),([^,\s]+)(,(R|RW|RWX))?$/);
+    unless ($opt_add =~ /^(group|server|zone|net|host|ipmask|level|elimit|defdept|tmplmask|grpmask|delmask|rhf|flag),([^,\s]+)(,(R|RW|RWX))?$/);
   $type=$addmodes{$1};
   $tmp=$2;
   $mode=$4;
+  if ($type==0) {
+    undef @d;                                                                  
+    db_query("SELECT id,name FROM user_groups WHERE name='$tmp';",\@d);        
+    fatal("cannot find group '$tmp'") if (@d < 1);
+    $ref=$d[0][0];          
+  }
   if ($type==1) {
     undef @d;
     db_query("SELECT id FROM servers WHERE name='$tmp';",\@d);
