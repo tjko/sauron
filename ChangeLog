@@ -1,8 +1,10 @@
 $Id$
 
 0.7.2beta
+	- sauron: slave server now inherits also "forward" zones patch
+	  by Ken McKinlay
 	- sauron: fixed router entry generatio (dhcpd.conf) if more than
-	  one network (nt subnet) is defined for server
+	  one network (not subnet) is defined for server
 	- CGI interface: fixed "disappearing" DHCP fields when editing
 	  subnet entry when using DBD::Pg interface
 	- generatehosts: fix to :N: parameter handling by Ken McKinlay
