@@ -1,6 +1,12 @@
 $Id$
 
 0.5.1
+	- added external authentication support (sample authenticator
+	  script included in contrib for authentication against Kerberos)
+	- fixed search result CVS output	
+	- added configuration option (SAURON_RHF) for configuring
+	  which fields are mandatory in restricted host edit/add forms
+	- adduser: now displays user group when prompting for user creation
 	- expire-hosts: fixed erroneous (but harmless) warnings about
 	  hosts not having ethernet address
      

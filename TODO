@@ -4,7 +4,6 @@ general:
 	  number of host entries, and to import interactively hosts
 	  from text files in standard zonefile format...
 	- IPv6 support
-	- adduser: display group
 
 import:
 	- real parser for both imports
@@ -29,5 +28,11 @@ browser.cgi:
 	- optional user authentication support
 
 
+
+
+next database format (1.1):
+	- lastlog: host CHAR(40) --> TEXT
+	- hosts: change ether_key to server wide (instead of just zone)
+	- 
 
 
