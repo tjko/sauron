@@ -3,6 +3,7 @@
 # sauron - generates BIND/DHCP/printer configuration files from database
 #
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000.
+# $Id$
 #
 require 5;
 use Net::Netmask;
@@ -10,11 +11,12 @@ use Net::Netmask;
 ($PG_DIR,$PG_NAME) = ($0 =~ /^(.*\/)(.*)$/);
 $0 = $PG_NAME;
 
-do "$PG_DIR/config" || die("cannot load config");
+do "$PG_DIR/config" || fatal("cannot load config");
 do "$PG_DIR/util.pl";
 do "$PG_DIR/db.pl";
+do "$PG_DIR/back_end.pl";
 
-$bind_conf=1;
+$bind_conf=0;
 $dhcp_conf=0;
 $printer_conf=0;
 
@@ -76,15 +78,15 @@ if ($argc > 1) {
 $user = (getpwuid($<))[0];
 
 
-die("target directory is a file! ($targetdir)") if (-f $targetdir);
-die("target directory does not exists ($targetdir)") if (! -d $targetdir);
-die("no permissions to target directory!") 
+fatal("target directory is a file! ($targetdir)") if (-f $targetdir);
+fatal("target directory does not exists ($targetdir)") if (! -d $targetdir);
+fatal("no permissions to target directory!") 
 	unless (-r $targetdir && -x $targetdir && -w $targetdir);
 
 print "server name: $servername\n";
 print "target directory: $targetdir\n";
 
-chdir($targetdir) || die("Cannot change to directory '$targetdir'!");
+chdir($targetdir) || fatal("Cannot change to directory '$targetdir'!");
 
 db_connect();
 
@@ -96,41 +98,6 @@ $serverid = get_server_id($servername);
 fatal("Cannot find server '$servername' from database.") if ($serverid < 0);
 fatal("Cannot get server record!") if (get_server($serverid,\%server));
 
-goto foo;
-
-foreach $key (keys %server) {
-  print "key='$key' value=$server{$key}\n";
-  print join(",",@{$server{$key}}) . " foo\n" if ($key eq 'allow_transfer') ;
-}
-
-print "update...\n";
-$server2{'comment'}="foo bar";
-$server2{'id'}=$server{'id'};
-$r=update_server(\%server2);
-print "r=$r\n";
-
-
-
-print "zone id=" . get_zone_id("jyu.fi",$serverid) . "\n";
-
-$listref = get_zone_list($serverid);
-for($i=0;$i < @{$listref}; $i++) {
-  $r=$$listref[$i];
-  print "$i: $$r[0] $$r[1] $$listref[$i][0]\n";
-}
-
-db_debug(1);
-fatal("Cannot get zone record!") if (get_zone(get_zone_id("jyu.fi",$serverid),\%zone));
-foreach $key (keys %zone) {
-  $r=$zone{$key};
-  print "zone key=$key value=$r\n";
-  print "ARRAY: " . join(",",@{$r}) . "\n" 
-    if (ref($r) eq 'ARRAY');
-#  print "ref: " . ref($zone{$key}) . ":\n";
-#    if (ref($key) eq ARRAY) ;
-}
-
-foo:
 
 $zonelist = get_zone_list($serverid);
 #$zonelist2 = get_zone_list(0);
@@ -140,6 +107,8 @@ $zones = @{$zonelist};
 print "Server '$servername' has $zones zones.\n";
 
 make_bind() if ($bind_conf);
+make_dhcp() if ($dhcp_conf);
+make_printcap() if ($printer_conf);
 
 exit;
 #######
@@ -202,6 +171,7 @@ sub make_bind() {
       if ($type eq 'master' || $type eq 'slave');
     print BINDFILE "};\n\n\n";
 
+
     next unless ($type eq 'master');
    
     ######################
@@ -220,6 +190,8 @@ sub make_bind() {
     $ttl=$zone{'ttl'};
     $ttl='' unless ($ttl > 0);
     $serial=new_serial($zone{'serial'});
+    fatal("Cannot update zone $zonename serial!")
+      if (update_zone({id=>$zoneid,serial=>$serial}));
     $hostname=$server{'hostname'};
     $hostmaster=$zone{'hostmaster'};
     $hostmaster=$server{'hostmaster'} if ($hostmaster eq '');
@@ -284,7 +256,8 @@ sub make_bind() {
     
     if ($rev eq 't') {
       # reverse zone
-      print "reversenet " . $zone{'reversenet'} . "\n";
+
+      #print "reversenet " . $zone{'reversenet'} . "\n";
       $rorigin = cidr2arpa($zone{'reversenet'}) . ".";
       foreach $rzoneid (@{$zone{'reverses'}}) {
 	undef @q;
@@ -299,7 +272,7 @@ sub make_bind() {
 	undef @q;
 	db_query("SELECT ip,domain FROM hosts,zones,rr_a " .
 		 "WHERE hosts.zone=zones.id AND rr_a.host=hosts.id " .
-		 "AND zones.id=$rzoneid AND rr_a.reverse='t' " .
+		 "AND zones.id=$rzoneid AND rr_a.reverse=true " .
 		 "AND ip << '$zone{'reversenet'}' " .
 		 "ORDER BY ip;",\@q);
 	if (@q > 0) {
@@ -390,11 +363,12 @@ sub make_bind() {
 
       # normal host entries
       undef @q;
+      undef %dnames;
       db_query("SELECT hosts.domain,ip,hinfo_hw,hinfo_sw,txt " .
 	       "FROM hosts,rr_a " .
 	       "WHERE hosts.zone=zones.id AND rr_a.host=hosts.id " .
 	       "AND zones.id=$zoneid AND hosts.type=1 " .
-	       "AND hosts.domain <> '\@' " .
+	       "AND rr_a.forward=true AND hosts.domain <> '\@' " .
 	       "ORDER BY rr_a.ip;",\@q);
       if (@q > 0) {
 	print ZONEFILE ";\n;\n; A records\n;\n";
@@ -407,6 +381,11 @@ sub make_bind() {
 	  $txt=db_decode_list_str($q[$i][4]);
 	  $wks=$wkshash{$domain};
 	  $mx=$mxhash{$domain};
+	  if ($dnames{$domain}) {
+	    #error("duplicate A record $ip for $domain ($dnames{$domain}).");
+	    #next;
+	  }
+	  $dnames{$domain}=$ip;
 	  #	print ZONEFILE "$domain\t\t$class\tA\t" . $ip . "\n";
 	  printf ZONEFILE "%-22s\t\t%s  A\t%s\n",$domain,$class,$ip;
 	  print ZONEFILE "\t\t$class  HINFO\t$hinfo_hw $hinfo_sw\n"
@@ -431,11 +410,30 @@ sub make_bind() {
       }
 
 
+      # aliases (A records)
+      undef @q;
+      db_query("SELECT a.domain,b.domain,rr_a.ip " .
+	       "FROM hosts a, hosts b,zones,rr_a " .
+	       "WHERE a.zone=zones.id AND rr_a.host=b.id " .
+	       "AND zones.id=$zoneid AND rr_a.forward=true " .
+	       "AND a.type=4 AND a.cname=false AND a.alias=b.id " .
+	       "ORDER BY a.domain;",\@q);
+      if (@q > 0) {
+	print ZONEFILE ";\n;\n; In-zone aliases (A records)\n;\n";
+	for $i (0 .. $#q) {
+	  $domain=$q[$i][0];
+	  $alias=$q[$i][2];
+	  $alias =~ s/\/\d{1,2}\s*$//g;
+	  printf ZONEFILE "%-22s\t\t%s  A\t%s\n",$domain,$class,$alias;
+	  printf ZONEFILE "\t\t\tTXT\t\"alias for $q[$i][1]\"\n";
+	}
+      }
+
       # aliases (CNAME records)
       undef @q;
       db_query("SELECT a.domain,b.domain FROM hosts a, hosts b,zones " .
 	       "WHERE a.zone=zones.id AND zones.id=$zoneid " .
-	       "AND a.type=4 AND a.cname=b.id " .
+	       "AND a.type=4 AND a.cname=true AND a.alias=b.id " .
 	       "ORDER BY a.domain;",\@q);
       if (@q > 0) {
 	print ZONEFILE ";\n;\n; In-zone aliases (CNAME records)\n;\n";
@@ -450,7 +448,7 @@ sub make_bind() {
       undef @q;
       db_query("SELECT domain,cname_txt FROM hosts,zones " .
 	       "WHERE hosts.zone=zones.id AND zones.id=$zoneid " .
-	       "AND hosts.type=4 AND hosts.cname=-1 " .
+	       "AND hosts.type=4 AND hosts.cname=true AND hosts.alias=-1 " .
 	       "ORDER BY hosts.domain;",\@q);
       if (@q > 0) {
 	print ZONEFILE ";\n;\n; Outside-zone aliases (CNAME records)\n;\n";
@@ -467,195 +465,233 @@ sub make_bind() {
     close(ZONEFILE);
   }
 
+  print BINDFILE "\n\n// eof\n";
   close(BINDFILE);
-
 }
 
 
-############################################################################
+######################################################################
+# DHCP
 
-sub new_serial($) {
-  my ($serial) = @_;
-  my ($sec,$min,$hour,$day,$mon,$year,$s);
+sub make_dhcp() {
+  print "DHCP configuration\n";
+  $time_now = gmtime;
 
-  if (! $serial) {
-    warn("no serial number passed to new_serial() !");
-    return "0";
-  }
+  # dhcpd.conf
+  print "Generating dhcpd.conf...\n";
 
-  ($sec,$min,$hour,$day,$mon,$year) = localtime(time);
   
-  $s=sprintf("%04d%02d%02d%02d",1900+$year,1+$mon,$day,$hour);
-  $s=$serial + 1 if ($s < $serial);
+  open(DHCPFILE,">dhcpd.conf") || fatal("Cannot create dhcpd.conf!");
+  print DHCPFILE "# dhcpd.conf -- automagically generated using $0 $VER\n";
+  print DHCPFILE "#               created by $user at $time_now\n#\n";
 
-  die("new_serial($serial) failed! return value='$s'")
-    if ($s < $serial);
+  # global entries
+  $dhcp=$server{'dhcp'};
+  for $i (0 .. $#{$dhcp}) {
+    print DHCPFILE "$$dhcp[$i];\n";
+  }
+  print DHCPFILE "\n\n";
 
-  return $s;
-}
-
-sub get_record($$$$) {
-  my ($table,$fields,$key,$rec,$keyname) = @_;
-  my (@list,$res,$i,$val);
-
-  $keyname='id' unless ($keyname);
-  undef %{$rec};
-  @list = split(",",$fields);
-  $fields =~ s/\@//g;
-  $res=db_exec("SELECT $fields FROM $table WHERE $keyname='$key';");
-  return -1 if ($res < 1);
-
-  $$rec{$keyname}=$key;
-  for($i=0; $i < @list; $i++) {
-    $val=db_getvalue(0,$i);
-    if ($list[$i] =~ /^\@/ ) {
-      $$rec{substr($list[$i],1)}=db_decode_list_str($val);
+  # subnet map
+  print DHCPFILE "shared-network \"$servername\" {\n";
+  
+  undef @subnets;
+  undef @nets;
+  db_query("SELECT net FROM nets WHERE server=$serverid AND no_dhcp=false " .
+	   "AND subnet=false ORDER BY net;",\@nets);
+  if (@nets < 1) {
+    fatal("No nets, that use DHCP, defined for this server!");
+  }
+  for $i (0 .. $#nets) {
+    $net=$nets[$i][0];
+    print DHCPFILE "# net: $net\n\n";
+    undef @q;
+    db_query("SELECT net,dhcp,name FROM nets " .
+	     "WHERE server=$serverid AND no_dhcp=false AND subnet=true " .
+	     "AND net << '$net' ORDER BY net;",\@q);
+    if (@q < 1 ) {
+      error("No subnets that use DHCP found");
+      push @q, [$net,'',''];
     } else {
-      $$rec{$list[$i]}=$val;
+      undef @qq;
+      db_query("SELECT ip,router FROM hosts,zones,rr_a " .
+	       "WHERE hosts.zone=zones.id AND rr_a.host=hosts.id " .
+	       "AND zones.server=$serverid AND router>0 " .
+	       "AND ip << '$net' " .
+	       "ORDER BY ip,router;",\@qq);
+      warn("No router interfaces found for net $net!") if (@qq < 1);
+
+      for $j (0 .. $#q) {
+	$ssnet = new Net::Netmask($q[$j][0]);
+	$snet = $ssnet->base();
+        $nmask = $ssnet->mask();
+	$dhcp = db_decode_list_str($q[$j][1]);
+	print DHCPFILE "\t# $q[$j][2]\n";
+	print DHCPFILE "\tsubnet $snet netmask $nmask {\n";
+
+	$pri=999999; # should be enough 'cos priority range for a router 0-999
+	$router='';
+	for $k (0 .. $#qq) {
+	  if ($ssnet->match($qq[$k][0]) && $pri > $qq[$k][1]) {
+	    $pri=$qq[$k][1];
+	    $router=$qq[$k][0];
+	  }
+	}
+	unless ($router eq '') {
+	  $router =~ s/\/\d{1,2}\s*$//g;
+	  print DHCPFILE "\t\toption routers $router;\n";
+	} else {
+	  print "no router interface found for subnet: $snet $nmask\n";
+	}
+
+	for $k (0 .. $#{$dhcp}) {
+	  print DHCPFILE "\t\t$$dhcp[$k];\n";
+	}
+	print DHCPFILE "\t}\n";
+      }
+    }
+
+  }
+  print DHCPFILE "}\n\n";
+
+  # groups
+  print DHCPFILE "# groups\n\n";
+
+  undef @groups;
+  db_query("SELECT id,name,dhcp FROM groups WHERE server=$serverid;",\@groups);
+  if (@groups < 1) {
+    error("no groups found for this server");
+  } 
+  else {
+    undef @ghosts;
+    db_query("SELECT h.grp,h.ether,a.ip,h.domain,z.name,h.dhcp " .
+	     "FROM hosts h, zones z, rr_a a " .
+	     "WHERE h.zone=z.id AND a.host=h.id AND h.type=1 " .
+	     "AND h.ether NOTNULL AND z.server=$serverid AND a.forward=true " .
+	     "AND h.grp>-1 " .
+	     "ORDER BY a.ip;",\@ghosts);
+    if (@ghosts > 0) {
+      for $i (0.. $#groups) {
+	$gid=$groups[$i][0];
+	$group=$groups[$i][1];
+	$dhcp=db_decode_list_str($groups[$i][2]);
+	print DHCPFILE "group {  # $group\n";
+	for $j (0 .. $#{$dhcp}) {
+	  print DHCPFILE "\t$$dhcp[$j];\n";
+	}
+	print DHCPFILE "\t\n";
+
+	for $j (0 .. $#nets) {
+	  $net=new Net::Netmask($nets[$j][0]);
+	  print DHCPFILE "\t# net: " .$net->desc() . "\n";
+	  for $k (0 .. $#ghosts) {
+	    if ($ghosts[$k][0]==$gid && $net->match($ghosts[$k][2]) ) {
+	      $host=$ghosts[$k][3];
+	      $host.=".$ghosts[$k][4]" unless ($host =~ /\.$/);
+	      $ip=$ghosts[$k][2];
+	      $ip =~ s/\/\d{1,2}\s*$//g;
+	      $ether=dhcpether($ghosts[$k][1]);
+	      $dhcp=db_decode_list_str($ghosts[$k][5]);
+	      if ($ethers{$ether}>0) {
+		error("dublicate interface $ip for $ether ($host) ignored");
+		next;
+	      }
+	      $ethers{$ether}++;
+	      print DHCPFILE "\thost $host {\n";
+	      print DHCPFILE "\t\tfixed-address $ip;\n";
+	      print DHCPFILE "\t\thardware ethernet $ether;\n";
+	      for $l (0 .. $#{$dhcp}) {
+		print DHCPFILE "\t\t$$dhcp[$l];\n";
+	      }
+	      print DHCPFILE "\t}\n";
+	    }
+	  }
+	}
+	print DHCPFILE "}\n\n";
+      }
+    } else {
+      print "no hosts found for any groups!";
+    }
+    }
+
+  # not grouped hosts...
+  print DHCPFILE "\n# hosts not in any group\n\n";
+  undef @ghosts;
+  db_query("SELECT h.grp,h.ether,a.ip,h.domain,z.name,h.dhcp " .
+	   "FROM hosts h, zones z, rr_a a " .
+	   "WHERE h.zone=z.id AND a.host=h.id AND h.type=1 " .
+	   "AND h.ether NOTNULL AND z.server=$serverid AND a.forward=true " .
+	   "AND h.grp<0 " .
+	   "ORDER BY a.ip;",\@ghosts);
+  if (@ghosts > 0 ) {
+    for $j (0 .. $#nets) {
+      $net=new Net::Netmask($nets[$j][0]);
+      print DHCPFILE "# net: " .$net->desc() . "\n";
+      for $k (0 .. $#ghosts) {
+	if ($net->match($ghosts[$k][2]) ) {
+	  $host=$ghosts[$k][3];
+	  $host.=".$ghosts[$k][4]" unless ($host =~ /\.$/);
+	  $ip=$ghosts[$k][2];
+	  $ip =~ s/\/\d{1,2}\s*$//g;
+	  $ether=dhcpether($ghosts[$k][1]);
+	  $dhcp=db_decode_list_str($ghosts[$k][5]);
+	  if ($ethers{$ether}>0) {
+	    error("dublicate interface $ip for $ether ($host) ignored");
+	    next;
+	  }
+	  $ethers{$ether}++;
+	  print DHCPFILE "host $host {\n";
+	  print DHCPFILE "\tfixed-address $ip;\n";
+	  print DHCPFILE "\thardware ethernet $ether;\n";
+	  for $l (0 .. $#{$dhcp}) {
+	    print DHCPFILE "\t$$dhcp[$l];\n";
+	  }
+	  print DHCPFILE "}\n";
+	}
+      }
     }
   }
 
-  return 0;
+  undef @ghosts;
+  undef %ethers;
+  print DHCPFILE "\n# eof\n";
+  close(DHCPFILE);
 }
 
 
-sub update_record($$) {
-  my ($table,$rec) = @_;
-  my ($key,$sqlstr,$id,$flag,$r);
+######################################################################
+# printcap
+
+sub make_printcap() {
+  print "PRINTER configuration\n";
+  $time_now = gmtime;
+
+  # printcap
+  print "Generating printcap...\n";
+
   
-  return -128 unless ($table);
-  return -1 unless (ref($rec) eq 'HASH');
-  return -2 unless ($$rec{'id'} > 0);
+  open(PCAPFILE,">printcap") || fatal("Cannot create printcap!");
+  print PCAPFILE "# printcap -- automagically generated using $0 $VER\n";
+  print PCAPFILE "#             created by $user at $time_now\n#\n";
 
-  $id=$$rec{'id'};
-  delete $$rec{'id'};
 
-  $sqlstr="UPDATE $table SET ";
-
-  foreach $key (keys %{$rec}) {
-    $sqlstr.="," if ($flag);
-    if (ref($$rec{$key}) eq 'ARRAY') {
-      $sqlstr.="$key=" . db_encode_list_str($$rec{$key});
-    } else {
-      $sqlstr.="$key=" . db_encode_str($$rec{$key});
-    }
-   
-    $flag=1 if (! $flag);
-  }
-
-  $sqlstr.=" WHERE id=$id;";
-  #print "sql=$sqlstr\n";
-
-  return db_exec($sqlstr);
+  print PCAPFILE "# eof\n";
+  close(PCAPFILE);
 }
 
 
 ############################################################################
-# server table function
 
-sub get_server_id($) {
-  my ($server) = @_;
+sub dhcpether($) {
+  my ($e) = @_;
 
-  return -1 unless ($server);
-  return -1 
-    unless (db_exec("SELECT id FROM servers WHERE name='$server';")>0);
-  return db_getvalue(0,0);
-}
-
-sub get_server_list() {
-  my ($res,$list,$i,$id,$name,$rec);
-
-  $list=[];
-  $res=db_exec("SELECT name,id FROM servers ORDER BY name;");
-
-  for($i=0; $i < $res; $i++) {
-    $name=db_getvalue($i,0);
-    $id=db_getvalue($i,1);
-    $rec=[$name,$id];
-    push @{$list}, $rec;
-  }
-  return $list;
-}
-
-	       
-sub get_server($$) {
-  my ($id,$rec) = @_;
-  return get_record("servers",
-		    "name,directory,named_ca,\@allow_transfer," .
-		    "pzone_path,szone_path,hostname,hostmaster,comment",
-		    $id,
-		    $rec);
-}
-
-
-
-sub update_server($) {
-  my($rec) = @_;
-  return update_record('servers',$rec);
-}
-
-############################################################################
-# zone table functions
-
-sub get_zone_id($$) {
-  my ($zone,$serverid) = @_;
-
-  return -1 unless ($zone && $serverid);
-  return -1 
-    unless (db_exec("SELECT id FROM zones " .
-		    "WHERE server=$serverid AND name='$zone';")>0);
-  return db_getvalue(0,0);
-}
-
-sub get_zone_list($$$) {
-  my ($serverid,$type,$reverse) = @_;
-  my ($res,$list,$i,$id,$name,$rec);
-
-  if ($type) {
-    $type=" AND type='$type' ";
-  } else {
-    $type='';
+  $e="\L$e";
+  if ($e =~ /(..)(..)(..)(..)(..)(..)/) {
+    return "$1:$2:$3:$4:$5:$6";
   }
 
-  if ($reverse) {
-    $reverse=" AND reverse='$reverse' ";
-  } else {
-    $reverse='';
-  }
-
-  $list=[];
-  return $list unless ($serverid >= 0);
-
-  $res=db_exec("SELECT name,id FROM zones " .
-	       "WHERE server=$serverid $type $reverse " .
-	       "ORDER BY type,reverse,reversenet,name;");
-
-  for($i=0; $i < $res; $i++) {
-    $name=db_getvalue($i,0);
-    $id=db_getvalue($i,1);
-    $rec=[$name,$id];
-    push @{$list}, $rec;
-  }
-  return $list;
+  return "00:00:00:00:00:00";
 }
-
-sub get_zone($$) {
-  my ($id,$rec) = @_;
-  
-  return get_record("zones",
-	       "server,active,type,reverse,class,name," .
-	       "hostmaster,serial,refresh,retry,expire,minimum,ttl," .
-	       "\@ns,\@mx,\@txt,\@dhcp,comment,\@reverses,reversenet," .
-	       "\@masters",
-	       $id,$rec);
-}
-
-sub update_zone($) {
-  my($rec) = @_;
-  return update_record('zones',$rec);
-}
-
-############################################################################
 
 sub error($) {
   my ($msg) = @_;
@@ -668,3 +704,7 @@ sub fatal($) {
   error($msg);
   exit 1;
 }
+
+
+
+

@@ -1,4 +1,5 @@
 /* Raw parse in.named format lines (possibly continued) and print them out */
+/* $Id$ */
 
 #include	<stdio.h>
 #include	<ctype.h>

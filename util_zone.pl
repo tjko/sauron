@@ -1,8 +1,8 @@
 # util_zone.pl - BIND zone file reading routines
 #
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000.
+# $Id$
 #
-
 
 # parse zone file, build hash of all domain names in zone
 #
@@ -20,10 +20,12 @@ sub process_zonefile($$$$) {
   $handle++;
   $zone_ttl=-1;
   $ext_flag=0 if (! $ext_flag);
-  #print "handle=$handle file='$filename' origi='$origin' ext_flag=$ext_flag\n";
-
-
   $origin.="." unless ($origin =~ /\.$/);
+
+  #print "handle=$handle file='$filename' origin='$origin' ext_flag=$ext_flag\n";
+
+  die("Cannot excecute $PROG_DIR/parse-hosts-rows!")
+    unless (-x "$PROG_DIR/parse-hosts-rows");
 
   open($handle,"$PROG_DIR/parse-hosts-rows $filename |") 
     || die("Cannot open zonefile: $filename");
@@ -118,7 +120,8 @@ sub process_zonefile($$$$) {
 	      ID => -1
 	    };
 
-      $zonedata{$domain}=$rec
+      $zonedata{$domain}=$rec;
+      #print "Adding domain: $domain\n";
     }
 
     $rec=$zonedata{$domain};

@@ -59,7 +59,7 @@ CREATE TABLE zones ( // zone table; contains zones
        ns	   TEXT[],
        mx	   TEXT[],
        txt	   TEXT[],
-       dhcp	   TEXT[],
+       dhcp	   TEXT[], // entries to include for each host in zone
        comment	   TEXT,
 
        reverses	   INT4[],
@@ -78,10 +78,11 @@ CREATE TABLE nets (
        server	   INT4 NOT NULL,
 
        name	   TEXT,
-       net	   CIDR UNIQUE NOT NULL,
-       virtual	   BOOL,
+       net	   CIDR NOT NULL,
+       subnet      BOOL DEFAULT true,
        rp_mbox	   TEXT DEFAULT '.',
        rp_txt	   TEXT DEFAULT '.',
+       no_dhcp     BOOL DEFAULT false, 
        dhcp	   TEXT[],
 
        comment	   TEXT,
@@ -122,7 +123,8 @@ CREATE TABLE hosts (
        
        // a	   CIDR,
        grp	   INT4 DEFAULT -1,  // ptr to group
-       cname	   INT4 DEFAULT -1,  // ptr to another rr record
+       alias	   INT4 DEFAULT -1,  // ptr to another rr record
+       cname       BOOL, // if true CNAME alias, otherwise A record alias
        cname_txt   TEXT,
        hinfo_hw	   TEXT,
        hinfo_sw	   TEXT,
@@ -134,7 +136,10 @@ CREATE TABLE hosts (
        txt	   TEXT[],
        rp_mbox	   TEXT DEFAULT '.',
        rp_txt	   TEXT DEFAULT '.',
-
+       router      INT4 DEFAULT 0, // router if > 0, also router priority
+	                           // (1 being highest priority)
+       prn         BOOL DEFAULT false,
+		
        ether	   CHAR(12),
        info	   TEXT,
        dhcp	   TEXT[],
@@ -152,7 +157,8 @@ CREATE TABLE rr_a (
       host	   INT4 NOT NULL, // ptr to hosts table id
 
       ip	   CIDR,
-      reverse	   BOOL, // generate reverse (PTR) records for this IP
+      reverse	   BOOL DEFAULT true, // generate reverse (PTR) record
+      forward      BOOL DEFAULT true, // generate (A) record 
       comment	   TEXT
 );
 
@@ -161,7 +167,7 @@ CREATE TABLE rr_a (
 // in this table. Entries are zone specific (should be server specific?)
 CREATE TABLE rr_wks (
       id	   SERIAL PRIMARY KEY,
-      zone	   INT4 NOT NULL,
+      server	   INT4 NOT NULL,
       
       wks	   TEXT[],
       comment	   TEXT
@@ -186,6 +192,8 @@ CREATE TABLE printer_classes (
        name	    TEXT UNIQUE NOT NULL CHECK(name <> ''),
 
        printer	    TEXT[],
+       dentries     TEXT[],  
+
        comment	    TEXT
 ) INHERITS(pokemon);
 
@@ -193,12 +201,3 @@ CREATE TABLE printer_classes (
 
 
 // eof
-
-
-
-
-
-
-
-
-

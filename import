@@ -3,6 +3,7 @@
 # import - imports BIND configuration/databases
 #
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000.
+# $Id$
 #
 require 5;
 use Net::Netmask;
@@ -256,9 +257,9 @@ for ($i=0; $i <= $#zones; $i+=1) {
   #handle master zones
   undef %zonedata;
   process_zonefile("fh0000",$files{$zones[$i]},$zone,\%zonedata);
-
+  print " found " . keys(%zonedata) . " domainames in zone\n";
   $rec = $zonedata{$origin};
-  die ("No SOA record found in zone $zone!") if (! $rec);
+  die ("No SOA record found in zone $zone! ($origin)") if (! $rec);
   
   $ttl=$rec->{TTL};
   $class=$rec->{CLASS};
@@ -358,8 +359,12 @@ for ($i=0; $i <= $#zones; $i+=1) {
 	  for($j=0;$j<$res;$j++) {
 	    $rid = db_getvalue($j,0);
 	    $rhost = db_getvalue($j,1);
-	    if ($rhost eq '@') { $rhost=''; } else { $rhost.='.'; }
-	    $rhost .= db_getvalue($j,2) . "." unless ($rhost =~ /\.$/);
+	    if ($rhost eq '@') { 
+	      $rhost= db_getvalue($j,2) . '.'; 
+	    } 
+	    else { 
+	      $rhost .= '.' . db_getvalue($j,2) . "." unless ($rhost =~ /\.$/);
+	    }
 
 	    $rhash{$rhost}=$rid;
 	  }
@@ -373,6 +378,7 @@ for ($i=0; $i <= $#zones; $i+=1) {
 	    $sqlstr = "UPDATE rr_a SET reverse=$rflag WHERE id=$rid;";
 	    $res=db_exec($sqlstr);
 	    die("cannot update rr_a record id=$rid host=$rhost") if ($res < 0);
+	    warn("fail: $sqlstr") if (db_status() ne 'UPDATE 1');
 	  }
 	  die("cannot commit rr_a record updates!") if (db_commit() < 0);
 	}
@@ -436,32 +442,42 @@ for ($i=0; $i <= $#zones; $i+=1) {
   foreach $wks (keys %wkshash) {
     $c=$wkshash{$wks};
     #print "wks: '$wks' $c\n";
-    $sqlstr="INSERT INTO rr_wks (zone,wks) VALUES($zoneid,'{$wks}');";
+    $wks_i_count++;
+    $sqlstr="INSERT INTO rr_wks (server,wks,comment) " .
+            "VALUES($serverid,'{$wks}'," .
+            "'$servername:$wks_i_count');";
     $res=db_exec($sqlstr);
     die("cannot insert record in rr_wks") if ($res < 0);
-    $sqlstr="SELECT id FROM rr_wks WHERE zone=$zoneid AND wks='{$wks}';";
+    $oid=db_lastoid();
+    $sqlstr="SELECT id FROM rr_wks WHERE OID=$oid";
+        #"AND server=$serverid AND wks='{$wks}';";
     $res=db_exec($sqlstr);
     die("cannot get record id from rr_wks!") if ($res < 0);
     $c=db_getvalue(0,0);
     $wkshash{$wks}=$c;
     #print "id=$c\n";
   }
+  die("Cannot commit rr_wks inserts!") if (db_commit() < 0);
 
+  db_begin();
   foreach $mx (keys %mxhash) {
     $c=$mxhash{$mx};
     #print "mx: '$mx' $c\n";
-    $sqlstr="INSERT INTO rr_mx (zone,mx) VALUES($zoneid,'{$mx}');";
+    $mx_i_count++;
+    $sqlstr="INSERT INTO rr_mx (zone,mx,comment) VALUES($zoneid,'{$mx}'," .
+            "'$zone:$mx_i_count');";
     $res=db_exec($sqlstr);
     die("cannot insert record in rr_mx") if ($res < 0);
-    $sqlstr="SELECT id FROM rr_mx WHERE zone=$zoneid AND mx='{$mx}';";
+    $oid=db_lastoid();
+    $sqlstr="SELECT id FROM rr_mx WHERE OID=$oid;";
+        #"AND zone=$zoneid AND mx='{$mx}';";
     $res=db_exec($sqlstr);
     die("cannot get record id from rr_mx!") if ($res < 0);
     $c=db_getvalue(0,0);
     $mxhash{$mx}=$c;
     #print "id=$c\n";
   }
-  
-  die("Cannot commit rr_wks/rr_mx inserts!") if (db_commit() < 0);
+  die("Cannot commit rr_mx inserts!") if (db_commit() < 0);
 
   
   # insert records in hosts table....
@@ -575,18 +591,18 @@ for ($i=0; $i <= $#zones; $i+=1) {
     if (! $rec2) {
       #warn("cannot find aliased host $host --> $rec->{CNAME}\n");
       $cname2="'$rec->{CNAME}'";
-      $cname=-1;
+      $alias=-1;
     } else {
       $cname2="NULL";
-      $cname=$rec2->{ID};
+      $alias=$rec2->{ID};
     }
     $host2=remove_origin($host,$origin);
     
     $sqlstr = "INSERT INTO hosts " .
-      "(cuser,muser,zone,type,domain,class,cname,cname_txt) ".
+      "(cuser,muser,zone,type,domain,class,alias,cname_txt,cname) ".
 	"VALUES(" .
 	"'$user','$user',$zoneid,4,'$host2','$class'," .
-	"$cname,$cname2" .
+	"$alias,$cname2,true" .
 	");";
 
     delete $zonedata{$host};
@@ -673,14 +689,13 @@ for ($i=0; $i <= $#zones; $i+=1) {
 #  }
 #}
 
+
 $res = db_exec("UPDATE servers SET hostmaster='$hostmaster'," .
 	       "hostname='$primaryservername' WHERE id=$serverid;");
 die("Cannot update server record!") if ($res < 0);
 
 db_vacuum();
 exit;
-
-
 
 
 ##########################################################################

@@ -87,10 +87,10 @@ init_tables: clean_tables
 	$(PSQL) -f init/tables.sql $(DBASE)
 	@echo "Database initialized..."
 
-dist:	clean_all
+dist:	clean
 	(cd .. ; tar cvzf $(DISTNAME).tar.gz $(DIRNAME))
 
-backup:	clean_all
+backup:	clean
 	(cd .. ; tar cvzf $(BACKUPNAME).tar.gz $(DIRNAME))
 
 

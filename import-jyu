@@ -3,7 +3,7 @@
 # import-jyu - imports nonstandard records from .hosts files
 #
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000.
-#
+# $Id$
 #              
 # fileformat (similar to BIND Master File format):
 # {<domain>|@|<blank>} [<ignored (ttl)>] [<ignored (class)] <type> <rdata>
@@ -97,11 +97,16 @@ if ($rec) {
   print "Updating zone record...\n";
   $dhcplist = db_build_list_str($rec->{DHCP});
 
-  $sqlstr = "UPDATE zones " .
-            "SET dhcp='{$dhcplist}' " .
-	    "WHERE id=$zoneid;";
+#  $sqlstr = "UPDATE zones " .
+#            "SET dhcp='{$dhcplist}' " .
+#	    "WHERE id=$zoneid;";
+#  $res = db_exec($sqlstr);
+#  die("Cannot update zone record '$zonename'!") if ($res < 0);
+
+  $sqlstr = "UPDATE servers SET dhcp='{$dhcplist}' " .
+            "WHERE id=$serverid;";
   $res = db_exec($sqlstr);
-  die("Cannot update zone record '$zonename'!") if ($res < 0);
+  die("Cannot update server record!") if ($res < 0);
 
   delete $zonedata{$origin};
 }
@@ -109,22 +114,30 @@ if ($rec) {
 
 
 # find virtual routers...
-
+db_begin();
 foreach $host (keys %zonedata) {
   $rec=$zonedata{$host};
   if ($rec->{ROUTER} ne '') {
     @router = split (" ",$rec->{ROUTER});
-    if (!$rhash{$router[0]}) {
+
+    if (! $rhash{$router[0]}) {
+      $sqlstr = "UPDATE hosts SET router='1' WHERE zone=$zoneid " .
+	"AND domain='" . remove_origin($host,$origin) . "';";
+      $res = db_exec($sqlstr);
+      die("Cannot update host record for router interface $host") if ($res<0);
+      print "FAILED: $sqlstr\n" if (db_status() ne 'UPDATE 1');
+
       $rhash{$router[0]}={ MASK => $router[1], NAME => $host};
       $rcount++;
     } else {
       $rec2=$rhash{$router[0]};
-      print "Duplicate router $rec2->{NAME} vs. $host $rec->{ROUTER} " .
+      print "Duplicate router $rec2->{NAME} $router[0] vs. $host $rec->{ROUTER} " .
 	    "(ignoring latter)\n";
+      #die("fix it...");
     }
   }
 }
-
+db_commit();
 $rc=keys %rhash;
 print "found $rcount virtual-routers/subnets...$rc\n";
 
@@ -140,9 +153,10 @@ foreach $net (keys %rhash) {
   #print "$n $rec->{NAME} $rec->{ETHER}\n" if ($rec->{ETHER} ne '');
   #print "$n $rec->{NAME} : $net : $rec->{MASK} : $rec2->{INFO}\n";
 
-  $sqlstr = "INSERT INTO nets (cuser,muser,server,net,comment,dhcp) " .
+  $sqlstr = "INSERT INTO nets (cuser,muser,server,net,comment,dhcp," .
+            "subnet,no_dhcp) " .
     "VALUES('$user','$user',$serverid,'$n','$rec2->{INFO}'," .
-    "'{$dhcplist}');";
+    "'{$dhcplist}',true,false);";
   warn("net record for '$n' already exists!") 
     if (db_exec($sqlstr) < 0);
   delete $zonedata{$rec->{NAME}};
@@ -190,21 +204,21 @@ foreach $group (keys %grouphash) {
   }
   if (! $rec) {
     warn("Cannot find group: $group ($host)!");
-    $printerlist='';
-    $dhcplist='';
+    $printerlist='NULL';
+    $dhcplist='NULL';
     $comment='empty group';
 
   } else {
-    $printerlist=db_build_list_str($rec->{PRINTER});
-    $dhcplist = db_build_list_str($rec->{DHCP});
+    $printerlist=db_encode_list_str($rec->{PRINTER});
+    $dhcplist = db_encode_list_str($rec->{DHCP});
     $comment=$rec->{INFO};
 
   }
 
   $sqlstr="INSERT INTO groups " .
           "(cuser,muser,server,name,dhcp,printer,comment) " .
-          "VALUES('$user','$user',$serverid,'$group','{$dhcplist}'," .
-	  "'{$printerlist}','$comment');";
+          "VALUES('$user','$user',$serverid,'$group',$dhcplist," .
+	  "$printerlist,'$comment');";
   warn("group '$group' allready exists") if (db_exec($sqlstr) < 0);
 
   delete $zonedata{$host};
@@ -245,10 +259,10 @@ foreach $host (keys %zonedata) {
       print "printer: $host $rec->{GROUP}\n";
       $sqlstr="INSERT INTO hosts " .
 	"(cuser,muser,zone,type,domain,hinfo_hw,hinfo_sw," .
-	"txt,printer,comment,grp) " .
+	"txt,printer,comment,grp,prn) " .
 	"VALUES('$user','$user',$zoneid,5,'$host2','REMOTE-PRINTER'," .
 	"'POSTSCRIPT','{$info}','{$prlist}','virtual printer entry'," .
-	"$group );";
+	"$group,true );";
       warn("cannot insert virtual printer '$host'") if (db_exec($sqlstr) < 0);
     }
 
@@ -277,8 +291,10 @@ foreach $host (keys %zonedata) {
     $prlist=db_build_list_str($rec->{PRINTER});
     if ($prlist eq '') {
       $prlist='NULL';
+      $prn='false';
     } else {
       $prlist="'{$prlist}'";
+      $prn='true';
     }
     $group=$grouphash{$rec->{GROUP}};
     $group=-1 if (! $group);
@@ -286,7 +302,7 @@ foreach $host (keys %zonedata) {
     #print "host: $host $hostname HW=$ether\n";
 
     $sqlstr = "UPDATE hosts SET ether=$ether, dhcp=$dhcplist, " .
-              "printer=$prlist, grp=$group " .
+              "printer=$prlist, grp=$group, prn=$prn " .
               "WHERE zone=$zoneid AND domain='$hostname';";
 
     $str.=$sqlstr . "\n";
@@ -319,6 +335,21 @@ foreach $host (keys %zonedata) {
   delete $zonedata{$host};
 }
 
+
+# tag printers...
+undef @plist;
+db_query("SELECT h.id FROM hosts h,zones z,groups g " .
+	 "WHERE h.zone=z.id AND h.grp=g.id AND z.server=$serverid " .
+	 "AND h.prn=false AND g.printer NOTNULL;",\@plist);
+if (@plist > 0) {
+  print "Tagging printers...\n";
+  db_begin();
+  for $i (0 .. $#plist) {
+    die("cannot update host entry id=$plist[$i][0]")
+      if (db_exec("UPDATE hosts SET prn=true WHERE id=$plist[$i][0];") < 0);
+  }
+  die("error comminting pinter updates") if (db_commit() < 0);
+}
 
 print "Vacuuming dbase...\n";
 db_vacuum();

@@ -64,6 +64,14 @@ sub db_getvalue($$) {
   return $db_last_result->getvalue($row,$col);
 }
 
+sub db_status() {
+  return $db_last_result->cmdStatus();
+}
+
+sub db_lastoid() {
+  return $db_last_result->oidStatus();
+}
+
 sub db_debug($) {
   my($flag) = @_;
 
@@ -72,6 +80,10 @@ sub db_debug($) {
   } else {
     $db_debug_flag=0;
   }
+}
+
+sub db_print_result() {
+  sql_print_result($db_last_result);
 }
 
 sub db_vacuum() {
@@ -117,6 +129,7 @@ sub db_encode_list_str($) {
   my($list) = @_;
   
   return "NULL" unless ($list);
+  return "NULL" if (@{$list}<1);
   return "'{" . db_build_list_str($list) . "}'";
 }
 

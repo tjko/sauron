@@ -1,8 +1,7 @@
 # util.pl
 #
-#
-#
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000.
+# $Id$
 #
 
 # returns nonzero in case given domainname is valid

@@ -1,4 +1,7 @@
 #!/usr/bin/perl
+#
+# $Id$
+#
 
 while (<>) {
     # eat extra whitespaces
