@@ -373,6 +373,7 @@
 	      <listitem><para>CGI v2.752 or later 
                               (older versions should work fine too)</></>
 	      <listitem><para>Digest::MD5 v2.20 or later</></>
+	      <listitem><para>Net::DNS v0.33 or later</></>
 	      <listitem><para>Net::Netmask v1.9002 or later</></>
 	      <listitem><para>Pg v1.9.0 or later (PostgreSQL interface)</></>
 	    </itemizedlist>

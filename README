@@ -1,11 +1,9 @@
-Sauron v.0.5.1 - DNS/DHCP Management System
+Sauron v.0.6.0 - DNS/DHCP Management System
 ==============
 
-NOTE! This is a development release, although the code is believed to be
-stable (Sauron has been in production use almost two years now).
-This release is primarily meant for developers and early adopters, 
-and does not contain much documentation yet (user's guide expected to be 
-included in 0.6.0). 
+NOTE! This is the first "stable" release of Sauron. It contains only
+small fixes and improvements to the v0.5 that has been in production use
+for almost two years now.
 
 
 REQUIREMENTS
@@ -14,6 +12,7 @@ REQUIREMENTS
 	- Perl 5 or better [at least 5.6 recommended]
 		- CGI module
 		- Pg perl module
+		- Net::DNS module
 		- Net::Netmask module
 		- Digest::MD5 module
 	- PostgresSQL [7.2 or newer recommended] 
