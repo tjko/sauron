@@ -38,7 +38,8 @@ $argcount=@ARGV;
 
 
 
-$result = GetOptions("cgi-enable","cgi-disable=s","help|h","pending:s");
+$result = GetOptions("cgi-enable","cgi-disable=s","help|h","pending:s",
+		     "quiet");
 
 if ($opt_help || not $result) {
   print "syntax: $0 [options]\n\n",
@@ -47,14 +48,15 @@ if ($opt_help || not $result) {
     " --pending                    display number of hosts pending\n",
     " --pending=<servername>       display pending hosts for a server\n\n",
     " --cgi-disable='message'      disable CGI interface\n",
-    " --cgi-enable                 enable CGI interface\n";
+    " --cgi-enable                 enable CGI interface\n",
+    " --quiet                      no verbose output\n";
   exit(0);
 }
 
 $db_ok = db_connect2();
 
 
-if ($argcount < 1) {
+if ($argcount < 1 && (! $opt_quiet)) {
   print "Sauron v$VER status\n\n";
   printf "Database connection:   %s\n", ($db_ok?"OK":"ERROR");
 }
@@ -63,9 +65,11 @@ exit unless ($db_ok);
 
 if (defined $opt_pending) {
   unless ($opt_pending) {
-    print "Pending host record modifications:\n\n",
-          "Server                         Hosts\n",
-	  "-----------------------------  -----\n";
+    unless ($opt_quiet) {
+      print "Pending host record modifications:\n\n",
+	    "Server                         Hosts\n",
+	    "-----------------------------  -----\n";
+    }
     $servers=get_server_list();
     for $i (0..$#{$servers}) {
       $server=$$servers[$i][0];
@@ -76,6 +80,7 @@ if (defined $opt_pending) {
 	       "WHERE z.server=$serverid AND h.zone=z.id " .
 	       " AND (h.mdate > z.serial_date OR h.cdate > z.serial_date);",
 	       \@q);
+      next if ($opt_quiet && $q[0][0] < 1);
       printf "%-30s %d\n",$server,$q[0][0];
     }
     exit;
@@ -147,17 +152,19 @@ if ($opt_cgi_disable) {
 undef @q;
 db_query("SELECT value FROM settings WHERE key='cgi_disable';",\@q);
 
-printf "CGI interface:         %s\n",
-	  ($q[0][0] ne '' ? "Disabled ($q[0][0])":"Enabled");
+unless ($opt_quiet) {
+  printf "CGI interface:         %s\n",
+    ($q[0][0] ne '' ? "Disabled ($q[0][0])":"Enabled");
+
+  print "\n";
+  printf("%-8s %-22s %-15s %-6s %s\n",'USER','NAME','FROM','IDLE','LOGIN');
+}
 
 
 $timeout=$USER_TIMEOUT;
 $timeout=3600 unless ($timeout > 0);
 $t=time;
 
-
-print "\n";
-printf("%-8s %-22s %-15s %-6s %s\n",'USER','NAME','FROM','IDLE','LOGIN');
 
 get_who_list(\@who,$timeout);
 for $i(0..$#who) {
