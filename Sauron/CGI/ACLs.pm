@@ -81,23 +81,28 @@ sub browse_keys($$$) {
     my($serverid,$server,$url) = @_;
     my($i,@q,@list);
 
-    db_query("SELECT id,name,algorithm,keysize,mode,comment FROM keys " .
-	     "WHERE type=1 AND ref=$serverid ORDER BY name;",\@q);
+    db_query("SELECT id,name,algorithm,keysize,mode,comment,cdate,mdate " .
+	     "FROM keys WHERE type=1 AND ref=$serverid ORDER BY name;",\@q);
     if (@q < 1) {
 	print h2("No Keys found!");
 	return;
     }
 
     for $i (0..$#q) {
+        my $date = ($q[$i][7] > 0 ? $q[$i][7] : $q[$i][6]);
+	if ($date > 0) {
+	  $date="".localtime($date);
+	} else { $date=''; }
 	#my $name = "<a href=\"$url$q[$i][0]\">$q[$i][1]</a>";
 	push @list, [$q[$i][1], 
 		     $key_algorithm_hash{$q[$i][2]},
 		     $q[$i][3],
 		     ($q[$i][4] == 0 ? 'Automatic' : 'Manual (Static)'),
+		     $date,
 		     $q[$i][5]];
     }
     print h3("Keys for server: $server");
-    display_list(['Name','Algorithm','Key size','Mode','Key Generation',
+    display_list(['Name','Algorithm','Key size','Mode','Key Generated',
 		  'Comment'],
 		 \@list,0);
     print "<br>";
