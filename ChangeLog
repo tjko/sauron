@@ -1,6 +1,11 @@
 $Id$
 
 0.5.1
+	- configuration changes: ICON_PATH --> SAURON_ICON_PATH,
+	  REMOVE_EXPIRED_DELAY --> SAURON_REMOVE_EXPIRED_DELAY,
+          USER_TIMEOUT --> SAURON_USER_TIMEOUT
+	- new module Sauron.pm that provides load_config() which sets
+	  default settings and parses configuration file
 	- update-dhcp-info: fixed bug detecting if year changes in the
 	  middle of log file, now also fills dhcp_info field with information
 	  about latest lease
