@@ -26,7 +26,8 @@ my %KEY_ALGORITHMS = (
 
 load_config();
 
-GetOptions("help|h","setmasterkey:s","add:s","del:s","regen:s","list:s");
+GetOptions("help|h","setmasterkey:s","add:s","del:s","regen:s","list:s",
+	   "verbose|v");
 
 if ($opt_help || not (defined($opt_add) || defined $opt_del || 
 		   defined $opt_regen || defined $opt_list || 
@@ -39,12 +40,13 @@ if ($opt_help || not (defined($opt_add) || defined $opt_del ||
         "\t--regen\t\tregenerate (non-static) key(s)\n",
         "\t--list\t\tlist keys\n\n",
         "non-interactive options:\n\n",
-        "\t--setmasterkey=<passphrase>\n",
+        "\t--setmasterkey=\"<passphrase>\"\n",
         "\t--list=<server>\n",
         "\t--regen=<server>,<keytype>\n",
         "\t--del=<server>,<keyname>\n",
-        "\t--add=\"<server>,<keyname>,TSIG,<keylen>,[,<comments>,<passphrase>]\"\n",
-        "\n";
+        "\t--add=\"<server>,<keyname>,<keytype>,<keylen>[,<comments>,<passphrase>]\"\n",
+	"\n\t--verbose\tverbose output\n",
+        "\n\nsupported key types: TSIG\n\n";
   exit(0);
 }
 
@@ -60,6 +62,7 @@ if (defined $opt_setmasterkey) { setmasterkey($opt_setmasterkey); }
 elsif (defined $opt_add) { addkey($opt_add); }
 elsif (defined $opt_del) { delkey($opt_del); }
 elsif (defined $opt_list) { listkeys($opt_list); }
+elsif (defined $opt_regen) { regenkeys($opt_regen); }
 else { fatal("unknown option?"); }
 
 exit;
@@ -228,11 +231,16 @@ sub setmasterkey($) {
 	print "Re-encrypting existing keys in database...\n";
 	my (@keys,$i);
 	db_begin();
-	if  (db_query("SELECT id,secretkey FROM keys",\@keys) < 0) {
+	if  (db_query("SELECT id,secretkey,name,algorithm " .
+		      "FROM keys",\@keys) < 0) {
 	    db_rollback();
 	    fatal("failed to read existing keys from database");
 	}
 	for $i (0..$#keys) {
+	    my $name = $keys[$i][2];
+	    my $algo = $keys[$i][3];
+	    fatal("unsupported key: $name (algorithm=$algo)") 
+	      if ($algo != 157);
 	    if ($keys[$i][1]) {
 		my $ref1 = Crypt::RC5->new($oldkey,16);
 		my $okey=$ref1->decrypt(decode_base64($keys[$i][1]));
@@ -244,10 +252,11 @@ sub setmasterkey($) {
 		    db_rollback();
 		    fatal("failed to update key id=$keys[$i][0]");
 		}
+		print "key: $name old: $keys[$i][1] new: $nkey\n"
+		  if ($opt_verbose);
 	    }
 	}
     }
-
 
     unless (open(FILE,">$keyfile")) {
 	db_rollback();
@@ -291,11 +300,10 @@ sub addkey() {
 	$mode=1;
     } else {
 	print "Generating key...\n";
-	$key=generate_key($name,$type,$len);
-	# print "orignal key=$key\n";
+	my $okey = generate_key($name,$type,$len);
 	my $ref = Crypt::RC5->new($SAURON_KEY,16);
-	$key=encode_base64($ref->encrypt(decode_base64($key)));
-	# print "encrypte key=$key\n";
+	$key=encode_base64($ref->encrypt(decode_base64($okey)));
+	print "Key: $okey  Encrypted-Key: $key\n" if ($opt_verbose);
 	$mode=0;
     }
 
@@ -351,6 +359,37 @@ sub delkey($) {
     fatal("cannot find key: $name") unless ($id > 0);
     fatal("failed to remove key: $name") if (delete_key($id) < 0);
     print "Key successfully deleted: $name (id=$id)\n";
+}
+
+
+sub regenkeys($) {
+  my($args) = @_;
+  my($server,$type) = split(/,/,$args);
+
+  $server=getserver($server);
+  $type=gettype($type);
+
+  my @keys;
+  db_query("SELECT id,name,algorithm,keysize FROM keys " .
+	   "WHERE type=1 AND ref=$server AND mode=0",\@keys);
+  fatal("No keys found to regenerate") unless (@keys > 0);
+
+
+  my $i;
+  for $i (0..$#keys) {
+    my($id,$name,$algo,$len) = @{$keys[$i]};
+
+    print "Generating key: $name ...\n";
+    my $okey = generate_key($name,$type,$len);
+    my $ref = Crypt::RC5->new($SAURON_KEY,16);
+    my $key=encode_base64($ref->encrypt(decode_base64($okey)));
+    chomp($key);
+    print "Key: $okey  Encrypted-Key: $key\n" if ($opt_verbose);
+    
+    fatal("Failed to update key: $name")
+      if (update_key({id=>$id,secretkey=>$key}) < 0);
+  }
+
 }
 
 # eof :-)
