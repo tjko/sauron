@@ -77,7 +77,8 @@ SQL_TABLES =	sql/common.sql \
 
 PROGS = sauron addgroup adduser deluser modhosts \
 	import import-ethers import-jyu import-roots \
-	last moduser parse-hosts-rows runsql status update-dhcp-info 
+	last moduser parse-hosts-rows runsql status update-dhcp-info \
+	export-networks
 
 PLFILES = back_end.pl db.pl parseconf.pl util.pl util_zone.pl cgi_util.pl
 

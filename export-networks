@@ -34,15 +34,16 @@ $host = `hostname`;
 $host =~ s/\n//g;
 $time_now = localtime;
 
-$result = GetOptions("help|h","verbose|v","all|a");
+$result = GetOptions("help|h","verbose|v","all|a","comments");
 
 if ($opt_help || @ARGV < 1) {
-  print "syntax: $0 [--help] [--verbose] [--all] <servername>\n";
+  print "syntax: $0 [--help] [--verbose] [--comments] [--all] <servername>\n";
   exit(0);
 }
 
 $verbose=1 if (defined $opt_verbose);
 $servername=$ARGV[0];
+$no_comments = ($opt_comments ? 0 : 1);
 
 db_connect();
 
@@ -55,7 +56,7 @@ unless ($opt_all) {
 }
 
 undef @q;
-db_query("SELECT net,name,comment " .
+db_query("SELECT net,netname,comment,name " .
 	 "FROM nets " .
 	 "WHERE server=$serverid $rule1 " .
 	 "ORDER BY net",\@q);
@@ -85,20 +86,28 @@ unless ($loopback_found) {
 for $i (0..$#q) {
   ($net=$q[$i][0]) =~ s/\/\d+\s*$//;
   #$net =~ s/\.0//g;
-  ($name=$q[$i][1]) =~ s/\s+/_/g;;
+  ($name=$q[$i][1]) =~ s/\s+/_/g;
 
-  $nname=substr($name,0,35);
-  if ($names{$nname}) {
-    print STDERR "network name collision: $name\n" if ($verbose);
-    $names{$nname}++;
-    $nname.="-$names{$nname}";
+  if ($name) {
+    $nname=substr($name,0,35);
+    if ($names{$nname}) {
+      print STDERR "network name collision: $name\n" if ($verbose);
+      $names{$nname}++;
+      $nname.="-$names{$nname}";
+    } else {
+      $names{$nname}++;
+    }
   } else {
-    $names{$nname}++;
+    $nname='#';
   }
   
-  printf "%-40s %-15s %s\n", $nname, $net, ($q[$i][2] ? "# $q[$i][2]" : "");
+  $comment = $q[$i][3] . ($q[$i][2] ? ", $q[$i][2]":"");
+  printf "# %s\n", $comment unless ($no_comments);
+  printf "%-40s %-15s\n", $nname, $net;
 }
 
+
+print "#\n# eof\n";
 
 exit 0;
 
