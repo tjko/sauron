@@ -1,6 +1,7 @@
 $Id$
 
 0.7.2beta
+	- CGI interface: new command "New Search" in Hosts menu	
 	- import: fixed IP number parsing (named.conf)
 	- CGI interface: fixed "-> This Subnet" button in host display
 	- CGI interface: fixed "Show Hosts" button in network/subnet display

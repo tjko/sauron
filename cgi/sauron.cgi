@@ -109,6 +109,7 @@ $debug_mode = $SAURON_DEBUG_MODE;
 	    'hosts'=>[
 		      ['Search',''],
 		      ['Last Search','sub=browse&lastsearch=1'],
+		      ['New Search','sub=browse&bh_submit=Clear&bh_re_edit=1'],
 		      [],
 		      ['Add host','sub=add&type=1'],
 		      [],
