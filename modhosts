@@ -38,7 +38,8 @@ sub fatal($) {
 ##############################################
 
 $result = GetOptions("help|h","cidr=s","name=s","move=s","delete",
-		     "info=s","rename=s","test");
+		     "info=s","rename=s","test","excludeip=s",
+		    "excludename=s");
 
 if ($opt_help || @ARGV < 2) {
   print "syntax: $0 <server> <zone> [options]\n\n",
@@ -54,6 +55,7 @@ if ($opt_help || @ARGV < 2) {
 	"\n";
   exit(0);
 }
+
 
 db_connect();
 
@@ -120,6 +122,16 @@ if ($opt_rename) {
   print "Rename rule: s/$rename1/$rename2/\n";
 }
 
+if ($opt_excludeip) {
+  @exclude_ips = split(/,/,$opt_excludeip);
+  $ecount=@exclude_ips;
+  foreach $ip (@exclude_ips) {
+    print "Excluded IP: $ip\n";
+    fatal("Invalid exclude IP sepcified: $ip") unless (is_cidr($ip));
+  }
+}
+
+
 
 $sql="SELECT h.id,h.domain,h.type $cidr_f FROM hosts h $cidr_t " .
      "WHERE h.zone=$zoneid $cidr_r $cidr $name $info " .
@@ -149,6 +161,17 @@ db_ignore_begin_and_commit(1);
 for $i (0..$#q) {
   printf "%-6d %-40s %2d %s %d\n", $q[$i][0],$q[$i][1],$q[$i][2],
                                 $q[$i][3],$q[$i][4];
+  if ($opt_excludeip) {
+    $ip_skip=0;
+    for $tmpip (@exclude_ips) {
+      if ($tmpip eq $q[$i][3]) {
+	print "Skipping excluded IP: $tmpip\n";
+	$ip_skip=1;
+      }
+    }
+    next if ($ip_skip);
+  }
+
   $id=$q[$i][0];
   $domain=$q[$i][1];
   if ($opt_rename) {
