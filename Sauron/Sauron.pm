@@ -9,7 +9,7 @@ use strict;
 use Sauron::Util;
 use vars qw($VERSION @ISA @EXPORT);
 
-$VERSION = '$Version:$';
+$VERSION = '$Id$';
 
 @ISA = qw(Exporter); # Inherit from Exporter
 @EXPORT = qw(
