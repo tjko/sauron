@@ -4,6 +4,8 @@ general:
 	  number of host entries, and to import interactively hosts
 	  from text files in standard zonefile format...
 	- IPv6 support
+        - add database format version check in db_connect{,2}
+	- implement delgroup utility
 
 import:
 	- real parser for both imports
