@@ -3656,9 +3656,10 @@ sub left_menu($) {
 }
 
 sub frame_set() {
-  print header;
+  print header(-type=>"text/html; charset=$SAURON_CHARSET");
 
-  print "<HTML><FRAMESET border=\"0\" rows=\"90,*\" >\n" .
+  print "<HTML><FRAMESET border=\"0\" rows=\"95,*\" >\n" .
+        "  <TITLE>Sauron ($SERVER_ID)</TITLE>" .
         "  <FRAME src=\"$script_name/frame1\" noresize>\n" .
         "  <FRAME src=\"$script_name/frames2\" name=\"bottom\">\n" .
         "  <NOFRAMES>\n" .
@@ -3666,6 +3667,7 @@ sub frame_set() {
 	"      <A HREF=\"$script_name\">here</A> \n" .
         "  </NOFRAMES>\n" .
         "</FRAMESET></HTML>\n";
+
   exit 0;
 }
 
@@ -3688,7 +3690,7 @@ sub frame_set2() {
 
 sub frame_1() {
   print header,
-        start_html(-title=>"sauron: top menu",-BGCOLOR=>'white',
+        start_html(-title=>"sauron: top menu",-BGCOLOR=>'#efefff',
 		   -target=>'bottom');
 
   $s_url .= '/frames2';
@@ -3700,7 +3702,7 @@ sub frame_1() {
 
 sub frame_2() {
   print header,
-        start_html(-title=>"sauron: left menu",-BGCOLOR=>'white',
+        start_html(-title=>"sauron: left menu",-BGCOLOR=>'#efefff',
 		   -target=>'main');
 
   $s_url .= '/frame3';
