@@ -438,7 +438,11 @@ sub about_menu() {
 
 
 sub logout() {
-  my($c,$u);
+  my($c,$um,$host);
+
+  $host='localhost???';
+  $host=$1 if (self_url =~ /https?\:\/\/([^\/]+)\//);
+
   $u=$state{'user'};
   update_lastlog($state{uid},$state{sid},2,$remote_addr,$remote_host);
   logmsg("notice","user ($u) logged off from $remote_addr");
@@ -450,8 +454,15 @@ sub logout() {
   remove_state($scookie);
   print header(-charset=>$SAURON_CHARSET,-target=>'_top',-cookie=>$c),
         start_html(-title=>"Sauron Logout",-BGCOLOR=>'white'),
-        h1("Sauron"),p,p,"You are now logged out...",
-        end_html();
+        "<CENTER><TABLE width=\"50%\" cellspacing=0 border=0>",
+        "<TR bgcolor=\"#002d5f\">",
+        "<TD><FONT color=\"white\"> &nbsp; Sauron",
+        "</FONT></TD><TD align=\"right\"><FONT color=\"white\">",
+        "$host &nbsp;</FONT></TD></FONT>",
+        "<TR><TD colspan=2 bgcolor=\"#efefff\"><CENTER>", 
+        h2("You have been logged out."),p
+        a({-href=>script_name},"Click to enter login screen again."),
+	"</CENTER></TD></TR></CENTER>",,end_html();
   exit;
 }
 
