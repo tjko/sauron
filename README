@@ -11,6 +11,7 @@ REQUIREMENTS
 		- Term::ReadKey module
 	- PostgresSQL (or add support to your favorite db yourself :)
 		- Pg perl module
+	- Apache (or any other www-server with CGI support)
 
 
 TESTED PLATFORMS
@@ -20,7 +21,20 @@ TESTED PLATFORMS
 
 
 INSTALLATION
-	.... (instructions to be added someday :)
+	.... (complete instructions to be added someday :)
+
+
+	./configure
+	make docs
+	<read docs... :)>
+	<create database (sauron) in postgres>
+	cp config.in config
+	<edit config>
+	make make_tables
+	make init_tables
+	<run import,import-jyu,contrib/netnames-jyu,... if necessary :)>
+	./adduser
+	<setup www interface...sauron.cgi>
 
 
 

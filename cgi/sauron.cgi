@@ -557,7 +557,7 @@ do "$PROG_DIR/back_end.pl";
 sub logmsg($$) {
   my($type,$msg)=@_;
 
-  open(LOGFILE,">>/tmp/sauron.log");
+  open(LOGFILE,">>$LOG_DIR/sauron.log");
   print LOGFILE localtime(time) . " sauron: $msg\n";
   close(LOGFILE);
 

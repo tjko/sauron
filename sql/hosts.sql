@@ -50,6 +50,7 @@ CREATE TABLE hosts (
        ether	   CHAR(12),        /* Ethernet address (MAC) */
        ether_alias INT4 DEFAULT -1, /* ptr to another host record
 					(for ETHER address) */
+       dhcp_date   INT4,       /* last time host requested IP */
        info	   TEXT,       /* Host info (appears as TXT record) */
        location	   TEXT,       /* Host location info */
        dept	   TEXT,       /* Department name */

@@ -1,25 +1,31 @@
 
 general:
-	add ACL support to server/zone 
-
+	- write utility to update dhcp_date fields in hosts table 
+	  using dhcpd log files...
+	- test whether changing TEXT fiels in hosts table to appropriate
+	  CHAR(n) fields would improve speed...
+ 	- make 'addgroup' utility (implement like moduser/modgroup combo)
+	- add 'install' to Makefile.in; directory generation, symlink
+	  generation (moduser->modgroup,adduser->addgroup)
+        - write (command-line :) utility for easily generating large
+	  number of host entries, and to import interactively hosts
+	  from text files in standard zonefile format...
+	- implement session ID (sid) stuff, and history&lastlog table stuff
 
 import:
-	- add SRV stuff
 	- remove unneccessary (?) quoting (\"...) from dhcp (and other) records
 	- add allow-query/allow-transfer/also-notify support for zones
 	- real parser for both imports
+        - rewrite parse-host-rows in perl (feasible?)
 
-import-jyu:
-	- add ETHER2 support
 
 sauron:
-	- better support for small reverse subnet delegations
+	- implement support for small reverse subnet delegations
+          (automagic CNAME generation on the fly...)
 	- check MX generation for "MX only" records not using MX templates
-	- add allow-query/allow-transfer/also-notify support for zones
-
 
 sauron.cgi:
-	- access control support
+	- finnish access control support
 	- fix timeout problem with huge zone/server deletes...(faster server :)
-
+	- add "ether2" field add/edit support
 
