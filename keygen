@@ -15,6 +15,15 @@ use Digest::MD5;
 use MIME::Base64;
 use Crypt::RC5;
 
+my %KEY_ALGORITHMS = ( 
+		       0=>'reserved',
+		       1=>'RSA/MD5',
+		       2=>'DH',
+		       3=>'DSA',
+		       4=>'ECC',
+		       157=>'HMAC-MD5'
+		      );
+
 load_config();
 
 GetOptions("help|h","setmasterkey:s","add:s","del:s","regen:s","list:s");
@@ -34,7 +43,7 @@ if ($opt_help || not (defined($opt_add) || defined $opt_del ||
         "\t--list=<server>\n",
         "\t--regen=<server>,<keytype>\n",
         "\t--del=<server>,<keyname>\n",
-        "\t--add=<server>,<keyname>,TSIG,<keylen>,[<passphrase>]\n",
+        "\t--add=\"<server>,<keyname>,TSIG,<keylen>,[,<comments>,<passphrase>]\"\n",
         "\n";
   exit(0);
 }
@@ -260,9 +269,10 @@ sub addkey() {
     fatal("Sauron master key not defined/available " .
 	  "(generate using --setmasterkey)") unless ($SAURON_KEY);
 
-    my ($server,$name,$type,$len,$key) = split(/,/,$add);
+    my ($server,$name,$type,$len,$comment,$key) = split(/,/,$add);
     $server=getserver($server);
     $name=getname($name);
+    $comment=~s/^\s+|\s+$//g;
 
     fatal("Key with same name allready exists: $name")
 	if (get_key_by_name($server,$name) > 0);
@@ -292,7 +302,8 @@ sub addkey() {
     chomp($key);
     fatal("failed to add key: $name")
 	if (add_key({type=>1,ref=>$server,name=>$name,protocol=>2,mode=>$mode,
-		     algorithm=>$algo,keysize=>$len,secretkey=>$key}) < 1);
+		     algorithm=>$algo,keysize=>$len,secretkey=>$key,
+		     comment=>$comment}) < 1);
     
     print "Key added successfully.\n";
 }
@@ -309,15 +320,22 @@ sub listkeys($) {
     }
 
     db_query("SELECT id,type,name,keytype,nametype,protocol,algorithm," .
-	     " mode,keysize,publickey,secretkey " .
+	     " mode,keysize,publickey,secretkey,comment " .
 	     "FROM keys " .
 	     "WHERE type=1 AND ref=$server $typerule ORDER by name",\@q);
     if (@q < 1) {
 	print "No keys found.\n";
 	return;
     }
+    print "Key name                  Type     Bits Mode   Comments\n";
+    print "------------------------- -------- ---- ------ ------------------------------\n";
     for $i (0..$#q) {
-	print "$i. ".join(',',@{$q[$i]})."\n";
+	printf "%-25s %-8s %4d %-6s %-30s\n",$q[$i][2],
+	                               $KEY_ALGORITHMS{$q[$i][6]},
+	                               $q[$i][8],
+	                               ($q[$i][7] == 0 ? 'Auto':'Static'),
+	                               substr($q[$i][11],0,30);
+	                               
     }
 }
 
