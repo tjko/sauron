@@ -1,6 +1,6 @@
 $Id$
 
-0.7.0beta
+0.7.0
 	- added new utility import-nets for importing/updating
 	  nets (and VLANs) from a CSV file
 	- added support for custom DHCP classes
