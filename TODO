@@ -22,13 +22,16 @@ sauron.cgi:
 	- fix timeout problem with huge zone/server deletes...(faster server :)
 	- add search by dhcp_date field...
 	- add quick search like in browser.cgi
-	- display conflicting domainname/MAC when host update/insert fails
 	- option to "download" search results in CSV format
 	- remove confirm from logout
+	- add clone/copy for hosts
+	- log hostname/mac changes into history
+	- longer info fields
 
 
 browser.cgi:
 	- optional user authentication support
+
 
 
 
