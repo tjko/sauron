@@ -31,19 +31,32 @@ do "$config_file" || die("cannot load config: $config_file");
 
 ###################################################################
 
-GetOptions("help|h","verbose|v","debug|d");
+GetOptions("help|h","verbose|v","debug|d","noupdate","year=s");
 
 if ($opt_help || @ARGV < 2) {
-  print "syntax: $0 [--help] [--verbose] <servername> <logfile>\n\n";
+  print "syntax: $0 [--help] [--verbose] [--year=<YYYY>]",
+        " <servername> <logfile>\n\n";
   print "" if ($opt_help);
   exit(0);
 }
 
 $opt_verbose = ($opt_verbose ? 1 : 0);
 $opt_debug = ($opt_debug ? 1 : 0);
+$opt_noupdate = ($opt_noupdate ? 1 : 0);
 $servername=$ARGV[0];
 $file=$ARGV[1];
-$year=(localtime(time))[5];
+$timenow=time();
+$year=(localtime($timenow))[5];
+
+if ($opt_year) {
+  fatal("invalid argument for option --year ($opt_year)")
+    unless ($opt_year =~ /^\d\d\d\d$/);
+  $year=$opt_year - 1900;
+  fatal("invalid year specified: $opt_year") unless ($year > 0);
+}
+
+print "Using year ($opt_year) as the year for data in logfile.\n"
+  if ($opt_verbose);
 
 
 fatal("cannot read input file '$file'") unless (-r $file);
@@ -79,29 +92,34 @@ while (<FILE>) {
   $t=timelocal($sec,$min,$hour,$d,$m,$year);
   $first_date = $t unless (defined $first_date);
   $first_host = $host unless (defined $first_host);
-  if (($t+86400) < $first_date) {
-    fatal("Log contains new year or time shifts backwards");
-  }
-  $mac=''; $cmd='';
+  fatal("Log contains new year or time shifts backwards")
+    if (($t+86400) < $first_date);
+  $mac=''; $cmd=''; $ip=''; $via='';
 
   if ($rest =~ /^(DHCPDISCOVER|BOOTREQUEST)\s+from\s+(\S+)\s+via\s+(.*)$/) {
     #print "$1 $2 $3\n";
     $cmd=$1;
     $mac="\U$2";
+    $via=$3;
   }
   elsif ($rest =~ /^(DHCPREQUEST)\s+for\s+(\S+)(\s+\((\S+)\))?\s+from\s+(\S+)\s+via\s+(.*)$/) {
     $cmd=$1;
     $mac="\U$5";
+    $via=$6;
     #print "$1 $2 ($4) $5 '$6' : $mac\n";
   }
   elsif ($rest =~ /^(DHCPACK|DHCPNAK)\s+on\s+(\S+)\s+to\s+(\S+)\s+via\s+(.*)$/) {
     $cmd=$1;
+    $ip=$2;
     $mac="\U$3";
+    $via=$4;
     #print "$1 $2 $3 '$4'\n";
   }
   elsif ($rest =~ /^(BOOTREPLY)\s+for\s+(\S+)\s+to\s+(\S+)\s+\((\S+)\)\s+via\s+(.*)$/) {
     $cmd=$1;
+    $ip=$2;
     $mac="\U$4";
+    $via=$5;
     #print "$1 $2 $3 $4 '$5'\n";
   }
 
@@ -116,6 +134,8 @@ while (<FILE>) {
     #print "$t : $mac\n";
     $hash{$mac}={} unless (defined $hash{$mac});
     $hash{$mac}->{$cmd}=$t;
+    $hash{$mac}->{"$cmd-via"}=$via;
+    $hash{$mac}->{"$cmd-ip"}=$ip;
   }
 
 }
@@ -143,18 +163,27 @@ for $i (0..$#q) {
   $date=($q[$i][2] > 0 ? $q[$i][2] : 0);
   $domain=$q[$i][3];
   $t = $hash{$mac}->{DHCPACK} > 0  ?  $hash{$mac}->{DHCPACK}  :  0;
-  $t = $hash{$mac}->{BOOTREPLY} if ($hash{$mac}->{BOOTREPLY} > $t);
-  unless ($t > $date) {
-    print "notupdating: $domain : $t : $date\n" if ($opt_debug);
+  $via = $hash{$mac}->{'DHCPACK-via'};
+  $ip = $hash{$mac}->{'DHCPACK-ip'};
+  if ($hash{$mac}->{BOOTREPLY} > $t) {
+    $t = $hash{$mac}->{BOOTREPLY};
+    $via = $hash{$mac}->{'BOOTREPLY-via'};
+    $ip = $hash{$mac}->{'BOOTREPLY-ip'};
+  }
+  if ( ($t <= $date) &&
+       ($date < ($timenow + 30*86400)) # handle bogus host dhcp_dates
+     ) {
+    print "notupdating: $domain (".dhcpether($mac).") : $t : $date\n"
+      if ($opt_debug);
     $notupdated++;
     next;
   }
-  print "match: $domain $id $date : $t\n" if ($opt_debug);
-  push @match, [$id,$t];
+  #print "match: $domain $id $date : $t ($via,$ip)\n" if ($opt_debug);
+  push @match, [$id,$t,"$ip for " . dhcpether($mac) . " via $via"];
 }
 
-print "$notfounds host(s) not found from database\n",
-      "$notupdated hosts(s) info not updated\n" if ($opt_verbose);
+print "No requests from $notfounds host(s) (that are in database).\n",
+      "$notupdated hosts(s) info not updated\n" if ($opt_debug);
 
 $mcount=@match;
 unless ($mcount > 0) {
@@ -163,12 +192,17 @@ unless ($mcount > 0) {
 }
 
 print "Updating dhcp_date for $mcount host records..." if ($opt_verbose);
+if ($opt_noupdate) {
+  print "\nNot updating records (--noupdate)\n";
+  exit(1);
+}
 
 db_begin();
 for $i (0..$#match) {
   $id=$match[$i][0];
   $t=$match[$i][1];
-  $res=db_exec("UPDATE hosts SET dhcp_date=$t WHERE id=$id;");
+  $info=db_encode_str($match[$i][2]);
+  $res=db_exec("UPDATE hosts SET dhcp_date=$t,dhcp_info=$info WHERE id=$id;");
   fatal("cannot update record id=$id") if ($res < 0);
 }
 fatal("cannot commit changes to database") if (db_commit() < 0);
