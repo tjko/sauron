@@ -49,6 +49,7 @@ $user = (getpwuid($<))[0];
 $origin = "$zonename.";
 
 db_connect();
+db_debug(1);
 
 die("cannot open .hosts file ($hostsfile)") if (! -f $hostsfile);
 
@@ -182,7 +183,7 @@ foreach $net (keys %rhash) {
     "true,false);";
 
   if (db_exec($sqlstr) < 0) {
-    warn("net record for '$n' already exists!") 
+    die("net record for '$n' already exists!") 
   } else {
     $res=db_exec("SELECT id FROM nets WHERE server=$serverid AND net='$n';");
     die("Cannot get net record id!") if ($res < 0);
@@ -204,8 +205,7 @@ foreach $net (keys %rhash) {
 foreach $host (keys %zonedata) {
   $rec = $zonedata{$host};
   if (@{$rec->{NS}} > 0) {
-    print "ns: $host\n";
-
+    #print "ns: $host\n";
     delete $zonedata{$host};
   }
 }
@@ -214,8 +214,7 @@ foreach $host (keys %zonedata) {
 foreach $host (keys %zonedata) {
   $rec = $zonedata{$host};
   if (@{$rec->{MX}} > 0 && @{$rec->{A}} < 1 && @{$rec->{DHCP}} < 1) {
-    print "plain mx: $host\n";
-
+    #print "plain mx: $host\n";
     delete $zonedata{$host};
   }
 }
@@ -256,7 +255,7 @@ foreach $group (keys %grouphash) {
           "(cuser,muser,server,name,comment) " .
           "VALUES('$user','$user',$serverid,'$group','$comment');";
   if (db_exec($sqlstr) < 0) {
-    warn("group '$group' allready exists") 
+    die("group '$group' allready exists") 
   } else {
     $res=db_exec("SELECT id FROM groups WHERE " .
 		 " server=$serverid AND name='$group';");
@@ -313,7 +312,7 @@ foreach $host (keys %zonedata) {
 	"(cuser,muser,name,comment) " .
 	  "VALUES('$user','$user','$host2','imported entry');";
       if (db_exec($sqlstr) < 0) {
-	warn("cannot insert printer_class '$host2'") ;
+	die("cannot insert printer_class '$host2'") ;
 	$lastid=-1;
       } else {
 	$res=db_exec("SELECT id FROM printer_classes WHERE name='$host2';");
@@ -330,7 +329,7 @@ foreach $host (keys %zonedata) {
 	"'POSTSCRIPT','$info','virtual printer entry'," .
 	"$group,true );";
       if (db_exec($sqlstr) < 0) {
-	warn("cannot insert virtual printer '$host2'");
+	die("cannot insert virtual printer '$host2'");
 	$lastid=-1;
       } else {
 	$res=db_exec("SELECT id FROM hosts WHERE zone=$zoneid AND " .
@@ -351,6 +350,7 @@ foreach $host (keys %zonedata) {
     delete $zonedata{$host};
   }
 }
+
 
 
 # build domainname<-->id hash 
@@ -411,19 +411,27 @@ foreach $host (keys %zonedata) {
     $group=-1 if (! $group);
 
     #print "host: $host $hostname HW=$ether\n";
+    $serial='NULL';
+    $serial=db_encode_str($rec->{SERIAL}) if ($rec->{SERIAL} ne '');
+    $model='NULL';
+    $model=db_encode_str($rec->{TYPE}) if ($rec->{TYPE} ne '');
+    $muuta=db_encode_str(join(',',@{$rec->{MUUTA}}));
+    $muuta='NULL' if ($muuta eq '');
+    $info='NULL';
+    $info=db_encode_str($rec->{INFO}) if ($rec->{INFO} ne '');
 
-    $sqlstr = "UPDATE hosts SET ether=$ether, " .
-              "grp=$group, prn=$prn " .
+    $sqlstr = "UPDATE hosts SET ether=$ether, model=$model, serial=$serial, " .
+              "misc=$muuta, info=$info, grp=$group, prn=$prn " .
 		"WHERE id=$lastid;";
 #              "WHERE zone=$zoneid AND domain='$hostname';";
-
+    #print "$sqlstr\n";
     $str.=$sqlstr . "\n";
     $j++;
     if ($j > 50) {
       die("Cannot update host $host") if (db_exec($str) < 0);
       $str='';
       $j=0;
-      print STDERR ".";
+      print STDERR "."; # . db_status() . "\n";
     }
     
     delete $zonedata{$host};
@@ -437,30 +445,28 @@ print "\n";
 
 
 
-
-
 # show unprocessed records...
 foreach $host (keys %zonedata) {
   $rec = $zonedata{$host};
-  print "unprosessed: $host\n" if (@{$rec->{A}} < 1);
+  #print "unprosessed: $host\n" if (@{$rec->{A}} < 1);
 
   delete $zonedata{$host};
 }
 
 
 # tag printers...
-undef @plist;
-db_query("SELECT h.id FROM hosts h,zones z,groups g " .
-	 "WHERE h.zone=z.id AND h.grp=g.id AND z.server=$serverid " .
-	 "AND h.prn=false AND g.printer NOTNULL;",\@plist);
-if (@plist > 0) {
-  print "Tagging printers...\n";
-
-  for $i (0 .. $#plist) {
-    die("cannot update host entry id=$plist[$i][0]")
-      if (db_exec("UPDATE hosts SET prn=true WHERE id=$plist[$i][0];") < 0);
-  }
-}
+#undef @plist;
+#db_query("SELECT h.id FROM hosts h,zones z,groups g " .
+#	 "WHERE h.zone=z.id AND h.grp=g.id AND z.server=$serverid " .
+#	 "AND h.prn=false AND g.printer NOTNULL;",\@plist);
+#if (@plist > 0) {
+#  print "Tagging printers...\n";
+#
+#  for $i (0 .. $#plist) {
+#    die("cannot update host entry id=$plist[$i][0]")
+#      if (db_exec("UPDATE hosts SET prn=true WHERE id=$plist[$i][0];") < 0);
+#  }
+#}
 
 
 
@@ -469,7 +475,7 @@ die("error commiting the changes!")
   if (db_commit() < 0);
 
 print "Vacuuming dbase...\n";
-db_vacuum();
+#db_vacuum();
 exit;
 
 # eof

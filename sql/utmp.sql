@@ -16,6 +16,7 @@ CREATE TABLE utmp (
 	zoneid		INT4 DEFAULT -1,
 	zone		TEXT,
 	login		INT4 DEFAULT 0,
-	last		INT4 DEFAULT 0
+	last		INT4 DEFAULT 0,
+	searchopts	TEXT	
 );
 

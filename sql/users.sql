@@ -15,6 +15,7 @@ CREATE TABLE users (
 	zone		INT4 DEFAULT -1,
 	last		INT4 DEFAULT 0,	
 	last_pwd	INT4 DEFAULT 0,
+	search_opts	TEXT,
 
 	comment	    TEXT
 ) INHERITS(pokemon);

@@ -81,7 +81,7 @@ sub process_zonefile($$$$) {
     # type
     unless ($type =~ /^(SOA|A|PTR|CNAME|MX|NS|TXT|HINFO|WKS|MB|MG|MD|MF|MINFO|MR|AFSDB|ISDN|RP|RT|X25|PX|SRV)$/) {
       if ($ext_flag > 0) {
-	unless ($type =~ /^(DHCP|ALIAS|AREC|ROUTER|PRINTER|BOOTP|INFO|ETHER|GROUP|BOOTP|MUUTA[0-9]|TYPE|SERIAL|PCTCP)$/) {
+	unless ($type =~ /^(DHCP|ALIAS|AREC|ROUTER|PRINTER|BOOTP|INFO|ETHER2?|GROUP|BOOTP|MUUTA[0-9]|TYPE|SERIAL|PCTCP)$/) {
 	  print STDERR "unsupported RR type '$type' in $filename\n$fline\n";
 	  next;
 	}
@@ -113,6 +113,7 @@ sub process_zonefile($$$$) {
 	      TYPE => '',
 	      MUUTA => [],
 	      ETHER => '',
+	      ETHER2 => '',
 	      DHCP => [],
 	      ROUTER => '',
 	      ROUTER_DHCP => [],
@@ -224,6 +225,10 @@ sub process_zonefile($$$$) {
       die("Invalid ethernet address for $domain\n$fline")
 	unless (/^([0-9a-f]{12})$/i);
       $rec->{ETHER} = "\U$1";
+    } 
+    elsif ($type eq 'ETHER2') {
+      s/(^\s*"|"\s*$)//g;
+      $rec->{ETHER2} = $_;
     } 
     elsif ($type eq 'DHCP') {
       #s/(^\s*"|"\s*$)//g;

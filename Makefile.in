@@ -61,7 +61,7 @@ SQL_TABLES = 	sql/common.sql \
 		sql/rr_a.sql sql/servers.sql sql/txt_entries.sql \
 	        sql/user_rights.sql sql/users.sql \
 		sql/wks_entries.sql sql/wks_templates.sql \
-		sql/zones.sql
+		sql/zones.sql sql/utmp.sql
 
 
 DIRNAME = $(shell basename `pwd`) 

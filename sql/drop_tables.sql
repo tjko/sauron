@@ -20,6 +20,7 @@ DROP TABLE mx_entries;
 DROP TABLE txt_entries;
 DROP TABLE wks_entries;
 DROP TABLE host_info;
+DROP TABLE utmp;
 DROP TABLE users;
 DROP TABLE user_rights;
 DROP TABLE ether_info;

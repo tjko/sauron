@@ -732,7 +732,7 @@ for ($i=0; $i <= $#zones; $i+=1) {
 
   # add MX & WKS template pointers to host entries
   #db_begin();
-  $j=0;
+  $j=0; $str='';
   foreach $host (keys %zonedata) {
     $rec = $zonedata{$host};
 
@@ -745,15 +745,22 @@ for ($i=0; $i <= $#zones; $i+=1) {
     if ($mx > 0  || $wks > 1) {
       die("no id found in hash for host $host (MX/WKS ptr update)!") 
 	if ($tmpid < 1 || !$tmpid);
+      die("invalid id for record '$host'!") if ($tmpid < 1);
+      $sqlstr="UPDATE hosts SET mx=$mx,wks=$wks WHERE id=$tmpid;";
+      $str.=$sqlstr ."\n";
+      $j++;
       if ($j>100) {
+	$res=db_exec($str);
+	die("cannot update MX/WKS pointers!") if ($res < 0);
 	print STDERR "ö";
 	$j=0;
+	$str='';
       }
-      die("invalid id for record '$host'!") if ($tmpid < 1);
-      $res=db_exec("UPDATE hosts SET mx=$mx,wks=$wks WHERE id=$tmpid;");
-      $j++;
     }
   }  
+  unless ($str eq '') {
+    die("cannot update MX/WKS pointers!") if (db_exec($str) < 0);
+  }
   #die("Cannot commit MX & WKS tempate pointer updates!") if (db_commit() < 0);
 
 

@@ -130,7 +130,7 @@ sub db_encode_str($) {
 
 sub db_build_list_str($) {
   my($list) = @_;
-  my ($tmp);
+  my ($tmp,$f);
 
   return "NULL" unless ($list);
 
@@ -200,6 +200,41 @@ sub db_timestr_time($) {
       }
 
    return 0;
+}
+
+
+sub db_insert($$$) {
+  my($table,$fields,$data) = @_;
+  my($str,$i,$j,$c,$row,$flag,$res);
+
+
+  $c=0;
+  for $i (0..$#{$data}) {
+    $row=$$data[$i]; $flag=0;
+    $str.="INSERT INTO $table ($fields) VALUES(";
+    for $j (0..$#{$row}) {
+      $str.="," if ($flag);
+      $str.=db_encode_str($$row[$j]);
+      $flag=1;
+    }
+    $str.=");\n";
+    $c++;
+    if ($c > 25) {
+      $c=0;
+      #print "BLOCK: $str\n";
+      $res=db_exec($str);
+      return -1 if ($res < 0);
+      $str='';
+    }
+  }
+
+  if ($str ne '') {
+    #print "LAST: $str\n";
+    $res=db_exec($str);
+    return -2 if ($res < 0);
+  }
+  
+  return 0;
 }
 
 # eof

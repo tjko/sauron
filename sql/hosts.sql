@@ -24,6 +24,7 @@ CREATE TABLE hosts (
        cname_txt   TEXT,
        hinfo_hw	   TEXT,
        hinfo_sw	   TEXT,
+       loc	   TEXT,
        wks	   INT4 DEFAULT -1, /* ptr to rr_wks table entry */
        mx	   INT4 DEFAULT -1, /* ptr to rr_mx table entry */
        rp_mbox	   TEXT DEFAULT '.',
@@ -32,8 +33,15 @@ CREATE TABLE hosts (
 	                              (1 being highest priority) */
        prn         BOOL DEFAULT false,
 		
-       ether	   CHAR(12),
-       info	   TEXT,
+       ether	   CHAR(12),   /* Ethernet address (MAC) */
+       info	   TEXT,       /* Host info (appears as TXT record) */
+       location	   TEXT,       /* Host location info */
+       dept	   TEXT,       /* Department name */
+       huser	   TEXT,       /* User info */
+
+       model       TEXT,       /* host model info */
+       serial	   TEXT,       /* serial number */
+       misc	   TEXT,       /* misc info */
 			       
        comment	   TEXT,
 

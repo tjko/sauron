@@ -157,23 +157,38 @@ sub update_record($$) {
 }
 
 
-sub add_record($$) {
+sub add_record_sql($$) {
   my($table,$rec) = @_;
-  my($sqlstr,@l,$key,$flag,$res,$oid,@q);
+  my($sqlstr,@l,$key,$flag);
 
-  return -130 unless ($table);
-  return -131 unless ($rec);
+  return '' unless ($table);
+  return '' unless ($rec);
 
-  delete $$rec{'id'}; # paranoid....
-  @l = keys %{$rec};
+  foreach $key (keys %{$rec}) {
+    next if ($key eq 'id');
+    next if (ref($$rec{$key}) eq 'ARRAY');
+    push @l, $key;
+  }
   $sqlstr="INSERT INTO $table (" . join(',',@l) . ") VALUES(";
-  #@l = map { $$rec{$_} }  @l;
   foreach $key (@l) {
     $sqlstr .= ',' if ($flag);
     $sqlstr .= db_encode_str($$rec{$key});
     $flag=1 unless ($flag);
   }
   $sqlstr.=");";
+
+  return $sqlstr;
+}
+
+sub add_record($$) {
+  my($table,$rec) = @_;
+  my($sqlstr,$res,$oid,@q);
+
+  return -130 unless ($table);
+  return -131 unless ($rec);
+
+  $sqlstr=add_record_sql($table,$rec);
+  return -132 if ($sqlstr eq '');
 
   #print "sql '$sqlstr'\n";
   $res=db_exec($sqlstr);
@@ -182,6 +197,30 @@ sub add_record($$) {
   db_query("SELECT id FROM $table WHERE OID=$oid;",\@q);
   return -2 if (@q < 1);
   return $q[0][0];
+}
+
+sub copy_records($$$$$$$) {
+  my($stable,$ttable,$key,$reffield,$ids,$fields,$selectsql)=@_;
+  my(@data,%h,$i,$newref,$tmp);
+
+  # make ID hash
+  for $i (0..$#{$ids}) { $h{$$ids[$i][0]}=$$ids[$i][1]; }
+
+  # read records into array & fix key fields using hash
+
+  $tmp="SELECT $reffield,$fields FROM $stable WHERE $key IN ($selectsql);";
+  #print "$tmp\n";
+  db_query($tmp,\@data);
+  print "<br>$stable records to copy: " . @data . "\n";
+  return 0 if (@data < 1);
+
+  for $i (0..$#data) {
+    $newref=$h{$data[$i][0]};
+    return -1 unless ($newref);
+    $data[$i][0]=$newref;
+  }
+  
+  return db_insert($ttable,"$reffield,$fields",\@data);
 }
 
 ############################################################################
@@ -516,11 +555,13 @@ sub delete_zone($) {
   db_begin();
 
   # cidr_entries
+  print "<BR>Deleting CIDR entries...\n";
   $res=db_exec("DELETE FROM cidr_entries WHERE (type=2 OR type=3) " .
 	       " AND ref=$id;");
   if ($res < 0) { db_rollback(); return -1; }
   
   # dhcp_entries
+  print "<BR>Deleting DHCP entries...\n";
   $res=db_exec("DELETE FROM dhcp_entries WHERE type=2 AND ref=$id;");
   if ($res < 0) { db_rollback(); return -2; }
   $res=db_exec("DELETE FROM dhcp_entries WHERE id IN ( " .
@@ -529,6 +570,7 @@ sub delete_zone($) {
   if ($res < 0) { db_rollback(); return -3; }
 
   # mx_entries
+  print "<BR>Deleting MX entries...\n";
   $res=db_exec("DELETE FROM mx_entries WHERE type=1 AND ref=$id;");
   if ($res < 0) { db_rollback(); return -4; }
   $res=db_exec("DELETE FROM mx_entries WHERE id IN ( " .
@@ -541,12 +583,14 @@ sub delete_zone($) {
   if ($res < 0) { db_rollback(); return -6; }
   
   # wks_entries
+  print "<BR>Deleting WKS entries...\n";
   $res=db_exec("DELETE FROM wks_entries WHERE id IN ( " .
 	       "SELECT a.id FROM wks_entries a, hosts h " .
 	       "WHERE h.zone=$id AND a.type=1 AND a.ref=h.id);");
   if ($res < 0) { db_rollback(); return -7; }
 
   # ns_entries
+  print "<BR>Deleting NS entries...\n";
   $res=db_exec("DELETE FROM ns_entries WHERE type=1 AND ref=$id;");
   if ($res < 0) { db_rollback(); return -8; }
   $res=db_exec("DELETE FROM ns_entries WHERE id IN ( " .
@@ -556,12 +600,14 @@ sub delete_zone($) {
 
 
   # printer_entries
+  print "<BR>Deleting PRINTER entries...\n";
   $res=db_exec("DELETE FROM printer_entries WHERE id IN ( " .
 	       "SELECT a.id FROM printer_entries a, hosts h " .
 	       "WHERE h.zone=$id AND a.type=2 AND a.ref=h.id);");
   if ($res < 0) { db_rollback(); return -10; }
 
   # txt_entries
+  print "<BR>Deleting TXT entries...\n";
   $res=db_exec("DELETE FROM txt_entries WHERE type=1 AND ref=$id;");
   if ($res < 0) { db_rollback(); return -11; }
   $res=db_exec("DELETE FROM txt_entries WHERE id IN ( " .
@@ -570,21 +616,24 @@ sub delete_zone($) {
   if ($res < 0) { db_rollback(); return -12; }
 
   # rr_a
+  print "<BR>Deleting A entries...\n";
   $res=db_exec("DELETE FROM rr_a WHERE id IN ( " .
 	       "SELECT a.id FROM rr_a a, hosts h " .
 	       "WHERE h.zone=$id AND a.host=h.id);");
   if ($res < 0) { db_rollback(); return -13; }
 
   # mx_templates
+  print "<BR>Deleting MX templates...\n";
   $res=db_exec("DELETE FROM mx_templates WHERE zone=$id;");
   if ($res < 0) { db_rollback(); return -14; }
 
   # hosts
+  print "<BR>Deleting Hosts...\n";
   $res=db_exec("DELETE FROM hosts WHERE zone=$id;");
   if ($res < 0) { db_rollback(); return -15; }
 
 
-
+  print "<BR>Deleting Zone record...\n";
   $res=db_exec("DELETE FROM zones WHERE id=$id;");
   if ($res < 0) { db_rollback(); return -50; }
 
@@ -598,6 +647,162 @@ sub add_zone($) {
   return add_record('zones',$rec);
 }
 
+sub copy_zone($$$$) {
+  my($id,$serverid,$newname,$trans)=@_;
+  my($newid,%z,$res,@q,@ids,@hids,$i,$j,%h,@t,$fields,%aids);
+
+  return -1 if (get_zone($id,\%z) < 0);
+  db_begin() if ($trans);
+
+  print "<BR>Copying zone record...";
+  delete $z{id};
+  $z{server}=$serverid;
+  $z{name}=$newname;
+  $newid=add_zone(\%z);
+  return -2 if ($newid < 1);
+  print "<BR>Copying records pointing to zone record...";
+
+  # cidr_entries
+  $res=db_exec("INSERT INTO cidr_entries (type,ref,ip,comment) " .
+	       "SELECT type,$newid,ip,comment FROM cidr_entries " .
+	       "WHERE (type=2 OR type=3) AND ref=$id;");
+  if ($res < 0) { db_rollback(); return -3; }
+  
+  # dhcp_entries
+  $res=db_exec("INSERT INTO dhcp_entries (type,ref,dhcp,comment) " .
+	       "SELECT type,$newid,dhcp,comment FROM dhcp_entries " .
+	       "WHERE type=2 AND ref=$id;");
+  if ($res < 0) { db_rollback(); return -4; }
+
+  # mx_entries
+  $res=db_exec("INSERT INTO mx_entries (type,ref,pri,mx,comment) " .
+	       "SELECT type,$newid,pri,mx,comment FROM mx_entries " .
+	       "WHERE type=1 AND ref=$id;");
+  if ($res < 0) { db_rollback(); return -5; }
+
+  # ns_entries
+  $res=db_exec("INSERT INTO ns_entries (type,ref,ns,comment) " .
+	       "SELECT type,$newid,ns,comment FROM ns_entries " .
+	       "WHERE type=1 AND ref=$id;");
+  if ($res < 0) { db_rollback(); return -6; }
+
+  # txt_entries
+  $res=db_exec("INSERT INTO txt_entries (type,ref,txt,comment) " .
+	       "SELECT type,$newid,txt,comment FROM txt_entries " .
+	       "WHERE type=1 AND ref=$id;");
+  if ($res < 0) { db_rollback(); return -7; }
+  
+
+  # mx_templates
+  print "<BR>Copying MX templates...";
+  undef @q;
+  db_query("SELECT id FROM mx_templates WHERE zone=$id;",\@ids);
+  for $i (0..$#ids) {
+    undef %h;
+    if (get_mx_template($ids[$i][0],\%h) < 0) { db_rollback(); return -8; }
+    $h{zone}=$newid;
+    $j=add_record('mx_templates',\%h);
+    if ($j < 0) { db_rollback(); return -9; }
+    $ids[$i][1]=$j;
+    $res=db_exec("INSERT INTO mx_entries (type,ref,pri,mx,comment) " .
+		 "SELECT type,$j,pri,mx,comment FROM mx_entries " .
+		 "WHERE type=3 AND ref=$ids[$i][0];");
+    if ($res < 0) { db_rollback(); return -10; }
+  }
+
+  # hosts
+  print "<BR>Copying hosts...";
+  $fields='type,domain,ttl,class,grp,alias,cname,cname_txt,hinfo_hw,' .
+          'hinfo_sw,wks,mx,rp_mbox,rp_txt,router,prn,ether,info,comment';
+
+  $res=db_exec("INSERT INTO hosts (zone,$fields) " .
+	       "SELECT $newid,$fields FROM hosts " .
+	       "WHERE zone=$id;");
+  if ($res < 0) { db_rollback(); return -11; }
+
+  db_query("SELECT a.id,b.id,a.domain FROM hosts a, hosts b " .
+	   "WHERE a.zone=$id AND b.zone=$newid AND a.domain=b.domain;",\@hids);
+  print "<br>hids = " . $#hids;
+
+  # rr_a
+  print "<BR>Copying A records...";
+  $res=copy_records('rr_a','rr_a','id','host',\@hids,
+     'ip,reverse,forward,comment',
+     "SELECT a.id FROM rr_a a,hosts h WHERE a.host=h.id AND h.zone=$id");
+  if ($res < 0) { db_rollback(); return -12; }
+
+  # dhcp_entries
+  print "<BR>Copying DHCP records...";
+  $res=copy_records('dhcp_entries','dhcp_entries','id','ref',\@hids,
+     'type,dhcp,comment',
+     "SELECT a.id FROM dhcp_entries a,hosts h " .
+     "WHERE a.type=3 AND a.ref=h.id AND h.zone=$id");
+  if ($res < 0) { db_rollback(); return -13; }
+
+  # mx_entires
+  print "<BR>Copying MX records...";
+  $res=copy_records('mx_entries','mx_entries','id','ref',\@hids,
+     'type,pri,mx,comment',
+     "SELECT a.id FROM mx_entries a,hosts h " .
+     "WHERE a.type=2 AND a.ref=h.id AND h.zone=$id");
+  if ($res < 0) { db_rollback(); return -14; }
+
+  # wks_entries
+  print "<BR>Copying WKS records...";
+  $res=copy_records('wks_entries','wks_entries','id','ref',\@hids,
+     'type,proto,services,comment',
+     "SELECT a.id FROM wks_entries a,hosts h " .
+     "WHERE a.type=1 AND a.ref=h.id AND h.zone=$id");
+  if ($res < 0) { db_rollback(); return -15; }
+
+  # ns_entries
+  print "<BR>Copying NS records...";
+  $res=copy_records('ns_entries','ns_entries','id','ref',\@hids,
+     'type,ns,comment',
+     "SELECT a.id FROM ns_entries a,hosts h " .
+     "WHERE a.type=2 AND a.ref=h.id AND h.zone=$id");
+  if ($res < 0) { db_rollback(); return -16; }
+
+  # printer_entries
+  print "<BR>Copying PRINTER records...";
+  $res=copy_records('printer_entries','printer_entries','id','ref',\@hids,
+     'type,printer,comment',
+     "SELECT a.id FROM printer_entries a,hosts h " .
+     "WHERE a.type=2 AND a.ref=h.id AND h.zone=$id");
+  if ($res < 0) { db_rollback(); return -17; }
+
+  # txt_entries
+  print "<BR>Copying TXT records...";
+  $res=copy_records('txt_entries','txt_entries','id','ref',\@hids,
+     'type,txt,comment',
+     "SELECT a.id FROM txt_entries a,hosts h " .
+     "WHERE a.type=2 AND a.ref=h.id AND h.zone=$id");
+  if ($res < 0) { db_rollback(); return -18; }
+
+  # update mx_template pointers
+  print "<BR>Updating MX template pointers...";
+  for $i (0..$#ids) {
+    $res=db_exec("UPDATE hosts SET mx=$ids[$i][1] " .
+		 "WHERE zone=$newid AND mx=$ids[$i][0];");
+    if ($res < 0) { db_rollback(); return -19; }
+  }
+
+  # update alias pointers
+  print "<BR>Updating ALIAS pointers...";
+  undef @q;
+  db_query("SELECT alias FROM hosts WHERE zone=$newid AND alias > 0;",\@q);
+  print " " .@q." alias records to update...";
+  for $i (0..$#q) { $aids{$q[$i][0]}=1; }
+  for $i (0..$#hids) {
+    next unless ($aids{$hids[$i][0]});
+    $res=db_exec("UPDATE hosts SET alias=$hids[$i][1] " .
+		 "WHERE zone=$newid AND alias=$hids[$i][0];");
+    if ($res < 0) { db_rollback(); return -20; }
+  }
+
+  if ($trans) { return -100 if (db_commit() < 0);  }
+  return $newid;
+}
 
 ############################################################################
 # hosts table functions
@@ -631,10 +836,15 @@ sub get_host($$) {
   get_array_field("printer_entries",3,"id,printer,comment","PRINTER,Comments",
 		  "type=2 AND ref=$id ORDER BY printer",$rec,'printer_l');
 
+  get_array_field("hosts",3,"id,domain,cname","Domain,cname",
+		  "type=4 AND alias=$id ORDER BY domain",$rec,'alias_l');
+
+
   if ($rec->{ether}) {
     $t=substr($rec->{ether},0,6);
     get_field("ether_info","info","ea='$t'","card_info",$rec);
   }
+  $rec->{card_info}='&nbsp;' if ($rec->{card_info} eq '');
 
   if ($rec->{wks} > 0) {
     $wrec={};

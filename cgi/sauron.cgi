@@ -2,7 +2,7 @@
 #
 # sauron.cgi
 # $Id$
-#
+# дце
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>, 2000,2001.
 # All Rights Reserved.
 #
@@ -35,9 +35,6 @@ do "$conf_dir/config" || error("cannot load configuration!");
 do "$PROG_DIR/util.pl";
 do "$PROG_DIR/db.pl";
 do "$PROG_DIR/back_end.pl";
-
-#error("invalid directory configuration") 
-#  unless (-d $CGI_STATE_PATH && -w $CGI_STATE_PATH);
 
 
 %server_form = ( 
@@ -151,11 +148,11 @@ do "$PROG_DIR/back_end.pl";
  data=>[	    
   {ftype=>0, name=>'Host' },
   {ftype=>1, tag=>'domain', name=>'Hostname', type=>'domain', len=>30},
+  {ftype=>5, tag=>'ip', name=>'IP address', iff=>['type','1']},
   {ftype=>4, tag=>'id', name=>'Host ID'},
   {ftype=>4, tag=>'type', name=>'Type', type=>'enum', enum=>\%host_types},
   {ftype=>4, tag=>'class', name=>'Class'},
   {ftype=>1, tag=>'ttl', name=>'TTL', type=>'int', len=>10},
-  {ftype=>5, tag=>'ip', name=>'IP address', iff=>['type','1']},
   {ftype=>1, tag=>'ether', name=>'Ethernet address', type=>'mac', len=>12,
    iff=>['type','1']},
   {ftype=>4, tag=>'card_info', name=>'Card manufacturer', iff=>['type','1']},
@@ -176,8 +173,10 @@ do "$PROG_DIR/back_end.pl";
    elabels=>['Priority','MX','comment'], iff=>['type','[13]']},
   {ftype=>2, tag=>'txt_l', name=>'TXT', type=>['text','text'], 
    fields=>2,
-   len=>[40,15], empty=>[0,1], elabels=>['TXT','comment'], iff=>['type','1']}
-
+   len=>[40,15], empty=>[0,1], elabels=>['TXT','comment'], iff=>['type','1']},
+  {ftype=>0, name=>'Aliases', iff=>['type','1']},
+  {ftype=>8, tag=>'alias_l', name=>'Aliases', fields=>2, 
+   elabels=>['Alias','Info'], iff=>['type','1']}
  ],
  bgcolor=>'#eeeebf',
  border=>'0',		
@@ -187,19 +186,27 @@ do "$PROG_DIR/back_end.pl";
 );
 
 
+%browse_page_size=(0=>'25',1=>'50',2=>'100',3=>'200',4=>'500');
+
 %browse_hosts_form=(
  data=>[
-  {ftype=>0, name=>'Browse hosts' },
+  {ftype=>0, name=>'Limit selection' },
   {ftype=>3, tag=>'type', name=>'Record type', type=>'enum',
    enum=>\%host_types},
   {ftype=>3, tag=>'order', name=>'Sort order', type=>'enum',
    enum=>{1=>'by hostname',2=>'by IP'}},
+  {ftype=>3, tag=>'size', name=>'Entries per page', type=>'enum',
+   enum=>\%browse_page_size},
   {ftype=>3, tag=>'net', name=>'Subnet', type=>'list', listkeys=>'nets_k', 
    list=>'nets'},
   {ftype=>1, tag=>'cidr', name=>'CIDR (block)', type=>'cidr',
    len=>20, empty=>1},
   {ftype=>1, tag=>'domain', name=>'Domain pattern (regexp)', type=>'text',
-   len=>40, empty=>1}
+   len=>40, empty=>1},
+  {ftype=>0, name=>'Search (optional)' },
+  {ftype=>3, tag=>'stype', name=>'Search field', type=>'enum',
+   enum=>{1=>'Ether',2=>'Info',3=>'User',4=>'Dept.'}},
+  {ftype=>1, tag=>'pattern',name=>'Pattern',type=>'text',len=>40,empty=>1}
  ],
  bgcolor=>'#eeeebf',
  border=>'0',		
@@ -304,6 +311,20 @@ do "$PROG_DIR/back_end.pl";
  heading_bg=>'#aaaaff'
 );
 
+%copy_zone_form=(
+ data=>[
+  {ftype=>0, name=>'Source zone'},
+  {ftype=>4, tag=>'source', name=>'Source zone'},
+  {ftype=>0, name=>'Target zone'},
+  {ftype=>1, tag=>'name', name=>'Name', type=>'domain', len=>40, empty=>0},
+  {ftype=>1, tag=>'comment', name=>'Comment', type=>'text', len=>60, empty=>1}
+ ],
+ bgcolor=>'#eeeebf',
+ border=>'0',		
+ width=>'100%',
+ nwidth=>'30%',
+ heading_bg=>'#aaaaff'
+);
 
 %new_template_form=(
  data=>[
@@ -479,7 +500,7 @@ unless ($frame_mode) {
   left_menu(0);
   print "</TD><TD align=\"left\" valign=\"top\" bgcolor=\"#ffffff\">\n";
 } else {
-  print "<TABLE width=100%><TR bgcolor=\"#ffffff\"><TD>";
+  #print "<TABLE width=100%><TR bgcolor=\"#ffffff\"><TD>";
 }
 
 print "<br>";
@@ -523,8 +544,9 @@ unless ($frame_mode) {
   print "</TD></TR><TR bgcolor=\"#002d5f\">",
         "<TD height=\"20\" colspan=\"2\" color=white align=\"right\">",
         "&nbsp;";
+  print "</TD></TR></TABLE>\n";
 }
-print "</TD></TR></TABLE>\n\n<!-- end of page -->\n";
+print "\n<!-- end of page -->\n";
 print end_html();
 
 exit;
@@ -665,6 +687,7 @@ sub zones_menu() {
     return;
   }
   elsif ($sub eq 'Delete') {
+    $|=1 if ($frame_mode);
     $res=delete_magic('zn','Zone','zones',\%zone_form,\&get_zone,
 		      \&delete_zone,$zoneid);
     if ($res == 1) {
@@ -684,7 +707,41 @@ sub zones_menu() {
     goto display_zone if ($res == 2);
     return;
   }
+  elsif ($sub eq 'Copy') {
+    if ($zoneid < 1) {
+      print h2("No zone selected!");
+      return;
+    }
+    if (param('copy_cancel')) {
+      print h2("Zone copy cancelled.");
+      return;
+    }
+    if (param('copy_confirm')) {
+      unless ($res=form_check_form('copy',\%data,\%copy_zone_form)) {
+	$|=1 if ($frame_mode);
+	print p,"Copying zone...please wait few minutes (or hours :)";
+	$res=copy_zone($zoneid,$serverid,$data{name},1);
+	if ($res < 0) {
+	  print '<FONT color="red">',h2('Zone copy failed (result=$res!'),
+	        '</FONT>';
+	} else {
+	  print h2("Zone succesfully copied (id=$res).");
+	}
+	return;
+      } else {
+	print '<FONT color="red">',h2('Invalid data in form!'),'</FONT>';
+      }
+    }
 
+    $data{source}=$zone;
+    print h2("Copy Zone:"),p,
+          startform(-method=>'POST',-action=>$selfurl),
+          hidden('menu','zones'),hidden('sub','Copy');
+    form_magic('copy',\%data,\%copy_zone_form);
+    print submit(-name=>'copy_confirm',-value=>'Copy Zone')," ",
+          submit(-name=>'copy_cancel',-value=>'Cancel'),end_form;
+    return;
+  }
 
  display_zone:
   $zone=param('selected_zone');
@@ -709,15 +766,15 @@ sub zones_menu() {
   
  select_zone:
   #display zone selection list
-  print h2("Zones for server: $server"),
-            p,"<TABLE width=90% bgcolor=white border=0>",
-            Tr,th(['Zone','Id','Type','Reverse']);
+  print h2("Select zone:"),
+            p,"<TABLE width=98% bgcolor=white border=0>",
+            "<TR bgcolor=\"#bfee00\">",th(['Zone','Type','Reverse']);
             
   $list=get_zone_list($serverid);
   for $i (0 .. $#{$list}) {
     $type=$$list[$i][2];
     if ($type eq 'M') { $type='Master'; $color='#f0f000'; }
-    elsif ($type eq 'S') { $type='Slave'; $color='#a0a0f0'; }
+    elsif ($type eq 'S') { $type='Slave'; $color='#eeeebf'; }
     $rev='No';
     $rev='Yes' if ($$list[$i][3] eq 't');
     $id=$$list[$i][1];
@@ -725,10 +782,10 @@ sub zones_menu() {
 	
     print "<TR bgcolor=$color>",td([
 	"<a href=\"$selfurl?menu=zones&selected_zone=$name\">$name</a>",
-					$id,$type,$rev]);
+					$type,$rev]);
   }
       
-  print "</TABLE>";
+  print "</TABLE><BR>";
 
 }
 
@@ -746,6 +803,7 @@ sub hosts_menu() {
   }
   
   $sub=param('sub');
+  $host_form{alias_l_url}="$selfurl?menu=hosts&h_id=";
   
   if ($sub eq 'Delete') {
     $res=delete_magic('h','Host','hosts',\%host_form,\&get_host,\&delete_host,
@@ -762,7 +820,7 @@ sub hosts_menu() {
   }
   elsif ($sub eq 'browse') {
     %bdata=(domain=>'',net=>'ANY',nets=>\%nethash,nets_k=>\@netkeys,
-	    type=>1,order=>2);
+	    type=>1,order=>2,stype=>1,size=>1);
     if (form_check_form('bh',\%bdata,\%browse_hosts_form)) {
       print p,'<FONT color="red">Invalid parameters.</FONT>';
       goto browse_hosts;
@@ -899,7 +957,7 @@ sub hosts_menu() {
     push @netkeys, $$nets[$i][0];
   }
   %bdata=(domain=>'',net=>'ANY',nets=>\%nethash,nets_k=>\@netkeys,
-	    type=>1,order=>2);
+	    type=>1,order=>2,stype=>1,size=>1);
   print start_form(-method=>'POST',-action=>$selfurl),
           hidden('menu','hosts'),hidden('sub','browse'),
           hidden('bh_page','0'),hidden('bh_psize','50');
@@ -1012,7 +1070,7 @@ sub groups_menu() {
     return;
   }
 
-  print "<TABLE><TR bgcolor=\"#ffee55\">",
+  print "<TABLE width=\"90%\"><TR bgcolor=\"#ffee55\">",
         th("Name"),th("Comment"),"</TR>";
   
   for $i (0..$#q) {
@@ -1110,10 +1168,10 @@ sub nets_menu() {
   
   for $i (0..$#q) {
       if ($q[$i][3] eq 't') {  
-	print "<TR bgcolor=\"#ddffdd\">";
+	print "<TR bgcolor=\"#eeeeee\">";
 	$type='Subnet';
       } else { 
-	print "<TR bgcolor=\"#dddddd\">";
+	print "<TR bgcolor=\"#ddffdd\">";
 	$type='Network';
       }
 				   
@@ -1651,9 +1709,13 @@ sub login_auth() {
 	  $state{'zone'}=$h{'name'} 
 	    unless(get_zone($state{'zoneid'},\%h));
 	}
-	print p,h1("Login ok!"),p,
-	    "Come in... <a href=\"$s_url/frames\">frames version</a> ",
-            "or <a href=\"$s_url\">table version (recommended for now)</a>";
+	print p,h1("Login ok!"),p,"<TABLE><TR><TD>",
+	    startform(-method=>'POST',-action=>$s_url),
+	    submit(-name=>'submit',-value=>'No Frames'),end_form,
+	    "</TD><TD> ",
+	    startform(-method=>'POST',-action=>"$s_url/frames"),
+	    submit(-name=>'submit',-value=>'Frames'),end_form,
+	    "</TD></TR></TABLE>";
 	logmsg("notice","user ($u) logged in from " . $ENV{'REMOTE_ADDR'});
 	db_exec("UPDATE users SET last=$ticks WHERE id=$user{'id'};");
       }
@@ -1728,6 +1790,7 @@ sub left_menu($) {
     print p,li("<a href=\"$url\">Current</a>"),
           p,li("<a href=\"$url&sub=select\">Select</a>"),
           p,li("<a href=\"$url&sub=add\">Add</a>"),
+          li("<a href=\"$url&sub=Copy\">Copy</a>"),
           li("<a href=\"$url&sub=Delete\">Delete</a>"),
           li("<a href=\"$url&sub=Edit\">Edit</a>");
   } elsif ($menu eq 'nets') {
@@ -1768,7 +1831,7 @@ sub left_menu($) {
     $url.='?menu=about';
     print p,li("<a href=\"$url\">About</a>"),
           li("<a href=\"$url&sub=copyright\">Copyright</a>"),
-          li("<a href=\"$url&sub=copying\">Copying</a>");
+          li("<a href=\"$url&sub=copying\">License</a>");
   } else {
     print "<p><p>empty menu\n";
   }
@@ -1810,7 +1873,7 @@ sub frame_set2() {
   $menu="?menu=" . param('menu') if ($menu);
   
   print "<HTML>" .
-        "<FRAMESET border=\"0\" cols=\"16%,84%\">\n" .
+        "<FRAMESET border=\"0\" cols=\"17%,*\">\n" .
 	"  <FRAME src=\"$script_name/frame2$menu\" name=\"menu\" noresize>\n" .
         "  <FRAME src=\"$script_name/frame3$menu\" name=\"main\">\n" .
         "  <NOFRAMES>\n" .
@@ -2131,7 +2194,7 @@ sub form_magic($$$) {
       if ($rec->{ftype} == 1) { 
 	param($p1,$val);
       }
-      elsif ($rec->{ftype} == 2) {
+      elsif ($rec->{ftype} == 2 || $rec->{ftype} == 8) {
 	$a=$data->{$rec->{tag}};
 	for $j (1..$#{$a}) {
 	  param($p1."_".$j."_id",$$a[$j][0]);
@@ -2151,7 +2214,7 @@ sub form_magic($$$) {
 	#$val=${$rec->{enum}}{$val}  if ($rec->{type} eq 'enum');
 	param($p1,$val);
       }
-      elsif ($rec->{ftype} == 2 || $rec->{ftype} == 5) {
+      elsif ($rec->{ftype} == 5) {
 	$rec->{fields}=5;
 	$a=$data->{$rec->{tag}};
 	for $j (1..$#{$a}) {
@@ -2328,6 +2391,26 @@ sub form_magic($$$) {
 	    "<TD>";
       print_wks_template(\%tmpl_rec);
       print "</TD></TR></TABLE></TD></TR>";
+    } elsif ($rec->{ftype} == 8) {
+      print "<TR>",td($rec->{name}),"<TD><TABLE><TR>";
+      $a=param($p1."_count");
+      $a=0 unless ($a > 0);
+      print hidden(-name=>$p1."_count",-value=>$a);
+      for $k (1..$rec->{fields}) { 
+	print "<TD>",${$rec->{elabels}}[$k-1],"</TD>"; 
+      }
+      print "</TR>";
+      for $j (1..$a) {
+	$p2=$p1."_".$j;
+	print "<TR>",hidden(-name=>$p2."_id",param($p2."_id"));
+	for $k (1..$rec->{fields}) {
+	  $n=$p2."_".$k;
+	  print td(param($n)),hidden($n,param($n));
+        }
+	print "</TR>";
+      }
+      print "</TABLE></TD></TR>\n";
+      
     }
     print "\n";
   }
@@ -2343,7 +2426,7 @@ sub form_magic($$$) {
 sub display_form($$) {
   my($data,$form) = @_;
   my($i,$j,$k,$a,$rec,$formdata,$h_bg,$val,$e);
-  my($ip,$ipinfo,$com);
+  my($ip,$ipinfo,$com,$url);
 
   $formdata=$form->{data};
 
@@ -2417,6 +2500,18 @@ sub display_form($$) {
 	print "</TD>";
       } else { print td("Not selected"); }
       print "</TR>";
+    } elsif ($rec->{ftype} == 8) {
+      print "<TR>",td($rec->{name}),"<TD><TABLE><TR>";
+      $a=$data->{$rec->{tag}};
+      $url=$form->{$rec->{tag}."_url"};
+      #for $k (1..$rec->{fields}) { print "<TH>",$$a[0][$k-1],"</TH>";  }
+      for $j (1..$#{$a}) {
+	$k=' ';
+	$k=' (AREC)' if ($$a[$j][2] eq 'f');
+	print "<TR>",td("<a href=\"$url$$a[$j][0]\">".$$a[$j][1]."</a> "),
+	          td($k),"</TR>";
+      }
+      print "</TABLE></TD>\n";
     } else {
       error("internal error (display_form)");
     }
