@@ -27,7 +27,7 @@ $mdate = time;
 
 %addmodes=('group'=>0,'server'=>1,'zone'=>2,'net'=>3,'host'=>4,'ipmask'=>5,
 	   'level'=>6,'elimit'=>7,'defdept'=>8,'tmplmask'=>9,
-	   'grpmask'=>10,'delmask'=>11,'rhf'=>12);
+	   'grpmask'=>10,'delmask'=>11,'rhf'=>12,'flag'=>13);
 
 %masktypes=(4=>'IP',9=>'Tempalate',10=>'Group',11=>'Delete');
 
