@@ -226,4 +226,51 @@ sub show_hash($) {
   print "</TABLE>";
 }
 
+
+# checks for valid IP-mask and also can test if given IP is within the mask
+# (dirty hack, clean up the code someday :)
+# 
+sub check_ipmask($$) {
+    my($mask,$ip) = @_;
+    my($tmp);
+
+    # print "check '$mask' '$ip'\n";
+    return 0 unless ($mask =~ /^(\*|(\d{1,3})(\-\d{1,3})?)\.(\*|(\d{1,3})(\-\d{1,3})?)\.(\*|(\d{1,3})(\-\d{1,3})?)\.(\*|(\d{1,3})(\-\d{1,3})?)$/ );
+
+    $a_1=$1; $a_2=$2; $a_3=$3;
+    $b_1=$4; $b_2=$5; $b_3=$6;
+    $c_1=$7; $c_2=$8; $c_3=$9;
+    $d_1=$10; $d_2=$11; $d_3=$12;
+
+    return 1 if ($ip eq '');
+
+    return 0 unless ($ip =~ /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+
+    if ($a_1 eq '*') { $a_2=0; $a_3=255; }
+    elsif ($a_3 eq '') { $a_3=$a_2; }
+    else { $a_3=-$a_3; }
+    # print "$1 , $a_2 - $a_3\n";
+    return 0 unless ($1 >= $a_2 && $1 <= $a_3);
+
+    if ($b_1 eq '*') { $b_2=0; $b_3=255; }
+    elsif ($b_3 eq '') { $b_3=$b_2; }
+    else { $b_3=-$b_3; }
+    # print "$2 , $b_2 - $b_3\n";
+    return 0 unless ($2 >= $b_2 && $2 <= $b_3);
+
+    if ($c_1 eq '*') { $c_2=0; $c_3=255; }
+    elsif ($c_3 eq '') { $c_3=$c_2; }
+    else { $c_3=-$c_3; }
+    # print "$3 , $c_2 - $c_3\n";
+    return 0 unless ($3 >= $c_2 && $3 <= $c_3);
+
+    if ($d_1 eq '*') { $d_2=0; $d_3=255; }
+    elsif ($d_3 eq '') { $d_3=$d_2; }
+    else { $d_3=-$d_3; }
+    # print "$4 , $d_2 - $d_3\n";
+    return 0 unless ($4 >= $d_2 && $4 <= $d_3);
+
+    return 1;
+}
+
 # eof

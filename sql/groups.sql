@@ -17,6 +17,7 @@ CREATE TABLE groups (
 				     1 = normal group,
 				     2 = dynamic address pool,
 				     3 = DHCP client class  */
+       plevel       INT4 DEFAULT 0,   /* required privilege level */
        comment	    TEXT,
 
        CONSTRAINT   groups_key UNIQUE(name,server)

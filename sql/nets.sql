@@ -18,7 +18,8 @@ CREATE TABLE nets (
        subnet      BOOL DEFAULT true, /* subnet flag */
        vlan	   INT4 DEFAULT -1, /* ptr to vlans table record
                                   -->vlans.id */
-
+       plevel	   INT4 DEFAULT 0, /* required priv.level */
+				  
        rp_mbox	   TEXT DEFAULT '.', /* RP mbox */
        rp_txt	   TEXT DEFAULT '.', /* RP txt */
        no_dhcp     BOOL DEFAULT false,  /* no-DHCP flag */

@@ -46,7 +46,7 @@ $mdate = time;
 
 $result = GetOptions("help|h","list!","add:s","delall!","del=s","passwd:s",
   	     "group=s","name=s","superuser=s","lock!","unlock!","edit!",
-	      "email=s","comment=s");
+	      "email=s","comment=s","expiration=s");
 
 $opt_user=$ARGV[0];
 
@@ -56,16 +56,17 @@ if ($opt_help || ($opt_user eq '' &&  $opt_list eq '')) {
   print " Option descriptions: \n";
 
   print "   --name=\"user name\"                    full user name\n",
-        "   --email=<address>                     set user's email address\n",
-        "   --comment=<text>                      set user comments\n",
-        "   --superuser=<yes|no>                  toggle superuser flag\n",
-        "   --passwd                              set password (interactive)\n",
-        "   --group=<groupname>                   set user group\n",
-        "   --passwd=<password>                   set password\n",
-        "   --list                                list all $fooname\n",
-        "   --lock                                lock account\n",
-        "   --unlock                              unlock account\n\n"
-	  unless ($modgroup);
+       "   --email=<address>                     set user's email address\n",
+       "   --comment=<text>                      set user comments\n",
+       "   --expiration=<DD-MM-YYYY> | none      set account expiration\n",
+       "   --superuser=<yes|no>                  toggle superuser flag\n",
+       "   --passwd                              set password (interactive)\n",
+       "   --group=<groupname>                   set user group\n",
+       "   --passwd=<password>                   set password\n",
+       "   --list                                list all $fooname\n",
+       "   --lock                                lock account\n",
+       "   --unlock                              unlock account\n\n"
+         unless ($modgroup);
 
   print "   --list                                list all groups\n"
       if ($modgroup);
@@ -162,6 +163,22 @@ if ($modgroup) {
 		 " muser='$user',mdate='$mdate' WHERE id=$id;");
     fatal("Cannot update user comment!") if ($res < 0);
     print "User comment succesfully updated.\n";
+  }
+
+  if ($opt_expiration) {
+      unless ($opt_expiration =~ /^(\d\d)-(\d\d)-(\d\d\d\d)$/) {
+	  if ($opt_expiration eq 'none') {
+	      $edate=-1;
+	  } else {
+	      fatal("Invalid date supplied for option --expiration");
+	  }
+      }
+      $edate=timelocal(0,0,0,$1,$2-1,$3-1900);
+
+      $res=db_exec("UPDATE users SET expiration=$edate, " .
+		   " muser='$user',mdate='$mdate' WHERE id=$id;");
+      fatal("Cannot update user account expiration!") if ($res < 0);
+      print "User account expiration succesfully updated.\n";
   }
 
   if ($opt_group) {
@@ -288,9 +305,9 @@ unless (defined $opt_add || defined $opt_del || defined $opt_delall) {
 if (defined $opt_add) {
   unless ($opt_add) {
   add_i:
-    print "Record type [1=server,2=zone,3=net,4=hostnamemask]: ";
+    print "Record type [1=server,2=zone,3=net,4=hostmask,5=IP-mask,6=priv.level]: ";
     $type = ReadLine 0; chomp $type;
-    unless ($type =~ /^(1|2|3|4)$/) { print "invalid type!\n"; goto add_i; }
+    unless ($type =~ /^([1-6])$/) { print "invalid type!\n"; goto add_i; }
     if ($type==1 || $type==2 || $type==3) {
       print "Enter server name: ";
       $tmp = ReadLine 0; chomp $tmp;
@@ -332,6 +349,30 @@ if (defined $opt_add) {
     elsif ($type==4) {
       print "Enter hostname mask (regexp): ";
       $tmp = ReadLine 0; chomp $tmp;
+      $tmp =~ s/\\/\\\\/g;
+      undef @d;
+      $mode=$tmp;
+      $ref=-1;
+    }
+    elsif ($type==5) {
+      print "Enter IP mask (eg 192.162.1-2.*, 192.162.1-2.10-254): ";
+      $tmp = ReadLine 0; chomp $tmp;
+      print "$tmp\n";
+      unless (check_ipmask($tmp)==1) { 
+	  print "invalid IP-mask!\n"; goto add_i; 
+      }
+      $tmp =~ s/\\/\\\\/g;
+      undef @d;
+      $mode=$tmp;
+      $ref=-1;
+    }
+    elsif ($type==6) {
+      print "Enter privilege level (0-999): ";
+      $tmp = ReadLine 0; chomp $tmp;
+      print "$tmp\n";
+      unless (($tmp =~ /^\d+$/) && ($tmp < 999)) { 
+	  print "invalid level\n"; goto add_i; 
+      }
       $tmp =~ s/\\/\\\\/g;
       undef @d;
       $mode=$tmp;
@@ -487,6 +528,26 @@ sub list_privs($$) {
     $d[$i][0] =~ s/\s+$//;
     printf "%-6s %-8s %-25s %s\n",$d[$i][1],"hostname",$d[$i][0],
       "(hostname constraint)";
+  }
+
+  undef @d;
+  db_query("SELECT a.rule,a.id  FROM user_rights a " .
+	   "WHERE a.rtype=5 AND a.ref=$id AND a.type=$utype;",\@d);
+  #print "IP-mask    records:\n";
+  for $i (0..$#d) { 
+    $d[$i][0] =~ s/\s+$//;
+    printf "%-6s %-8s %-25s %s\n",$d[$i][1],"IP-mask",$d[$i][0],
+      "(IP constraint)";
+  }
+
+  undef @d;
+  db_query("SELECT a.rule,a.id  FROM user_rights a " .
+	   "WHERE a.rtype=6 AND a.ref=$id AND a.type=$utype;",\@d);
+  #print "priv.level    records:\n";
+  for $i (0..$#d) { 
+    $d[$i][0] =~ s/\s+$//;
+    printf "%-6s %-8s %-25s %s\n",$d[$i][1],"Level",$d[$i][0],
+      "(privilege level)";
   }
 
 }

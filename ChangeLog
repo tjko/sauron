@@ -1,6 +1,10 @@
 $Id$
 	
-0.50		
+0.50
+	- added privilege level & IP-mask access controls
+	- added privilege levels to {wks,mx}-templates, groups and nets
+	  tables
+	- added email field to users table and account expiration support
 	- added vlans table and VLAN (Layer-2 networks) management 
 	- add new "info" fields to hosts table (asset ID)
 	- clear ether_alias ptrs from other hosts when deleting a host

@@ -10,6 +10,7 @@ CREATE TABLE wks_templates (
 	id		SERIAL PRIMARY KEY, /* unique ID */
 	server		INT4 NOT NULL, /* ptr to a server table record
 					  -->servers.id */
+        plevel	        INT4 DEFAULT 0, /* required priv.level */
 	name		TEXT, /* template name */
 	comment		TEXT
 ) INHERITS(common_fields);
