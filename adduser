@@ -28,26 +28,20 @@ do "$config_file" || die("cannot load config: $config_file");
 
 ##############################################
 
-my(
-   $result,$superuser,$user,$pwd,$cdate,
-   $i,$t,$r,$res,%user
-  );
-
-
 $SAURON_PWD_MODE = 0 unless (defined $SAURON_PWD_MODE);
-$cdate = time;
 $user = (getpwuid($<))[0];
 set_muser($user);
 
-$result = GetOptions("user=s","superuser","help|h","passwd=s","name=s",
-		     "group=s","comment=s","email=s","expiration=s");
+GetOptions("user=s","superuser","help|h","passwd=s","name=s",
+	   "group=s","comment=s","email=s","expiration=s");
 
 if ($opt_help) {
   print "syntax: $0 [--user=username] [--group=name] [--superuser] " .
         "[--help]\n" ,
         "\t\t[--passwd=password] [--name=\"<user's full name>\"]\n",
 	"\t\t[--email=foo\@bar] [--comment=\"comments\"]\n",
-	"\t\t[--expiration=dd-mm-yyyy]\n\n";
+	"\t\t[--expiration=dd-mm-yyyy]\n";
+  print "\n" if ($opt_help); # to get rid of warnings :)
   exit(0);
 }
 
@@ -61,6 +55,8 @@ unless ($opt_user) {
   $i=1;
 }
 fatal("Invalid username '$opt_user'!") unless ($opt_user =~ /^[a-z0-9]+$/);
+fatal("User allready exists!") unless (get_user($opt_user,\%user));
+undef %user;
 
 unless ($opt_group) {
   print "Enter group name (empty for none): ";
@@ -123,7 +119,7 @@ unless ($opt_passwd) {
   $opt_passwd = $dpasswd unless($opt_passwd);
 }
 
-$superuser=($opt_superuser==1?"true":"false");
+$opt_superuser=($opt_superuser==1?"true":"false");
 $user = (getpwuid($<))[0];
 $pwd=pwd_make($opt_passwd,$SAURON_PWD_MODE);
 
@@ -134,7 +130,7 @@ if ($i) { # ask confirmation only in interactive session...
   "\t    comment: $opt_comment\n",
   "\t expiration: ". ($opt_expiration > 0 ? localtime($opt_expiration) :
 		      '<none>') . "\n",
-  "\t  superuser: $superuser\n",
+  "\t  superuser: $opt_superuser\n",
   "Add this user [y/n]?";
 
   chomp($t=<STDIN>);
@@ -147,18 +143,18 @@ if ($i) { # ask confirmation only in interactive session...
 $user{username}=$opt_user;
 $user{password}=$pwd;
 $user{name}=$opt_name;
-$user{superuser}=$superuser;
+$user{superuser}=$opt_superuser;
 $user{email}=$opt_email;
 $user{comment}=$opt_comment;
 $user{gid}=$gid;
 $user{expiration}=$opt_expiration;
 
-fatal("Cannot add user to users table! (user already exists?)\n" .
-      db_errormsg()) if (add_user(\%user) < 0);
+fatal("Cannot add user to users table: " . db_errormsg())
+  if (add_user(\%user) < 0);
 
 print "User $opt_user added succesfully.\n";
 print "Remember to give user some rights with moduser command.\n"
-	  if (($superuser ne 'true') and ($gid < 1));
+	  if (($opt_superuser ne 'true') and ($gid < 1));
 
 exit(0);
 
