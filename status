@@ -47,11 +47,14 @@ fatal("DB_CONNECT not defined in configuration!") unless ($DB_CONNECT);
 $db_ok = db_connect2($DB_CONNECT);
 
 $VER=sauron_version();
+$DBVER=sauron_db_version();
+$dbversion=get_db_version();
 
 if ($argcount < 1 && (! $opt_quiet)) {
   print "Sauron v$VER status\n\n";
   printf "Database connection:   %s\n", ($db_ok?"OK":"ERROR");
-  printf "Database version:      %s\n", sauron_db_version();
+  printf "Database version:      %s\t%s\n", $dbversion,
+    ($dbversion < $DBVER ? "Database version too old ($DBVER required)!":'');
 }
 
 exit unless ($db_ok);

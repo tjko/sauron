@@ -10,6 +10,7 @@ require Exporter;
 @EXPORT = qw(
 	     sauron_version
 	     sauron_db_version
+	     get_db_version
 	     set_muser
 	     new_serial
 	     auto_address
@@ -116,10 +117,14 @@ use strict;
 my($muser);
 
 sub sauron_version() {
-  return "0.5.0";
+  return "0.5.0"; # current back end version
 }
 
 sub sauron_db_version() {
+  return "1.0"; # required db format version for backend
+}
+
+sub get_db_version() {
   my(@q);
   db_query("SELECT value FROM settings WHERE key='dbversion';",\@q);
   return ($q[0][0] =~ /^\d/ ? $q[0][0] : 'ERROR');
