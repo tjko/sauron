@@ -26,12 +26,13 @@ do "$config_file" || die("cannot load config: $config_file");
 
 ##############################################
 
-my($opt_help,$opt_user,$id,$res,$i,$t,@q);
+my($id,$res,$i,$t,@q);
 
 GetOptions("user=s","help|h");
 
 if ($opt_help) {
   print "syntax: $0 [--help] [--user=<username>]\n";
+  print "\n" if ($opt_help);
   exit(0);
 }
 
