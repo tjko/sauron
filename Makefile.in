@@ -172,14 +172,18 @@ backup:	clean
 
 install: all make_dirs
 	$(INSTALL) -m 644 config.in $(INSTALL_ROOT)/$(etcdir)/config.in
+	$(PERL) -p -i -e 's@^\$$PROG_DIR = "/usr/local/sauron/";@\$$PROG_DIR = "$(bindir)/";@;' $(INSTALL_ROOT)/$(etcdir)/config.in
 	if [ ! -f $(INSTALL_ROOT)/$(etcdir)/config ]; then \
 	    $(INSTALL) -m 644 config.in $(INSTALL_ROOT)/$(etcdir)/config; \
+	    $(PERL) -p -i -e 's@^\$$PROG_DIR = "/usr/local/sauron/";@\$$PROG_DIR = "$(bindir)/";@;' $(INSTALL_ROOT)/$(etcdir)/config; \
 	fi
 	$(INSTALL) -m 644 config-browser.in \
 		$(INSTALL_ROOT)/$(etcdir)/config-browser.in
+	$(PERL) -p -i -e 's@^\$$PROG_DIR = "/usr/local/sauron/";@\$$PROG_DIR = "$(bindir)/";@;' $(INSTALL_ROOT)/$(etcdir)/config-browser.in
 	if [ ! -f $(INSTALL_ROOT)/$(etcdir)/config-browser ]; then \
 	    $(INSTALL) -m 644 config-browser.in \
 		$(INSTALL_ROOT)/$(etcdir)/config-browser; \
+	    $(PERL) -p -i -e 's@^\$$PROG_DIR = "/usr/local/sauron/";@\$$PROG_DIR = "$(bindir)/";@;' $(INSTALL_ROOT)/$(etcdir)/config-browser; \
 	fi
 	$(INSTALL) -m 755 $(PROGS) $(INSTALL_ROOT)/$(bindir)
 	$(INSTALL) -m 644 $(MISCFILES) $(INSTALL_ROOT)/$(bindir)
