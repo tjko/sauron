@@ -12,7 +12,15 @@ use Getopt::Long;
 ($PG_DIR,$PG_NAME) = ($0 =~ /^(.*\/)(.*)$/);
 $0 = $PG_NAME;
 
-do "$PG_DIR/config" || fatal("cannot load config");
+if (-r "/etc/sauron/config") {
+  $config_file="/etc/sauron/config";
+} elsif (-r "/usr/local/etc/sauron/config") {
+  $config_file="/usr/local/etc/sauron/config"; 
+} else {
+  die("cannot find config file in /etc/sauron or /usr/local/etc/sauron");
+}
+
+do "$config_file" || die("cannot load config: $config_file");
 do "$PG_DIR/util.pl";
 do "$PG_DIR/db.pl";
 do "$PG_DIR/back_end.pl";
@@ -170,7 +178,7 @@ sub make_bind() {
       db_query("SELECT domain,ttl,type,value FROM root_servers " .
 	       "WHERE server=-1 ORDER BY domain,type,value;",\@q);
     }
-    warn("empty $server{named_ca}") if (@q < 1);
+    fatal("empty $server{named_ca}") if (@q < 1);
     print "Generating $server{named_ca} file...\n";
     open(ZONEFILE, ">$zfile") || fatal("Cannot create file: $zfile!");
     $time_now=gmtime;
@@ -495,7 +503,6 @@ sub make_bind() {
 	}
       }
 
-
       # plain MX domains
 
       undef @q; # entries with mx-templates
@@ -651,13 +658,13 @@ sub make_bind() {
       # normal host entries
       undef @q;
       undef %dnames;
-      db_query("SELECT hosts.domain,ip,hinfo_hw,hinfo_sw,ttl,huser,dept, " .
-	       "location,info " .
-	       "FROM hosts,a_entries " .
-	       "WHERE hosts.zone=zones.id AND a_entries.host=hosts.id " .
-	       "AND zones.id=$zoneid AND hosts.type=1 " .
-	       "AND a_entries.forward=true AND hosts.domain <> '\@' " .
-	       "ORDER BY a_entries.ip,hosts.domain;",\@q);
+      db_query("SELECT h.domain,a.ip,h.hinfo_hw,h.hinfo_sw,h.ttl,h.huser, " .
+	       " h.dept,h.location,h.info " .
+	       "FROM hosts h, a_entries a, zones z " .
+	       "WHERE h.zone=z.id AND a.host=h.id " .
+	       "AND z.id=$zoneid AND h.type=1 " .
+	       "AND a.forward=true AND h.domain <> '\@' " .
+	       "ORDER BY a.ip,h.domain;",\@q);
       if (@q > 0) {
 	print ZONEFILE ";\n;\n; A records\n;\n";
 	for $i (0 .. $#q) {
@@ -725,11 +732,11 @@ sub make_bind() {
 
       # aliases (A records)
       undef @q;
-      db_query("SELECT a.domain,b.domain,a_entries.ip,a.ttl " .
-	       "FROM hosts a, hosts b,zones z, arec_entries r,a_entries " .
+      db_query("SELECT a.domain,b.domain,ae.ip,a.ttl " .
+	       "FROM hosts a, hosts b,zones z, arec_entries r,a_entries ae " .
 	       "WHERE z.id=$zoneid AND a.type=7 AND a.zone=z.id " .
-	       " AND r.host=a.id AND b.id=r.arec AND a_entries.host=b.id " .
-	       " AND a_entries.forward=true " .
+	       " AND r.host=a.id AND b.id=r.arec AND ae.host=b.id " .
+	       " AND ae.forward=true " .
 	       "ORDER BY a.domain;",\@q);
       if (@q > 0) {
 	print ZONEFILE ";\n;\n; In-zone aliases (A records)\n;\n";
@@ -757,8 +764,9 @@ sub make_bind() {
 
       # aliases (CNAME records)
       undef @q;
-      db_query("SELECT a.domain,b.domain,a.ttl FROM hosts a, hosts b,zones " .
-	       "WHERE a.zone=zones.id AND zones.id=$zoneid " .
+      db_query("SELECT a.domain,b.domain,a.ttl " .
+	       "FROM hosts a, hosts b,zones z " .
+	       "WHERE a.zone=z.id AND z.id=$zoneid " .
 	       "AND a.type=4 AND a.alias=b.id " .
 	       "ORDER BY a.domain;",\@q);
       if (@q > 0) {
@@ -978,6 +986,7 @@ sub make_dhcp() {
 	    if ($ghosts[$k][0]==$gid && ($ip ne '')) {
 	      $host=$ghosts[$k][3];
 	      $host.=".$ghosts[$k][4]" unless ($host =~ /\.$/);
+	      $host =~ s/\.$//;
 	      $ether=dhcpether($ghosts[$k][1]);
 	      #$dhcp=db_decode_list_str($ghosts[$k][5]);
 	      $dhcpid=$ghosts[$k][5];
@@ -1031,6 +1040,7 @@ sub make_dhcp() {
 	if ($ip ne '') {
 	  $host=$ghosts[$k][3];
 	  $host.=".$ghosts[$k][4]" unless ($host =~ /\.$/);
+	  $host =~ s/\.$//;
 	  $ether=dhcpether($ghosts[$k][1]);
 	  #$dhcp=db_decode_list_str($ghosts[$k][5]);
 	  $dhcpid=$ghosts[$k][5];

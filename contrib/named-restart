@@ -1,0 +1,82 @@
+#!/bin/sh
+#
+# named-restart   -- script to restart/reload named and monitor if any
+#                    errors occured.
+#
+# $Id$
+#
+
+LOGFILE=/var/log/daemon.log
+NAMEDSCRIPT=/etc/init.d/bind
+TAILARGS="-f -n0"
+
+########################################################################
+
+set -m
+
+trap_handler () {
+    echo "Trap!"
+    kill %1
+    kill %2
+    exit;
+}
+
+
+
+case "$1" in
+    reload)
+	CMD=reload
+    ;;
+
+    restart) 
+	CMD=restart
+    ;;
+
+    *)
+	echo "Usage: $0 {reload|restart}"
+	exit 1
+    ;;
+esac
+
+
+if [ -r ${LOGFILE} ]; then
+    echo "Using logfile: $LOGFILE"
+else
+    echo "$0: cannot read logfile: $LOGFILE"
+    exit 1;
+fi
+
+if [ -x ${NAMEDSCRIPT} ]; then
+    echo "Using init.d script: $NAMEDSCRIPT"
+else
+    echo "$0: cannot execute: $NAMEDSCRIPT"
+    exit 1;
+fi
+
+if [ -f named.out ]; then
+    rm -f named.out
+fi
+
+touch named.out
+if [ $? != 0 ]; then
+    echo "$0: cannot write to: named.out"
+    exit 1;
+fi
+
+trap trap_handler 1 2 3 9
+
+tail ${TAILARGS} ${LOGFILE}  > named.out &
+
+
+echo "Telling named to $CMD..."
+${NAMEDSCRIPT} ${CMD} &
+
+wait %%
+
+
+kill %%
+
+egrep ': (starting|restart|error)' named.out
+
+echo "done"
+
