@@ -58,6 +58,7 @@ CREATE TABLE zones (
 			    (if applicaple) */
        parent	   INT4 DEFAULT -1, /* unused */
        rdate       INT4 DEFAULT 0,  /* last host removal date */
+       transfer_source INET,  /* transfer-source (optional) */
 
        CONSTRAINT  zones_key UNIQUE (name,server)
 ) INHERITS(common_fields);
