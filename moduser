@@ -191,7 +191,7 @@ if ($modgroup) {
 
 ########################################
 
-unless ($opt_add || $opt_del || $opt_delall) {
+unless (defined $opt_add || defined $opt_del || defined $opt_delall) {
   print 
     "Type     Ref.                      Mode\n",
     "-------- ------------------------- --------------------------------\n";

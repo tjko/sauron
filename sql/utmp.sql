@@ -10,6 +10,8 @@ CREATE TABLE utmp (
 	cookie		CHAR(32) PRIMARY KEY, /* session id cookie (MD5) */
 	uid		INT4, /* ptr to users table record
 				 -->users.id */
+	gid		INT4, /* ptr to user_groups table record
+				 -->user_groups.id */
 	uname		TEXT, /* username */
 	addr		CIDR, /* user's IP address */
 	superuser	BOOL DEFAULT false, /* superuser flag */
