@@ -16,6 +16,10 @@ import:
 
 sauron:
 	- more sanity checks
+	- add access control record for setting maximum allowed host expiration
+	  time
+        - add field in user_groups for default account expiration
+
 
 sauron.cgi:
 	- fix timeout problem with huge zone/server deletes...(faster server :)
