@@ -5,6 +5,11 @@
 #
 package Sauron::Sauron;
 require Exporter;
+use strict;
+use Sauron::Util;
+use vars qw($VERSION @ISA @EXPORT);
+
+$VERSION = '$Version:$';
 
 @ISA = qw(Exporter); # Inherit from Exporter
 @EXPORT = qw(
@@ -14,8 +19,6 @@ require Exporter;
 	     logmsg
 	    );
 
-use strict;
-use Sauron::Util;
 
 sub set_defaults() {
   $main::SAURON_CHARSET='iso-8859-1';
