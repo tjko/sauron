@@ -78,7 +78,7 @@ sub process_zonefile($$$$) {
     die("Invalid or missing RR class") unless ($class =~ /^(IN|CS|CH|HS)$/);
 
     # type
-    unless ($type =~ /^(SOA|A|PTR|CNAME|MX|NS|TXT|HINFO|WKS|MB|MG|MD|MF|MINFO|MR|AFSDB|ISDN|RP|RT|X25|PX)$/) {
+    unless ($type =~ /^(SOA|A|PTR|CNAME|MX|NS|TXT|HINFO|WKS|MB|MG|MD|MF|MINFO|MR|AFSDB|ISDN|RP|RT|X25|PX|SRV)$/) {
       if ($ext_flag > 0) {
 	unless ($type =~ /^(DHCP|ALIAS|AREC|ROUTER|PRINTER|BOOTP|INFO|ETHER|GROUP|BOOTP|MUUTA[0-9]|TYPE|SERIAL|PCTCP)$/) {
 	  print STDERR "unsupported RR type '$type' in $filename\n$fline\n";
@@ -106,6 +106,7 @@ sub process_zonefile($$$$) {
 	      WKS => [],
 	      
 	      RP => [],
+	      SRV => [],
 
 	      SERIAL => '',
 	      TYPE => '',
@@ -180,14 +181,20 @@ sub process_zonefile($$$$) {
 	unless ("\U$line[0]" =~ /^(TCP|UDP)$/);
       push @{$rec->{WKS}}, join(" ",@line);
     } 
+    elsif ($type eq 'SRV') {
+      die("invalid SRV record: $fline") 
+	unless ($line[0]=~/^\d+$/ && $line[1]=~/^\d$/ && $line[2]=~/^\d$+/
+		&& $line[3] ne '');
+      push @{$rec->{SRV}}, "$line[0] $line[1] $line[2] $line[3]";
+    } 
     elsif ($type eq 'TXT') {
       s/(^\s*"|"\s*$)//g;
       push @{$rec->{TXT}}, $_;
+    } 
     #
     # Otto's (jyu.fi's) extensions for automagic generation of DHCP/BOOTP/etc 
     # configs
     #
-    } 
     elsif ($type eq 'ALIAS' || $type eq 'AREC' || 
 	   $type eq 'PCTCP' || $type eq 'BOOTP') {
       # ignored...

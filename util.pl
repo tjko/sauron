@@ -34,6 +34,14 @@ sub valid_domainname($) {
   return 1;
 }
 
+# check if parameter contains a valid CIDR...returns 0 if not.
+sub is_cidr($) {
+  my($s) = @_;
+  if ( $s =~ /((\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})|(\d{1,3}(\.\d{1,3}(\.\d{1,3}(\.\d{1,3})?)?)?\/\d{1,3}))/ ) {
+    return $1;
+  }
+  return 0;
+}
 
 # convert in-addr.arpa format address into CIDR format address
 sub arpa2cidr($) {
