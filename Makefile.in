@@ -161,7 +161,7 @@ install: all make_dirs
 		$(INSTALL) -m 644 config.in $(etcdir)/config; \
 	fi
 	$(INSTALL) -m 755 $(PROGS) $(bindir)
-	$(INSTALL) -m 644 $(PLFILES) $(bindir)
+#	$(INSTALL) -m 644 $(PLFILES) $(bindir)
 	$(INSTALL) -m 644 $(MISCFILES) $(bindir)
 	$(INSTALL) -m 755 $(CGIFILES) $(bindir)/cgi
 	$(INSTALL) -m 644 $(LOGOFILES) $(bindir)/cgi
