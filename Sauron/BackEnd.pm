@@ -629,6 +629,8 @@ sub get_server($$) {
 		  "type=3 AND ref=$id ORDER BY id",$rec,'txt');
   get_array_field("txt_entries",3,"id,txt,comment","TXT,Comments",
 		  "type=10 AND ref=$id ORDER BY id",$rec,'logging');
+  get_array_field("txt_entries",3,"id,txt,comment","TXT,Comments",
+		  "type=11 AND ref=$id ORDER BY id",$rec,'custom_opts');
 
   $rec->{dhcp_flags_ad}=($rec->{dhcp_flags} & 0x01 ? 1 : 0);
   $rec->{dhcp_flags_fo}=($rec->{dhcp_flags} & 0x02 ? 1 : 0);
@@ -710,10 +712,14 @@ sub update_server($) {
   $r=update_array_field("cidr_entries",3,"ip,comment,type,ref",
 			 'forwarders',$rec,"11,$id");
   if ($r < 0) { db_rollback(); return -19; }
-  # logging
+  # logging (BIND)
   $r=update_array_field("txt_entries",3,"txt,comment,type,ref",
 			 'logging',$rec,"10,$id");
-  if ($r < 0) { db_rollback(); return -19; }
+  if ($r < 0) { db_rollback(); return -20; }
+  # custom options (BIND)
+  $r=update_array_field("txt_entries",3,"txt,comment,type,ref",
+			 'custom_opts',$rec,"11,$id");
+  if ($r < 0) { db_rollback(); return -21; }
 
   return db_commit();
 }
@@ -766,6 +772,10 @@ sub add_server($) {
   $res = add_array_field('txt_entries','txt,comment','logging',$rec,
 			 'type,ref',"10,$id");
   if ($res < 0) { db_rollback(); return -18; }
+  # custom options
+  $res = add_array_field('txt_entries','txt,comment','custom_opts',$rec,
+			 'type,ref',"11,$id");
+  if ($res < 0) { db_rollback(); return -19; }
 
 
   return -100 if (db_commit() < 0);
@@ -863,7 +873,7 @@ sub delete_server($) {
 
   # txt_entries
   $res=db_exec("DELETE FROM txt_entries " .
-	       "WHERE (type=3 OR type=10) AND ref=$id;");
+	       "WHERE (type=3 OR type=10 OR type=11) AND ref=$id;");
   if ($res < 0) { db_rollback(); return -17; }
   $res=db_exec("DELETE FROM txt_entries WHERE id IN ( " .
 	       "SELECT a.id FROM txt_entries a, zones z, hosts h " .

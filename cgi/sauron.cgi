@@ -143,6 +143,9 @@ load_config();
   {ftype=>2, tag=>'logging', name=>'Logging options', type=>['text','text'],
    fields=>2, len=>[50,20], maxlen=>[100,20], empty=>[0,1],
    elabels=>['logging option','comment']},
+  {ftype=>2, tag=>'custom_opts', name=>'Custom (BIND) options',
+   type=>['text','text'], fields=>2, len=>[50,20], maxlen=>[100,20], 
+   empty=>[0,1], elabels=>['BIND option','comment']},
 
   {ftype=>0, name=>'DHCP Settings'},
   {ftype=>3, tag=>'dhcp_flags_ad', name=>'auto-domainnames',

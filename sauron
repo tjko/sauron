@@ -203,17 +203,24 @@ sub make_bind() {
   	    ($server{listen_on_port}?"port $server{listen_on_port}":""),
 	    10,$serverid,"\t");
 
-    print BINDFILE "\n";
     print BINDFILE "\tforward $forward_enum{$server{forward}};\n"
       if ($forward_enum{$server{forward}});
     print_cidr_list('forwarders',11,$serverid,"\t");
 
+    if (@{$server{custom_opts}} > 1) {
+      print BINDFILE "\t// custom BIND options\n";
+      for $j (1..$#{$server{custom_opts}}) {
+	($val=$server{custom_opts}[$j][1]) =~ s/\;\s*$//;
+	print BINDFILE "\t$val;\n";
+      }
+      print BINDFILE "\n";
+    }
 
-    print BINDFILE "};\n\n";
+    print BINDFILE "};\n";
 
     # logging section
     if (@{$server{logging}} > 1) {
-      print BINDFILE "logging {\n";
+      print BINDFILE "\nlogging {\n";
       for $j (1..$#{$server{logging}}) {
 	($val=$server{logging}[$j][1]) =~ s/\;\s*$//;
 	print BINDFILE "\t$val;\n";
@@ -510,8 +517,8 @@ sub make_bind() {
 
       # generate reverse map for master reverse zones
 
-      #print "reversenet " . $zone{'reversenet'} . "\n";
       $rorigin = cidr2arpa($zone{'reversenet'}) . ".";
+      print "reversenet " . $zone{'reversenet'} . " ($rorigin)\n";
 
       undef %riphash;
       undef @q;
