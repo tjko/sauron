@@ -360,10 +360,10 @@ do "$PROG_DIR/back_end.pl";
   {ftype=>0, name=>'Host info',iff=>['type','1']},
   {ftype=>1, tag=>'huser', name=>'User', type=>'text', len=>25, empty=>1,
    iff=>['type','1']},
-  {ftype=>1, tag=>'location', name=>'Location', type=>'text', len=>25,
-   empty=>1, iff=>['type','1']},
   {ftype=>1, tag=>'dept', name=>'Dept.', type=>'text', len=>25, empty=>1,
    iff=>['type','1']},
+  {ftype=>1, tag=>'location', name=>'Location', type=>'text', len=>25,
+   empty=>1, iff=>['type','1']},
   {ftype=>1, tag=>'info', name=>'Info', type=>'text', len=>50, empty=>1 },
   {ftype=>0, name=>'Equipment info',iff=>['type','1']},
   {ftype=>101, tag=>'hinfo_hw', name=>'HINFO hardware', type=>'hinfo', len=>20,
@@ -412,10 +412,10 @@ do "$PROG_DIR/back_end.pl";
   {ftype=>0, name=>'Host info',iff=>['type','1']},
   {ftype=>1, tag=>'huser', name=>'User', type=>'text', len=>25, empty=>0,
    iff=>['type','1']},
-  {ftype=>1, tag=>'location', name=>'Location', type=>'text', len=>25,
-   empty=>0, iff=>['type','1']},
   {ftype=>1, tag=>'dept', name=>'Dept.', type=>'text', len=>25, empty=>0,
    iff=>['type','1']},
+  {ftype=>1, tag=>'location', name=>'Location', type=>'text', len=>25,
+   empty=>0, iff=>['type','1']},
   {ftype=>1, tag=>'info', name=>'Info', type=>'text', len=>50, empty=>1 },
   {ftype=>0, name=>'Equipment info',iff=>['type','1']},
   {ftype=>101, tag=>'hinfo_hw', name=>'HINFO hardware', type=>'hinfo', len=>20,
@@ -1928,7 +1928,7 @@ sub nets_menu() {
   }
 
  browse_nets:
-  db_query("SELECT id,name,net,subnet,comment,no_dhcp FROM nets " .
+  db_query("SELECT id,name,net,subnet,comment,no_dhcp,vlan FROM nets " .
 	   "WHERE server=$serverid ORDER BY subnet,net;",\@q);
   if (@q < 1) {
     print h2("No networks found!");
@@ -1936,7 +1936,8 @@ sub nets_menu() {
   }
 
   print "<TABLE><TR bgcolor=\"#aaaaff\">",
-        "<TH>Net</TH>",th("Name"),th("Type"),th("DHCP"),th("Comment"),"</TR>";
+        "<TH>Net</TH>",th("Name"),th("Type"),th("DHCP"),th("VLAN"),
+	  th("Comment"),"</TR>";
 
   for $i (0..$#q) {
       if ($q[$i][3] eq 't') {  
@@ -1947,6 +1948,7 @@ sub nets_menu() {
 	$type='Network';
       }
 
+      $vlan=($q[$i][6] ? $q[$i][6] : '&nbsp;');
       $name=$q[$i][1];
       $name='&nbsp;' if ($name eq '');
       $comment=$q[$i][4];
@@ -1954,7 +1956,8 @@ sub nets_menu() {
       $dhcp=($q[$i][5] eq 't' ? 'No' : 'Yes' );
       print "<td><a href=\"$selfurl?menu=nets&net_id=$q[$i][0]\">",
 	  "$q[$i][2]</a></td>",
-          td($name),td($type),td($dhcp),td($comment),"</TR>";
+          td("<FONT size=-1>$name</FONT>"),td($type),td($dhcp),td($vlan),
+	    td("<FONT size=-1>$comment</FONT>"),"</TR>";
   }
 
   print "</TABLE>";

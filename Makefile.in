@@ -73,7 +73,7 @@ SQL_TABLES =	sql/common.sql \
 
 #		sql/host_info.sql \
 
-PROGS = sauron addgroup adduser deluser \
+PROGS = sauron addgroup adduser deluser modhosts \
 	import import-ethers import-jyu import-roots \
 	last moduser parse-hosts-rows runsql status update-dhcp-info 
 

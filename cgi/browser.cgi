@@ -284,7 +284,7 @@ sub do_search() {
   elsif ($type =~ /^Ether/) {
     $mask = "\U$mask";
     $mask =~ s/(\s|:)//g;
-    print "mask='$mask'";
+    #print "mask='$mask'";
     unless ($mask =~ /^(\^)?([0-9A-F]+)(\$)?$/) {
       alert1("Invalid Ethernet address");
       return;
