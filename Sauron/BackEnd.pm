@@ -106,6 +106,12 @@ $VERSION = '$Id$ ';
 	     delete_vlan
 	     get_vlan_list
 
+	     get_vmps
+	     update_vmps
+	     add_vmps
+	     delete_vmps
+	     get_vmps_list
+
 	     add_news
 	     get_news_list
 
@@ -2537,13 +2543,13 @@ sub delete_net($) {
 }
 
 ############################################################################
-# vlan functions
+# VLAN functions
 
 sub get_vlan($$) {
   my ($id,$rec) = @_;
 
   return -100 if (get_record("vlans",
-                      "server,name,description,comment,".
+                      "server,name,description,comment,vlanno,".
 		      "cdate,cuser,mdate,muser", $id,$rec,"id"));
 
   get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comment",
@@ -2627,6 +2633,86 @@ sub get_vlan_list($$$) {
   return if ($serverid < 1);
 
   db_query("SELECT id,name FROM vlans " .
+	   "WHERE server=$serverid ORDER BY name;",\@q);
+  for $i (0..$#q) {
+    push @{$lst}, $q[$i][0];
+    $$rec{$q[$i][0]}=$q[$i][1];
+  }
+}
+
+
+############################################################################
+# VMPS functions
+
+sub get_vmps($$) {
+  my ($id,$rec) = @_;
+
+  return -100 if (get_record("vmps",
+                      "server,name,description,comment,".
+		      "mode,nodomainreq,fallback,".
+		      "cdate,cuser,mdate,muser", $id,$rec,"id"));
+
+  add_std_fields($rec);
+  return 0;
+}
+
+
+sub update_vmps($) {
+  my($rec) = @_;
+  my($r,$id);
+
+  del_std_fields($rec);
+
+  db_begin();
+  $r=update_record('vmps',$rec);
+  if ($r < 0) { db_rollback(); return $r; }
+
+  return db_commit();
+}
+
+sub add_vmps($) {
+  my($rec) = @_;
+  my($res,$id,$i);
+
+  db_begin();
+  $rec->{cdate}=time;
+  $rec->{cuser}=$muser;
+  $res = add_record('vmps',$rec);
+  if ($res < 0) { db_rollback(); return -1; }
+  $id=$res;
+
+  return -10 if (db_commit() < 0);
+  return $id;
+}
+
+sub delete_vmps($) {
+  my($id) = @_;
+  my($res);
+
+  return -100 unless ($id > 0);
+
+  db_begin();
+
+  $res=db_exec("DELETE FROM vmps WHERE id=$id");
+  if ($res < 0) { db_rollback(); return -1; }
+
+  $res=db_exec("UPDATE hosts SET vmps=-1 WHERE vmps=$id");
+  if ($res < 0) { db_rollback(); return -10; }
+
+  return db_commit();
+}
+
+sub get_vmps_list($$$) {
+  my($serverid,$rec,$lst) = @_;
+  my(@q,$i);
+
+  undef @{$lst};
+  push @{$lst},  -1;
+  undef %{$rec};
+  $$rec{-1}='None';
+  return if ($serverid < 1);
+
+  db_query("SELECT id,name FROM vmps " .
 	   "WHERE server=$serverid ORDER BY name;",\@q);
   for $i (0..$#q) {
     push @{$lst}, $q[$i][0];

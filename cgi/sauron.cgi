@@ -83,7 +83,10 @@ load_config();
 		     ['Add subnet','sub=addsub'],
 		     [],
 		     ['VLANs','sub=vlans'],
-		     ['Add vlan','sub=addvlan']
+		     ['Add vlan','sub=addvlan'],
+		     [],
+		     ['VMPS','sub=vmps'],
+		     ['Add VMPS','sub=addvmps']
 		    ],
 	    'templates'=>[
 			  ['Show MX','sub=mx'],
@@ -990,12 +993,39 @@ if (param('csv')) {
 );
 
 
+%vmps_form=(
+ data=>[
+  {ftype=>0, name=>'VMPS Domain'},
+  {ftype=>1, tag=>'name', name=>'Name', type=>'texthandle',
+   len=>32, conv=>'L', empty=>0},
+  {ftype=>4, tag=>'id', name=>'ID', no_edit=>0},
+  {ftype=>1, tag=>'description', name=>'Description', type=>'text',
+   len=>60, empty=>1},
+  {ftype=>1, tag=>'comment', name=>'Comments', type=>'text',
+   len=>60, empty=>1},
+
+  {ftype=>3, tag=>'mode', name=>'Mode', type=>'enum', conv=>'L',
+   enum=>{0=>'Open',1=>'Secure'}},
+  {ftype=>3, tag=>'nodomainreq', name=>'no-domain-req',
+   type=>'enum', conv=>'L', enum=>{0=>'Allow',1=>'Deny'}},
+  {ftype=>3, tag=>'fallback', name=>'Fallback VLAN', type=>'enum', conv=>'L',
+   enum=>\%vlan_list_hash, elist=>\@vlan_list_lst, restricted=>0},
+
+  {ftype=>0, name=>'Record info', no_edit=>1},
+  {ftype=>4, name=>'Record created', tag=>'cdate_str', no_edit=>1},
+  {ftype=>4, name=>'Last modified', tag=>'mdate_str', no_edit=>1}
+ ]
+);
+
+
 %vlan_form=(
  data=>[
   {ftype=>0, name=>'VLAN (Layer-2 Network / Shared Network)'},
   {ftype=>1, tag=>'name', name=>'Name', type=>'texthandle',
    len=>32, conv=>'L', empty=>0},
   {ftype=>4, tag=>'id', name=>'ID', no_edit=>0},
+  {ftype=>1, tag=>'vlanno', name=>'VLAN No.', type=>'priority',
+   len=>5, empty=>1},
   {ftype=>1, tag=>'description', name=>'Description', type=>'text',
    len=>60, empty=>1},
   {ftype=>1, tag=>'comment', name=>'Comments', type=>'text',
@@ -1017,6 +1047,8 @@ if (param('csv')) {
   {ftype=>0, name=>'VLAN (Layer-2 Network / Shared Network)'},
   {ftype=>1, tag=>'name', name=>'Name', type=>'texthandle',
    len=>32, conv=>'L', empty=>0},
+  {ftype=>1, tag=>'vlanno', name=>'VLAN No.', type=>'priority',
+   len=>5, empty=>1},
   {ftype=>1, tag=>'description', name=>'Description', type=>'text',
    len=>40, empty=>1},
   {ftype=>1, tag=>'comment', name=>'Comments', type=>'text',
@@ -2560,6 +2592,7 @@ sub nets_menu() {
   $sub=param('sub');
   $id=param('net_id');
   $v_id=param('vlan_id');
+  $vm_id=param('vmps_id');
 
   unless ($serverid > 0) {
     print h2("Server not selected!");
@@ -2567,6 +2600,39 @@ sub nets_menu() {
   }
   return if (check_perms('server','R'));
 
+ show_vmps_record:
+  if ($vm_id > 0) {
+      return if (check_perms('level',$ALEVEL_VLANS));
+      if (get_vmps($vm_id,\%vmps)) {
+	  alert2("Cannot get vmps record (id=$vm_id)");
+	  return;
+      }
+      get_vlan_list($serverid,\%vlan_list_hash,\@vlan_list_lst);
+
+      if ($sub eq 'Edit') {
+	  return if (check_perms('superuser',''));
+	  $res=edit_magic('vmps','VMPS Domain','vmps',\%vmps_form,
+			  \&get_vmps,\&update_vmps,$vm_id);
+	  return unless ($res == 2 || $res == 1);
+	  get_vmps($vm_id,\%vmps);
+      }
+      elsif ($sub eq 'Delete') {
+	  return if (check_perms('superuser',''));
+	  $res=delete_magic('vmps','VMPS Domain','vmps',\%vmps_form,
+			    \&get_vmps,\&delete_vmps,$vm_id);
+	  return unless ($res == 2);
+	  get_vlan($v_id,\%vlan);
+      }
+
+      display_form(\%vmps,\%vmps_form);
+      print p,startform(-method=>'GET',-action=>$selfurl),
+            hidden('menu','nets'),hidden('vmps_id',$vm_id);
+      print submit(-name=>'sub',-value=>'Edit'), "  ",
+            submit(-name=>'sub',-value=>'Delete'), " &nbsp;&nbsp;&nbsp; "
+	    unless (check_perms('superuser','',1));
+      print end_form;
+      return;
+  }
  show_vlan_record:
   if ($v_id > 0) {
       return if (check_perms('level',$ALEVEL_VLANS));
@@ -2580,8 +2646,7 @@ sub nets_menu() {
 	  return if (check_perms('superuser',''));
 	  $res=edit_magic('vlan','VLAN','vlans',\%vlan_form,
 			  \&get_vlan,\&update_vlan,$v_id);
-	  #goto browse_vlans if ($res == -1);
-	  return unless ($res == 2);
+	  return unless ($res == 2 || $res == 1);
 	  get_vlan($v_id,\%vlan);
       }
       elsif ($sub eq 'Delete') {
@@ -2602,20 +2667,49 @@ sub nets_menu() {
       return;
   }
 
-  if ($sub eq 'vlans') {
+  if ($sub eq 'vmps') {
+      return if (check_perms('level',$ALEVEL_VLANS));
+      undef @q;
+      db_query("SELECT id,name,description,comment FROM vmps " .
+	       "WHERE server=$serverid ORDER BY name;",\@q);
+      print h3("VMPS Domains");
+      for $i (0..$#q) {
+	$q[$i][1]="<a href=\"$selfurl?menu=nets&vmps_id=$q[$i][0]\">".
+	          "$q[$i][1]</a>";
+      }
+      display_list(['Name','Description','Comments'],\@q,1);
+      print "<br>";
+      return;
+  }
+  elsif ($sub eq 'vlans') {
     browse_vlans:
       return if (check_perms('level',$ALEVEL_VLANS));
       undef @q;
-      db_query("SELECT id,name,description,comment FROM vlans " .
+      db_query("SELECT id,name,vlanno,description,comment FROM vlans " .
 	       "WHERE server=$serverid ORDER BY name;",\@q);
       print h3("VLANs");
       for $i (0..$#q) {
 	$q[$i][1]="<a href=\"$selfurl?menu=nets&vlan_id=$q[$i][0]\">".
 	          "$q[$i][1]</a>";
       }
-      display_list(['Name','Description','Comments'],\@q,1);
+      display_list(['Name','VLAN No.','Description','Comments'],\@q,1);
       print "<br>";
       return;
+  }
+  elsif ($sub eq 'addvmps') {
+    return if (check_perms('superuser',''));
+    get_vlan_list($serverid,\%vlan_list_hash,\@vlan_list_lst);
+    $data{server}=$serverid;
+    $res=add_magic('addvmps','VMPS Domain','vmps',\%vmps_form,
+		   \&add_vmps,\%data);
+    if ($res > 0) {
+      #show_hash(\%data);
+      #print "<p>$res $data{name}";
+      $vm_id=$res;
+      goto show_vmps_record;
+    }
+    print db_lasterrormsg();
+    return;
   }
   elsif ($sub eq 'addvlan') {
     return if (check_perms('superuser',''));
