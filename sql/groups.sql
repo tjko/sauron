@@ -11,8 +11,8 @@ CREATE TABLE groups (
        server	    INT4 NOT NULL,
 
        name	    TEXT NOT NULL CHECK(name <> ''),
-       dhcp	    TEXT[],
-       printer	    TEXT[],
+       /* dhcp	    TEXT[], */
+       /* printer    TEXT[], */
 
        comment	    TEXT,
 

@@ -880,6 +880,87 @@ sub get_wks_template_list($$$) {
   }
 }
 
+############################################################################
+# group functions
+
+sub get_group($$) {
+  my ($id,$rec) = @_;
+
+  return -100 if (get_record("groups","name,comment",$id,$rec,"id"));
+
+  get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comments",
+		  "type=5 AND ref=$id ORDER BY dhcp",$rec,'dhcp');
+  get_array_field("printer_entries",3,"id,printer,comment","PRINTER,Comments",
+		  "type=1 AND ref=$id ORDER BY printer",$rec,'printer');
+
+  return 0;
+}
+
+sub update_group($) {
+  my($rec) = @_;
+  my($r,$id);
+
+  db_begin();
+  $r=update_record('groups',$rec);
+  if ($r < 0) { db_rollback(); return $r; }
+  $id=$rec->{id};
+
+  $r=update_array_field("dhcp_entries",3,"dhcp,comment,type,ref",
+			'dhcp',$rec,"5,$id");
+  if ($r < 0) { db_rollback(); return -16; }
+  $r=update_array_field("printer_entries",3,"printer,comment,type,ref",
+			'printer',$rec,"1,$id");
+  if ($r < 0) { db_rollback(); return -17; }
+
+  return db_commit();
+}
+
+sub add_group($) {
+  my($rec) = @_;
+
+  return add_record('groups',$rec);
+}
+
+
+sub delete_group($) {
+  my($id) = @_;
+  my($res);
+
+  return -100 unless ($id > 0);
+
+  db_begin();
+
+  # dhcp_entries
+  $res=db_exec("DELETE FROM dhcp_entries WHERE type=5 AND ref=$id;");
+  if ($res < 0) { db_rollback(); return -1; }
+  # printer_entries
+  $res=db_exec("DELETE FROM printer_entries WHERE type=1 AND ref=$id;");
+  if ($res < 0) { db_rollback(); return -2; }
+
+  $res=db_exec("DELETE FROM groups WHERE id=$id;");
+  if ($res < 0) { db_rollback(); return -3; }
+
+  return db_commit();
+}
+
+sub get_group_list($$$) {
+  my($serverid,$rec,$lst) = @_;
+  my(@q,$i);
+
+  undef @{$lst};
+  push @{$lst},  -1;
+  undef %{$rec};
+  $$rec{-1}='None';
+  return if ($serverid < 1);
+
+  db_query("SELECT id,name FROM groups " .
+	   "WHERE server=$serverid ORDER BY name;",\@q);
+  for $i (0..$#q) {
+    push @{$lst}, $q[$i][0];
+    $$rec{$q[$i][0]}=$q[$i][1];
+  }
+}
+
 
 ############################################################################
 # user functions

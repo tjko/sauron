@@ -266,6 +266,27 @@ do "$PROG_DIR/back_end.pl";
  heading_bg=>'#aaaaff'
 );
 
+%group_form=(
+ data=>[
+  {ftype=>0, name=>'Group'},
+  {ftype=>1, tag=>'name', name=>'Name', type=>'text', len=>40, empty=>0},
+  {ftype=>4, tag=>'id', name=>'ID'},
+  {ftype=>1, tag=>'comment', name=>'Comment', type=>'text', len=>60, empty=>1},
+  {ftype=>2, tag=>'dhcp', name=>'DHCP entries', 
+   type=>['text','text'], fields=>2,
+   len=>[40,20], empty=>[0,1], elabels=>['DHCP','comment']},
+  {ftype=>2, tag=>'printer', name=>'PRINTER entries', 
+   type=>['text','text'], fields=>2,
+   len=>[40,20], empty=>[0,1], elabels=>['PRINTER','comment']}
+ ],
+ bgcolor=>'#eeeebf',
+ border=>'0',		
+ width=>'100%',
+ nwidth=>'30%',
+ heading_bg=>'#aaaaff'
+);
+
+
 %new_template_form=(
  data=>[
   {ftype=>0, name=>'New template'},
@@ -280,6 +301,8 @@ do "$PROG_DIR/back_end.pl";
  nwidth=>'30%',
  heading_bg=>'#aaaaff'
 );
+
+%new_group_form = %new_template_form;
 
 %mx_template_form=(
  data=>[
@@ -450,9 +473,9 @@ elsif ($menu eq 'hosts') { hosts_menu(); }
 elsif ($menu eq 'about') { about_menu(); }
 elsif ($menu eq 'nets') { nets_menu(); }
 elsif ($menu eq 'templates') { templates_menu(); }
-else {
-  print p,"Unknown menu '$menu'";
-}
+elsif ($menu eq 'templates') { templates_menu(); }
+elsif ($menu eq 'groups') { groups_menu(); }
+else { print p,"Unknown menu '$menu'"; }
 
 
 if ($debug_mode) {
@@ -835,6 +858,127 @@ sub hosts_menu() {
   form_magic('bh',\%bdata,\%browse_hosts_form);
   print submit(-name=>'bh_submit',-value=>'Search'),end_form;
 
+}
+
+
+# GROUPS menu
+#
+sub groups_menu() {
+  my(@q,$i,$id);
+
+  $sub=param('sub');
+  $id=param('grp_id');
+
+  unless ($serverid > 0) {
+    print h2("Server not selected!");
+    return;
+  }
+
+  if ($sub eq 'add') {
+    $data{server}=$serverid;
+    $res=add_magic('add','Group','groups',\%new_group_form,
+		   \&add_group,\%data);
+    if ($res > 0) {
+      #show_hash(\%data);
+      #print "<p>$res $data{name}";
+      $id=$res;
+      goto show_group_record;
+    }
+    return;
+  }
+  elsif ($sub eq 'Edit') {
+    $res=edit_magic('grp','Group','groups',\%group_form,
+		    \&get_group,\&update_group,$id);
+    goto browse_groups if ($res == -1);
+    goto show_group_record if ($res > 0);
+    return;		    
+  }
+  elsif ($sub eq 'Delete') {
+    if (get_group($id,\%group)) {
+      print h2("Cannot get group (id=$id)");
+      return;
+    }
+    if (param('grp_cancel')) {
+      print h2('Group not removed');
+      goto show_group_record;
+    } 
+    elsif (param('grp_confirm')) {
+      $new_id=param('grp_new');
+      if ($new_id eq $id) {
+	print h2("Cannot change host records to point the group " .
+		 "being deleted!");
+	goto show_group_record;
+      }
+      $new_id=-1 unless ($new_id > 0);
+      if (db_exec("UPDATE hosts SET grp=$new_id WHERE grp=$id;") < 0) {
+	print h2('Cannot update records pointing to this group!');
+	return;
+      }
+      if (delete_group($id) < 0) {
+	print "<FONT color=\"red\">",h1("Group delete failed!"),
+	        "</FONT>";
+	return;
+      }
+      print h2("Group successfully deleted.");
+      return;
+    }
+
+    undef @q;
+    db_query("SELECT COUNT(id) FROM hosts WHERE grp=$id;",\@q);
+    print p,"$q[0][0] host records use this group.",
+	      startform(-method=>'GET',-action=>$selfurl);
+    if ($q[0][0] > 0) {
+      get_group_list($serverid,\%lsth,\@lst);
+      print p,"Change those host records to point to: ",
+	        popup_menu(-name=>'grp_new',-values=>\@lst,
+			   -default=>-1,-labels=>\%lsth);
+    }
+    print hidden('menu','groups'),hidden('sub','Delete'),
+	      hidden('grp_id',$id),p,
+	      submit(-name=>'grp_confirm',-value=>'Delete'),"  ",
+	      submit(-name=>'grp_cancel',-value=>'Cancel'),end_form;
+    display_form(\%group,\%group_form);
+    return;
+  }
+  
+ show_group_record:
+  if ($id > 0) {
+    if (get_group($id,\%group)) {
+      print h2("Cannot get group record (id=$id)!");
+      return;
+    }
+    display_form(\%group,\%group_form);
+    print p,startform(-method=>'GET',-action=>$selfurl),
+          hidden('menu','groups'),
+          submit(-name=>'sub',-value=>'Edit'), "  ",
+          submit(-name=>'sub',-value=>'Delete'),
+          hidden('grp_id',$id),end_form;
+    return;
+  }
+
+ browse_groups:
+  db_query("SELECT id,name,comment FROM groups " .
+	   "WHERE server=$serverid ORDER BY name;",\@q);
+  if (@q < 1) {
+    print h2("No groups found!");
+    return;
+  }
+
+  print "<TABLE><TR bgcolor=\"#ffee55\">",
+        th("Name"),th("Comment"),"</TR>";
+  
+  for $i (0..$#q) {
+    print "<TR bgcolor=\"#dddddd\">";
+				   
+    $name=$q[$i][1];
+    $name='&nbsp;' if ($name eq '');
+    $comment=$q[$i][2];
+    $comment='&nbsp;' if ($comment eq '');
+    print "<td><a href=\"$selfurl?menu=groups&grp_id=$q[$i][0]\">$name</a></td>",
+          td($comment),"</TR>";
+  }
+ 
+  print "</TABLE>";
 }
 
 
@@ -1497,6 +1641,7 @@ sub top_menu($) {
         "<A HREF=\"$s_url?menu=zones\"><FONT color=\"#ffffff\">Zones</FONT></A> | ",
         "<A HREF=\"$s_url?menu=nets\"><FONT color=\"#ffffff\">Nets</FONT></A> | ",
         "<A HREF=\"$s_url?menu=templates\"><FONT color=\"#ffffff\">Templates</FONT></A> | ",
+        "<A HREF=\"$s_url?menu=groups\"><FONT color=\"#ffffff\">Groups</FONT></A> | ",
         "<A HREF=\"$s_url?menu=servers\"><FONT color=\"#ffffff\">Servers</FONT></A> | ",
 	"<A HREF=\"$s_url?menu=login\"><FONT color=\"#ffffff\">Login</FONT></A> | ",
 	"<A HREF=\"$s_url?menu=about\"><FONT color=\"#ffffff\">About</FONT></A> ",
@@ -1548,10 +1693,18 @@ sub left_menu($) {
           li("<a href=\"$url&sub=wks\">Show WKS</a><br>"),
           p,li("<a href=\"$url&sub=addmx\">Add MX</a>"),
           li("<a href=\"$url&sub=addwks\">Add WKS</a>");
+  } elsif ($menu eq 'groups') {
+    $url.='?menu=groups';
+    print p,li("<a href=\"$url\">Groups</a>"),
+          p,li("<a href=\"$url&sub=add\">Add</a>");
   } elsif ($menu eq 'hosts') {
     $url.='?menu=hosts';
     print p,li("<a href=\"$url\">Browse</a>"),
-          p,li("<a href=\"$url&sub=add\">Add host</a>");
+          p,li("<a href=\"$url&sub=addhost\">Add host</a>"),
+          li("<a href=\"$url&sub=addmx\">Add MX entry</a>"),
+          li("<a href=\"$url&sub=adddelegation\">Add delegation</a>"),
+          li("<a href=\"$url&sub=addprinter\">Add glue rec.</a>"),
+          li("<a href=\"$url&sub=addprinter\">Add printer</a>");
   } elsif ($menu eq 'login') {
     $url.='?menu=login';
     print p,li("<a href=\"$url&sub=login\">Login</a>"),
@@ -1664,7 +1817,7 @@ sub make_cookie() {
   $state{'addr'}=$ENV{'REMOTE_ADDR'};
   save_state($val);
   $ncookie=$val;
-  return cookie(-name=>'sauron',-expires=>'+1d',-value=>$val,-path=>$s_url);
+  return cookie(-name=>'sauron',-expires=>'+7d',-value=>$val,-path=>$s_url);
 }
 
 sub save_state($id) {
