@@ -67,9 +67,9 @@ if ($opt_help || ($opt_user eq '' &&  $opt_list eq '')) {
 
   print "                                         Priviliges\n",
         "   --add                                 interactive add\n",
-        "   --add=\"server,<servername>,<mode>\"    add server (mode=R|RW|RWS)\n",
-        "   --add=\"zone,<zonename>,<mode>\"        add zone (mode=R|RW|RWS)\n",
-        "   --add=\"net,<net>,<mode>\"              add net (mode=RW|RWS)\n",
+        "   --add=\"server,<servername>,<mode>\"    add server (mode=R|RW|RWX)\n",
+        "   --add=\"zone,<zonename>,<mode>\"        add zone (mode=R|RW|RWX)\n",
+        "   --add=\"net,<net>,<mode>\"              add net (mode=RW|RWX)\n",
         "   --add=\"host,<reg exp>\"                add hostname mask\n",
         "   --add=\"ipmask,<ipmask>\"               add IP-mask\n",
         "   --add=\"level,<level>\"                 add priv.level\n",
@@ -402,7 +402,7 @@ if (defined $opt_add) {
   }
 
   fatal("invalid parameter '$opt_add' for add option!")
-    unless ($opt_add =~ /^(server|zone|net|host|ipmask|level|elimit|defdept),([^,\s]+)(,(R|RW|RWS))?$/);
+    unless ($opt_add =~ /^(server|zone|net|host|ipmask|level|elimit|defdept),([^,\s]+)(,(R|RW|RWX))?$/);
   $type=$addmodes{$1};
   $tmp=$2;
   $mode=$4;
@@ -508,8 +508,8 @@ sub ask_mode($n) {
   my($mode,$t,$i);
   my(%modehash);
 
-  if ($n==1) { %modehash=(1=>'RW',2=>'RWS'); }
-  else { %modehash=(1=>'R',2=>'RW',3=>'RWS'); }
+  if ($n==1) { %modehash=(1=>'RW',2=>'RWX'); }
+  else { %modehash=(1=>'R',2=>'RW',3=>'RWX'); }
   print "Enter mode [";
   foreach $i (keys %modehash) { print "$i=$modehash{$i} "; }
   print "]: ";
