@@ -527,7 +527,7 @@ sub make_bind() {
 	       " AND (h.type=1 OR h.type=6 OR h.type=10) " .
 	       " AND a.host=h.id " .
 	       " AND a.reverse=true AND a.ip << '$zone{reversenet}' " .
-	       "ORDER BY ip;",\@q);
+	       "ORDER BY a.ip,h.domain",\@q);
       error(db_errormsg()) if (db_errormsg());
       if (@q > 0) {
 	print ZONEFILE ";\n; reverse map for: $zone{reversenet}\n;\n";
@@ -1129,7 +1129,7 @@ sub make_dhcp() {
 		   "\tmax-response-delay $fo_mrd;\n",
 		   "\tmax-unacked-updates $fo_muu;\n",
 		   "\tmclt $fo_mclt;\n",
-		   "\tsplit $fo_split;\n",
+		   ($failover_mode == 1 ? "\tsplit $fo_split;\n" : ''),
 		   "\tload balance max seconds $fo_lbm;\n}\n\n";
   }
 
