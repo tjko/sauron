@@ -55,7 +55,7 @@ do "$config_file" || die("cannot load config: $config_file");
 
 db_connect($DB_CONNECT);
 
-print "Create initial table for sauron [y/n]? ";
+print "Create initial tables for sauron [y/n]? ";
 chomp($a=lc(<STDIN>));
 exit unless ($a eq 'y');
 
