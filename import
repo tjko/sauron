@@ -629,6 +629,11 @@ for ($i=0; $i <= $#zones; $i+=1) {
       }
     }
 
+    if ($hosttype == 0) {
+      print STDERR "\nIGNORING uknown host entry '$host' in zone $zone\n";
+      next;
+    }
+
     die("empty hostname after stripping origin '$host'")  if ($host2 eq '');
     #print STDERR "$host: many IPs\n" if (@{$rec->{A}} > 1); 
 
@@ -861,7 +866,7 @@ $res = db_exec("UPDATE servers SET hostmaster='$hostmaster'," .
 	       "hostname='$primaryservername' WHERE id=$serverid;");
 die("Cannot update server record!") if ($res < 0);
 
-print STDERR "Vacuuming..."
+print STDERR "Vacuuming...";
 db_vacuum();
 print STDERR "\n";
 exit;

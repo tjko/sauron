@@ -88,6 +88,7 @@ process_zonefile("fh0000",$hostsfile,$zonename,\%zonedata,1);
 $count = keys %zonedata;
 print "\nFound $count hosts...\n";
 
+db_begin();
 
 $rec = $zonedata{$origin};
 warn("No SOA record found in hosts file!") unless ($rec);
@@ -105,8 +106,15 @@ if ($rec) {
 
   $sqlstr = "UPDATE servers SET dhcp='{$dhcplist}' " .
             "WHERE id=$serverid;";
-  $res = db_exec($sqlstr);
+  $res = db_exec($sqlstr);   # voi poistaa!!!!!!!!!!!!!!!!!!!
   die("Cannot update server record!") if ($res < 0);
+
+  foreach $rtmp (@{$rec->{DHCP}}) {
+    next if ($rtmp =~ /^\s*$/);
+    $res=db_exec("INSERT INTO dhcp_entries (type,ref,dhcp) " .
+		 "VALUES(1,$serverid,'$rtmp');");
+    die("cannot insert dhcp_entry '$rtmp' for server!") if ($res < 0);
+  }
 
   delete $zonedata{$origin};
 }
@@ -114,7 +122,7 @@ if ($rec) {
 
 
 # find virtual routers...
-db_begin();
+
 foreach $host (keys %zonedata) {
   $rec=$zonedata{$host};
   if ($rec->{ROUTER} ne '') {
@@ -137,7 +145,7 @@ foreach $host (keys %zonedata) {
     }
   }
 }
-db_commit();
+
 $rc=keys %rhash;
 print "found $rcount virtual-routers/subnets...$rc\n";
 
@@ -157,8 +165,22 @@ foreach $net (keys %rhash) {
             "subnet,no_dhcp) " .
     "VALUES('$user','$user',$serverid,'$n','$rec2->{INFO}'," .
     "'{$dhcplist}',true,false);";
-  warn("net record for '$n' already exists!") 
-    if (db_exec($sqlstr) < 0);
+
+  if (db_exec($sqlstr) < 0) {
+    warn("net record for '$n' already exists!") 
+  } else {
+    $res=db_exec("SELECT id FROM nets WHERE server=$serverid AND net='$n';");
+    die("Cannot get net record id!") if ($res < 0);
+    $lastid=db_getvalue(0,0);
+
+    foreach $rtmp (@{$rec2->{DHCP}}) {
+      next if ($rtmp =~ /^\s*$/);
+      $res=db_exec("INSERT INTO dhcp_entries (type,ref,dhcp) " .
+		   "VALUES(4,$lastid,'$rtmp');");
+      die("cannot insert dhcp_entry '$rtmp' for net $net!") if ($res < 0);
+    }
+  }
+  
   delete $zonedata{$rec->{NAME}};
 }
 
@@ -209,7 +231,7 @@ foreach $group (keys %grouphash) {
     $comment='empty group';
 
   } else {
-    $printerlist=db_encode_list_str($rec->{PRINTER});
+    $printerlist=db_encode_list_str($rec->{PRINTER}); # voi poistaa!!!!!!
     $dhcplist = db_encode_list_str($rec->{DHCP});
     $comment=$rec->{INFO};
 
@@ -219,7 +241,28 @@ foreach $group (keys %grouphash) {
           "(cuser,muser,server,name,dhcp,printer,comment) " .
           "VALUES('$user','$user',$serverid,'$group',$dhcplist," .
 	  "$printerlist,'$comment');";
-  warn("group '$group' allready exists") if (db_exec($sqlstr) < 0);
+  if (db_exec($sqlstr) < 0) {
+    warn("group '$group' allready exists") 
+  } else {
+    $res=db_exec("SELECT id FROM groups WHERE " .
+		 " server=$serverid AND name='$group';");
+    die("Cannot get group record id!") if ($res < 0);
+    $lastid=db_getvalue(0,0);
+
+    foreach $rtmp (@{$rec->{DHCP}}) {
+      next if ($rtmp =~ /^\s*$/);
+      $res=db_exec("INSERT INTO dhcp_entries (type,ref,dhcp) " .
+		   "VALUES(5,$lastid,'$rtmp');");
+      die("cannot insert dhcp_entry '$rtmp' for group $group!") if ($res < 0);
+    }
+    foreach $rtmp (@{$rec->{PRINTER}}) {
+      next if ($rtmp =~ /^\s*$/);
+      $res=db_exec("INSERT INTO printer_entries (type,ref,printer) " .
+		   "VALUES(1,$lastid,'$rtmp');");
+      die("cannot insert printer_entry '$rtmp' for group $group!") 
+	if ($res < 0);
+    }
+  }
 
   delete $zonedata{$host};
 }
@@ -245,26 +288,51 @@ foreach $host (keys %zonedata) {
     $printerhash{$host}=$rec;
     $host2=remove_origin($host,$origin);
     $prlist=db_build_list_str($rec->{PRINTER});
-    $info="\"$rec->{INFO}\"";
+    $info="$rec->{INFO}";
     $group=$grouphash{$rec->{GROUP}};
     $group=-1 if (! $group);
     
     if ($host =~ /^\@\S+$/) {
+      $ptype=3;
       print "printer class: $host2\n";
       $sqlstr="INSERT INTO printer_classes " .
 	"(cuser,muser,name,printer,comment) " .
 	  "VALUES('$user','$user','$host2','{$prlist}','imported entry');";
-      warn("cannot insert printer_class '$host2'") if (db_exec($sqlstr) < 0);
+      if (db_exec($sqlstr) < 0) {
+	warn("cannot insert printer_class '$host2'") ;
+	$lastid=-1;
+      } else {
+	$res=db_exec("SELECT id FROM printer_classes WHERE name='$host2';");
+	die("Cannot get printer_class record id!") if ($res < 0);
+	$lastid=db_getvalue(0,0);	
+      }
     } else {
+      $ptype=2;
       print "printer: $host $rec->{GROUP}\n";
       $sqlstr="INSERT INTO hosts " .
 	"(cuser,muser,zone,type,domain,hinfo_hw,hinfo_sw," .
-	"txt,printer,comment,grp,prn) " .
+	"info,printer,comment,grp,prn) " .
 	"VALUES('$user','$user',$zoneid,5,'$host2','REMOTE-PRINTER'," .
-	"'POSTSCRIPT','{$info}','{$prlist}','virtual printer entry'," .
+	"'POSTSCRIPT','$info','{$prlist}','virtual printer entry'," .
 	"$group,true );";
-      warn("cannot insert virtual printer '$host'") if (db_exec($sqlstr) < 0);
+      if (db_exec($sqlstr) < 0) {
+	warn("cannot insert virtual printer '$host2'");
+	$lastid=-1;
+      } else {
+	$res=db_exec("SELECT id FROM hosts WHERE zone=$zoneid AND " .
+		     " domain='$host2';");
+	die("Cannot get printer(host) record id!") if ($res < 0);
+	$lastid=db_getvalue(0,0);	
+      }
     }
+
+    foreach $rtmp (@{$rec->{PRINTER}}) {
+      next if ($rtmp =~ /^\s*$/);
+      $res=db_exec("INSERT INTO printer_entries (type,ref,printer) " .
+		   "VALUES($ptype,$lastid,'$rtmp');");
+      die("cannot insert printer_entry '$rtmp' for printer $host2!") 
+	if ($res < 0);
+    }    
 
     delete $zonedata{$host};
   }
@@ -273,7 +341,7 @@ foreach $host (keys %zonedata) {
 
 
 # hosts
-db_begin();
+
 $j=0;
 $str='';
 foreach $host (keys %zonedata) {
@@ -322,7 +390,7 @@ if ($str ne '') {
       print STDERR "|";
 }
 print "\n";
-db_commit();
+
 
 
 
@@ -343,15 +411,21 @@ db_query("SELECT h.id FROM hosts h,zones z,groups g " .
 	 "AND h.prn=false AND g.printer NOTNULL;",\@plist);
 if (@plist > 0) {
   print "Tagging printers...\n";
-  db_begin();
+
   for $i (0 .. $#plist) {
     die("cannot update host entry id=$plist[$i][0]")
       if (db_exec("UPDATE hosts SET prn=true WHERE id=$plist[$i][0];") < 0);
   }
-  die("error comminting pinter updates") if (db_commit() < 0);
 }
+
+
+exit;
+print "Commiting changes...\n";
+die("error commiting the changes!") 
+  if (db_commit() < 0);
 
 print "Vacuuming dbase...\n";
 db_vacuum();
 exit;
+
 # eof
