@@ -390,6 +390,7 @@ for ($i=0; $i <= $#zones; $i+=1) {
     foreach $host (keys %zonedata) {
       $rec = $zonedata{$host};
       next unless (@{$rec->{NS}}>0);
+      next if ($host eq $origin);
 
       $host2=remove_origin($host,$origin);
       $hosttype=2;

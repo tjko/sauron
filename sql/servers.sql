@@ -17,7 +17,8 @@ CREATE TABLE servers (
 	zones_only	BOOL DEFAULT false, /* if true, generate named.zones 
 					       file otherwise generate 
 					       complete named.conf */
-	no_roots	BOOL DEFAULT false, /* ? */
+	no_roots	BOOL DEFAULT false, /* if true, no root server (hint)
+					       zone entry is generated */
 
 	/* named.conf options...more to be added as needed... */
 	directory	TEXT, /* base directory for named (optional) */

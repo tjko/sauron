@@ -138,7 +138,8 @@ sub make_bind() {
     print BINDFILE "\tcheck-names response $val;\n" if ($val ne '');
 
     undef @q;
-    db_query("SELECT ip FROM cidr_entries WHERE type=1 AND ref=$serverid;",
+    db_query("SELECT ip FROM cidr_entries WHERE type=1 AND ref=$serverid " .
+	     "ORDER BY ip;",
 	     \@q);
     if (@q > 0) {
       print BINDFILE "\tallow-transfer {\n";
@@ -213,7 +214,8 @@ sub make_bind() {
 
     # allow_update
     undef @q;
-    db_query("SELECT ip FROM cidr_entries WHERE type=2 AND ref=$zoneid;",\@q);
+    db_query("SELECT ip FROM cidr_entries WHERE type=2 AND ref=$zoneid " .
+	     "ORDER BY ip;",\@q);
     if (@q > 0) {
       print BINDFILE "\tallow-update {\n";
       for $j (0..(@q-1)) { print BINDFILE "\t\t$q[$j][0];\n"; }
@@ -221,7 +223,8 @@ sub make_bind() {
     }
     # allow_query
     undef @q;
-    db_query("SELECT ip FROM cidr_entries WHERE type=4 AND ref=$zoneid;",\@q);
+    db_query("SELECT ip FROM cidr_entries WHERE type=4 AND ref=$zoneid " .
+	     "ORDER BY ip;",\@q);
     if (@q > 0) {
       print BINDFILE "\tallow-query {\n";
       for $j (0..(@q-1)) { print BINDFILE "\t\t$q[$j][0];\n"; }
@@ -229,7 +232,8 @@ sub make_bind() {
     }
     # allow_transfer
     undef @q;
-    db_query("SELECT ip FROM cidr_entries WHERE type=5 AND ref=$zoneid;",\@q);
+    db_query("SELECT ip FROM cidr_entries WHERE type=5 AND ref=$zoneid " .
+	     "ORDER BY ip;",\@q);
     if (@q > 0) {
       print BINDFILE "\tallow-transfer {\n";
       for $j (0..(@q-1)) { print BINDFILE "\t\t$q[$j][0];\n"; }
@@ -237,11 +241,12 @@ sub make_bind() {
     }
     # also_notify
     undef @q;
-    db_query("SELECT ip FROM cidr_entries WHERE type=6 AND ref=$zoneid;",
+    db_query("SELECT ip FROM cidr_entries WHERE type=6 AND ref=$zoneid " .
+	     "ORDER BY ip;",
 	     \@q);
     if (@q > 0) {
-      print BINDFILE "\talso-notify { ";
-      for $j (0..(@q-1)) { 
+      print BINDFILE "\talso-notify {\n";
+      for $j (0..(@q-1)) {
 	$ip=$q[$j][0];
 	$ip =~ s/\/32$//g;
 	print BINDFILE "\t\t$ip;\n";
@@ -251,14 +256,15 @@ sub make_bind() {
     # masters
     if ($type eq 'slave') {
       undef @q;
-      db_query("SELECT ip FROM cidr_entries WHERE type=3 AND ref=$zoneid;",
+      db_query("SELECT ip FROM cidr_entries WHERE type=3 AND ref=$zoneid " .
+	       "ORDER BY ip;",
 	       \@q);
       if (@q > 0) {
 	print BINDFILE "\tmasters { ";
-	for $j (0..(@q-1)) { 
+	for $j (0..(@q-1)) {
 	  $ip=$q[$j][0];
 	  $ip =~ s/\/32$//g;
-	  print BINDFILE "$ip; "; 
+	  print BINDFILE " $ip; "; 
 	}
 	print BINDFILE " };\n";
       }
@@ -324,10 +330,11 @@ sub make_bind() {
     if ($rev eq 'f') {
       print ZONEFILE ";\n; zone mail exchanges\n;\n";
       undef @q;
-      db_query("SELECT mx FROM mx_entries WHERE type=1 AND ref=$zoneid;",\@q);
+      db_query("SELECT pri,mx FROM mx_entries WHERE type=1 AND ref=$zoneid " .
+	       "ORDER BY pri,mx;",\@q);
       foreach $mx (@q) {
 	#print ZONEFILE "\t\t$class\tMX\t$$mx[0]\n";
-	printf ZONEFILE $ZFORMAT, '',$ttl,$class,'MX',$$mx[0];
+	printf ZONEFILE $ZFORMAT, '',$ttl,$class,'MX',"$$mx[0] $$mx[1]";
       }
       print ZONEFILE ";\n; contact info\n;\n";
       undef @q;
@@ -342,7 +349,9 @@ sub make_bind() {
 	       \@q);
       foreach $txt (@q) {
 	#print ZONEFILE "\t\t$class\tTXT\t\"$$txt[0]\"\n";
-	printf ZONEFILE $ZFORMAT, '',$ttl,$class,'TXT',$$txt[0];
+	$val=$$txt[0];
+	$val =~ s/\"//g;
+	printf ZONEFILE $ZFORMAT, '',$ttl,$class,'TXT',"\"$$txt[0]\"";
       }
 
       # zone A records
@@ -370,10 +379,11 @@ sub make_bind() {
     undef @cnamedelegs;
     undef %delegnets;
     undef @q;
+    $delegation_mask='';
     db_query("SELECT a.domain,c.ns,a.ttl FROM hosts a,zones b,ns_entries c " .
 	     "WHERE c.ref=a.id AND a.zone=b.id AND c.type=2 AND a.type=2 " .
 	     "AND b.id=$zoneid " .
-	     "ORDER BY a.domain;",\@q);
+	     "ORDER BY a.domain,c.ns;",\@q);
     if (@q > 0) {
       print ZONEFILE ";\n;\n; delegated zones\n;\n";
       $domain='';
@@ -388,7 +398,7 @@ sub make_bind() {
 	    $dnet = arpa2cidr("$val.$zonename");
 	    fatal("invalid reverse delegation '$val'")
 	      if ($dneg eq '0.0.0.0/0');
-	    print "dnet: $dnet\n";
+	    #print "dnet: $dnet\n";
 	    $net = new Net::Netmask($dnet);
 	    $net->storeNetblock(\%delegnets);
 	  }
@@ -397,11 +407,17 @@ sub make_bind() {
 	$ns=$q[$i][1];
 	$ttl=$q[$i][2];
 	$ttl='' unless ($ttl > 0);
+	if ($val) {
+	  $delegation_mask .= '|' if ($delegation_mask);
+	  $delegation_mask .= $val;
+	}
 	printf ZONEFILE $ZFORMAT, $val,$ttl,$class,'NS',$ns;
       }
 	print ZONEFILE ";\n";
     }
 
+    $delegation_mask =~ s/\./\\\./g;
+    #print "dmask='$delegation_mask'\n";
 
     if ($rev eq 't') {
       # reverse zone
@@ -423,6 +439,9 @@ sub make_bind() {
 	}
 	print ZONEFILE ";\n";
       }
+
+
+      # generate reverse map for master reverse zones
 
       #print "reversenet " . $zone{'reversenet'} . "\n";
       $rorigin = cidr2arpa($zone{'reversenet'}) . ".";
@@ -484,7 +503,7 @@ sub make_bind() {
 	       "FROM hosts h,zones z,mx_entries m,mx_templates r " .
 	       "WHERE h.zone=z.id AND h.mx=r.id AND m.ref=r.id AND m.type=3 " .
 	       " AND h.type=3 AND h.mx > 0 AND z.id=$zoneid " .
-	       "ORDER BY h.domain,m.pri;",\@q);
+	       "ORDER BY h.domain,m.pri,m.mx;",\@q);
       if (@q > 0) {
 	print ZONEFILE ";\n;\n; MX only domains (using MX-templates)\n;\n";
 	$domain='';
@@ -504,7 +523,7 @@ sub make_bind() {
 	       "FROM hosts h,zones z,mx_entries m " .
 	       "WHERE h.zone=z.id AND m.ref=h.id AND m.type=2 " .
 	       " AND h.type=3 AND h.mx=-1 AND z.id=$zoneid " .
-	       "ORDER BY h.domain,m.pri;",\@q);
+	       "ORDER BY h.domain,m.pri,m.mx;",\@q);
       if (@q > 0) {
 	print ZONEFILE ";\n;\n; MX only domains\n;\n";
 	$domain='';
@@ -571,8 +590,8 @@ sub make_bind() {
       ## mx hash
       undef %mxhash;
       undef @q;
-      db_query("SELECT h.domain,m.pri,m.mx FROM hosts h,zones z,mx_templates r, " .
-	         "mx_entries m " .
+      db_query("SELECT h.domain,m.pri,m.mx " .
+	       "FROM hosts h,zones z,mx_templates r, mx_entries m " .
 	       "WHERE h.zone=z.id AND h.mx=r.id AND m.ref=r.id AND m.type=3 " .
 	       "AND z.id=$zoneid AND h.type=1 " .
 	       "ORDER BY h.domain,m.pri,m.mx;",\@q);
@@ -622,7 +641,9 @@ sub make_bind() {
 	    $rec=[];
 	    $txthash{$q[$i][0]}=$rec;
 	  }
-	  push @{$txthash{$q[$i][0]}}, "$q[$i][1]";
+	  $val=$q[$i][1];
+	  $val =~ s/\"//g;
+	  push @{$txthash{$q[$i][0]}}, $val;
 	}
       }
 
@@ -640,7 +661,16 @@ sub make_bind() {
       if (@q > 0) {
 	print ZONEFILE ";\n;\n; A records\n;\n";
 	for $i (0 .. $#q) {
-	  $domain=$q[$i][0];
+	  #$domain=$q[$i][0];
+	  $domain=remove_origin($q[$i][0],$origin);
+	  if ($domain =~ /\.$/) {
+	    error("Out-of-zone host skipped: $q[$i][0]");
+	    next;
+	  }
+	  if ($domain =~ /\.($delegation_mask)$/) {
+	    error("Host in delegated zone skipped: $q[$i][0]");
+	    next;
+	  }
 	  $ip=$q[$i][1];
 	  $ip =~ s/\/\d\d$//g;
 	  $hinfo_hw=$q[$i][2];
@@ -704,7 +734,16 @@ sub make_bind() {
       if (@q > 0) {
 	print ZONEFILE ";\n;\n; In-zone aliases (A records)\n;\n";
 	for $i (0 .. $#q) {
-	  $domain=$q[$i][0];
+	  #$domain=$q[$i][0];
+	  $domain=remove_origin($q[$i][0],$origin);
+	  if ($domain =~ /\.$/) {
+	    error("Out-of-zone alias (A rec) skipped: $q[$i][0]");
+	    next;
+	  }
+	  if ($domain =~ /\.($delegation_mask)$/) {
+	    error("Alias (A rec) in delegated zone skipped: $q[$i][0]");
+	    next;
+	  }
 	  $alias=$q[$i][2];
 	  $ttl=$q[$i][3];
 	  $ttl='' unless ($ttl > 0);
@@ -725,7 +764,16 @@ sub make_bind() {
       if (@q > 0) {
 	print ZONEFILE ";\n;\n; In-zone aliases (CNAME records)\n;\n";
 	for $i (0 .. $#q) {
-	  $domain=$q[$i][0];
+	  #$domain=$q[$i][0];
+	  $domain=remove_origin($q[$i][0],$origin);
+	  if ($domain =~ /\.$/) {
+	    error("Out-of-zone alias (CNAME) skipped: $q[$i][0]");
+	    next;
+	  }
+	  if ($domain =~ /\.($delegation_mask)$/) {
+	    error("Alias (CNAME) in delegated zone skipped: $q[$i][0]");
+	    next;
+	  }
 	  $ttl=$q[$i][2];
 	  $ttl='' unless ($ttl > 0);
 	  $alias=$q[$i][1];
@@ -742,7 +790,16 @@ sub make_bind() {
       if (@q > 0) {
 	print ZONEFILE ";\n;\n; Outside-zone aliases (CNAME records)\n;\n";
 	for $i (0 .. $#q) {
-	  $domain=$q[$i][0];
+	  #$domain=$q[$i][0];
+	  $domain=remove_origin($q[$i][0],$origin);
+	  if ($domain =~ /\.$/) {
+	    error("Out-of-zone alias (CNAME) skipped: $q[$i][0]");
+	    next;
+	  }
+	  if ($domain =~ /\.($delegation_mask)$/) {
+	    error("Alias (CNAME) in delegated zone skipped: $q[$i][0]");
+	    next;
+	  }
 	  $alias=$q[$i][1];
 	  $ttl=$q[$i][2];
 	  $ttl='' unless ($ttl > 0);
@@ -797,6 +854,8 @@ sub make_dhcp() {
 
 
   # global entries
+
+  print DHCPFILE "\n# global options\n\n";
   undef @q;
   db_query("SELECT d.dhcp FROM dhcp_entries d " .
 	   "WHERE d.type=1 AND d.ref=$serverid;",\@q);
@@ -807,9 +866,12 @@ sub make_dhcp() {
 
   # net/subnet map
 
+  $net_map_mode=0;  # 0=use VLANs, 1=use networks
+
+  print DHCPFILE "\n# network map\n\n";
   undef @subnets;
   undef @nets;
-  db_query("SELECT net,name,id " . 
+  db_query("SELECT net,name,id,vlan " . 
 	   "FROM nets WHERE server=$serverid AND no_dhcp=false " .
 	   "AND subnet=false ORDER BY net;",\@nets);
   if (@nets < 1) {
@@ -819,65 +881,50 @@ sub make_dhcp() {
     $net=$nets[$i][0];
     $netname=$nets[$i][1];
     $netname =~ s/\s+//g;
-    print DHCPFILE "shared-network \"$netname\" {\n";
-    undef @net_dhcp;
-    db_query("SELECT d.dhcp FROM dhcp_entries d " .
-	     "WHERE d.type=4 AND d.ref=$nets[$i][2];",\@net_dhcp);
-    for $j (0..$#net_dhcp) { print DHCPFILE "\t$net_dhcp[$i][0];\n"; }
-    print DHCPFILE "\n";
+    if ($net_map_mode == 1) {
+      print DHCPFILE "shared-network \"$netname\" {\n";
+      undef @net_dhcp;
+      db_query("SELECT d.dhcp FROM dhcp_entries d " .
+	       "WHERE d.type=4 AND d.ref=$nets[$i][2];",\@net_dhcp);
+      for $j (0..$#net_dhcp) { print DHCPFILE "\t$net_dhcp[$i][0];\n"; }
+      print DHCPFILE "\n";
+    }
 
-    #print DHCPFILE "# net: $net\n\n";
     undef @q;
-    db_query("SELECT net,id,name FROM nets " .
+    db_query("SELECT net,id,name,vlan FROM nets " .
 	     "WHERE server=$serverid AND no_dhcp=false AND subnet=true " .
 	     "AND net << '$net' ORDER BY net;",\@q);
     if (@q < 1 ) {
-      error("No subnets that use DHCP found");
-      push @q, [$net,'',''];
-    } else {
-      undef @qq;
-      db_query("SELECT ip,router FROM hosts,zones,a_entries " .
-	       "WHERE hosts.zone=zones.id AND a_entries.host=hosts.id " .
-	       "AND zones.server=$serverid AND router>0 " .
-	       "AND ip << '$net' " .
-	       "ORDER BY ip,router;",\@qq);
-      warn("No router interfaces found for net $net!") if (@qq < 1);
-
-      for $j (0 .. $#q) {
-	$ssnet = new Net::Netmask($q[$j][0]);
-	$snet = $ssnet->base();
-        $nmask = $ssnet->mask();
-	$dhcpid = $q[$j][1];
-	print DHCPFILE "\t# $q[$j][2]\n";
-	print DHCPFILE "\tsubnet $snet netmask $nmask {\n";
-
-	$pri=999999; # should be enough 'cos priority range for a router 0-999
-	$router='';
-	for $k (0 .. $#qq) {
-	  if ($ssnet->match($qq[$k][0]) && $pri > $qq[$k][1]) {
-	    $pri=$qq[$k][1];
-	    $router=$qq[$k][0];
-	  }
-	}
-	unless ($router eq '') {
-	  $router =~ s/\/\d{1,2}\s*$//g;
-	  print DHCPFILE "\t\toption routers $router;\n";
-	} else {
-	  print "no router interface found for subnet: $snet $nmask\n";
-	}
-
-	undef @qqq;
-	db_query("SELECT d.dhcp FROM dhcp_entries d " .
-		 "WHERE d.type=4 AND d.ref=$dhcpid;",\@qqq);
-	for $k (0..$#qqq) {
-	  print DHCPFILE "\t\t$qqq[$k][0];\n";
-	}
-
-	print DHCPFILE "\t}\n";
-      }
+      error("No subnets that use DHCP found") if ($net_map_mode==1);
+      push @q, [$net,$nets[$i][2],$nets[$i][1],$nets[$i][3]];
     }
 
-    print DHCPFILE "}\n\n";
+    if ($net_map_mode == 1) {
+      print_subnets();
+      print DHCPFILE "}\n\n";
+    } else {
+      push (@subnets,@q);
+    }
+  }
+
+  if ($net_map_mode == 0) {
+    # print network map using VLANs...
+    undef %vlanhash;
+    for $i (0..$#subnets) {
+      $vlanhash{$subnets[$i][3]}++;
+    }
+    foreach $vlan (sort keys %vlanhash) {
+      $netname=$vlan;
+      $netname =~ s/\s//g;
+      $netname = 'CHAOS' unless ($netname);
+      print DHCPFILE "shared-network \"$netname\" {\n";
+      undef @q;
+      for $i (0..$#subnets) {
+	push ( @q, $subnets[$i])  if ($subnets[$i][3] eq $vlan);
+      }
+      print_subnets();
+      print DHCPFILE "}\n\n";
+    }
   }
 
   # groups
@@ -887,13 +934,13 @@ sub make_dhcp() {
   db_query("SELECT id,name FROM groups WHERE server=$serverid;",\@groups);
   if (@groups < 1) {
     error("no groups found for this server");
-  } 
+  }
   else {
     undef @ghosts;
     db_query("SELECT h.grp,h.ether,a.ip,h.domain,z.name,h.id " .
 	     "FROM hosts h, zones z, a_entries a " .
 	     "WHERE h.zone=z.id AND a.host=h.id AND h.type=1 " .
-	     "AND h.ether NOTNULL AND z.server=$serverid AND a.forward=true " .
+	     "AND h.ether NOTNULL AND z.server=$serverid " .
 	     "AND h.grp>-1 " .
 	     "ORDER BY a.ip;",\@ghosts);
     if (@ghosts > 0) {
@@ -960,7 +1007,7 @@ sub make_dhcp() {
   db_query("SELECT h.grp,h.ether,a.ip,h.domain,z.name,h.id " .
 	   "FROM hosts h, zones z, a_entries a " .
 	   "WHERE h.zone=z.id AND a.host=h.id AND h.type=1 " .
-	   "AND h.ether NOTNULL AND z.server=$serverid AND a.forward=true " .
+	   "AND h.ether NOTNULL AND z.server=$serverid " .
 	   "AND h.grp<0 " .
 	   "ORDER BY a.ip;",\@ghosts);
   if (@ghosts > 0 ) {
@@ -1008,6 +1055,53 @@ sub make_dhcp() {
   close(DHCPFILE);
 }
 
+
+
+
+sub print_subnets() {
+  my(@qq,@qqq,$j,$k,$router,$ssnet,$snet,$nmask,$dhcpid,$pri);
+
+  db_query("SELECT ip,router FROM hosts,zones,a_entries " .
+	       "WHERE hosts.zone=zones.id AND a_entries.host=hosts.id " .
+	       "AND zones.server=$serverid AND router>0 " .
+	       "AND ip << '$net' " .
+	       "ORDER BY ip,router;",\@qq);
+  error("No router interfaces found for net $net!") if (@qq < 1);
+
+  for $j (0 .. $#q) {
+    $ssnet = new Net::Netmask($q[$j][0]);
+    $snet = $ssnet->base();
+    $nmask = $ssnet->mask();
+    $dhcpid = $q[$j][1];
+    print DHCPFILE "\t# $q[$j][2]\n";
+    print DHCPFILE "\tsubnet $snet netmask $nmask {\n";
+
+    $pri=999999; # should be enough 'cos priority range for a router 0-999
+    $router='';
+    for $k (0 .. $#qq) {
+      if ($ssnet->match($qq[$k][0]) && $pri > $qq[$k][1]) {
+	$pri=$qq[$k][1];
+	$router=$qq[$k][0];
+      }
+    }
+    unless ($router eq '') {
+      $router =~ s/\/\d{1,2}\s*$//g;
+      print DHCPFILE "\t\toption routers $router;\n";
+    } else {
+      print "no router interface found for subnet: $snet $nmask\n";
+    }
+
+    undef @qqq;
+    db_query("SELECT d.dhcp FROM dhcp_entries d " .
+	     "WHERE d.type=4 AND d.ref=$dhcpid;",\@qqq);
+    for $k (0..$#qqq) {
+      print DHCPFILE "\t\t$qqq[$k][0];\n";
+    }
+
+    print DHCPFILE "\t}\n";
+  }
+
+}
 
 ######################################################################
 # printcap
