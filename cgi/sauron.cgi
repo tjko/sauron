@@ -3102,7 +3102,8 @@ sub login_menu() {
     undef @wholist;
     get_who_list(\@wholist,$timeout);
     print h2("Current users:");
-    print "<TABLE width=\"100%\"><TR bgcolor=\"#aaaaff\">",
+    print "<TABLE width=\"99%\" cellspacing=1 bgcolor=\"#ccccff\">",
+          "<TR bgcolor=\"#aaaaff\">",
           th('User'),th('Name'),th('From'),th('Idle'),th('Login'),"</TR>";
     for $i (0..$#wholist) {
       print "<TR bgcolor=\"#eeeebf\">",	
@@ -3113,16 +3114,20 @@ sub login_menu() {
   }
   elsif ($sub eq 'lastlog') {
     return if (check_perms('superuser',''));
-    $count=get_lastlog(20,'',\@lastlog);
+    $count=get_lastlog(40,'',\@lastlog);
     print h2("Lastlog:");
-    print "<TABLE bgcolor=\"#eeeebf\" width=\"100%\">",
-          "<TR bgcolor=\"aaaaff\">",th("User"),th("SID"),th("Host"),
+    print "<TABLE bgcolor=\"#ccccff\" width=\"99%\" cellspacing=1>",
+          "<TR bgcolor=\"#aaaaff\">",th("User"),th("SID"),th("Host"),
 	    th("Login"),th("Logout (session length)"),"</TR>";
     for $i (0..($count-1)) {
-      print Tr(td($lastlog[$i][0]),td($lastlog[$i][1]),td($lastlog[$i][2]),
-	       td($lastlog[$i][3]),td($lastlog[$i][4]));
+      print "<TR bgcolor=#eeeebf>",
+	    td($lastlog[$i][0]),
+	    td("<a href=\"$selfurl?menu=login&sub=session&session_sid=$lastlog[$i][1]\">$lastlog[$i][1]</a>"),
+	    td($lastlog[$i][2]),
+            td($lastlog[$i][3]),
+            td($lastlog[$i][4]),"</TR>";
     }
-    print "</TABLE>\n";
+    print "</TABLE><br>\n";
   }
   elsif ($sub eq 'session') {
     return if (check_perms('superuser',''));
@@ -3138,13 +3143,14 @@ sub login_menu() {
 	       "FROM lastlog l, users u " .
 	       "WHERE l.uid=u.id AND l.sid=$session_id;",\@q);
       if (@q > 0) {
-	print "<TABLE bgcolor=\"#eeeebf\" width=\"100%\">",
-              "<TR bgcolor=\"aaaaff\">",th("SID"),th("User"),th("Login"),
+	print "<TABLE bgcolor=\"#ccccff\" width=\"99%\" cellspacing=1>",
+              "<TR bgcolor=\"#aaaaff\">",th("SID"),th("User"),th("Login"),
 	      th("Logout"),th("From"),"</TR>";
 	$date1=localtime($q[0][1]);
 	$date2=($q[0][2] > 0 ? localtime($q[0][2]) : '&nbsp;');
-	print Tr(td($session_id),td($q[0][4]),td($date1),td($date2),
-		 td($q[0][3])),"</TABLE>";
+	print "<TR bgcolor=\"#eeeebf\">",
+	         td($session_id),td($q[0][4]),td($date1),td($date2),
+		 td($q[0][3]),"</TR></TABLE>";
       }
 
       undef @q;
@@ -3152,14 +3158,15 @@ sub login_menu() {
 	       "FROM history WHERE sid=$session_id;",\@q);
       if (@q > 0) {
 	print h3("Session history:");
-	print "<TABLE bgcolor=\"#eeeebf\" width=\"100%\">",
-              "<TR bgcolor=\"aaaaff\">",th("Date"),th("Type"),th("Ref"),
+	print "<TABLE bgcolor=\"#ccccff\" width=\"99%\" cellspacing=1>",
+              "<TR bgcolor=\"#aaaaff\">",th("Date"),th("Type"),th("Ref"),
 	      th("Action"),th("Info"),"</TR>";
 	for $i (0..$#q) {
 	  $date1=localtime($q[$i][0]);
 	  $type=$q[$i][1];
-	  print Tr(td($date1),td($type),
-		   td($q[$i][2]),td($q[$i][3]),td($q[$i][4]));
+	  print "<TR bgcolor=\"#eeeebf\">",
+	         td($date1),td($type),
+		 td($q[$i][2]),td($q[$i][3]),td($q[$i][4]),"</TR>";
 	}
 	print "</TABLE>";
       }
@@ -3168,15 +3175,15 @@ sub login_menu() {
   elsif ($sub eq 'motd') {
     print h2("News & motd (message of day) messages:");
     get_news_list($serverid,10,\@list);
-    print "<TABLE cellspacing=0 cellpadding=4  bgcolor=\"#dddddd\">";
-    print "<TR bgcolor=\"aaaaff\"><TH width=\"70%\">Message</TH>",
+    print "<TABLE cellspacing=1 cellpadding=4  bgcolor=\"#ccccff\">";
+    print "<TR bgcolor=\"#aaaaff\"><TH width=\"70%\">Message</TH>",
           th("Date"),th("Type"),th("By"),"</TR>";
     for $i (0..$#list) {
       $date=localtime($list[$i][0]);
       $type=($list[$i][2] < 0 ? 'Global' : 'Local');
       $msg=$list[$i][3];
       $msg =~ s/\n/<BR>/g;
-      print "<TR><TD bgcolor=\"#ddeeff\">$msg</TD>",
+      print "<TR bgcolor=\"#ddeeff\"><TD>$msg</TD>",
 		   td($date),td($type),td($list[$i][1]),"</TR>";
     }
     print "</TABLE>";
