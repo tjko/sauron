@@ -2,7 +2,7 @@
 #
 # sauron.cgi
 # $Id$
-# [едц]
+# [едц~]
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>, 2000,2001.
 # All Rights Reserved.
 #
@@ -337,15 +337,15 @@ do "$conf_dir/config" || die("cannot load configuration!");
   {ftype=>4, tag=>'class', name=>'Class'},
   {ftype=>1, tag=>'ttl', name=>'TTL', type=>'int', len=>10, empty=>1,
    definfo=>['','Default']},
-  {ftype=>1, tag=>'router', name=>'Router (priority)', type=>'priority', 
+  {ftype=>1, tag=>'router', name=>'Router (priority)', type=>'priority',
    len=>10, empty=>0,definfo=>['0','No'], iff=>['type','1']},
-  {ftype=>1, tag=>'huser', name=>'User', type=>'text', len=>25, empty=>1,
+  {ftype=>1, tag=>'huser', name=>'User', type=>'text', len=>40, empty=>1,
    iff=>['type','1']},
-  {ftype=>1, tag=>'dept', name=>'Dept.', type=>'text', len=>25, empty=>1,
+  {ftype=>1, tag=>'dept', name=>'Dept.', type=>'text', len=>30, empty=>1,
    iff=>['type','1']},
-  {ftype=>1, tag=>'location', name=>'Location', type=>'text', len=>25,
+  {ftype=>1, tag=>'location', name=>'Location', type=>'text', len=>30,
    empty=>1, iff=>['type','1']},
-  {ftype=>1, tag=>'info', name=>'[Extra] Info', type=>'text', len=>50, 
+  {ftype=>1, tag=>'info', name=>'[Extra] Info', type=>'text', len=>50,
    empty=>1, iff=>['type','(1|101)']},
 
   {ftype=>0, name=>'Equipment info', iff=>['type','1|101']},
@@ -420,7 +420,7 @@ do "$conf_dir/config" || die("cannot load configuration!");
 %restricted_host_form = (
  data=>[
   {ftype=>0, name=>'Host (restricted edit)' },
-  {ftype=>1, tag=>'domain', name=>'Hostname', type=>'domain', 
+  {ftype=>1, tag=>'domain', name=>'Hostname', type=>'domain',
    conv=>'L', len=>40},
   {ftype=>5, tag=>'ip', name=>'IP address', restricted_mode=>1,
    iff=>['type','([169]|101)']},
@@ -428,13 +428,13 @@ do "$conf_dir/config" || die("cannot load configuration!");
    len=>60, iff=>['type','4'], iff2=>['alias','-1']},
   {ftype=>4, tag=>'id', name=>'Host ID'},
   {ftype=>4, tag=>'type', name=>'Type', type=>'enum', enum=>\%host_types},
-  {ftype=>1, tag=>'huser', name=>'User', type=>'text', len=>25, empty=>0,
+  {ftype=>1, tag=>'huser', name=>'User', type=>'text', len=>40, empty=>0,
    iff=>['type','1']},
-  {ftype=>1, tag=>'dept', name=>'Dept.', type=>'text', len=>25, empty=>0,
+  {ftype=>1, tag=>'dept', name=>'Dept.', type=>'text', len=>30, empty=>0,
    iff=>['type','1']},
-  {ftype=>1, tag=>'location', name=>'Location', type=>'text', len=>25,
+  {ftype=>1, tag=>'location', name=>'Location', type=>'text', len=>30,
    empty=>0, iff=>['type','1']},
-  {ftype=>1, tag=>'info', name=>'[Extra] Info', type=>'text', len=>50, 
+  {ftype=>1, tag=>'info', name=>'[Extra] Info', type=>'text', len=>50,
    empty=>1, iff=>['type','(1|101)']},
 
   {ftype=>0, name=>'Equipment info', iff=>['type','1|101']},
@@ -512,11 +512,11 @@ do "$conf_dir/config" || die("cannot load configuration!");
   {ftype=>6, tag=>'mx', name=>'MX template', iff=>['type','1']},
   {ftype=>7, tag=>'wks', name=>'WKS template', iff=>['type','1']},
   {ftype=>0, name=>'Host info',iff=>['type','1']},
-  {ftype=>1, tag=>'huser', name=>'User', type=>'text', len=>25, empty=>1,
+  {ftype=>1, tag=>'huser', name=>'User', type=>'text', len=>40, empty=>1,
    iff=>['type','1']},
-  {ftype=>1, tag=>'dept', name=>'Dept.', type=>'text', len=>25, empty=>1,
+  {ftype=>1, tag=>'dept', name=>'Dept.', type=>'text', len=>30, empty=>1,
    iff=>['type','1']},
-  {ftype=>1, tag=>'location', name=>'Location', type=>'text', len=>25,
+  {ftype=>1, tag=>'location', name=>'Location', type=>'text', len=>30,
    empty=>1, iff=>['type','1']},
   {ftype=>1, tag=>'info', name=>'Info', type=>'text', len=>50, empty=>1 },
   {ftype=>0, name=>'Equipment info',iff=>['type','1']},
@@ -580,13 +580,13 @@ do "$conf_dir/config" || die("cannot load configuration!");
   {ftype=>6, tag=>'mx', name=>'MX template', iff=>['type','1']},
   {ftype=>7, tag=>'wks', name=>'WKS template', iff=>['type','1']},
   {ftype=>0, name=>'Host info',iff=>['type','1']},
-  {ftype=>1, tag=>'huser', name=>'User', type=>'text', len=>25, empty=>0,
+  {ftype=>1, tag=>'huser', name=>'User', type=>'text', len=>40, empty=>0,
    iff=>['type','1']},
-  {ftype=>1, tag=>'dept', name=>'Dept.', type=>'text', len=>25, empty=>0,
+  {ftype=>1, tag=>'dept', name=>'Dept.', type=>'text', len=>30, empty=>0,
    iff=>['type','1']},
-  {ftype=>1, tag=>'location', name=>'Location', type=>'text', len=>25,
+  {ftype=>1, tag=>'location', name=>'Location', type=>'text', len=>30,
    empty=>0, iff=>['type','1']},
-  {ftype=>1, tag=>'info', name=>'[Extra] Info', type=>'text', len=>50, 
+  {ftype=>1, tag=>'info', name=>'[Extra] Info', type=>'text', len=>50,
    empty=>1 },
   {ftype=>0, name=>'Equipment info',iff=>['type','1']},
   {ftype=>101, tag=>'hinfo_hw', name=>'HINFO hardware', type=>'hinfo', len=>20,
@@ -598,13 +598,13 @@ do "$conf_dir/config" || die("cannot load configuration!");
   {ftype=>1, tag=>'ether', name=>'Ethernet address', type=>'mac', len=>17,
    conv=>'U', iff=>['type','[19]'], empty=>0},
 
-  {ftype=>1, tag=>'asset_id', name=>'Asset ID', type=>'text', len=>20, 
+  {ftype=>1, tag=>'asset_id', name=>'Asset ID', type=>'text', len=>20,
    empty=>1, no_empty=>1, iff=>['type','1']},
-  {ftype=>1, tag=>'model', name=>'Model', type=>'text', len=>50, empty=>1, 
+  {ftype=>1, tag=>'model', name=>'Model', type=>'text', len=>50, empty=>1,
    iff=>['type','1']},
   {ftype=>1, tag=>'serial', name=>'Serial no.', type=>'text', len=>35,
    empty=>1, iff=>['type','1']},
-  {ftype=>1, tag=>'misc', name=>'Misc.', type=>'text', len=>50, empty=>1, 
+  {ftype=>1, tag=>'misc', name=>'Misc.', type=>'text', len=>50, empty=>1,
    iff=>['type','1']},
   {ftype=>0, name=>'Record info'},
   {ftype=>1, name=>'Expiration date', tag=>'expiration', len=>30,
@@ -2506,17 +2506,12 @@ sub nets_menu() {
       db_query("SELECT id,name,description,comment FROM vlans " .
 	       "WHERE server=$serverid ORDER BY name;",\@q);
       print h3("VLANs");
-      print "<TABLE width=\"99%\" cellspacing=2 border=0>",
-	    "<TR bgcolor=\"#aaaaff\">",
-            "<TH>Name</TH>",th("Description"),th("Comments"),"</TR>";
       for $i (0..$#q) {
-	  print "<TR bgcolor=\"#eeeeee\">",
-                td("<a href=\"$selfurl?menu=nets&vlan_id=$q[$i][0]\">".
-                   "$q[$i][1]</a>"),
-	        td($q[$i][2].'&nbsp;'),
-	        td($q[$i][3].'&nbsp;'), "</TR>";
+	$q[$i][1]="<a href=\"$selfurl?menu=nets&vlan_id=$q[$i][0]\">".
+	          "$q[$i][1]</a>";
       }
-      print "</TABLE>";
+      display_list(['Name','Description','Comments'],\@q,1);
+      print "<br>";
       return;
   }
   elsif ($sub eq 'addvlan') {
@@ -2753,103 +2748,57 @@ sub templates_menu() {
   $pc_id=param('pc_id');
   $hinfo_id=param('hinfo_id');
 
-  if ($sub eq 'mx') {
-    db_query("SELECT id,name,comment,alevel FROM mx_templates " .
+  if ($sub eq 'mx' || $sub eq '') {
+    db_query("SELECT name,comment,alevel,id FROM mx_templates " .
 	     "WHERE zone=$zoneid ORDER BY name;",\@q);
-    if (@q < 1) {
-      print h2("No MX templates found for this zone!"); 
-      return;
-    }
-
-    print h3("MX templates for zone: $zone"),
-          "<TABLE width=\"99%\" cellspacing=\"1\" border=\"0\">",
-	  "<TR bgcolor=\"#aaaaff\">",
-          th("Name"),th("Comment"),th("Lvl"),"</TR>";
-
+    print h3("MX templates for zone: $zone");
     for $i (0..$#q) {
-      $name=$q[$i][1];
-      $name='&nbsp;' if ($name eq '');
-      $comment=$q[$i][2];
-      $comment='&nbsp;' if ($comment eq '');
-      print "<TR bgcolor=\"#eeeebf\">",
-	td("<a href=\"$selfurl?menu=templates&mx_id=$q[$i][0]\">$name</a>"),
-	td($comment),td($q[$i][3].'&nbsp;'),"</TR>";
+	$q[$i][0]=
+	  "<a href=\"$selfurl?menu=templates&mx_id=$q[$i][3]\">$q[$i][0]</a>";
     }
-    print "</TABLE>";
+    display_list(['Name','Comment','Lvl'],\@q,0);
+    print "<br>";
     return;
   }
   elsif ($sub eq 'wks') {
-    db_query("SELECT id,name,comment,alevel FROM wks_templates " .
+    db_query("SELECT name,comment,alevel,id FROM wks_templates " .
 	     "WHERE server=$serverid ORDER BY name;",\@q);
-    if (@q < 1) {
-      print h2("No WKS templates found for this server!");
-      return;
-    }
-
-    print h3("WKS templates for server: $server"),
-          "<TABLE width=\"99%\" cellspacing=\"1\" border=\"0\">",
-	  "<TR bgcolor=\"#aaaaff\">",
-          th("Name"),th("Comment"),th("Lvl"),"</TR>";
+    print h3("WKS templates for server: $server");
 
     for $i (0..$#q) {
-      $name=$q[$i][1];
-      $name='&nbsp;' if ($name eq '');
-      $comment=$q[$i][2];
-      $comment='&nbsp;' if ($comment eq '');
-      print "<TR bgcolor=\"#eeeebf\">",
-	td("<a href=\"$selfurl?menu=templates&wks_id=$q[$i][0]\">$name</a>"),
-	td($comment),td($q[$i][3].'&nbsp;'),"</TR>";
+      $q[$i][0]=
+	"<a href=\"$selfurl?menu=templates&wks_id=$q[$i][3]\">$q[$i][0]</a>";
     }
-    print "</TABLE>";
+    display_list(['Name','Comment','Lvl'],\@q,0);
+    print "<br>";
     return;
   }
   elsif ($sub eq 'pc') {
     db_query("SELECT id,name,comment FROM printer_classes " .
 	     "ORDER BY name;",\@q);
-    if (@q < 1) {
-      print h2("No PRINTER classes found!");
-      return;
-    }
-
-    print h3("PRINTER Classes (global)"),
-          "<TABLE width=\"99%\" cellspacing=\"1\" border=\"0\">",
-	  "<TR bgcolor=\"#aaaaff\">",
-          th("Name"),th("Comment"),"</TR>";
+    print h3("PRINTER Classes (global)");
 
     for $i (0..$#q) {
-      $name=$q[$i][1];
-      $name='&nbsp;' if ($name eq '');
-      $comment=$q[$i][2];
-      $comment='&nbsp;' if ($comment eq '');
-      print "<TR bgcolor=\"#eeeebf\">",
-	td("<a href=\"$selfurl?menu=templates&pc_id=$q[$i][0]\">$name</a>"),
-	td($comment),"</TR>";
+      $q[$i][1]=
+	"<a href=\"$selfurl?menu=templates&pc_id=$q[$i][0]\">$q[$i][1]</a>";
     }
-    print "</TABLE>";
+    display_list(['Name','Comment'],\@q,1);
+    print "<br>";
     return;
   }
   elsif ($sub eq 'hinfo') {
     db_query("SELECT id,type,hinfo,pri FROM hinfo_templates " .
 	     "ORDER BY type,pri,hinfo;",\@q);
-    if (@q < 1) {
-      print h2("No HINFO templates found!");
-      return;
-    }
 
-    print h3("HINFO templates (global)"),
-          "<TABLE width=\"99%\" cellspacing=\"1\" border=\"0\">",
-	  "<TR bgcolor=\"#aaaaff\">",
-          th("Type"),th("HINFO"),th("Priority"),"</TR>";
+    print h3("HINFO templates (global)");
 
     for $i (0..$#q) {
-      $name=$q[$i][2];
-      $name='&nbsp;' if ($name eq '');
-      print "<TR bgcolor=\"" . ($q[$i][1]==0?"#eeeebf":"#eebfee") . "\">",
-	td(($q[$i][1]==0 ? "Hardware" : "Software")),
-	td("<a href=\"$selfurl?menu=templates&hinfo_id=$q[$i][0]\">$name</a>"),
-	td($q[$i][3]),"</TR>";
+	$q[$i][1]=($q[$i][1]==0 ? "Hardware" : "Software");
+	$q[$i][2]="<a href=\"$selfurl?menu=templates&hinfo_id=$q[$i][0]\">" .
+	          "$q[$i][2]</a>";
     }
-    print "</TABLE>";
+    display_list(['Type','HINFO','Priority'],\@q,1);
+    print "<br>";
     return;
   }
   elsif ($sub eq 'Edit') {
@@ -3091,16 +3040,6 @@ sub templates_menu() {
     return;
   }
 
-  print "<p><br><ul>",
-    "<li><a href=\"$selfurl?menu=templates&sub=mx\">" .
-      "Show MX templates</a></li>",
-    "<li><a href=\"$selfurl?menu=templates&sub=wks\">" .
-      "Show WKS templates</a></li>",
-    "<li><a href=\"$selfurl?menu=templates&sub=pc\">" .
-      "Show PRINTER classes</a></li>",
-    "<li><a href=\"$selfurl?menu=templates&sub=hinfo\">" .
-      "Show HINFO templates</a></li>",
-    "</ul>";
 }
 
 
@@ -3115,12 +3054,12 @@ sub login_menu() {
 
   if ($sub eq 'login') {
     print h2("Login as another user?"),p,
-          "Click <a href=\"$s_url/login\">here</a> ",
+          "Click <a href=\"$s_url/login\" target=\"_top\">here</a> ",
           "if you want to login as another user.";
   }
   elsif ($sub eq 'logout') {
     print h2("Logout from the system?"),p,
-          "Click <a href=\"$s_url/logout\">here</a> ",
+          "Click <a href=\"$s_url/logout\" target=\"_top\">here</a> ",
           "if you want to logout.";
   }
   elsif ($sub eq 'passwd') {
@@ -3551,7 +3490,7 @@ sub login_form($$) {
 	"$host &nbsp;</FONT></TD></FONT>",
 	"<TR><TD colspan=2 bgcolor=\"#dddddd\">";
 
-  print start_form,"<BR><CENTER>",h2($msg),p,"<TABLE>",
+  print start_form(-target=>'_top'),"<BR><CENTER>",h2($msg),p,"<TABLE>",
         Tr,td("Login:"),td(textfield(-name=>'login_name',-maxlength=>'8')),
         Tr,td("Password:"),
                    td(password_field(-name=>'login_pwd',-maxlength=>'30')),
@@ -3631,16 +3570,17 @@ sub login_auth() {
 	# print news/MOTD stuff
 	get_news_list($state{serverid},3,\@newslist);
 	if (@newslist > 0) {
-	  print h2("Message(s) of the day:"),"<TABLE bgcolor=\"#eeeeff\">";
+	  print h2("Message(s) of the day:"),
+	        "<TABLE width=\"70%\" bgcolor=\"#eeeeff\">";
 	  for $i (0..$#newslist) {
 	    $msg=$newslist[$i][3];
-	    $msg =~ s/\n/<BR>/g;
+	    #$msg =~ s/\n/<BR>/g;
 	    $date=localtime($newslist[$i][0]);
 	    print 
 	      Tr(td($msg . "<FONT size=-1><I>" .
                   "<BR> &nbsp; &nbsp; -- $newslist[$i][1] $date </I></FONT>"));
 	  }
-	  print "</TABLE>";
+	  print "</TABLE><BR>";
 	}
 
 	logmsg("notice","user ($u) logged in from " . $ENV{'REMOTE_ADDR'});
@@ -3675,13 +3615,15 @@ sub top_menu($) {
     print '<TABLE border="0" cellspacing="0" width="100%">',
           '<TR bgcolor="#002d5f"><TD rowspan=2>',
           '<a href="http://sauron.jyu.fi/" target="sauron">',
-          '<IMG src="' .$ICON_PATH . '/logo.png" widht="80" height="70" border="0" alt=""></a></TD>',
+          '<IMG src="' .$ICON_PATH .
+	  '/logo.png" widht="80" height="70" border="0" alt=""></a></TD>',
           '<TD colspan=2><FONT size=+2 color="white">Sauron</WHITE></TD></TR>',
 	  '<TR bgcolor="#002d5f" align="left" valign="center">',
           '<TD><FONT color="white">';
   } else {
     print '<a href="http://sauron.jyu.fi/" target="sauron">',
-      '<IMG src="' .$ICON_PATH . '/logo.png" width="80" height="70" border="0" alt=""></a>';
+          '<IMG src="' .$ICON_PATH .
+          '/logo.png" width="80" height="70" border="0" alt=""></a>';
 
     print '<TABLE border="0" cellspacing="0" width="100%">';
 
