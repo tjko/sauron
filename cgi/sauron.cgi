@@ -23,7 +23,7 @@ $SAURON_CGI_VER = ' $Revision$ $Date$ ';
 
 $ALEVEL_VLANS = 5 unless (defined($ALEVEL_VLANS));
 #$|=1;
-$debug_mode = 0;
+$debug_mode = 1;
 
 if (-f "/etc/sauron/config") {
   $conf_dir='/etc/sauron';
@@ -2549,13 +2549,22 @@ sub nets_menu() {
 	get_vlan_list($serverid,\%vlan_list_hash,\@vlan_list);
     }
     display_form(\%net,\%net_form);
-    print p,startform(-method=>'GET',-action=>$selfurl),
+    print p,"<TABLE><TR><TD> ",startform(-method=>'GET',-action=>$selfurl),
           hidden('menu','nets');
     print submit(-name=>'sub',-value=>'Edit'), "  ",
           submit(-name=>'sub',-value=>'Delete'), " &nbsp;&nbsp;&nbsp; "
 	    unless (check_perms('superuser','',1));
     print submit(-name=>'sub',-value=>'Net Info'),
-          hidden('net_id',$id),end_form;
+          hidden('net_id',$id),end_form,"</TD><TD>";
+    param('menu','hosts');
+    param('sub','browse');
+    print startform(-method=>'GET',-action=>$selfurl),
+          hidden('menu','hosts'),hidden('sub','browse'),
+	  hidden('bh_type','1'),hidden('bh_order','2'),
+	  hidden('bh_size','3'),hidden('bh_stype','0'),
+	  hidden('bh_net',$net{net}),hidden('bh_submit','Search'),
+          submit(-name=>'foobar',-value=>'Show Hosts'),end_form,
+	  "</TD></TR></TABLE>";
     return;
   }
 

@@ -2,6 +2,10 @@ $Id$
 	
 	
 0.50
+	- added "show hosts" button to network entry display
+	- update-dhcp-info now updates dhcp_date field only for
+	  DHCPACK or BOOTREPLY
+	- new user rights: max expiration time, default department 
 	- fixed SRV record support	
 	- fixed nondeterministic behaviour with multiple IPs in 
 	  'fixed-address' lines in dhcpd.conf

@@ -1,31 +1,27 @@
 
 general:
-	- test whether changing TEXT fiels in hosts table to appropriate
-	  CHAR(n) fields would improve speed...
         - write (command-line :) utility for easily generating large
 	  number of host entries, and to import interactively hosts
 	  from text files in standard zonefile format...
 	- IPv6 support
-	- fix "wrong year" bug in update-dhcp-info
-	- add DHCP v3 support to update-dhcp-info
 
 import:
-	- remove unneccessary (?) quoting (\"...) from dhcp (and other) records
 	- real parser for both imports
 
 
 sauron:
 	- more sanity checks
-	- add access control record for setting maximum allowed host expiration
-	  time
-        - add field in user_groups for default account expiration
+	- use tmp files
+	- support for automatic validity checks for dhcpd.conf and 
+	  named.conf & zone files (if dhcpd,named-checkconf,named-checkzone
+	  are in path)
+	  
 
 
 sauron.cgi:
 	- fix timeout problem with huge zone/server deletes...(faster server :)
 	- add search by dhcp_date field...
 	- add quick search like in browser.cgi
-        - add "show hosts" button to network entry display
 	- display conflicting domainname/MAC when host update/insert fails
 	- option to "download" search results in CSV format
 	- remove confirm from logout
