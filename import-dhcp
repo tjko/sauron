@@ -211,13 +211,16 @@ foreach $key (keys %{$data{host}}) {
 	next;
       }
     }
-    elsif ($line =~ /^\s*hardware\s+ethernet\s+([0-9a-fA-F:]{17})\s*$/) {
-      ($ether=uc($1)) =~ s/://g;
+    elsif ($line =~ /^\s*hardware\s+ethernet\s+(([0-9a-fA-F]{1,2}(:|\b)){6})\s*$/) {
+      my @tmp = split(/:/, $1);
+      my $mac = "";
+      foreach $byte (@tmp){ $mac .= sprintf ("%02s", $byte); }
+      $ether=uc($mac);
     } else {
       push @q, $line;
     }
+    
   }
-
   next unless ($ip && $ether);
   print "host: $key ip=$ip,ether=$ether,groupid=$id\n" if ($opt_verbose);
   $hosts{$ip}=[$ether,$id,$key];
