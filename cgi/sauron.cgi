@@ -16,7 +16,7 @@ $CGI::DISABLE_UPLOADS = 1; # no uploads
 $CGI::POST_MAX = 100000; # max 100k posts
 
 #$|=1;
-$debug_mode = 0;
+$debug_mode = 1;
 
 if (-f "/etc/sauron/config") {
   $conf_dir='/etc/sauron';
@@ -623,6 +623,7 @@ if ((time() - $state{'last'}) > $USER_TIMEOUT) {
 error("Unauthorized Access denied!")
   if ($remote_addr ne $state{'addr'}) ;
 
+
 $server=$state{'server'};
 $serverid=$state{'serverid'};
 $zone=$state{'zone'};
@@ -644,8 +645,10 @@ if ($pathinfo ne '') {
   frame_2() if ($pathinfo =~ /^\/frame2/);
 }
 
+
 unless ($state{superuser} eq 'yes') {
-  error("cannot get permissions!") if (get_permissions($state{uid},\%perms));
+ error("cannot get permissions!")
+   if (get_permissions($state{uid},$state{gid},\%perms));
 }
 
 $bgcolor='black';
@@ -670,6 +673,7 @@ unless ($frame_mode) {
 }
 
 print "<br>" unless ($frame_mode);
+
 
 if ($menu eq 'servers') { servers_menu(); }
 elsif ($menu eq 'zones') { zones_menu(); }
@@ -720,7 +724,12 @@ exit;
 sub servers_menu() {
   $sub=param('sub');
 
+  goto select_server if (check_perms('server','R'));
+
+
   if ($sub eq 'add') {
+    return if (check_perms('superuser',''));
+
     $res=add_magic('srvadd','Server','servers',\%new_server_form,
 		   \&add_server,\%data);
     if ($res > 0) {
@@ -734,6 +743,8 @@ sub servers_menu() {
   }
 
   if (($sub eq 'del') && ($serverid > 0)) {
+    return if (check_perms('superuser',''));
+
     if (param('srvdel_submit') ne '') {
       if (delete_server($serverid) < 0) {
 	print h2("Cannot delete server!");
@@ -757,6 +768,8 @@ sub servers_menu() {
   }
 
   if ($sub eq 'edit') {
+    return if (check_perms('superuser',''));
+
     $res=edit_magic('srv','Server','servers',\%server_form,
 		    \&get_server,\&update_server,$serverid);
     goto select_zone if ($res == -1);
@@ -814,8 +827,11 @@ sub zones_menu() {
     print h2("Server not selected!");
     return;
   }
+  return if (check_perms('server','R'));
 
   if ($sub eq 'add') {
+    return if (check_perms('superuser',''));
+
     $data{server}=$serverid;
     if (param('add_submit')) {
       unless (($res=form_check_form('addzone',\%data,\%new_zone_form))) {
@@ -850,6 +866,8 @@ sub zones_menu() {
     return;
   }
   elsif ($sub eq 'Delete') {
+    return if (check_perms('superuser',''));
+
     $|=1 if ($frame_mode);
     $res=delete_magic('zn','Zone','zones',\%zone_form,\&get_zone,
 		      \&delete_zone,$zoneid);
@@ -864,6 +882,8 @@ sub zones_menu() {
     return;
   }
   elsif ($sub eq 'Edit') {
+    return if (check_perms('superuser',''));
+
     $res=edit_magic('zn','Zone','zones',\%zone_form,\&get_zone,\&update_zone,
 		    $zoneid);
     goto select_zone if ($res == -1);
@@ -871,6 +891,8 @@ sub zones_menu() {
     return;
   }
   elsif ($sub eq 'Copy') {
+    return if (check_perms('superuser',''));
+
     if ($zoneid < 1) {
       print h2("No zone selected!");
       return;
@@ -964,6 +986,7 @@ sub hosts_menu() {
     alert1("Zone not selected!");
     return;
   }
+  return if (check_perms('server','R'));
 
   $sub=param('sub');
   $host_form{alias_l_url}="$selfurl?menu=hosts&h_id=";
@@ -971,6 +994,12 @@ sub hosts_menu() {
   $host_form{alias_d_url}="$selfurl?menu=hosts&h_id=";
 
   if ($sub eq 'Delete') {
+    if (get_host(param('h_id'),\%host)) {
+	alert2("Cannot get host record (id=$id)!");
+	return;
+    }
+    goto show_host_record if (check_perms('host',$host{domain}));
+
     $res=delete_magic('h','Host','hosts',\%host_form,\&get_host,\&delete_host,
 		      param('h_id'));
     goto show_host_record if ($res == 2);
@@ -986,6 +1015,8 @@ sub hosts_menu() {
       }
       $data{aliasname}=$host{domain};
     }
+    goto show_host_record if (check_perms('host',$host{domain}));
+
     $data{type}=4;
     $data{zone}=$zoneid;
     $data{alias}=param('aliasadd_alias') if (param('aliasadd_alias'));
@@ -1007,6 +1038,8 @@ sub hosts_menu() {
       alert2("Cannot get host record (id=$id)!");
       return;
     }
+    goto show_host_record if (check_perms('host',$host{domain}));
+
     if ($#{$h{ip}} > 1) {
       alert2("Host has multiple IPs!");
       print  p,"Move of hosts with multiple IPs not supported (yet)";
@@ -1066,6 +1099,12 @@ sub hosts_menu() {
     return;
   }
   elsif ($sub eq 'Edit') {
+    if (get_host(param('h_id'),\%host)) {
+	alert2("Cannot get host record (id=$id)!");
+	return;
+    }
+    goto show_host_record if (check_perms('host',$host{domain}));
+
     $res=edit_magic('h','Host','hosts',\%host_form,\&get_host,\&update_host,
 		   param('h_id'));
     goto browse_hosts if ($res == -1);
@@ -1243,7 +1282,9 @@ sub hosts_menu() {
     return;
   }
   elsif ($sub eq 'add') {
+    return if (check_perms('zone','RW'));
     $type=param('type');
+    return if (($type!=1) && check_perms('superuser',''));
     unless ($host_types{$type}) {
       alert2('Invalid add type!');
       return;
@@ -1391,8 +1432,11 @@ sub groups_menu() {
     print h2("Server not selected!");
     return;
   }
+  return if (check_perms('server','R'));
 
   if ($sub eq 'add') {
+    return if (check_perms('superuser',''));
+
     $data{server}=$serverid;
     $res=add_magic('add','Group','groups',\%new_group_form,
 		   \&add_group,\%data);
@@ -1405,6 +1449,7 @@ sub groups_menu() {
     return;
   }
   elsif ($sub eq 'Edit') {
+    return if (check_perms('superuser',''));
     $res=edit_magic('grp','Group','groups',\%group_form,
 		    \&get_group,\&update_group,$id);
     goto browse_groups if ($res == -1);
@@ -1412,6 +1457,7 @@ sub groups_menu() {
     return;		    
   }
   elsif ($sub eq 'Delete') {
+    return if (check_perms('superuser',''));
     if (get_group($id,\%group)) {
       print h2("Cannot get group (id=$id)");
       return;
@@ -1513,7 +1559,11 @@ sub nets_menu() {
     return;
   }
 
+  return if (check_perms('server','R'));
+
+
   if ($sub eq 'addnet') {
+    return if (check_perms('superuser',''));
     $data{subnet}='f';
     $data{server}=$serverid;
     $res=add_magic('addnet','Network','nets',\%new_net_form,
@@ -1527,6 +1577,7 @@ sub nets_menu() {
     return;
   }
   elsif ($sub eq 'addsub') {
+    return if (check_perms('superuser',''));
     $data{subnet}='t';
     $data{server}=$serverid;
     $res=add_magic('addnet','Network','nets',\%new_net_form,
@@ -1540,12 +1591,14 @@ sub nets_menu() {
     return;
   }
   elsif ($sub eq 'Edit') {
+    return if (check_perms('superuser',''));
     $res=edit_magic('net','Net','nets',\%net_form,\&get_net,\&update_net,$id);
     goto browse_nets if ($res == -1);
     goto show_net_record if ($res > 0);
     return;
   }
   elsif ($sub eq 'Delete') {
+    return if (check_perms('superuser',''));
     $res=delete_magic('net','Net','nets',\%net_form,\&get_net,
 		      \&delete_net,$id);
     goto show_net_record if ($res == 2);
@@ -1683,6 +1736,7 @@ sub templates_menu() {
     print h2("Zone not selected!");
     return;
   }
+  return if (check_perms('server','R'));
 
   $sub=param('sub');
   $mx_id=param('mx_id');
@@ -1786,6 +1840,8 @@ sub templates_menu() {
     return;
   }
   elsif ($sub eq 'Edit') {
+    return if (check_perms('superuser',''));
+
     if ($mx_id > 0) {
       $res=edit_magic('mx','MX template','templates',\%mx_template_form,
 		      \&get_mx_template,\&update_mx_template,$mx_id);
@@ -1807,6 +1863,8 @@ sub templates_menu() {
     return;
   }
   elsif ($sub eq 'Delete') {
+    return if (check_perms('superuser',''));
+
     if ($mx_id > 0) {
       if (get_mx_template($mx_id,\%h)) {
 	print h2("Cannot get mx template (id=$mx_id)");
@@ -1915,6 +1973,7 @@ sub templates_menu() {
     return;
   }
   elsif ($sub eq 'addmx') {
+    return if (check_perms('superuser',''));
     $data{zone}=$zoneid;
     $res=add_magic('addmx','MX template','templates',\%new_template_form,
 		   \&add_mx_template,\%data);
@@ -1925,6 +1984,7 @@ sub templates_menu() {
     return;
   }
   elsif ($sub eq 'addwks') {
+    return if (check_perms('superuser',''));
     $data{server}=$serverid;
     $res=add_magic('addwks','WKS template','templates',\%new_template_form,
 		   \&add_wks_template,\%data);
@@ -1935,6 +1995,7 @@ sub templates_menu() {
     return;
   }
   elsif ($sub eq 'addpc') {
+    return if (check_perms('superuser',''));
     #$data{server}=$serverid;
     $res=add_magic('addwpc','PRINTER class','templates',
 		   \%new_printer_class_form,\&add_printer_class,\%data);
@@ -1945,6 +2006,7 @@ sub templates_menu() {
     return;
   }
   elsif ($sub eq 'addhinfo') {
+    return if (check_perms('superuser',''));
     $data{type}=0; 
     $data{pri}=100;
     $res=add_magic('addhinfo','HINFO template','templates',
@@ -2343,6 +2405,7 @@ sub login_auth() {
 	$state{'auth'}='yes';
 	$state{'user'}=$u;
 	$state{'uid'}=$user{'id'};
+	$state{'gid'}=$user{'gid'};
 	$state{'login'}=$ticks;
 	$state{'serverid'}=$user{'server'};
 	$state{'zoneid'}=$user{'zone'};
@@ -2625,6 +2688,7 @@ sub save_state($id) {
   $s_addr=$state{'addr'};
   $other='';
   if ($state{'uid'}) { $other.=", uid=".$state{'uid'}." ";  }
+  if ($state{'gid'}) { $other.=", gid=".$state{'gid'}." ";  }
   if ($state{'serverid'}) {
     $other.=", serverid=".$state{'serverid'}." ";
     $other.=", server='".$state{'server'}."' ";
@@ -2657,7 +2721,7 @@ sub load_state($) {
 
   undef @q;
   db_query("SELECT uid,addr,auth,mode,serverid,server,zoneid,zone," .
-       "uname,last,login,searchopts,searchdomain,searchpattern,superuser " .
+      "uname,last,login,searchopts,searchdomain,searchpattern,superuser,gid " .
        "FROM utmp WHERE cookie='$id';",\@q);
   if (@q > 0) {
     $state{'uid'}=$q[0][0];
@@ -2680,6 +2744,7 @@ sub load_state($) {
     $state{'searchdomain'}=$q[0][12];
     $state{'searchpattern'}=$q[0][13];
     $state{'superuser'}='yes' if ($q[0][14] eq 't');
+    $state{'gid'}=$q[0][15];
 
     db_exec("UPDATE utmp SET last=" . time() . " WHERE cookie='$id';");
     return 1;
@@ -2693,6 +2758,43 @@ sub remove_state($) {
 
   db_exec("DELETE FROM utmp WHERE cookie='$id';");
   undef %state;
+}
+
+sub check_perms($$$) {
+  my($type,$rule) = @_;
+  my($i,$re);
+
+  return 0 if ($state{superuser} eq 'yes');
+
+  if ($type eq 'superuser') {
+    alert1("Access denied: administrator priviliges required.");
+    return 1;
+  }
+  elsif ($type eq 'server') {
+    return 0 if ($perms{server}->{$serverid} =~ /$rule/);
+  }
+  elsif ($type eq 'zone') {
+    return 0 if ($perms{server}->{$serverid} =~ /$rule/);
+    return 0 if ($perms{zone}->{$zoneid} =~ /$rule/);
+  }
+  elsif ($type eq 'host') {
+    return 0  if ($perms{server}->{$serverid} =~ /RW/);
+    if ($perms{zone}->{$zoneid} =~ /RW/) {
+      for $i (0..$#{$perms{hostname}}) {
+	$re=$perms{hostname}[$i];
+	#print p,"regexp='$re' '$rule'";
+	return 0 if ($rule =~ /$re/);
+      }
+    }
+    alert1("You are not authorized to modify this host record");
+    return 1;
+  }
+  elsif ($type eq 'net') {
+
+  }
+
+  alert1("Access to $type denied");
+  return 1;
 }
 
 ############################################################################

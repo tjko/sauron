@@ -1487,7 +1487,7 @@ sub get_user($$) {
   my ($uname,$rec) = @_;
 
   return get_record("users",
-	       "username,password,name,superuser,server,zone,comment,id",
+	       "username,password,name,superuser,server,zone,comment,gid,id",
 	       $uname,$rec,"username");
 }
 
@@ -1624,12 +1624,13 @@ sub cgi_disabled() {
   return $q[0][0];
 }
 
-sub get_permissions($$) {
-  my($uid,$rec) = @_;
+sub get_permissions($$$) {
+  my($uid,$gid,$rec) = @_;
   my(@q,$i,$type,$ref,$mode,$s,$e);
 
   return -1 unless ($uid > 0);
-  return -2 unless ($rec);
+  return -2 unless ($gid > 0);
+  return -3 unless ($rec);
 
   $rec->{server}={};
   $rec->{zone}={};
@@ -1637,17 +1638,27 @@ sub get_permissions($$) {
   $rec->{hostname}=[];
 
   undef @q;
-  db_query("SELECT a.type,a.ref,a.mode,n.range_start,n.range_end " .
+  db_query("SELECT a.rtype,a.rref,a.rule,n.range_start,n.range_end " .
 	   "FROM user_rights a, nets n " .
-	   "WHERE a.uref=$uid AND a.type=3 AND a.ref=n.id " .
+	   "WHERE ((a.type=2 AND a.ref=$uid) OR (a.type=1 AND a.ref=$gid)) " .
+           "  AND a.rtype=3 AND a.rref=n.id " .
 	   "UNION " .
-	   "SELECT type,ref,mode,NULL,NULL FROM user_rights " .
-	   "WHERE type<>3 AND uref=$uid;",\@q);
+	   "SELECT rtype,rref,rule,NULL,NULL FROM user_rights " .
+	   "WHERE ((ref=$uid AND type=2) OR (ref=$gid AND type=1)) " .
+	   " AND rtype<>3 ORDER BY 1;",\@q);
+
+
   for $i (0..$#q) {
-    ($type,$ref,$mode,$s,$e)=$q[$i];
-    if ($type == 1) { $$rec->{server}{$ref}=$mode; }
-    elsif ($type == 2) { $$rec->{zone}{$ref}=$mode; }
-    elsif ($type == 3) { $$rec->{net}{$ref}=[$s,$e]; }
+    $type=$q[$i][0];
+    $ref=$q[$i][1];
+    $mode=$q[$i][2];
+    $s=$q[$i][3];
+    $e=$q[$i][4];
+    $mode =~ s/\s+$//;
+
+    if ($type == 1) { $rec->{server}->{$ref}=$mode; }
+    elsif ($type == 2) { $rec->{zone}->{$ref}=$mode; }
+    elsif ($type == 3) { $rec->{net}->{$ref}=[$s,$e]; }
     elsif ($type == 4) { push @{$rec->{hostname}}, $mode; }
   }
   return 0;
