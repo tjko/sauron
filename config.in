@@ -19,9 +19,17 @@ $USER_TIMEOUT = 3600;
 #########################################################################
 # DNS browser
 
-$BROWSER_CONF = { foo=>'servername,zonename', 
-	          foo2=>'server1,zone2.org' };
+$BROWSER_CONF = { 
+		  foo=>['servername','zonename'], 
+	          foo2=>['server1','zone2.orgg'] 
+		};
 
+$BROWSER_HELP = { 
+		  foo=>['Help','http://www.zone2.orgg/browserhelp.thml'] 
+		  foo2=>['Info','/browserhelp.thml'] 
+		}
+
+$BROWSER_MAX = 100;
 
 #########################################################################
 # misc
