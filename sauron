@@ -1227,7 +1227,7 @@ sub make_dhcp() {
   print DHCPFILE "\n\n";
 
 
-  # dynamic hosts
+  # dynamic hosts (DHCP classes)
   unless ($dhcp2_mode) {
   print_dhcp_classes:
     undef @dclasses;
@@ -1254,18 +1254,23 @@ sub make_dhcp() {
 
 	# subclasses
 	if ($dclasses[$i][2]== 3) {
+	  my $lastmac;
 	  undef @q;
-	  db_query("SELECT h.ether,h.domain FROM hosts h, zones z " .
-		   "WHERE z.server=$serverid AND h.zone=z.id " .
-		   " AND h.grp=$dclasses[$i][0] AND h.ether NOTNULL " .
+	  db_query("SELECT h.ether,h.domain " .
+		   "FROM zones z JOIN hosts h ON z.id=h.zone " .
+		   " LEFT JOIN group_entries g ON h.id=g.host " .
+		   "WHERE z.server=$serverid AND h.ether NOTNULL " .
+		   " AND (h.grp=$dclasses[$i][0] OR g.grp=$dclasses[$i][0]) " .
 		   "ORDER BY h.ether",\@q);
 	  for $j (0..$#q) {
 	    unless ($q[$j][0] =~ /^[0-9A-F]{12}$/) {
 	      #error("invalid ether for subclass: $q[$j][0]");
 	      next;
 	    }
+	    next if ($q[$j][0] eq $lastmac);
 	    print DHCPFILE "subclass \"$dclasses[$i][1]\" 1:" .
 	                   dhcpether($q[$j][0]) . ";  # $q[$j][1]\n";
+	    $lastmac=$q[$j][0];
 	  }
 	}
 
