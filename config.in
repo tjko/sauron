@@ -6,8 +6,9 @@
 #########################################################################
 # general configuration options
 
-$LOG_DIR = "/var/log/";
 $PROG_DIR = "/usr/local/sauron/";
+
+$LOG_DIR = "$PROG_DIR/logs/";
 
 #########################################################################
 # WWW interface (sauron.cgi) configuration options 
