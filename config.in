@@ -22,13 +22,18 @@ $DB_CONNECT = "dbname=sauron";
 
 $USER_TIMEOUT = 3600;
 
-$PLEVEL_VLANS = 5;  # required priv.level to see vlan info in web interface
+$ALEVEL_VLANS = 5;  # authorization level needed to see vlan info 
+                    # in web interface
 
-# uncomment to enable compatibilty hack for DHCP v2.0 ...
-# $SAURON_DCHP2_MODE = 1;
+$SAURON_CHARSET = 'iso-8859-15';
+
+# $SAURON_DTDHACK = 1;
 
 #########################################################################
 # misc
+
+# uncomment to enable compatibilty with DHCP v2.0 ...
+# $SAURON_DCHP2_MODE = 1;
 
 $LOOPBACK_NET = "127.0.0.0/24";
 $LOOPBACK_ZONE = "loopback.";

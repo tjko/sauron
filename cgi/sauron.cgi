@@ -7,7 +7,7 @@
 # All Rights Reserved.
 #
 use Sys::Syslog;
-use CGI qw/:standard *table/;
+use CGI qw/:standard *table -no_xhtml/;
 use CGI::Carp 'fatalsToBrowser'; # debug stuff
 use Digest::MD5;
 use Net::Netmask;
@@ -846,6 +846,19 @@ do "$PROG_DIR/cgi_util.pl";
  ]
 );
 
+
+%menus = (
+	  'servers'=>\&servers_menu,
+	  'zones'=>\&zones_menu,
+	  'login'=>\&login_menu,
+	  'hosts'=>\&hosts_menu,
+	  'about'=>\&about_menu,
+	  'nets'=>\&nets_menu,
+	  'templates'=>\&templates_menu,
+	  'groups'=>\&groups_menu
+);
+
+
 sub logmsg($$) {
   my($type,$msg)=@_;
 
@@ -955,18 +968,26 @@ unless ($state{superuser} eq 'yes') {
 }
 
 if (param('csv')) {
-  print header(-type=>'text/csv',-target=>'_new');
+  print header(-type=>'text/csv',-target=>'_new',-'x-filename'=>'foo.csv');
   hosts_menu();
   exit(0);
 }
 
-print header(-type=>'text/html; charset=iso-8859-1'),
-      start_html(-title=>"Sauron $VER",-BGCOLOR=>$bgcolor,
-		 -meta=>{'keywords'=>'GNU Sauron DNS DHCP tool'}),
-      "\n\n<!-- Sauron $VER -->\n",
+$SAURON_CHARSET='iso-8859-1' unless ($SAURON_CHARSET);
+
+print header(-type=>"text/html; charset=$SAURON_CHARSET");
+if ($SAURON_DTD_HACK) {
+    print "<!DOCTYPE HTML PUBLIC \"-//IETF//DTD HTML//EN\">\n",
+          "<html><head><title>Sauron $VER</title>\n",
+          "<meta NAME=\"keywords\" CONTENT=\"Sauron DNS DHCP tool\">\n",
+          "</head><body bgcolor=\"$bgcolor\">\n";
+} else {
+    print start_html(-title=>"Sauron $VER",-BGCOLOR=>$bgcolor,-dtd=>{},
+		     -meta=>{'keywords'=>'Sauron DNS DHCP tool'});
+}
+
+print "\n\n<!-- Sauron $VER -->\n",
       "<!-- Copyright (c) Timo Kokkonen <tjko\@iki.fi>  2000,2001. -->\n\n";
-
-
 
 unless ($frame_mode) {
   top_menu(0);
@@ -982,16 +1003,7 @@ unless ($frame_mode) {
 
 
 print "<br>" unless ($frame_mode);
-
-if ($menu eq 'servers') { servers_menu(); }
-elsif ($menu eq 'zones') { zones_menu(); }
-elsif ($menu eq 'login') { login_menu(); }
-elsif ($menu eq 'hosts') { hosts_menu(); }
-elsif ($menu eq 'about') { about_menu(); }
-elsif ($menu eq 'nets') { nets_menu(); }
-elsif ($menu eq 'templates') { templates_menu(); }
-elsif ($menu eq 'templates') { templates_menu(); }
-elsif ($menu eq 'groups') { groups_menu(); }
+if ($menuref=$menus{$menu}) { &$menuref; } 
 else { print p,"Unknown menu '$menu'"; }
 
 
@@ -1697,7 +1709,7 @@ sub hosts_menu() {
       goto show_host_record;
     }
 
-    print "<TABLE width=\"99%\" cellspacing=0 cellpadding=1 border=0 " .
+    print "<TABLE width=\"99%\" cellspacing=1 cellpadding=1 border=0 " .
           "BGCOLOR=\"ffffff\">",
           "<TR><TD><B>Zone:</B> $zone</TD>",
           "<TD align=right>Page: ".($page+1)."</TD></TR></TABLE>";
@@ -1732,10 +1744,10 @@ sub hosts_menu() {
       $trcolor='#eeeeee';
       $trcolor='#ffffcc' if ($i % 2 == 0);
       print "<TR bgcolor=\"$trcolor\">",
-	    "<TD><FONT size=-1>".($i+1).".</FONT></TD>",
-	    td([$hostname,"<FONT size=-1>$host_types{$q[$i][3]}</FONT>",$ip,
-	       "<PRE>$ether&nbsp;</PRE>",
-	       "<FONT size=-1>".$info."&nbsp;</FONT>"]),"</TR>";
+	    td(["<FONT size=-1>".($i+1)."</FONT>",$hostname,
+		"<FONT size=-1>$host_types{$q[$i][3]}</FONT>",$ip,
+	        "<font size=-3 face=\"courier\">$ether&nbsp;</font>",
+	        "<FONT size=-1>".$info."&nbsp;</FONT>"]),"</TR>";
 
     }
     print "</TABLE><BR><CENTER>[";
@@ -1758,8 +1770,8 @@ sub hosts_menu() {
     } else { print "next"; }
 
     print "]</CENTER><BR>",
-          "<div align=right><font size=-1>",
-          "<a name=\"foo.csv\" href=\"$sorturl&csv=1\">",
+          "<div align=right><font size=-2>",
+          "<a title=\"foo.csv\" href=\"$sorturl&csv=1\">",
           "[Download results in CSV format]</a> &nbsp;</font></div>";
     return;
   }
@@ -3162,7 +3174,7 @@ sub login_form($$) {
   print "</TD></TR></TABLE>";
 
   #print "</TABLE>\n" unless($frame_mode);
-  print p,"You should have cookies enabled for this site...",end_html();
+  print p,"You need to have cookies enabled for this site...", end_html();
   $state{'mode'}='1';
   $state{'auth'}='no';
   $state{'superuser'}='no';
