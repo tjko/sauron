@@ -1,6 +1,13 @@
 $Id$
 
 0.7.2beta
+	- address match list support
+	- new utility for managing (TSIG) keys: keygen
+	- database format changes (1.3):
+	    - new tables: acls, keys
+	    - modified tables: zones, cidr_entries
+	    - conversion script now tries to fix possibly broken
+	      keys/indexs on tables: vmps,vlans,nets,zones
         - new utility dhcpd-lease-view for viewing dhcpd.leases file
           by Riku Meskanen
 	- sauron: slave server now inherits also "forward" zones patch

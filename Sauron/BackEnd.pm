@@ -674,16 +674,10 @@ sub get_server($$) {
   return -1 if ($res < 0);
   fix_bools($rec,"no_roots,zones_only");
 
-  #get_array_field("cidr_entries",3,"id,ip,comment","CIDR,Comments",
-  #		  "type=1 AND ref=$id ORDER BY ip",$rec,'allow_transfer');
   get_aml_field($id,1,$id,$rec,'allow_transfer');
-
-  get_array_field("cidr_entries",3,"id,ip,comment","CIDR,Comments",
-		  "type=7 AND ref=$id ORDER BY ip",$rec,'allow_query');
-  get_array_field("cidr_entries",3,"id,ip,comment","CIDR,Comments",
-		  "type=8 AND ref=$id ORDER BY ip",$rec,'allow_recursion');
-  get_array_field("cidr_entries",3,"id,ip,comment","CIDR,Comments",
-		  "type=9 AND ref=$id ORDER BY ip",$rec,'blackhole');
+  get_aml_field($id,7,$id,$rec,'allow_query');
+  get_aml_field($id,8,$id,$rec,'allow_recursion');
+  get_aml_field($id,9,$id,$rec,'blackhole');
   get_array_field("cidr_entries",3,"id,ip,comment","IP,Comments",
 		  "type=10 AND ref=$id ORDER BY ip",$rec,'listen_on');
   get_array_field("cidr_entries",3,"id,ip,comment","IP,Comments",
@@ -746,8 +740,6 @@ sub update_server($) {
   $id=$rec->{id};
 
   # allow_transfer
-  #$r=update_array_field("cidr_entries",3,"ip,comment,type,ref",
-#			 'allow_transfer',$rec,"1,$id");
   $r=update_aml_field(1,$id,$rec,'allow_transfer');
   if ($r < 0) { db_rollback(); return -12; }
   # dhcp
@@ -759,20 +751,17 @@ sub update_server($) {
 			'txt',$rec,"3,$id");
   if ($r < 0) { db_rollback(); return -14; }
   # allow_query
-  $r=update_array_field("cidr_entries",3,"ip,comment,type,ref",
-			 'allow_query',$rec,"7,$id");
+  $r=update_aml_field(7,$id,$rec,'allow_query');
   if ($r < 0) { db_rollback(); return -15; }
   # allow_recursion
-  $r=update_array_field("cidr_entries",3,"ip,comment,type,ref",
-			 'allow_recursion',$rec,"8,$id");
+  $r=update_aml_field(8,$id,$rec,'allow_recursion');
   if ($r < 0) { db_rollback(); return -16; }
   # blackhole
-  $r=update_array_field("cidr_entries",3,"ip,comment,type,ref",
-			 'blackhole',$rec,"9,$id");
+  $r=update_aml_field(9,$id,$rec,'blackhole');
   if ($r < 0) { db_rollback(); return -17; }
   # listen_on
   $r=update_array_field("cidr_entries",3,"ip,comment,type,ref",
-			 'listen_on',$rec,"10,$id");
+			'listen_on',$rec,"10,$id");
   if ($r < 0) { db_rollback(); return -18; }
   # forwarder
   $r=update_array_field("cidr_entries",3,"ip,comment,type,ref",
@@ -1041,7 +1030,7 @@ sub get_zone_list($$$) {
 
 sub get_zone($$) {
   my ($id,$rec) = @_;
-  my ($res,@q,$hid);
+  my ($res,@q,$hid,$sid);
 
   $res = get_record("zones",
 	       "server,active,dummy,type,reverse,class,name,nnotify," .
@@ -1051,6 +1040,7 @@ sub get_zone($$) {
 	       $id,$rec,"id");
   return -1 if ($res < 0);
   fix_bools($rec,"active,dummy,reverse,noreverse");
+  $sid=$rec->{server};
 
   if ($rec->{type} eq 'M') {
     $hid=get_host_id($id,'@');
@@ -1071,14 +1061,11 @@ sub get_zone($$) {
 
   get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comments",
 		  "type=2 AND ref=$id ORDER BY id",$rec,'dhcp');
-  get_array_field("cidr_entries",3,"id,ip,comment","CIDR,Comments",
-		  "type=2 AND ref=$id ORDER BY ip",$rec,'allow_update');
+  get_aml_field($sid,2,$id,$rec,'allow_update');
   get_array_field("cidr_entries",3,"id,ip,comment","IP,Comments",
 		  "type=3 AND ref=$id ORDER BY ip",$rec,'masters');
-  get_array_field("cidr_entries",3,"id,ip,comment","CIDR,Comments",
-		  "type=4 AND ref=$id ORDER BY ip",$rec,'allow_query');
-  get_array_field("cidr_entries",3,"id,ip,comment","CIDR,Comments",
-		  "type=5 AND ref=$id ORDER BY ip",$rec,'allow_transfer');
+  get_aml_field($sid,4,$id,$rec,'allow_query');
+  get_aml_field($sid,5,$id,$rec,'allow_transfer');
   get_array_field("cidr_entries",3,"id,ip,comment","IP,Comments",
 		  "type=6 AND ref=$id ORDER BY ip",$rec,'also_notify');
   get_array_field("cidr_entries",3,"id,ip,comment","IP,Comments",
@@ -1152,20 +1139,17 @@ sub update_zone($) {
   if ($r < 0) { db_rollback(); return -15; }
 
   # allow_update
-  $r=update_array_field("cidr_entries",3,"ip,comment,type,ref",
-			'allow_update',$rec,"2,$id");
+  $r=update_aml_field(2,$id,$rec,'allow_update');
   if ($r < 0) { db_rollback(); return -16; }
   # masters
   $r=update_array_field("cidr_entries",3,"ip,comment,type,ref",
 			'masters',$rec,"3,$id");
   if ($r < 0) { db_rollback(); return -17; }
   # allow_query
-  $r=update_array_field("cidr_entries",3,"ip,comment,type,ref",
-			'allow_query',$rec,"4,$id");
+  $r=update_aml_field(4,$id,$rec,'allow_query');
   if ($r < 0) { db_rollback(); return -18; }
   # allow_transfer
-  $r=update_array_field("cidr_entries",3,"ip,comment,type,ref",
-			'allow_transfer',$rec,"5,$id");
+  $r=update_aml_field(5,$id,$rec,'allow_transfer');
   if ($r < 0) { db_rollback(); return -19; }
   # also_notify
   $r=update_array_field("cidr_entries",3,"ip,comment,type,ref",

@@ -771,7 +771,7 @@ sub form_magic($$$) {
 	my(@aml_key_l,%aml_key_h,@aml_acl_l,%aml_acl_h);
 	get_acl_list(param($p1."_serverid"),\%aml_acl_h,\@aml_acl_l);
 	get_key_list(param($p1."_serverid"),\%aml_key_h,\@aml_key_l,157);
-	print td($rec->{name}),"<TD><TABLE bgcolor=#ddefef spacing=1><TR>",
+	print td($rec->{name}),"<TD><TABLE><TR>",
  	      th(["<FONT size=-2>Op</FONT>",
 		  "<FONT size=-2>Rule</FONT>",
 		  "<FONT size=-2>Comments</FONT>"]);
@@ -847,19 +847,22 @@ sub form_magic($$$) {
 	# add line...
 	$j=$a+1;
 	$p2=$p1."_".$j;
-	print "<TR border=1><TD rowspan=3>",
+	print "<TR><TD rowspan=3 bgcolor=\"#efefef\">",
 	      popup_menu(-name=>$p2."_5",-default=>'0',
 			    -values=>[0,1],-labels=>{0=>' ',1=>'NOT'}),"</TD>",
 	      "<TD>",textfield(-name=>$p2."_2",-size=>18,-maxlength=>18,
-			   -value=>''),"</TD><TD rowspan=3>",
+			   -value=>''),
+	      "</TD><TD rowspan=3 bgcolor=\"#efefef\">",
 	      textfield(-name=>$p2."_6",-size=>25,-maxlength=>80,
 			       -value=>''),"</TD>",
 	      td(submit(-name=>$p1."_add",-value=>"Add CIDR")),"</TR><TR>",
-	      td(popup_menu(-name=>$p2."_3",-default=>-1,
-			    -values=>\@aml_acl_l,-labels=>\%aml_acl_h)),
+	      "<TD bgcolor=\"#efefef\">",
+	      popup_menu(-name=>$p2."_3",-default=>-1,
+			 -values=>\@aml_acl_l,-labels=>\%aml_acl_h),"</TD>",
 	      td(submit(-name=>$p1."_add",-value=>'Add ACL')),"</TR><TR>",
-	      td(popup_menu(-name=>$p2."_4",-default=>-1,
-			 -values=>\@aml_key_l,-labels=>\%aml_key_h)),
+	      "<TD bgcolor=\"#efefef\">",
+	      popup_menu(-name=>$p2."_4",-default=>-1,
+			 -values=>\@aml_key_l,-labels=>\%aml_key_h),"</TD>",
 	      td(submit(-name=>$p1."_add",-value=>'Add KEY')),"</TR>";
 	
 	print "</TABLE></TD>";
