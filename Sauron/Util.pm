@@ -1,6 +1,6 @@
 # Sauron::Util.pm
 #
-# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000-2003.
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000-2003,2005.
 # $Id$
 #
 package Sauron::Util;
@@ -19,6 +19,7 @@ $VERSION = '$Id$ ';
 	     valid_domainname
 	     valid_texthandle
 	     is_cidr
+	     is_ip
 	     decode_cidr
 	     is_cidr_within_cidr
 	     arpa2cidr
@@ -143,6 +144,12 @@ sub is_cidr($) {
   return 1;
 }
 
+sub is_ip($) {
+  my($ip) = @_;
+
+  return 1 if (is_cidr($ip) && $ip !~ /\/\d{1,2}$/);
+  return 0;
+}
 
 # decode CIDR into base/mask...
 sub decode_cidr($$$) {
