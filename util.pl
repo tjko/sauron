@@ -141,6 +141,26 @@ sub pwd_crypt($$) {
   return "MD5:" . $salt . ":" . $ctx->hexdigest;
 }
 
+# encrypts given password 
+sub pwd_make($) {
+  my($password) = @_;
+  my($salt);
+
+  $salt=int(rand(900000)+100000);
+  return pwd_crypt($password,$salt);
+}
+
+# check if passwords match
+sub pwd_check($$) {
+  my($password,$pwd) = @_;
+  my($salt,$t);
+
+  $salt=$1 if ($pwd =~ /^MD5:(\S+):(\S+)$/);
+  return -2 if ($salt eq '');
+  $t=pwd_crypt($password,$salt);
+  return -1 if ($t ne $pwd);
+  return 0;
+}
 
 # print error message and exit program
 sub fatal($) {
@@ -149,5 +169,21 @@ sub fatal($) {
   exit(1);
 }
 
+# show hash in HTML format
+sub show_hash($) {
+  my($rec) = @_;
+  my($key);
+
+  unless (ref($rec) eq 'HASH') {
+    print "<P>Parameter is not a HASH!\n";
+    return;
+  }
+
+  print "<TABLE border=\"3\"><TR><TH>key</TH><TH>value</TH></TR>";
+  foreach $key (keys %{$rec}) {
+    print "<TR><TD>$key</TD><TD>" . $$rec{$key} . "</TD></TR>";
+  }
+  print "</TABLE>";
+}
 
 # eof

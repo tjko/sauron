@@ -13,7 +13,8 @@ CREATE TABLE users (
 	superuser	BOOL DEFAULT false,
 	server		INT4 DEFAULT -1,
 	zone		INT4 DEFAULT -1,
-	last		TIMESTAMP,	
+	last		INT4 DEFAULT 0,	
+	last_pwd	INT4 DEFAULT 0,
 
 	comment	    TEXT
 ) INHERITS(pokemon);

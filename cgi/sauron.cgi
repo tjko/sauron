@@ -15,7 +15,7 @@ $CGI::DISABLE_UPLOADS =1; # no uploads
 $CGI::POST_MAX = 100000; # max 100k posts
 
 #$|=1;
-$debug_mode = 0;
+$debug_mode = 1;
 
 if (-f "/etc/sauron/config") { 
   $conf_dir='/etc/sauron'; 
@@ -192,6 +192,24 @@ do "$PROG_DIR/back_end.pl";
  heading_bg=>'#aaaaff'
 );
 
+%user_info_form=(
+ data=>[
+  {ftype=>0, name=>'User info' },
+  {ftype=>4, tag=>'user', name=>'User name'},
+  {ftype=>4, tag=>'login', name=>'Last login', type=>'localtime'},
+  {ftype=>4, tag=>'addr', name=>'Host'},
+  {ftype=>0, name=>'Current selections'},
+  {ftype=>4, tag=>'server', name=>'Server'},
+  {ftype=>4, tag=>'zone', name=>'Zone'}
+ ],
+ bgcolor=>'#eeeebf',
+ border=>'0',		
+ width=>'100%',
+ nwidth=>'30%',
+ heading_bg=>'#aaaaff'
+);
+
+
 %new_server_form=(
  data=>[
   {ftype=>1, tag=>'name', name=>'Name', type=>'text',
@@ -205,6 +223,65 @@ do "$PROG_DIR/back_end.pl";
  nwidth=>'30%',
  heading_bg=>'#aaaaff'
 );
+
+%new_net_form=(
+ data=>[
+  {ftype=>1, tag=>'name', name=>'Name', type=>'text',
+   len=>40, empty=>0},
+  {ftype=>4, tag=>'subnet', name=>'Type', type=>'enum',
+   enum=>{t=>'Subnet',f=>'Net'}},
+  {ftype=>1, tag=>'net', name=>'Net (CIDR)', type=>'cidr'},
+  {ftype=>1, tag=>'comment', name=>'Comment', type=>'text',
+   len=>60, empty=>1}
+ ],
+ bgcolor=>'#eeeebf',
+ border=>'0',		
+ width=>'100%',
+ nwidth=>'30%',
+ heading_bg=>'#aaaaff'
+);
+
+%net_form=(
+ data=>[
+  {ftype=>0, name=>'Net'},
+  {ftype=>1, tag=>'name', name=>'Name', type=>'text',
+   len=>40, empty=>0},
+  {ftype=>4, tag=>'id', name=>'ID'},
+  {ftype=>4, tag=>'subnet', name=>'Type', type=>'enum',
+   enum=>{t=>'Subnet',f=>'Net'}},
+  {ftype=>1, tag=>'net', name=>'Net (CIDR)', type=>'cidr'},
+  {ftype=>1, tag=>'comment', name=>'Comment', type=>'text',
+   len=>60, empty=>1},
+  {ftype=>3, tag=>'no_dhcp', name=>'DHCP', type=>'enum', conv=>'L',
+   enum=>{f=>'Enabled',t=>'Disabled'}},
+  {ftype=>0, name=>'DHCP'},
+  {ftype=>2, tag=>'dhcp_l', name=>'Net specific DHCP entries', 
+   type=>['text','text'], fields=>2,
+   len=>[40,20], empty=>[0,1], elabels=>['DHCP','comment']}
+ ],
+ bgcolor=>'#eeeebf',
+ border=>'0',		
+ width=>'100%',
+ nwidth=>'30%',
+ heading_bg=>'#aaaaff'
+);
+
+
+
+%change_passwd_form=(
+ data=>[
+  {ftype=>1, tag=>'old', name=>'Old password', type=>'passwd', len=>20 },
+  {ftype=>0, name=>'Type new password twice'},
+  {ftype=>1, tag=>'new1', name=>'New password', type=>'passwd', len=>20 },
+  {ftype=>1, tag=>'new2', name=>'New password', type=>'passwd', len=>20 }
+ ],
+ bgcolor=>'#eeeebf',
+ border=>'0',		
+ width=>'100%',
+ nwidth=>'30%',
+ heading_bg=>'#aaaaff'
+);
+
 
 sub logmsg($$) {
   my($type,$msg)=@_;
@@ -286,37 +363,42 @@ unless ($menu) {
 
 
 if ($pathinfo ne '') {
+  $frame_mode=1 if ($pathinfo =~ /^\/frame/);
   logout() if ($pathinfo eq '/logout');
   frame_set() if ($pathinfo eq '/frames');
   frame_set2() if ($pathinfo eq '/frames2');
   frame_1() if ($pathinfo eq '/frame1');
   frame_2() if ($pathinfo =~ /^\/frame2/);
-  $frame_mode=1 if ($pathinfo =~ /^\/frame3/);
 }
 
+$bgcolor='black';
+#$bgcolor='white' if ($frame_mode);
 
 print header(-type=>'text/html; charset=iso-8859-1'),
-      start_html(-title=>"Sauron $VER",-BGCOLOR=>'white',
+      start_html(-title=>"Sauron $VER",-BGCOLOR=>$bgcolor,
 		 -meta=>{'keywords'=>'GNU Sauron DNS DHCP tool'}),
       "\n\n<!-- Sauron $VER -->\n",
       "<!-- Copyright (c) Timo Kokkonen <tjko\@iki.fi>  2000,2001. -->\n\n";
 
 unless ($frame_mode) {
   top_menu(0);
-  print "<TABLE bgcolor=\"green\" border=\"0\" cellspacing=\"5\" " .
+  print "<TABLE bgcolor=\"black\" border=\"0\" cellspacing=\"0\" " .
           "width=\"100%\">\n" .
-        "<TR><TD align=\"left\" valign=\"top\" bgcolor=\"white\" " .
+        "<TR><TD align=\"left\" valign=\"top\" bgcolor=\"gray\" " .
           "width=\"15%\">\n";
   left_menu(0);
-  print "<TD align=\"left\" valign=\"top\" bgcolor=\"white\">\n";
+  print "</TD><TD align=\"left\" valign=\"top\" bgcolor=\"#ffffff\">\n";
+} else {
+  print "<TABLE width=100%><TR bgcolor=\"#ffffff\"><TD>";
 }
-
 
 
 if ($menu eq 'servers') { servers_menu(); }
 elsif ($menu eq 'zones') { zones_menu(); }
 elsif ($menu eq 'login') { login_menu(); }
 elsif ($menu eq 'hosts') { hosts_menu(); }
+elsif ($menu eq 'about') { about_menu(); }
+elsif ($menu eq 'nets') { nets_menu(); }
 else {
   print p,"unknown menu '$menu'";
 }
@@ -344,9 +426,13 @@ if ($debug_mode) {
     print "$key,";
   }
 }
- 
-print "</TABLE> <!-- end of page -->\n" unless ($frame_mode);
-print "<p><hr>Sauron";
+
+unless ($frame_mode) {
+  print "</TD></TR><TR bgcolor=\"#002d5f\"><TD height=\"20\" colspan=\"2\">",
+        "&nbsp;";
+}
+print "</TD></TR></TABLE> <!-- end of page -->\n";
+#print "<p><hr>Sauron";
 print end_html();
 
 exit;
@@ -454,61 +540,74 @@ sub zones_menu() {
 
   if ($sub eq 'add') {
     print p,"add...";
+    return;
   }
-  elsif ($sub eq 'del') {
-    print p,"del...";
-  }
-  elsif (($sub eq 'edit') || ($sub eq 'Edit')) {
-    $res=edit_magic('zn','Zone','zones',\%zone_form,\&get_zone,\&update_zone,
-		    $zoneid);
+  elsif ($sub eq 'Delete') {
+    $res=delete_magic('zn','Zone','zones',\%zone_form,\&get_zone,
+		      \&delete_zone,$zoneid);
+    if ($res == 1) {
+      $state{'zone'}='';
+      $state{'zoneid'}=-1;
+      save_state($scookie);
+      goto select_zone;
+    }
+    goto display_zone if ($res == 2);
     goto select_zone if ($res == -1);
     return;
   }
-  else {
-    $zone=param('selected_zone');
-    $zone=$state{'zone'} unless ($zone);
-    if ($zone && $sub ne 'select') {
-      #display selected zone info
-      $zoneid=get_zone_id($zone,$serverid);
-      if ($zoneid < 1) {
-	print h3("Cannot select zone '$zone'!"),p;
-	goto select_zone;
-      }
-      print h2("Selected zone: $zone"),p;
-      get_zone($zoneid,\%zn);
-      $state{'zone'}=$zone;
-      $state{'zoneid'}=$zoneid;
-      save_state($scookie);
+  elsif ($sub eq 'Edit') {
+    $res=edit_magic('zn','Zone','zones',\%zone_form,\&get_zone,\&update_zone,
+		    $zoneid);
+    goto select_zone if ($res == -1);
+    goto display_zone if ($res == 2);
+    return;
+  }
 
-      display_form(\%zn,\%zone_form);
-      
+
+ display_zone:
+  $zone=param('selected_zone');
+  $zone=$state{'zone'} unless ($zone);
+  if ($zone && $sub ne 'select') {
+    #display selected zone info
+    $zoneid=get_zone_id($zone,$serverid);
+    if ($zoneid < 1) {
+      print h3("Cannot select zone '$zone'!"),p;
+      goto select_zone;
     }
-    else {
-     select_zone:
-      #display zone selection list
-      print h2("Zones for server: $server"),
+    print h2("Selected zone: $zone"),p;
+    get_zone($zoneid,\%zn);
+    $state{'zone'}=$zone;
+    $state{'zoneid'}=$zoneid;
+    save_state($scookie);
+    
+    display_form(\%zn,\%zone_form);
+    return;
+  }
+
+  
+ select_zone:
+  #display zone selection list
+  print h2("Zones for server: $server"),
             p,"<TABLE width=90% bgcolor=white border=0>",
             Tr,th(['Zone','Id','Type','Reverse']);
             
-      $list=get_zone_list($serverid);
-      for $i (0 .. $#{$list}) {
-	$type=$$list[$i][2];
-	if ($type eq 'M') { $type='Master'; $color='#f0f000'; }
-	elsif ($type eq 'S') { $type='Slave'; $color='#a0a0f0'; }
-	$rev='No';
-	$rev='Yes' if ($$list[$i][3] eq 't');
-	$id=$$list[$i][1];
-	$name=$$list[$i][0];
+  $list=get_zone_list($serverid);
+  for $i (0 .. $#{$list}) {
+    $type=$$list[$i][2];
+    if ($type eq 'M') { $type='Master'; $color='#f0f000'; }
+    elsif ($type eq 'S') { $type='Slave'; $color='#a0a0f0'; }
+    $rev='No';
+    $rev='Yes' if ($$list[$i][3] eq 't');
+    $id=$$list[$i][1];
+    $name=$$list[$i][0];
 	
-	print "<TR bgcolor=$color>",td([
-	  "<a href=\"$selfurl?menu=zones&selected_zone=$name\">$name</a>",
+    print "<TR bgcolor=$color>",td([
+	"<a href=\"$selfurl?menu=zones&selected_zone=$name\">$name</a>",
 					$id,$type,$rev]);
-      }
-      
-      print "</TABLE>";
-
-    }
   }
+      
+  print "</TABLE>";
+
 }
 
 
@@ -675,6 +774,104 @@ sub hosts_menu() {
 }
 
 
+# NETS menu
+#
+sub nets_menu() {
+  my(@q,$i,$id);
+
+  $sub=param('sub');
+  $id=param('net_id');
+
+  unless ($serverid > 0) {
+    print h2("Server not selected!");
+    return;
+  }
+
+  if ($sub eq 'addnet') {
+    $data{subnet}='f';
+    $data{server}=$serverid;
+    $res=add_magic('addnet','Network','nets',\%new_net_form,
+		   \&add_net,\%data);
+    if ($res > 0) {
+      #show_hash(\%data);
+      #print "<p>$res $data{name}";
+      $id=$res;
+      goto show_net_record;
+    }
+    return;
+  }
+  elsif ($sub eq 'addsub') {
+    $data{subnet}='t';
+    $data{server}=$serverid;
+    $res=add_magic('addnet','Network','nets',\%new_net_form,
+		   \&add_net,\%data);
+    if ($res > 0) {
+      #show_hash(\%data);
+      #print "<p>$res $data{name}";
+      $id=$res;
+      goto show_net_record;
+    }
+    return;
+  }
+  elsif ($sub eq 'Edit') {
+    $res=edit_magic('net','Net','nets',\%net_form,\&get_net,\&update_net,$id);
+    goto browse_nets if ($res == -1);
+    goto show_net_record if ($res > 0);
+    return;		    
+  }
+  elsif ($sub eq 'Delete') {
+    $res=delete_magic('net','Net','nets',\%net_form,\&get_net,
+		      \&delete_net,$id);
+    goto show_net_record if ($res == 2);
+    return;
+  }
+  
+ show_net_record:
+  if ($id > 0) {
+    if (get_net($id,\%net)) {
+      print h2("Cannot get net record (id=$id)!");
+      return;
+    }
+    display_form(\%net,\%net_form);
+    print p,startform(-method=>'GET',-action=>$selfurl),
+          hidden('menu','nets'),
+          submit(-name=>'sub',-value=>'Edit'), "  ",
+          submit(-name=>'sub',-value=>'Delete'),
+          hidden('net_id',$id),end_form;
+    return;
+  }
+
+ browse_nets:
+  db_query("SELECT id,name,net,subnet,comment FROM nets " .
+	   "WHERE server=$serverid ORDER BY subnet,net;",\@q);
+  if (@q < 1) {
+    print h2("No networks found!");
+    return;
+  }
+
+  print "<TABLE><TR bgcolor=\"#ffee55\">",
+        "<TH>Net</TH>",th("Name"),th("Type"),th("Comment"),"</TR>";
+  
+  for $i (0..$#q) {
+      if ($q[$i][3] eq 't') {  
+	print "<TR bgcolor=\"#ddffdd\">";
+	$type='Subnet';
+      } else { 
+	print "<TR bgcolor=\"#dddddd\">";
+	$type='Network';
+      }
+				   
+    $name=$q[$i][1];
+    $name='&nbsp;' if ($name eq '');
+    $comment=$q[$i][4];
+    $comment='&nbsp;' if ($comment eq '');
+    print "<td><a href=\"$selfurl?menu=nets&net_id=$q[$i][0]\">$q[$i][2]</a></td>",
+          td($name),td($type),td($comment),"</TR>";
+  }
+ 
+  print "</TABLE>";
+}
+
 # LOGIN menu
 #
 sub login_menu() {
@@ -691,9 +888,38 @@ sub login_menu() {
           "if you want to logout.";
   }
   elsif ($sub eq 'passwd') {
-    print h2("Change password"),p,
-          "Click <a href=\"$s_url/logout\">here</a> ",
-          "if you want to logout.";
+    if (param('passwd_submit') ne '') {
+      unless (($res=form_check_form('passwd',\%h,\%change_passwd_form))) {
+	if (param('passwd_new1') ne param('passwd_new2')) {
+	  print "<FONT color=\"red\">",h2("New passwords dont match!"),
+	        "</FONT>";
+	} else {
+	  get_user($state{user},\%user);
+	  unless (pwd_check(param('passwd_old'),$user{password})) {
+	    $password=pwd_make(param('passwd_new1'));
+	    $ticks=time();
+	    if (db_exec("UPDATE users SET password='$password', " .
+			"last_pwd=$ticks WHERE id=$state{uid};") < 0) {
+	      print "<FONT color=\"red\">",
+	             h2("Password update failed!"),"</FONT>";
+	      return;
+	    }
+	    print p,h2("Password changed succesfully.");
+	    return;
+	  }
+	  print "<FONT color=\"red\">",h2("Invalid password!"),"</FONT>";
+	}
+      } else {
+	print "<FONT color=\"red\">",h2("Invalid data in form!"),"</FONT>";
+      }
+    }
+    print h2("Change password:"),p,
+          startform(-method=>'POST',-action=>$selfurl),
+          hidden('menu','login'),hidden('sub','passwd');
+    form_magic('passwd',\%h,\%change_passwd_form);
+    print submit(-name=>'passwd_submit',-value=>'Change password'),
+          end_form;
+    return;
   }
   elsif ($sub eq 'save') {
     $uid=$state{'uid'};
@@ -708,7 +934,39 @@ sub login_menu() {
     }
   }
   else {
-    #print p,"Unknown menu selection!";
+    print p;
+    display_form(\%state,\%user_info_form);
+  }
+}
+
+# ABOUT menu
+#
+sub about_menu() {
+  $sub=param('sub');
+  
+  if ($sub eq 'copyright') {
+    open(FILE,"$PROG_DIR/COPYRIGHT") || return;
+    print "<PRE>\n\n";
+    while (<FILE>) { print " $_"; }
+    print "</PRE>";
+  }
+  elsif ($sub eq 'copying') {
+    open(FILE,"$PROG_DIR/COPYING") || return;
+    print "<PRE>";
+    while (<FILE>) { print " $_"; }
+    print "</PRE>";
+  }
+  else {
+    print "<P><BR><CENTER>",
+          "<IMG src=\"$ICON_PATH/logo_large.png\" alt=\"Sauron\">",
+          "<BR>Version $VER<P>",
+          "a free DNS & DHCP management system<p>",
+          "<hr noshade width=\"40%\"><b>Author:</b>",
+          "<br>Timo Kokkonen <i>&lt;tjko\@iki.fi&gt;</i>",
+          "<hr width=\"30%\"><b>Logo design:</b>",
+          "<br>Teemu Lähteenmäki <i>&lt;tola\@iki.fi&gt;</i>",
+          "<hr noshade width=\"40%\"><p>",
+	  "</CENTER><BR><BR>";
   }
 }
 
@@ -723,6 +981,11 @@ sub edit_magic($$$$$$$) {
     return -1;
   }
   
+  if (param($prefix . '_cancel') ne '') {
+    print h2("No changes made to $name record.");
+    return 2;
+  }
+
   if (param($prefix . '_submit') ne '') {
     if(&$get_func($id,\%h) < 0) {
       print h2("Cannot find $name record anymore! ($id)");
@@ -734,10 +997,10 @@ sub edit_magic($$$$$$$) {
 	print "<FONT color=\"red\">",h1("$name record update failed!"),
 	      "<br>result code=$res</FONT>";
       } else {
-	print h2("$name record succefully updated:");
-	&$get_func($id,\%h);
-	display_form(\%h,$form);
-	return 0;
+	print h2("$name record succefully updated");
+	#&$get_func($id,\%h);
+	#display_form(\%h,$form);
+	return 1;
       }
     } else {
       print "<FONT color=\"red\">",h2("Invalid data in form!"),"</FONT>";
@@ -747,7 +1010,7 @@ sub edit_magic($$$$$$$) {
   unless (param($prefix . '_re_edit') eq '1') {
     if (&$get_func($id,\%h)) {
       print h2("Cannot get $name record (id=$id)!");
-      return;
+      return -3;
     }
   }
 
@@ -755,7 +1018,9 @@ sub edit_magic($$$$$$$) {
           startform(-method=>'POST',-action=>$selfurl),
           hidden('menu',$menu),hidden('sub','Edit');
   form_magic($prefix,\%h,$form);
-  print submit(-name=>$prefix . '_submit',-value=>'Make changes'),end_form;
+  print submit(-name=>$prefix . '_submit',-value=>'Make changes'), "  ",
+        submit(-name=>$prefix . '_cancel',-value=>'Cancel'),
+        end_form;
 
   return 0;
 }
@@ -766,14 +1031,13 @@ sub add_magic($$$$$$) {
 
   
   if (param($prefix . '_submit') ne '') {
-    unless (($res=form_check_form($prefix,\%h,$form))) {
-      $res=&$add_func(\%h);
+    unless (($res=form_check_form($prefix,$data,$form))) {
+      $res=&$add_func($data);
       if ($res < 0) {
 	print "<FONT color=\"red\">",h1("Adding $name record failed!"),
 	      "<br>result code=$res</FONT>";
       } else {
 	print h3("$name record succefully added");
-	%$data=%h;
 	return $res;
       }
     } else {
@@ -784,10 +1048,59 @@ sub add_magic($$$$$$) {
   print h2("New $name:"),p,
           startform(-method=>'POST',-action=>$selfurl),
           hidden('menu',$menu),hidden('sub','Edit');
-  form_magic($prefix,\%h,$form);
+  form_magic($prefix,\%data,$form);
   print submit(-name=>$prefix . '_submit',-value=>"Create $name"),end_form;
   return 0;
 }
+
+sub delete_magic($$$$$$$) {
+  my($prefix,$name,$menu,$form,$get_func,$del_func,$id) = @_;
+  my(%h);
+
+  if (($id eq '') || ($id < 1)) {
+    print h2("$name id not specified!");
+    return -1;
+  }
+  
+  if (param($prefix . '_cancel') ne '') {
+    print h2("$name record not deleted.");
+    return 2;
+  }
+
+  if (param($prefix . '_confirm') ne '') {
+    if(&$get_func($id,\%h) < 0) {
+      print h2("Cannot find $name record anymore! ($id)");
+      return -2;
+    }
+
+    $res=&$del_func($id);
+    if ($res < 0) {
+      print "<FONT color=\"red\">",h1("$name record delete failed!"),
+      "<br>result code=$res</FONT>";
+      return -10;
+    } else {
+      print h2("$name record successfully deleted");
+      return 1;
+    }
+  }
+
+
+  if (&$get_func($id,\%h)) {
+    print h2("Cannot get $name record (id=$id)!");
+    return -3;
+  }
+
+  print h2("Delete $name:"),p,
+          startform(-method=>'POST',-action=>$selfurl),
+          hidden('menu',$menu),hidden('sub','Delete'),
+          hidden($prefix . "_id",$id);
+  print submit(-name=>$prefix . '_confirm',-value=>'Delete'),"  ",
+        submit(-name=>$prefix . '_cancel',-value=>'Cancel'),end_form;
+  display_form(\%h,$form);
+  return 0;
+}
+
+
 
 sub logout() {
   my($c,$u);
@@ -828,8 +1141,9 @@ sub login_form($$) {
 
 sub login_auth() {
   my($u,$p);  
-  my(%user,$ctx,$salt,$pass,$digest,%h);
+  my(%user,%h,$ticks);
   
+  $ticks=time();
   $state{'auth'}='no';
   $state{'mode'}='0';
   $u=param('login_name');
@@ -840,35 +1154,28 @@ sub login_auth() {
     print p,h1("Username or password empty!");
   } else {
     unless (get_user($u,\%user)) {
-      $salt='';
-      if ($user{'password'} =~ /^MD5:(\S+)\:(\S+)$/) {
-	$salt=$1; 
-      }
-      #print p,h1("user ok<br>" . $user{'password'});
-      if ($salt ne '') {
-	$digest=pwd_crypt($p,$salt);
-	if ($digest eq $user{'password'}) {
-	  $state{'auth'}='yes';
-	  $state{'user'}=$u;
-	  $state{'uid'}=$user{'id'};
-	  $state{'login'}=time();
-	  $state{'serverid'}=$user{'server'};
-	  $state{'zoneid'}=$user{'zone'};
-	  if ($state{'serverid'} > 0) {
-	    $state{'server'}=$h{'name'} 
-	      unless(get_server($state{'serverid'},\%h));
-	  }
-	  if ($state{'zoneid'} > 0) {
-	    $state{'zone'}=$h{'name'} 
-	      unless(get_zone($state{'zoneid'},\%h));
-	  }
-	  print p,h1("Login ok!"),p,
-	      "Come in... <a href=\"$s_url/frames\">frames version</a> ",
-              "or <a href=\"$s_url\">table version (recommended for now)</a>";
-	  logmsg("notice","user ($u) logged in from " . $ENV{'REMOTE_ADDR'});
+      if (pwd_check($p,$user{'password'}) == 0) {
+	$state{'auth'}='yes';
+	$state{'user'}=$u;
+	$state{'uid'}=$user{'id'};
+	$state{'login'}=$ticks;
+	$state{'serverid'}=$user{'server'};
+	$state{'zoneid'}=$user{'zone'};
+	if ($state{'serverid'} > 0) {
+	  $state{'server'}=$h{'name'} 
+	    unless(get_server($state{'serverid'},\%h));
 	}
+	if ($state{'zoneid'} > 0) {
+	  $state{'zone'}=$h{'name'} 
+	    unless(get_zone($state{'zoneid'},\%h));
+	}
+	print p,h1("Login ok!"),p,
+	    "Come in... <a href=\"$s_url/frames\">frames version</a> ",
+            "or <a href=\"$s_url\">table version (recommended for now)</a>";
+	logmsg("notice","user ($u) logged in from " . $ENV{'REMOTE_ADDR'});
+	db_exec("UPDATE users SET last=$ticks WHERE id=$user{'id'};");
       }
-    } 
+    }
   }
 
   print p,h1("Login failed."),p,"<a href=\"$selfurl\">try again</a>"
@@ -885,21 +1192,21 @@ sub login_auth() {
 sub top_menu($) {
   my($mode)=@_;
   
-  print	'<IMG src="' .$ICON_PATH . '/logo.png" alt="Sauron">';
+  print	'<IMG src="' .$ICON_PATH . '/logo.png" alt="">';
 
   print '<TABLE border="0" cellspacing="0" width="100%">';
-#        '<TR align="left" valign="bottom"><TD rowspan="1">' . 
-#	'<IMG src="' .$ICON_PATH . '/logo.png" alt=""></TD>';
 
-  #print "<TD>mode=$mode<TD>foo<TD>foo<TD>";
   print '<TR bgcolor="#002d5f" align="left" valign="center">',
-        '<TD width="17%" height="24">',
+        '<TD width="15%" height="24">',
         '<FONT color="white">&nbsp;GNU/Sauron</FONT></TD>',
         '<TD><FONT color="#ffffff">',
         "<A HREF=\"$s_url?menu=hosts\"><FONT color=\"#ffffff\">Hosts</FONT></A> | " ,
         "<A HREF=\"$s_url?menu=zones\"><FONT color=\"#ffffff\">Zones</FONT></A> | ",
+        "<A HREF=\"$s_url?menu=nets\"><FONT color=\"#ffffff\">Nets</FONT></A> | ",
+        "<A HREF=\"$s_url?menu=templates\"><FONT color=\"#ffffff\">Templates</FONT></A> | ",
         "<A HREF=\"$s_url?menu=servers\"><FONT color=\"#ffffff\">Servers</FONT></A> | ",
-	"<A HREF=\"$s_url?menu=login\"><FONT color=\"#ffffff\">login</FONT></A> | ";
+	"<A HREF=\"$s_url?menu=login\"><FONT color=\"#ffffff\">Login</FONT></A> | ",
+	"<A HREF=\"$s_url?menu=about\"><FONT color=\"#ffffff\">About...</FONT></A> ";
   print "</FONT></TABLE>";
 }
 
@@ -911,11 +1218,11 @@ sub left_menu($) {
   
   $url=$s_url;
   print "<BR><TABLE width=$w bgcolor=\"#002d5f\" border=\"0\" " .
-        "cellspacing=\"0\" cellpadding=\"0\">", # Tr,th(h4("$menu")),
+        "cellspacing=\"3\" cellpadding=\"0\">", # Tr,th(h4("$menu")),
         "<TR><TD><TABLE width=\"100%\" cellspacing=\"2\" cellpadding=\"1\" " ,
 	 "border=\"0\">",
          "<TR><TH><FONT color=\"#ffffff\">$menu</FONT></TH></TR>",
-	  "<TR><TD BGCOLOR=\"#eeeeee\">";
+	  "<TR><TD BGCOLOR=\"#eeeeee\"><FONT>";
   #print "<p>mode=$mode";
 
   if ($menu eq 'servers') {
@@ -930,8 +1237,13 @@ sub left_menu($) {
     print p,"<a href=\"$url\">Current zone</a><br>",
           p,"<a href=\"$url&sub=select\">Select zone</a><br>",
           p,"<a href=\"$url&sub=add\">Add zone</a><br>",
-          "<a href=\"$url&sub=del\">Delete zone</a><br>",
-          "<a href=\"$url&sub=edit\">Edit zone</a><br>";
+          "<a href=\"$url&sub=Delete\">Delete zone</a><br>",
+          "<a href=\"$url&sub=Edit\">Edit zone</a><br>";
+  } elsif ($menu eq 'nets') {
+    $url.='?menu=nets';
+    print p,"<a href=\"$url\">Networks</a><br>",
+          p,"<a href=\"$url&sub=addnet\">Add network</a><br>",
+          "<a href=\"$url&sub=addsub\">Add subnet</a><br>";
   } elsif ($menu eq 'hosts') {
     $url.='?menu=hosts';
     print p,"<a href=\"$url\">Browse hosts</a><br>",
@@ -942,12 +1254,22 @@ sub left_menu($) {
           "<br><a href=\"$url&sub=logout\">Logout</a>",
           "<br><a href=\"$url&sub=passwd\">Change password</a>",
           "<br><a href=\"$url&sub=save\">Save defaults</a>";
+    if ($frame_mode) {
+      print "<br><a href=\"$script_name\" target=\"_top\">Frames OFF</a>";
+    } else {
+      print "<br><a href=\"$s_url/frames\" target=\"_top\">Frames ON</a>";
+    }
+  } elsif ($menu eq 'about') {
+    $url.='?menu=about';
+    print "<a href=\"$url\">About</a>",
+          "<br><a href=\"$url&sub=copyright\">Copyright</a>",
+          "<br><a href=\"$url&sub=copying\">Copying</a>";
   } else {
     print "<p><p>empty menu\n";
   }
-  print "</TR></TABLE></TD></TABLE><BR>";
+  print "</FONT></TR></TABLE></TD></TABLE><BR>";
 
-  print "<TABLE width=$w bgcolor=\"#002d5f\" border=\"0\" cellspacing=\"0\" " .
+  print "<TABLE width=$w bgcolor=\"#002d5f\" border=\"0\" cellspacing=\"3\" " .
         "cellpadding=\"0\">", #<TR><TD><H4>Current selections</H4></TD></TR>",
         "<TR><TD><TABLE width=\"100%\" cellspacing=\"2\" cellpadding=\"1\" " .
 	"border=\"0\">",
@@ -967,7 +1289,7 @@ sub left_menu($) {
 sub frame_set() {
   print header;
   
-  print "<HTML><FRAMESET border=\"1\" rows=\"130,*\">\n" .
+  print "<HTML><FRAMESET border=\"0\" rows=\"110,*\">\n" .
         "  <FRAME src=\"$script_name/frame1\" noresize>\n" .
         "  <FRAME src=\"$script_name/frames2\" name=\"bottom\">\n" .
         "  <NOFRAMES>\n" .
@@ -983,7 +1305,7 @@ sub frame_set2() {
   $menu="?menu=" . param('menu') if ($menu);
   
   print "<HTML>" .
-        "<FRAMESET border=\"0\" cols=\"15%,85%\">\n" .
+        "<FRAMESET border=\"0\" cols=\"16%,84%\">\n" .
 	"  <FRAME src=\"$script_name/frame2$menu\" name=\"menu\" noresize>\n" .
         "  <FRAME src=\"$script_name/frame3$menu\" name=\"main\">\n" .
         "  <NOFRAMES>\n" .
@@ -997,7 +1319,7 @@ sub frame_set2() {
 
 sub frame_1() {
   print header,
-        start_html(-title=>"sauron: top menu",-BGCOLOR=>'white',
+        start_html(-title=>"sauron: top menu",-BGCOLOR=>'black',
 		   -target=>'bottom');
 
   $s_url .= '/frames2';
@@ -1009,12 +1331,11 @@ sub frame_1() {
 
 sub frame_2() {
   print header,
-        start_html(-title=>"sauron: left menu",-BGCOLOR=>'white',
+        start_html(-title=>"sauron: left menu",-BGCOLOR=>'black',
 		   -target=>'main');
 
   $s_url .= '/frame3';
   left_menu(1);
-
   print end_html();
   exit 0;
 }
@@ -1087,7 +1408,7 @@ sub load_state($) {
 
   undef @q;
   db_query("SELECT uid,addr,auth,mode,serverid,server,zoneid,zone," .
-	   "uname,last " .
+	   "uname,last,login " .
 	   "FROM utmp WHERE cookie='$id';",\@q);
   if (@q > 0) {
     $state{'uid'}=$q[0][0];
@@ -1105,6 +1426,7 @@ sub load_state($) {
     }
     $state{'user'}=$q[0][8] if ($q[0][8] ne '');
     $state{'last'}=$q[0][9];
+    $state{'login'}=$q[0][10];
     
     db_exec("UPDATE utmp SET last=" . time() . " WHERE cookie='$id';");
     return 1;
@@ -1164,6 +1486,8 @@ sub form_check_field($$$) {
   } elsif ($type eq 'cidr') {
     return 'valid CIDR (IP) required!' unless (is_cidr($value));
   } elsif ($type eq 'text') {
+    return '';
+  } elsif ($type eq 'passwd') {
     return '';
   } elsif ($type eq 'enum') {
     return '';
@@ -1368,8 +1692,13 @@ sub form_magic($$$) {
       print "<TR><TH COLSPAN=2 ALIGN=\"left\" BGCOLOR=\"$h_bg\">",
              $rec->{name},"</TH></TR>\n";
     } elsif ($rec->{ftype} == 1) {
-      print "<TR>",td($rec->{name}),"<TD>",
-            textfield(-name=>$p1,-size=>$rec->{len},-value=>param($p1));
+      if ($rec->{type} eq 'passwd') {
+	print "<TR>",td($rec->{name}),"<TD>",
+	  password_field(-name=>$p1,-size=>$rec->{len},-value=>param($p1));
+      } else {
+	print "<TR>",td($rec->{name}),"<TD>",
+	  textfield(-name=>$p1,-size=>$rec->{len},-value=>param($p1));
+      }
 
       print "<FONT size=-1 color=\"red\"><BR> ",
             form_check_field($rec,param($p1),0),
@@ -1532,6 +1861,8 @@ sub display_form($$) {
     $val="\L$val" if ($rec->{conv} eq 'L');
     $val="\U$val" if ($rec->{conv} eq 'U');
     $val=${$rec->{enum}}{$val}  if ($rec->{type} eq 'enum');
+    $val=localtime($val) if ($rec->{type} eq 'localtime');
+    $val=gmtime($val) if ($rec->{type} eq 'gmtime');
 
     if ($rec->{ftype} == 0) {
       print "<TR><TH COLSPAN=2 ALIGN=\"left\" ",

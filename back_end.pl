@@ -507,6 +507,91 @@ sub update_zone($) {
   return db_commit();
 }
 
+sub delete_zone($) {
+  my($id) = @_;
+  my($res);
+
+  return -100 unless ($id > 0);
+
+  db_begin();
+
+  # cidr_entries
+  $res=db_exec("DELETE FROM cidr_entries WHERE (type=2 OR type=3) " .
+	       " AND ref=$id;");
+  if ($res < 0) { db_rollback(); return -1; }
+  
+  # dhcp_entries
+  $res=db_exec("DELETE FROM dhcp_entries WHERE type=2 AND ref=$id;");
+  if ($res < 0) { db_rollback(); return -2; }
+  $res=db_exec("DELETE FROM dhcp_entries WHERE id IN ( " .
+	        "SELECT a.id FROM dhcp_entries a, hosts h " .
+	        "WHERE h.zone=$id AND a.type=3 AND a.ref=h.id);");
+  if ($res < 0) { db_rollback(); return -3; }
+
+  # mx_entries
+  $res=db_exec("DELETE FROM mx_entries WHERE type=1 AND ref=$id;");
+  if ($res < 0) { db_rollback(); return -4; }
+  $res=db_exec("DELETE FROM mx_entries WHERE id IN ( " .
+	       "SELECT a.id FROM mx_entries a, hosts h " .
+	       "WHERE h.zone=$id AND a.type=2 AND a.ref=h.id);");
+  if ($res < 0) { db_rollback(); return -5; }
+  $res=db_exec("DELETE FROM mx_entries WHERE id IN ( " .
+	       "SELECT a.id FROM mx_entries a, mx_templates m " .
+	       "WHERE m.zone=$id AND a.type=3 AND a.ref=m.id);");
+  if ($res < 0) { db_rollback(); return -6; }
+  
+  # wks_entries
+  $res=db_exec("DELETE FROM wks_entries WHERE id IN ( " .
+	       "SELECT a.id FROM wks_entries a, hosts h " .
+	       "WHERE h.zone=$id AND a.type=1 AND a.ref=h.id);");
+  if ($res < 0) { db_rollback(); return -7; }
+
+  # ns_entries
+  $res=db_exec("DELETE FROM ns_entries WHERE type=1 AND ref=$id;");
+  if ($res < 0) { db_rollback(); return -8; }
+  $res=db_exec("DELETE FROM ns_entries WHERE id IN ( " .
+	       "SELECT a.id FROM ns_entries a, hosts h " .
+	       "WHERE h.zone=$id AND a.type=2 AND a.ref=h.id);");
+  if ($res < 0) { db_rollback(); return -9; }
+
+
+  # printer_entries
+  $res=db_exec("DELETE FROM printer_entries WHERE id IN ( " .
+	       "SELECT a.id FROM printer_entries a, hosts h " .
+	       "WHERE h.zone=$id AND a.type=2 AND a.ref=h.id);");
+  if ($res < 0) { db_rollback(); return -10; }
+
+  # txt_entries
+  $res=db_exec("DELETE FROM txt_entries WHERE type=1 AND ref=$id;");
+  if ($res < 0) { db_rollback(); return -11; }
+  $res=db_exec("DELETE FROM txt_entries WHERE id IN ( " .
+	       "SELECT a.id FROM txt_entries a, hosts h " .
+	       "WHERE h.zone=$id AND a.type=2 AND a.ref=h.id);");
+  if ($res < 0) { db_rollback(); return -12; }
+
+  # rr_a
+  $res=db_exec("DELETE FROM rr_a WHERE id IN ( " .
+	       "SELECT a.id FROM rr_a a, hosts h " .
+	       "WHERE h.zone=$id AND a.host=h.id);");
+  if ($res < 0) { db_rollback(); return -13; }
+
+  # mx_templates
+  $res=db_exec("DELETE FROM mx_templates WHERE zone=$id;");
+  if ($res < 0) { db_rollback(); return -14; }
+
+  # hosts
+  $res=db_exec("DELETE FROM hosts WHERE zone=$id;");
+  if ($res < 0) { db_rollback(); return -15; }
+
+
+
+  $res=db_exec("DELETE FROM zones WHERE id=$id;");
+  if ($res < 0) { db_rollback(); return -50; }
+
+  #return db_commit();
+  return db_rollback();
+}
+
 
 ############################################################################
 # hosts table functions
@@ -714,4 +799,60 @@ sub get_net_list($$) {
     push @{$list}, $rec;
   }
   return $list;
+}
+
+sub get_net($$) {
+  my ($id,$rec) = @_;
+
+  return -100 if (get_record("nets",
+                      "server,name,net,subnet,rp_mbox,rp_txt,no_dhcp,comment",
+		      $id,$rec,"id"));
+
+  get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comment",
+		  "type=4 AND ref=$id ORDER BY dhcp",$rec,'dhcp_l');
+  
+  return 0;
+}
+
+sub update_net($) {
+  my($rec) = @_;
+  my($r,$id);
+
+  db_begin();
+  $r=update_record('nets',$rec);
+  if ($r < 0) { db_rollback(); return $r; }
+  $id=$rec->{id};
+
+  $r=update_array_field("dhcp_entries",3,"dhcp,comment,type,ref",
+			'dhcp_l',$rec,"4,$id");
+  if ($r < 0) { db_rollback(); return -10; }
+
+  return db_commit();
+}
+
+
+
+sub add_net($) {
+  my($rec) = @_;
+
+  return add_record('nets',$rec);
+}
+
+
+sub delete_net($) {
+  my($id) = @_;
+  my($res);
+
+  return -100 unless ($id > 0);
+
+  db_begin();
+
+  # dhcp_entries
+  $res=db_exec("DELETE FROM dhcp_entries WHERE type=4 AND ref=$id;");
+  if ($res < 0) { db_rollback(); return -1; }
+
+  $res=db_exec("DELETE FROM nets WHERE id=$id;");
+  if ($res < 0) { db_rollback(); return -2; }
+
+  return db_commit();
 }
