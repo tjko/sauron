@@ -2,7 +2,7 @@
 $VER = "0.1a";
 
 $PROG_DIR = "/home/tjko/work/sauron/";
-
+$ICON_PATH = "/sauron/icons";
 
 
 $DB_CONNECT = "host=localhost port=5432 dbname=sauron";
