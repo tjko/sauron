@@ -98,7 +98,7 @@ CONTRIB_FILES = contrib/additional-ether-codes.txt \
 		contrib/htmldoc-sql
 
 CGIFILES = cgi/sauron.cgi cgi/browser.cgi
-LOGOFILES = cgi/logo.png cgi/logo_large.png
+LOGOFILES = icons/logo.png icons/logo_large.png
 MISCFILES = COPYING COPYRIGHT
 
 DIRNAME = $(shell basename `pwd`) 
@@ -182,7 +182,7 @@ install: all make_dirs
 	$(INSTALL) -m 755 $(PROGS) $(INSTALL_ROOT)/$(bindir)
 	$(INSTALL) -m 644 $(MISCFILES) $(INSTALL_ROOT)/$(bindir)
 	$(INSTALL) -m 755 $(CGIFILES) $(INSTALL_ROOT)/$(bindir)/cgi
-	$(INSTALL) -m 644 $(LOGOFILES) $(INSTALL_ROOT)/$(bindir)/cgi
+	$(INSTALL) -m 644 $(LOGOFILES) $(INSTALL_ROOT)/$(bindir)/icons
 	$(INSTALL) -m 644 $(MODULES) $(INSTALL_ROOT)/$(bindir)/Sauron
 	$(INSTALL) -m 644 $(SQL_TABLES) $(SQL_MISC) \
 				 $(INSTALL_ROOT)/$(bindir)/sql
@@ -206,6 +206,7 @@ make_dirs:
 	$(INSTALL) -m 755 -d $(INSTALL_ROOT)/$(bindir)/sql
 	$(INSTALL) -m 755 -d $(INSTALL_ROOT)/$(bindir)/logs
 	$(INSTALL) -m 755 -d $(INSTALL_ROOT)/$(bindir)/contrib
+	$(INSTALL) -m 755 -d $(INSTALL_ROOT)/$(bindir)/icons
 
 
 printable.man:
