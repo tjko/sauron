@@ -3484,11 +3484,14 @@ sub login_form($$) {
   $host=$1 if (self_url =~ /https?\:\/\/([^\/]+)\//);
 
   print "<FONT color=\"blue\">";
-  print "<CENTER><TABLE width=\"50%\" cellspacing=0 border=0>",
-        "<TR bgcolor=\"#0000ff\"><TD><FONT color=\"yellow\">&nbsp; Sauron",
-        "</FONT></TD><TD align=\"right\"><FONT color=\"yellow\">",
+  print "<CENTER><TABLE width=\"65%\" cellspacing=0 border=0>",
+        "<TR valign=\"bottom\" bgcolor=\"#002d5f\">",
+        "<TD width=\"80\"><IMG src=\"$ICON_PATH/logo.png\" width=\"80\" height=\"70\" ",
+	" alt=\"\"></TD>",
+        "<TD><FONT color=\"white\"> &nbsp; Sauron",
+        "</FONT></TD><TD align=\"right\"><FONT color=\"white\">",
 	"$host &nbsp;</FONT></TD></FONT>",
-	"<TR><TD colspan=2 bgcolor=\"#dddddd\">";
+	"<TR><TD colspan=3 bgcolor=\"#efefff\">";
 
   print start_form(-target=>'_top'),"<BR><CENTER>",h2($msg),p,"<TABLE>",
         Tr,td("Login:"),td(textfield(-name=>'login_name',-maxlength=>'8')),
@@ -3496,12 +3499,10 @@ sub login_form($$) {
                    td(password_field(-name=>'login_pwd',-maxlength=>'30')),
               "</TABLE>",
         hidden(-name=>'login',-default=>'yes'),
-        submit(-name=>'submit',-value=>'Login'),end_form,"</CENTER>";
+        submit(-name=>'submit',-value=>'Login'),end_form,
+        p,"<br><br>You need to have cookies enabled for this site...",
+        "<br></CENTER></TD></TR></TABLE>",end_html();
 
-  print "</TD></TR></TABLE>";
-
-  #print "</TABLE>\n" unless($frame_mode);
-  print p,"You need to have cookies enabled for this site...", end_html();
   $state{'mode'}='1';
   $state{'auth'}='no';
   $state{'superuser'}='no';
@@ -3519,7 +3520,7 @@ sub login_auth() {
   $u=param('login_name');
   $p=param('login_pwd');
   $p=~s/\ \t\n//g;
-  print "<P><BR><BR><BR><BR><CENTER>";
+  print "<P><CENTER>";
   if (! (valid_safe_string($u,255) && valid_safe_string($p,255))) {
     print p,h1("Invalid arguments!");
   }
@@ -3550,7 +3551,19 @@ sub login_auth() {
 	  $state{'zone'}=$h{'name'} 
 	    unless(get_zone($state{'zoneid'},\%h));
 	}
-	print p,h1("Login ok!"),p,"<TABLE><TR><TD>",
+
+	print "<TABLE border=0 cellspacing=0 bgcolor=\"#efefff\" " .
+	      " width=\"70%\">",
+	      "<TR bgcolor=\"#002d5f\">",
+	      "<td width=\"80\"><IMG src=\"$ICON_PATH/logo.png\" alt=\"\" " .
+		" width=\"80\" height=\"70\" border=0></td>",
+	      "<td valign=\"bottom\" align=\"left\">",
+	      "<font color=\"white\"> &nbsp; Sauron v".sauron_version().
+	      "</font></td>",
+	      "<td valign=\"bottom\" align=\"right\">",
+	      "<font color=\"white\">$SERVER_ID &nbsp; </font></td>",
+	      "</TR><TR><TD colspan=3><CENTER>\n";
+	print h1("Login ok!"),p,"<TABLE><TR><TD>",
 	    startform(-method=>'POST',-action=>$s_url),
 	    submit(-name=>'submit',-value=>'No Frames'),end_form,
 	    "</TD><TD> ",
@@ -3571,7 +3584,7 @@ sub login_auth() {
 	get_news_list($state{serverid},3,\@newslist);
 	if (@newslist > 0) {
 	  print h2("Message(s) of the day:"),
-	        "<TABLE width=\"70%\" bgcolor=\"#eeeeff\">";
+	        "<TABLE width=\"80%\" bgcolor=\"#eaeaff\">";
 	  for $i (0..$#newslist) {
 	    $msg=$newslist[$i][3];
 	    #$msg =~ s/\n/<BR>/g;
@@ -3583,6 +3596,7 @@ sub login_auth() {
 	  print "</TABLE><BR>";
 	}
 
+	print "</CENTER></td></tr></table>\n";
 	logmsg("notice","user ($u) logged in from " . $ENV{'REMOTE_ADDR'});
 	$last_from = db_encode_str($ENV{'REMOTE_ADDR'});
 	db_exec("UPDATE users SET last=$ticks,last_from=$last_from " .
@@ -3616,7 +3630,7 @@ sub top_menu($) {
           '<TR bgcolor="#002d5f"><TD rowspan=2>',
           '<a href="http://sauron.jyu.fi/" target="sauron">',
           '<IMG src="' .$ICON_PATH .
-	  '/logo.png" widht="80" height="70" border="0" alt=""></a></TD>',
+	  '/logo.png" width="80" height="70" border="0" alt=""></a></TD>',
           '<TD colspan=2><FONT size=+2 color="white">Sauron</WHITE></TD></TR>',
 	  '<TR bgcolor="#002d5f" align="left" valign="center">',
           '<TD><FONT color="white">';
