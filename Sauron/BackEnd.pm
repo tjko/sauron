@@ -599,7 +599,7 @@ sub get_server_list($$$) {
   undef @{$lst};
   push @{$lst},  -1;
   undef %{$rec};
-  $$rec{-1}='None';
+  $$rec{-1}='--None--';
 
   db_query("SELECT id,name,comment FROM servers ORDER BY name",\@q);
   for $i (0..$#q) {
@@ -1954,7 +1954,7 @@ sub get_mx_template_list($$$$) {
   undef @{$lst};
   push @{$lst},  -1;
   undef %{$rec};
-  $$rec{-1}='None';
+  $$rec{-1}='--None--';
   return if ($zoneid < 1);
   $alevel=0 unless ($alevel>0);
 
@@ -2053,7 +2053,7 @@ sub get_wks_template_list($$$$) {
   undef @{$lst};
   push @{$lst},  -1;
   undef %{$rec};
-  $$rec{-1}='None';
+  $$rec{-1}='--None--';
   return if ($serverid < 1);
   $alevel=0 unless ($alevel > 0);
 
@@ -2300,7 +2300,7 @@ sub get_group_list($$$$) {
   undef @{$lst};
   push @{$lst},  -1;
   undef %{$rec};
-  $$rec{-1}='None';
+  $$rec{-1}='--None--';
   return if ($serverid < 1);
   $alevel=0 unless ($alevel > 0);
 
@@ -2639,7 +2639,7 @@ sub get_vlan_list($$$) {
   undef @{$lst};
   push @{$lst},  -1;
   undef %{$rec};
-  $$rec{-1}='None';
+  $$rec{-1}='--None--';
   return if ($serverid < 1);
 
   db_query("SELECT id,name FROM vlans " .
@@ -2728,7 +2728,7 @@ sub get_vmps_list($$$) {
   undef @{$lst};
   push @{$lst},  -1;
   undef %{$rec};
-  $$rec{-1}='None';
+  $$rec{-1}='--None--';
   return if ($serverid < 1);
 
   db_query("SELECT id,name FROM vmps " .
