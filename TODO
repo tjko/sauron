@@ -10,6 +10,9 @@ general:
 	- add ACL (BIND) support
 	- allow '*' in hostnames
 	- method for cleaning up ever-growing history/lastlog tables
+	- allow long usernames
+	- add Internationalized Domain Names (IDN) support
+
 	  
 
 import:
