@@ -4,6 +4,8 @@ general:
 	  number of host entries, and to import interactively hosts
 	  from text files in standard zonefile format...
 	- IPv6 support
+	- adduser: suggest random password for new users
+	- adduser: prompt for account expiration date in interactive add
 
 import:
 	- real parser for both imports
@@ -25,7 +27,7 @@ sauron.cgi:
 	- display conflicting domainname/MAC when host update/insert fails
 	- option to "download" search results in CSV format
 	- remove confirm from logout
-
+	- display record type in "Show Pending"
 
 
 browser.cgi:
