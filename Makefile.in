@@ -218,6 +218,8 @@ install: make_dirs
 		echo $(INSTALL_ROOT)/$(bindir)/$$f; \
 		$(PERL) -p -i -e 's@^#!/usr/bin/perl -I/usr/local/sauron@#!$(PERL) -I$(bindir)@;' $(INSTALL_ROOT)/$(bindir)/$$f; \
 	done
+	@echo $(INSTALL_ROOT)/$(bindir)/Sauron/Sauron.pm
+	@$(PERL) -p -i -e 's@__CONF_FILE_PATH__@$(etcdir)@;' $(INSTALL_ROOT)/$(bindir)/Sauron/Sauron.pm
 
 make_dirs:
 	$(INSTALL) -m 755 -d $(INSTALL_ROOT)/$(etcdir)

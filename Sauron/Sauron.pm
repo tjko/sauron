@@ -7,9 +7,11 @@ package Sauron::Sauron;
 require Exporter;
 use Sauron::Util;
 use strict;
-use vars qw($VERSION @ISA @EXPORT);
+use vars qw($VERSION $CONF_FILE_PATH @ISA @EXPORT);
 
 $VERSION = '$Id$ ';
+$CONF_FILE_PATH = '__CONF_FILE_PATH__';
+
 
 @ISA = qw(Exporter); # Inherit from Exporter
 @EXPORT = qw(
@@ -29,6 +31,8 @@ sub sauron_version() {
 
 
 sub set_defaults() {
+  undef $main::CONFIG_FILE;
+
   undef $main::PROG_DIR;
   undef $main::LOG_DIR;
   undef $main::DB_CONNECT;
@@ -135,13 +139,18 @@ sub print_config() {
   print "LOOPBACK_ZONE=",$main::LOOPBACK_ZONE,"\n";
 }
 
+
 sub load_config_file($) {
   my($cfile)=@_;
   my($file,$ret);
 
   fatal("internal error in load_config_file()") unless ($cfile);
 
-  if (-f "/etc/sauron/$cfile") {
+  if ( ($CONF_FILE_PATH !~ /^__CONF_FILE_PATH/) &&
+       -f "$CONF_FILE_PATH/$cfile" ) {
+    $file="$CONF_FILE_PATH/$cfile";
+  }
+  elsif (-f "/etc/sauron/$cfile") {
     $file="/etc/sauron/$cfile";
   }
   elsif (-f "/usr/local/etc/sauron/$cfile") {
@@ -156,12 +165,16 @@ sub load_config_file($) {
 
   fatal("cannot read configuration file: $file") unless (-r $file);
 
-  { package main; $ret = do "$file";
+  # evaluate configuration file in 'main' name space...
+  {
+    package main;
+    $ret = do "$file";
     fatal("parse error in configuration file: $file") if $@;
     fatal("failed to access configuration file: $file") unless defined $ret;
     fatal("failed to run configuration file: $file") unless $ret;
   }
 
+  $main::CONFIG_FILE=$file;
 }
 
 # load sauron config file
