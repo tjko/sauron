@@ -17,6 +17,7 @@ $Id$
 005056	VMware Inc. (virtual adapters)
 0050DA  3Com (3c905C-TX PCI cards)
 00601D  Lucent WaveLAN (IEEE 802.11)
+00D095  Alcatel
 00D0B7  Intel (EtherExpress 10/100)
 08000E  AT&T WaveLAN (standard) & DEC RoamAbout
 08006A  AT&T WaveLAN (alternate)
