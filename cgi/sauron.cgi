@@ -266,6 +266,40 @@ do "$PROG_DIR/back_end.pl";
  heading_bg=>'#aaaaff'
 );
 
+%mx_template_form=(
+ data=>[
+  {ftype=>0, name=>'MX template'},
+  {ftype=>1, tag=>'name', name=>'Name', type=>'text',len=>40, empty=>0},
+  {ftype=>4, tag=>'id', name=>'ID'},
+  {ftype=>1, tag=>'comment', name=>'Comment', type=>'text',len=>60, empty=>1},
+  {ftype=>2, tag=>'mx_l', name=>'Mail exchanges (MX)', 
+   type=>['priority','domain','text'], fields=>3, len=>[5,30,20], 
+   empty=>[0,0,1],elabels=>['Priority','MX','comment']}
+ ],
+ bgcolor=>'#eeeebf',
+ border=>'0',		
+ width=>'100%',
+ nwidth=>'30%',
+ heading_bg=>'#aaaaff'
+);
+
+%wks_template_form=(
+ data=>[
+  {ftype=>0, name=>'WKS template'},
+  {ftype=>1, tag=>'name', name=>'Name', type=>'text',len=>40, empty=>0},
+  {ftype=>4, tag=>'id', name=>'ID'},
+  {ftype=>1, tag=>'comment', name=>'Comment', type=>'text',len=>60, empty=>1},
+  {ftype=>2, tag=>'wks_l', name=>'WKS', 
+   type=>['text','text','text'], fields=>3, len=>[10,30,10], empty=>[0,0,1], 
+   elabels=>['Protocol','Services','comment']}
+ ],
+ bgcolor=>'#eeeebf',
+ border=>'0',		
+ width=>'100%',
+ nwidth=>'30%',
+ heading_bg=>'#aaaaff'
+);
+
 
 
 %change_passwd_form=(
@@ -372,7 +406,7 @@ if ($pathinfo ne '') {
 }
 
 $bgcolor='black';
-#$bgcolor='white' if ($frame_mode);
+$bgcolor='white' if ($frame_mode);
 
 print header(-type=>'text/html; charset=iso-8859-1'),
       start_html(-title=>"Sauron $VER",-BGCOLOR=>$bgcolor,
@@ -384,7 +418,7 @@ unless ($frame_mode) {
   top_menu(0);
   print "<TABLE bgcolor=\"black\" border=\"0\" cellspacing=\"0\" " .
           "width=\"100%\">\n" .
-        "<TR><TD align=\"left\" valign=\"top\" bgcolor=\"gray\" " .
+        "<TR><TD align=\"left\" valign=\"top\" bgcolor=\"white\" " .
           "width=\"15%\">\n";
   left_menu(0);
   print "</TD><TD align=\"left\" valign=\"top\" bgcolor=\"#ffffff\">\n";
@@ -392,6 +426,7 @@ unless ($frame_mode) {
   print "<TABLE width=100%><TR bgcolor=\"#ffffff\"><TD>";
 }
 
+print "<br>";
 
 if ($menu eq 'servers') { servers_menu(); }
 elsif ($menu eq 'zones') { zones_menu(); }
@@ -399,8 +434,9 @@ elsif ($menu eq 'login') { login_menu(); }
 elsif ($menu eq 'hosts') { hosts_menu(); }
 elsif ($menu eq 'about') { about_menu(); }
 elsif ($menu eq 'nets') { nets_menu(); }
+elsif ($menu eq 'templates') { templates_menu(); }
 else {
-  print p,"unknown menu '$menu'";
+  print p,"Unknown menu '$menu'";
 }
 
 
@@ -428,11 +464,11 @@ if ($debug_mode) {
 }
 
 unless ($frame_mode) {
-  print "</TD></TR><TR bgcolor=\"#002d5f\"><TD height=\"20\" colspan=\"2\">",
+  print "</TD></TR><TR bgcolor=\"#002d5f\">",
+        "<TD height=\"20\" colspan=\"2\" color=white align=\"right\">",
         "&nbsp;";
 }
-print "</TD></TR></TABLE> <!-- end of page -->\n";
-#print "<p><hr>Sauron";
+print "</TD></TR></TABLE>\n\n<!-- end of page -->\n";
 print end_html();
 
 exit;
@@ -773,7 +809,7 @@ sub hosts_menu() {
   $netkeys[0]='ANY';
   for $i (0..$#{$nets}) { 
     #print p,$$nets[$i][0]; 
-    $nethash{$$nets[$i][0]}="$$nets[$i][0] - $$nets[$i][2]";
+    $nethash{$$nets[$i][0]}="$$nets[$i][0] - " . substr($$nets[$i][2],0,25);
     push @netkeys, $$nets[$i][0];
   }
   %bdata=(domain=>'',net=>'ANY',nets=>\%nethash,nets_k=>\@netkeys,
@@ -885,6 +921,94 @@ sub nets_menu() {
   print "</TABLE>";
 }
 
+
+# TEMPLATES menu
+#
+sub templates_menu() {
+  my(@q,$i,$id);
+
+  unless ($serverid > 0) {
+    print h2("Server not selected!");
+    return;
+  }
+  unless ($zoneid > 0) {
+    print h2("Zone not selected!");
+    return;
+  }
+
+  $sub=param('sub');
+  $mx_id=param('mx_id');
+  $wks_id=param('wks_id');
+
+  if ($sub eq 'mx') {
+    db_query("SELECT id,name,comment FROM mx_templates " .
+	     "WHERE zone=$zoneid ORDER BY name;",\@q);
+    if (@q < 1) {
+      print h2("No MX templates found for this zone!"); 
+      return;
+    }
+
+    print h3("MX templates for zone: $zone"),
+          "<TABLE width=\"100%\"><TR bgcolor=\"#ffee55\">",
+          th("Name"),th("Comment"),"</TR>";
+  
+    for $i (0..$#q) {
+      $name=$q[$i][1];
+      $name='&nbsp;' if ($name eq '');
+      $comment=$q[$i][2];
+      $comment='&nbsp;' if ($comment eq '');
+      print "<TR bgcolor=\"#dddddd\">",
+	td("<a href=\"$selfurl?menu=templates&mx_id=$q[$i][0]\">$name</a>"),
+	td($comment),"</TR>";
+    }
+    print "</TABLE>";
+    return;
+  }
+  elsif ($sub eq 'wks') {
+    db_query("SELECT id,name,comment FROM wks_templates " .
+	     "WHERE server=$serverid ORDER BY name;",\@q);
+    if (@q < 1) {
+      print h2("No WKS templates found for this server!"); 
+      return;
+    }
+
+    print h3("WKS templates for server: $server"),
+          "<TABLE width=\"100%\"><TR bgcolor=\"#ffee55\">",
+          th("Name"),th("Comment"),"</TR>";
+  
+    for $i (0..$#q) {
+      $name=$q[$i][1];
+      $name='&nbsp;' if ($name eq '');
+      $comment=$q[$i][2];
+      $comment='&nbsp;' if ($comment eq '');
+      print "<TR bgcolor=\"#dddddd\">",
+	td("<a href=\"$selfurl?menu=templates&wks_id=$q[$i][0]\">$name</a>"),
+	td($comment),"</TR>";
+    }
+    print "</TABLE>";
+    return;
+  }
+  elsif ($mx_id > 0) {
+    if (get_mx_template($mx_id,\%mxhash)) {
+      print h2("Cannot get MX template (id=$mx_id)!");
+      return;
+    }
+    display_form(\%mxhash,\%mx_template_form);
+    return;
+  }
+  elsif ($wks_id > 0) {
+    if (get_wks_template($wks_id,\%wkshash)) {
+      print h2("Cannot get WKS template (id=$wks_id)!");
+      return;
+    }
+    display_form(\%wkshash,\%wks_template_form);
+    return;
+  }
+
+  print "&nbsp;";  # end of templates_menu()
+} 
+
+
 # LOGIN menu
 #
 sub login_menu() {
@@ -965,9 +1089,9 @@ sub about_menu() {
   }
   elsif ($sub eq 'copying') {
     open(FILE,"$PROG_DIR/COPYING") || return;
-    print "<PRE>";
+    print "<FONT size=\"-1\"><PRE>";
     while (<FILE>) { print " $_"; }
-    print "</PRE>";
+    print "</PRE></FONT>";
   }
   else {
     print "<P><BR><CENTER>",
@@ -1204,6 +1328,9 @@ sub login_auth() {
 
 sub top_menu($) {
   my($mode)=@_;
+  my($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst);
+
+  ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime(time);
   
   print	'<IMG src="' .$ICON_PATH . '/logo.png" alt="">';
 
@@ -1211,16 +1338,21 @@ sub top_menu($) {
 
   print '<TR bgcolor="#002d5f" align="left" valign="center">',
         '<TD width="15%" height="24">',
-        '<FONT color="white">&nbsp;GNU/Sauron</FONT></TD>',
-        '<TD><FONT color="#ffffff">',
+        '<FONT color="white">&nbsp;GNU/Sauron</FONT></TD><TD>',
+        '<FONT color="white">',
         "<A HREF=\"$s_url?menu=hosts\"><FONT color=\"#ffffff\">Hosts</FONT></A> | " ,
         "<A HREF=\"$s_url?menu=zones\"><FONT color=\"#ffffff\">Zones</FONT></A> | ",
         "<A HREF=\"$s_url?menu=nets\"><FONT color=\"#ffffff\">Nets</FONT></A> | ",
         "<A HREF=\"$s_url?menu=templates\"><FONT color=\"#ffffff\">Templates</FONT></A> | ",
         "<A HREF=\"$s_url?menu=servers\"><FONT color=\"#ffffff\">Servers</FONT></A> | ",
 	"<A HREF=\"$s_url?menu=login\"><FONT color=\"#ffffff\">Login</FONT></A> | ",
-	"<A HREF=\"$s_url?menu=about\"><FONT color=\"#ffffff\">About...</FONT></A> ";
-  print "</FONT></TABLE>";
+	"<A HREF=\"$s_url?menu=about\"><FONT color=\"#ffffff\">About</FONT></A> ",
+        '</FONT></TD>';
+
+  print  "<TD align=\"right\">";
+  printf "<FONT color=\"#ffffff\">%d.%d.%d %02d:%02d </FONT></TD>", 
+         $mday,$mon,$year+1900,$hour,$min;     
+  print "</TR></TABLE>";
 }
 
 sub left_menu($) {
@@ -1235,48 +1367,54 @@ sub left_menu($) {
         "<TR><TD><TABLE width=\"100%\" cellspacing=\"2\" cellpadding=\"1\" " ,
 	 "border=\"0\">",
          "<TR><TH><FONT color=\"#ffffff\">$menu</FONT></TH></TR>",
-	  "<TR><TD BGCOLOR=\"#eeeeee\"><FONT>";
+	  "<TR><TD BGCOLOR=\"#eeeeee\"><FONT size=\"-1\">";
   #print "<p>mode=$mode";
 
   if ($menu eq 'servers') {
     $url.='?menu=servers';
-    print p,"<a href=\"$url\">Current server</a><br>",
-          "<a href=\"$url&sub=select\">Select server</a><br>",
-          p,"<a href=\"$url&sub=add\">Add server</a><br>",
-          "<a href=\"$url&sub=del\">Delete server</a><br>",
-          "<a href=\"$url&sub=edit\">Edit server</a><br>";
+    print p,li("<a href=\"$url\">Current</a>"),
+          li("<a href=\"$url&sub=select\">Select</a>"),
+          p,li("<a href=\"$url&sub=add\">Add</a>"),
+          li("<a href=\"$url&sub=del\">Delete</a>"),
+          li("<a href=\"$url&sub=edit\">Edit</a>");
   } elsif ($menu eq 'zones') {
     $url.='?menu=zones';
-    print p,"<a href=\"$url\">Current zone</a><br>",
-          p,"<a href=\"$url&sub=select\">Select zone</a><br>",
-          p,"<a href=\"$url&sub=add\">Add zone</a><br>",
-          "<a href=\"$url&sub=Delete\">Delete zone</a><br>",
-          "<a href=\"$url&sub=Edit\">Edit zone</a><br>";
+    print p,li("<a href=\"$url\">Current</a>"),
+          p,li("<a href=\"$url&sub=select\">Select</a>"),
+          p,li("<a href=\"$url&sub=add\">Add</a>"),
+          li("<a href=\"$url&sub=Delete\">Delete</a>"),
+          li("<a href=\"$url&sub=Edit\">Edit</a>");
   } elsif ($menu eq 'nets') {
     $url.='?menu=nets';
-    print p,"<a href=\"$url\">Networks</a><br>",
-          p,"<a href=\"$url&sub=addnet\">Add network</a><br>",
-          "<a href=\"$url&sub=addsub\">Add subnet</a><br>";
+    print p,li("<a href=\"$url\">Networks</a>"),
+          p,li("<a href=\"$url&sub=addnet\">Add net</a>"),
+          li("<a href=\"$url&sub=addsub\">Add subnet</a>");
+  } elsif ($menu eq 'templates') {
+    $url.='?menu=templates';
+    print p,li("<a href=\"$url&sub=mx\">Show MX</a>"),
+          li("<a href=\"$url&sub=wks\">Show WKS</a><br>"),
+          p,li("<a href=\"$url&sub=addmx\">Add MX</a>"),
+          li("<a href=\"$url&sub=addwks\">Add WKS</a>");
   } elsif ($menu eq 'hosts') {
     $url.='?menu=hosts';
-    print p,"<a href=\"$url\">Browse hosts</a><br>",
-          "<br><a href=\"$url&sub=add\">Add host</a><br>";
+    print p,li("<a href=\"$url\">Browse</a>"),
+          p,li("<a href=\"$url&sub=add\">Add host</a>");
   } elsif ($menu eq 'login') {
     $url.='?menu=login';
-    print "<a href=\"$url&sub=login\">Login</a>",
-          "<br><a href=\"$url&sub=logout\">Logout</a>",
-          "<br><a href=\"$url&sub=passwd\">Change password</a>",
-          "<br><a href=\"$url&sub=save\">Save defaults</a>";
+    print p,li("<a href=\"$url&sub=login\">Login</a>"),
+          li("<a href=\"$url&sub=logout\">Logout</a>"),
+          p,li("<a href=\"$url&sub=passwd\">Change password</a>"),
+          li("<a href=\"$url&sub=save\">Save defaults</a>");
     if ($frame_mode) {
-      print "<br><a href=\"$script_name\" target=\"_top\">Frames OFF</a>";
+      print li("<a href=\"$script_name\" target=\"_top\">Frames OFF</a>");
     } else {
-      print "<br><a href=\"$s_url/frames\" target=\"_top\">Frames ON</a>";
+      print li("<a href=\"$s_url/frames\" target=\"_top\">Frames ON</a>");
     }
   } elsif ($menu eq 'about') {
     $url.='?menu=about';
-    print "<a href=\"$url\">About</a>",
-          "<br><a href=\"$url&sub=copyright\">Copyright</a>",
-          "<br><a href=\"$url&sub=copying\">Copying</a>";
+    print p,li("<a href=\"$url\">About</a>"),
+          li("<a href=\"$url&sub=copyright\">Copyright</a>"),
+          li("<a href=\"$url&sub=copying\">Copying</a>");
   } else {
     print "<p><p>empty menu\n";
   }
@@ -1344,7 +1482,7 @@ sub frame_1() {
 
 sub frame_2() {
   print header,
-        start_html(-title=>"sauron: left menu",-BGCOLOR=>'black',
+        start_html(-title=>"sauron: left menu",-BGCOLOR=>'white',
 		   -target=>'main');
 
   $s_url .= '/frame3';

@@ -588,8 +588,8 @@ sub delete_zone($) {
   $res=db_exec("DELETE FROM zones WHERE id=$id;");
   if ($res < 0) { db_rollback(); return -50; }
 
-  #return db_commit();
-  return db_rollback();
+  return db_commit();
+  #return db_rollback();
 }
 
 
@@ -728,8 +728,8 @@ sub delete_host($) {
   $res=db_exec("DELETE FROM hosts WHERE id=$id;");
   if ($res < 0) { db_rollback(); return -50; }
 
-  #return db_commit();
-  return db_rollback();
+  return db_commit();
+  #return db_rollback();
 }
 
 
@@ -739,7 +739,7 @@ sub delete_host($) {
 sub get_mx_template($$) {
   my ($id,$rec) = @_;
 
-  return -100 if (get_record("mx_templates","name",$id,$rec,"id"));
+  return -100 if (get_record("mx_templates","name,comment",$id,$rec,"id"));
 
   get_array_field("mx_entries",4,"id,pri,mx,comment","Priority,MX,Comment",
 		  "type=3 AND ref=$id ORDER BY pri,mx",$rec,'mx_l');
@@ -771,7 +771,7 @@ sub get_mx_template_list($$$) {
 sub get_wks_template($$) {
   my ($id,$rec) = @_;
 
-  return -100 if (get_record("wks_templates","name",$id,$rec,"id"));
+  return -100 if (get_record("wks_templates","name,comment",$id,$rec,"id"));
   
   get_array_field("wks_entries",4,"id,proto,services,comment",
 		  "Proto,Services,Comment",
@@ -820,7 +820,7 @@ sub update_user($) {
 
 sub get_net_list($$) {
   my ($serverid,$subnets) = @_;
-  my ($res,$list,$i,$id,$net,$rec);
+  my ($res,$list,$i,$id,$net,$rec,$name);
 
   if ($subnets) {
     $subnets=($subnets==0?'false':'true');
@@ -832,14 +832,15 @@ sub get_net_list($$) {
   $list=[];
   return $list unless ($serverid >= 0);
 
-  $res=db_exec("SELECT net,id,comment FROM nets " .
+  $res=db_exec("SELECT net,id,name FROM nets " .
 	       "WHERE server=$serverid $subnets " .
 	       "ORDER BY net;");
 
   for($i=0; $i < $res; $i++) {
     $net=db_getvalue($i,0);
     $id=db_getvalue($i,1);
-    $rec=[$net,$id];
+    $name=db_getvalue($i,2);
+    $rec=[$net,$id,$name];
     push @{$list}, $rec;
   }
   return $list;
