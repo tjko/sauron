@@ -100,6 +100,9 @@ $filename=shift;
 $opt_commit=($opt_commit ? 1 : 0);
 $opt_origin.='.' if ($opt_origin && $opt_origin !~ /^\.$/);
 
+$user = (getpwuid($<))[0];
+set_muser($user);
+
 fatal("cannot read input file: $filename")
   if ($filename ne '-' && ! -r $filename);
 
