@@ -124,14 +124,15 @@ $user = (getpwuid($<))[0];
 $pwd=pwd_make($opt_passwd,$SAURON_PWD_MODE);
 
 if ($i) { # ask confirmation only in interactive session...
-  print "\t Username: $opt_user\n",
-  "\t   Longname: $opt_name\n",
-  "\t      email: $opt_email\n",
-  "\t    comment: $opt_comment\n",
-  "\t expiration: ". ($opt_expiration > 0 ? localtime($opt_expiration) :
-		      '<none>') . "\n",
-  "\t  superuser: $opt_superuser\n",
-  "Add this user [y/n]?";
+  print "\t   Username: $opt_user\n",
+    "\t      Group: " . ($opt_group ? "$opt_group (GID=$gid)":"<none>") . "\n",
+    "\t   Longname: $opt_name\n",
+    "\t      email: $opt_email\n",
+    "\t    comment: $opt_comment\n",
+    "\t expiration: ". ($opt_expiration > 0 ? localtime($opt_expiration) :
+			'<none>') . "\n",
+    "\t  superuser: $opt_superuser\n",
+    "Add this user [y/n]?";
 
   chomp($t=<STDIN>);
   unless ($t eq 'y' || $t eq 'Y') {
