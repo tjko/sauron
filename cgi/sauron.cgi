@@ -212,7 +212,9 @@ do "$PROG_DIR/cgi_util.pl";
  data=>[
   {ftype=>0, name=>'Host' },
   {ftype=>1, tag=>'domain', name=>'Hostname', type=>'domain',
-   conv=>'L', len=>40},
+   conv=>'L', len=>40, iff=>['type','[^8]']},
+  {ftype=>1, tag=>'domain', name=>'Hostname (SRV)', type=>'srvname', len=>40,
+   conv=>'L', iff=>['type','[8]']},
   {ftype=>5, tag=>'ip', name=>'IP address', iff=>['type','[169]']},
   {ftype=>9, tag=>'alias_d', name=>'Alias for', idtag=>'alias',
    iff=>['type','4'], iff2=>['alias','\d+']},
@@ -369,7 +371,9 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>0, name=>'New record' },
   {ftype=>4, tag=>'type', name=>'Type', type=>'enum', enum=>\%host_types},
   {ftype=>1, tag=>'domain', name=>'Hostname', type=>'domain', len=>40,
-   conv=>'L'},
+   conv=>'L', iff=>['type','[^8]']},
+  {ftype=>1, tag=>'domain', name=>'Hostname (SRV)', type=>'srvname', len=>40,
+   conv=>'L', iff=>['type','[8]']},
   {ftype=>1, tag=>'cname_txt', name=>'Alias for', type=>'fqdn', len=>60,
    iff=>['type','4']},
   {ftype=>3, tag=>'net', name=>'Subnet', type=>'enum',
@@ -419,6 +423,13 @@ do "$PROG_DIR/cgi_util.pl";
    empty=>1, iff=>['type','1']},
   {ftype=>1, tag=>'misc', name=>'Misc.', type=>'text', len=>50, empty=>1, 
    iff=>['type','1']},
+
+  {ftype=>0, name=>'SRV records', no_edit=>1, iff=>['type','8']},
+  {ftype=>2, tag=>'srv_l', name=>'SRV entries', fields=>5,len=>[5,5,5,30,10],
+   empty=>[0,0,0,0,1],elabels=>['Priority','Weight','Port','Target','Comment'],
+   type=>['priority','priority','priority','fqdn','text'],
+   iff=>['type','8']},
+
   {ftype=>0, name=>'Record info'},
   {ftype=>1, name=>'Expiration date', tag=>'expiration', len=>30,
    type=>'expiration', empty=>1, iff=>['type','[147]']}
@@ -860,7 +871,7 @@ $menu=param('menu');
 $remote_addr = $ENV{'REMOTE_ADDR'};
 $remote_host = remote_host();
 
-($scookie = cookie(-name=>"sauron-$SERVER_ID")) =~ s/[^a-f0-9]//g;
+($scookie = cookie(-name=>"sauron-$SERVER_ID")) =~ s/[^A-Fa-f0-9]//g;
 if ($scookie) {
   unless (load_state($scookie)) { 
     logmsg("notice","invalid cookie ($scookie) supplied by $remote_addr"); 
@@ -1234,14 +1245,15 @@ sub zones_menu() {
 	     "WHERE z.id=$zoneid AND h.zone=z.id " .
 	     " AND (h.mdate > z.serial_date OR h.cdate > z.serial_date) " .
 	     "ORDER BY h.domain LIMIT 100;",\@q);
-    print "<TABLE width=\"98%\" bgcolor=\"#eeeebf\" cellspacing=1 border=0>",
+    print "<TABLE width=\"98%\" bgcolor=\"#ccccff\" cellspacing=1 ".
+          " cellpadding=1 border=0>",
           "<TR bgcolor=\"#aaaaff\">",th("#"),th("Hostname"),
 	  "<TH>Action</TH><TH>Date</TH><TH>By</TH></TR>";
     for $i (0..$#q) {
       $action=($q[$i][2] > $q[$i][3] ? 'Create' : 'Modify');
       $date=localtime(($action eq 'Create' ? $q[$i][2] : $q[$i][3]));
       $user=($action eq 'Create' ? $q[$i][4] : $q[$i][5]);
-      print "<TR>",td($i."."),
+      print "<TR bgcolor=\"#eeeebf\">",td($i."."),
 	    td("<a href=\"$selfurl?menu=hosts&h_id=$q[$i][0]\">$q[$i][1]</a>"),
 	    td($action),td($date),td($user),"</TR>";
     }
@@ -1533,6 +1545,7 @@ sub hosts_menu() {
 	alert2("Cannot get host record (id=$id)!");
 	return;
     }
+    goto show_host_record unless ($host{type} == 1);
     get_host_network_settings($serverid,$host{ip}[1][1],\%data);
     print "Current network settings for: $host{domain}<p>";
     display_form(\%data,\%host_net_info_form);
@@ -1635,7 +1648,7 @@ sub hosts_menu() {
     undef @q;
     $fields="a.id,a.type,a.domain,a.ether,a.info,a.huser,a.dept,a.location";
     $fields.=",a.cdate,a.mdate,a.dhcp_date" if (param('csv'));
-            
+
     $sql1="SELECT b.ip,'',$fields FROM hosts a,a_entries b " .
 	  "WHERE a.zone=$zoneid AND b.host=a.id $typerule $typerule2 " .
 	  " $netrule $domainrule $extrarule ";
@@ -1691,9 +1704,8 @@ sub hosts_menu() {
 
     $sorturl="$selfurl?menu=hosts&sub=browse&lastsearch=1";
     print 
-      "<TABLE width=\"99%\" border=0 cellspacing=1 cellpadding=1 BGCOLOR=\"#eeeeff\">",
-      Tr,Tr,
-      "<TR bgcolor=#aaaaff>",
+      "<TABLE width=\"99%\" border=0 cellspacing=1 cellpadding=1 ".
+      " BGCOLOR=\"#ccccff\"><TR bgcolor=#aaaaff>",
       th(['#',
 	  "<a href=\"$sorturl&bh_order=1\">Hostname</a>",
 	  'Type',
@@ -1775,7 +1787,7 @@ sub hosts_menu() {
     $data{type}=$type;
     $data{zone}=$zoneid;
     $data{grp}=-1; $data{mx}=-1; $data{wks}=-1;
-    $data{mx_l}=[]; $data{ns_l}=[]; $data{printer_l}=[];
+    $data{mx_l}=[]; $data{ns_l}=[]; $data{printer_l}=[]; $data{srv_l}=[];
 
 
     if (param('addhost_cancel')) {
@@ -1870,9 +1882,10 @@ sub hosts_menu() {
       print submit(-name=>'sub',-value=>'Alias'), " " if ($host{type} == 1);
     }
     print "&nbsp;&nbsp;",submit(-name=>'sub',-value=>'Refresh'), " ",
-           "&nbsp;&nbsp; <FONT size=-1>",
-	   submit(-name=>'sub',-value=>'Show Network Settings'),
-	   "</FONT>",end_form;
+           "&nbsp;&nbsp; <FONT size=-1>";
+    print submit(-name=>'sub',-value=>'Show Network Settings')
+      if ($host{type} == 1);
+    print "</FONT>",end_form;
     return;
   }
 
@@ -2296,7 +2309,8 @@ sub nets_menu() {
     $novlans=0;
   }
 
-  print "<TABLE width=\"99%\" cellspacing=1 border=0><TR bgcolor=\"#aaaaff\">",
+  print "<TABLE width=\"99%\" cellspacing=1 cellpadding=1 border=0>",
+        "<TR bgcolor=\"#aaaaff\">",
         "<TH>Net</TH>",th("NetName"),th("Description"),th("Type"),
         th("DHCP"),($novlans?'':th("VLAN")),th("Lvl"),"</TR>";
 
@@ -3167,8 +3181,15 @@ sub login_auth() {
   $p=param('login_pwd');
   $p=~s/\ \t\n//g;
   print "<P><BR><BR><BR><BR><CENTER>";
-  if ($u eq '' || $p eq '') { print p,h1("Username or password empty!");  } 
-  elsif ($u !~ /^[a-zA-Z0-9\.\-]+$/) { print p,h1("Invalid usrname!"); }
+  if (! (valid_safe_string($u,255) && valid_safe_string($p,255))) {
+    print p,h1("Invalid arguments!");
+  }
+  if ($u eq '' || $p eq '') {
+    print p,h1("Username or password empty!");
+  }
+  elsif ($u !~ /^[a-zA-Z0-9\.\-]+$/) {
+    print p,h1("Invalid username!");
+  }
   else {
     unless (get_user($u,\%user)) {
       if (pwd_check($p,$user{'password'}) == 0) {
@@ -3349,7 +3370,8 @@ sub left_menu($) {
           Tr(td("<a href=\"$url&sub=add&type=2\">Add delegation</a>")),
           Tr(td("<a href=\"$url&sub=add&type=6\">Add glue rec.</a>")),
           Tr(td("<a href=\"$url&sub=add&type=9\">Add DHCP entry</a>")),
-          Tr(td("<a href=\"$url&sub=add&type=5\">Add printer</a>"));
+          Tr(td("<a href=\"$url&sub=add&type=5\">Add printer</a>")),
+          Tr(td("<a href=\"$url&sub=add&type=8\">Add SRV record</a>"));
   } elsif ($menu eq 'login') {
     $url.='?menu=login';
     print Tr(td("<a href=\"$url\">User info</a>")),

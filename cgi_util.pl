@@ -68,8 +68,11 @@ sub form_check_field($$$) {
 	unless (valid_domainname($value) && $value=~/\.$/);
     }
   } elsif ($type eq 'zonename') {
-    return 'valid zone name required!' 
+    return 'valid zone name required!'
       unless (valid_domainname_check($value,1));
+  } elsif ($type eq 'srvname') {
+    return 'valid SRV name required!'
+      unless (valid_domainname_check($value,2));
   } elsif ($type eq 'path') {
     return 'valid pathname required!'
       unless ($value =~ /^(|\S+\/)$/);

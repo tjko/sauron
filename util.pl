@@ -17,7 +17,7 @@ sub valid_domainname_check($$) {
       /^(\d{1,3}\.)?(\d{1,3}\.)?(\d{1,3}\.)?\d{1,3}\.in-addr\.arpa\.?$/)  {
     return 1;
   }
-  
+
   if ($mode == 1) {
     if ($dom =~ /([^a-z0-9\-\._])/) {
       #warn("invalid character '$1' in domainname: '$domain'");
@@ -28,7 +28,19 @@ sub valid_domainname_check($$) {
       #warn("domainname starts with invalid character: '$domain'");
       return 0;
     }
-  } 
+  }
+  elsif ($mode == 2) {
+    if ($dom =~ /([^a-z0-9\-\.\*_])/) {
+      warn("invalid character '$1' in domainname: '$domain'");
+      return 0;
+    }
+
+    unless ($dom =~ /^[a-z_\*]/) {
+      warn("domainname starts with invalid character: '$domain'");
+      return 0;
+    }
+    return 1;
+  }
   else {
     if ($dom =~ /([^a-z0-9\-\.])/) {
       #warn("invalid character '$1' in domainname: '$domain'");
@@ -40,7 +52,7 @@ sub valid_domainname_check($$) {
       return 0;
     }
   }
-  
+
 
   if ($dom =~ /([^a-z0-9])\./) {
     #warn("invalid character '$1' before dot in domainname: '$domain'");

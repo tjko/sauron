@@ -891,6 +891,44 @@ sub make_bind() {
 	}
       }
 
+
+      # SRV records
+      undef @q;
+      db_query("SELECT a.domain,a.ttl,a.expiration," .
+	       " b.pri,b.weight,b.port,b.target " .
+	       "FROM hosts a, srv_entries b, zones z " .
+	       "WHERE a.zone=z.id AND z.id=$zoneid " .
+	       "AND a.type=8 AND a.id=b.ref " .
+	       "ORDER BY a.domain,b.port,b.pri,b.weight,b.target;",\@q);
+      error(db_errormsg()) if (db_errormsg());
+      if (@q > 0) {
+	print ZONEFILE ";\n;\n; SRV records\n;\n";
+	for $i (0 .. $#q) {
+	  $domain=remove_origin($q[$i][0],$origin);
+	  if ($domain =~ /\.$/) {
+	    error("Out-of-zone SRV record skipped: $q[$i][0]");
+	    next;
+	  }
+	  if ($domain =~ /\.($delegation_mask)$/) {
+	    error("SRV in delegated zone skipped: $q[$i][0]");
+	    next;
+	  }
+	  if (($q[$i][2] > 0) && ($q[$i][2] < $time_now_ticks)) {
+	    error("Skipping expired SRV record: $q[$i][0]");
+	    next;
+	  }
+	  $ttl=$q[$i][2];
+	  $ttl='' unless ($ttl > 0);
+	  $pri=($q[$i][3] > 0 ? $q[$i][3] : 0);
+	  $weight=($q[$i][4] > 0 ? $q[$i][4] : 0);
+	  $port=($q[$i][5] > 0 ? $q[$i][5] : 0);
+	  $target=$q[$i][6];
+	  $target.=".$origin" unless ($target =~ /\.$/);
+	  printf ZONEFILE $ZFORMAT, $domain,$ttl,$class,'SRV',
+	         "$pri $weight $port $target";
+	}
+      }
+
     }
 
     print ZONEFILE ";\n;\n; eof\n";

@@ -1203,6 +1203,10 @@ sub delete_host($) {
   $res=db_exec("UPDATE hosts SET ether_alias=-1 WHERE ether_alias=$id;");
   if ($res < 0) { db_rollback(); return -10; }
 
+  # srv_entries
+  $res=db_exec("DELETE FROM srv_entries WHERE type=1 AND ref=$id;");
+  if ($res < 0) { db_rollback(); return -11; }
+
   $res=db_exec("DELETE FROM hosts WHERE id=$id;");
   if ($res < 0) { db_rollback(); return -50; }
 
@@ -1261,9 +1265,22 @@ sub add_host($) {
     if ($res < 0) { db_rollback(); return -5; }
   }
 
+  # ARECs
   if ($rec->{type}==7) {
     $res=db_exec("INSERT INTO arec_entries (host,arec) VALUES($id,$a_id);");
     if ($res < 0) { db_rollback(); return -6; }
+  }
+
+  # SRVs
+  for $i (0..$#{$rec->{srv_l}}) {
+    #print "<br> SRV",$rec->{srv_l}[$i][1];
+    $res=db_exec("INSERT INTO srv_entries ".
+		 " (type,ref,pri,weight,port,target,comment) " .
+                 "VALUES(1,$id,$rec->{srv_l}[$i][1],$rec->{srv_l}[$i][2],".
+		 " $rec->{srv_l}[$i][3],".
+		 db_encode_str($rec->{srv_l}[$i][4]).",".
+                 db_encode_str($rec->{srv_l}[$i][5]).");");
+    if ($res < 0) { db_rollback(); return -7; }
   }
 
   return -10 if (db_commit() < 0);
