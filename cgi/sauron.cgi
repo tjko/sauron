@@ -1912,7 +1912,7 @@ sub nets_menu() {
   }
 
  browse_nets:
-  db_query("SELECT id,name,net,subnet,comment FROM nets " .
+  db_query("SELECT id,name,net,subnet,comment,no_dhcp FROM nets " .
 	   "WHERE server=$serverid ORDER BY subnet,net;",\@q);
   if (@q < 1) {
     print h2("No networks found!");
@@ -1920,7 +1920,7 @@ sub nets_menu() {
   }
 
   print "<TABLE><TR bgcolor=\"#aaaaff\">",
-        "<TH>Net</TH>",th("Name"),th("Type"),th("Comment"),"</TR>";
+        "<TH>Net</TH>",th("Name"),th("Type"),th("DHCP"),th("Comment"),"</TR>";
 
   for $i (0..$#q) {
       if ($q[$i][3] eq 't') {  
@@ -1930,15 +1930,17 @@ sub nets_menu() {
 	print "<TR bgcolor=\"#ddffdd\">";
 	$type='Network';
       }
-				   
-    $name=$q[$i][1];
-    $name='&nbsp;' if ($name eq '');
-    $comment=$q[$i][4];
-    $comment='&nbsp;' if ($comment eq '');
-    print "<td><a href=\"$selfurl?menu=nets&net_id=$q[$i][0]\">$q[$i][2]</a></td>",
-          td($name),td($type),td($comment),"</TR>";
+
+      $name=$q[$i][1];
+      $name='&nbsp;' if ($name eq '');
+      $comment=$q[$i][4];
+      $comment='&nbsp;' if ($comment eq '');
+      $dhcp=($q[$i][5] eq 't' ? 'No' : 'Yes' );
+      print "<td><a href=\"$selfurl?menu=nets&net_id=$q[$i][0]\">",
+	  "$q[$i][2]</a></td>",
+          td($name),td($type),td($dhcp),td($comment),"</TR>";
   }
- 
+
   print "</TABLE>";
 }
 
