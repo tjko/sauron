@@ -224,8 +224,11 @@ do "$conf_dir/config" || die("cannot load configuration!");
    empty=>1},
   {ftype=>4, tag=>'type', name=>'Type', type=>'enum', conv=>'U',
    enum=>{M=>'Master', S=>'Slave', H=>'Hint', F=>'Forward'}},
-  {ftype=>4, tag=>'reverse', name=>'Reverse', type=>'enum', 
+  {ftype=>4, tag=>'reverse', name=>'Reverse', type=>'enum',
    enum=>{f=>'No',t=>'Yes'}, iff=>['type','M']},
+  {ftype=>3, tag=>'txt_auto_generation',
+   name=>'Info TXT record auto generation', type=>'enum',
+   enum=>{0=>'No',1=>'Yes'}, iff=>['type','M']},
   {ftype=>3, tag=>'dummy', name=>'"Dummy" zone', type=>'enum',
    enum=>\%boolean_enum, iff=>['type','M'] },
   {ftype=>3, tag=>'class', name=>'Class', type=>'enum', conv=>'L',
@@ -3184,7 +3187,7 @@ sub login_menu() {
   elsif ($sub eq 'motd') {
     print h2("News & motd (message of day) messages:");
     get_news_list($serverid,10,\@list);
-    print "<TABLE cellspacing=1 cellpadding=4  bgcolor=\"#ccccff\">";
+    print "<TABLE width=\"99%\" cellspacing=1 cellpadding=4  bgcolor=\"#ccccff\">";
     print "<TR bgcolor=\"#aaaaff\"><TH width=\"70%\">Message</TH>",
           th("Date"),th("Type"),th("By"),"</TR>";
     for $i (0..$#list) {

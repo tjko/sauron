@@ -25,7 +25,9 @@ CREATE TABLE zones (
        reverse	   BOOL DEFAULT false, /* true for reverse (arpa) zones */
        noreverse   BOOL DEFAULT false, /* if true, zone not used in reverse
 				          map generation */
-       flags	   INT DEFAULT 0, /* zone option flags: reserved */
+       flags	   INT DEFAULT 0, /* zone option flags: 
+				     0x01 = generate TXT records from
+				            user,dept,location,info fields  */
        forward	   CHAR(1) DEFAULT 'D', /* forward: D=default, 
 						    O=only, F=first */
        nnotify	   CHAR(1) DEFAULT 'D', /* notify: D=default, Y=yes, N=no */

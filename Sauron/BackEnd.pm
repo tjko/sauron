@@ -909,7 +909,7 @@ sub get_zone($$) {
 	       "server,active,dummy,type,reverse,class,name,nnotify," .
 	       "hostmaster,serial,refresh,retry,expire,minimum,ttl," .
 	       "chknames,reversenet,comment,cdate,cuser,mdate,muser," .
-	       "forward,serial_date",
+	       "forward,serial_date,flags",
 	       $id,$rec,"id");
   return -1 if ($res < 0);
 
@@ -953,6 +953,8 @@ sub get_zone($$) {
 			"<FONT color=\"#ff0000\">$q[0][0]</FONT>" : 'None');
 
 
+  $rec->{txt_auto_generation}=($rec->{flags} & 0x01 ? 1 : 0);
+
   add_std_fields($rec);
   return 0;
 }
@@ -964,6 +966,10 @@ sub update_zone($) {
   del_std_fields($rec);
   delete $rec->{pending_info};
   delete $rec->{zonehostid};
+
+  $rec->{flags}=0;
+  $rec->{flags}|=0x01 if ($rec->{txt_auto_generation});
+  delete $rec->{txt_auto_generation};
 
   if ($rec->{reverse} eq 't') {
       $new_net=arpa2cidr($rec->{name});

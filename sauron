@@ -804,8 +804,10 @@ sub make_bind() {
 	    printf ZONEFILE $ZFORMAT, '',$ttl,$class,'TXT',"\"$val\"";
 	  }
 	  $info =~ s/\"//g;
-	  printf ZONEFILE $ZFORMAT, '',$ttl,$class,'TXT',"\"$info\""
-	    unless ($info eq '');
+	  if ($zone{txt_auto_generation}) {
+	    printf ZONEFILE $ZFORMAT, '',$ttl,$class,'TXT',"\"$info\""
+	      unless ($info eq '');
+	  }
 	  print ZONEFILE ";\n";
 	}
       }
