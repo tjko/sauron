@@ -1,0 +1,64 @@
+<table frame=all id="edit-net-dialog">
+<title>Edit Net Dialog</>
+<tgroup cols=3>
+<thead>
+<row><entry>Field</><entry>Description</><entry>Example</></>
+</thead>
+<tbody>
+<row><entry>Net name</>
+     <entry>Network (subnet) name (handle that can contain only
+            letters and numbers and hyphen)</>
+     <entry>sales-net</>
+</row>
+<row><entry>Description</>
+     <entry>Long description of network</>
+     <entry>Sales Deparment Network</>
+</row>
+<row><entry>Net (CIDR)</>
+     <entry>Network defined as CIDR block</>
+     <entry>192.168.1.0/24</>
+</row>
+<row><entry>VLAN</>
+     <entry>VLAN (Layer-2 network) this network belongs to</>
+     <entry>None</>
+</row>
+<row><entry>Authorization level</>
+     <entry>Authorization level required for user to see this network</>
+     <entry>0</>
+</row>
+<row><entry>Private (hide from browser)</>
+     <entry>Private network (hide from <filename>browser.cgi</>)</>
+     <entry>No</>
+</row>
+<row><entry>Comment</>
+     <entry>Optional comments aobut this network</>
+     <entry></>
+</row>
+
+<row><entry>Range start</>
+     <entry>Auto assign address range start (Sauron will automatically
+            assign new IP addresses from a network that are inside
+            the auto assign range).</>
+     <entry>192.168.1.1</>
+</row>
+<row><entry>Range end</>
+     <entry>Auto assign address range end.</>
+     <entry>192.168.1.254</>
+</row>
+
+<row><entry>DHCP</>
+     <entry>DHCP enabled flag; this network is <quote>visible</> to DHCP
+            server only if this is enabled</>
+     <entry>Enabled</>
+</row>
+<row><entry>Net specific DHCP entries</>
+     <entry>DHCP configuration options lines specific to this network
+            (don't use semicolon at the end of these lines).</>
+     <entry></>
+</row>
+
+</tbody>
+</tgroup>
+</table> 
+
+
