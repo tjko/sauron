@@ -1,9 +1,8 @@
-Sauron v.0.6.0 - DNS/DHCP Management System
+Sauron v.0.6.1 - DNS/DHCP Management System
 ==============
 
-NOTE! This is the first "stable" release of Sauron. It contains mainly
-bug fixes and small improvements to the v0.5 that has been in production use
-for almost two years now.
+NOTE! This release contains mainly bug fixes and small improvements to 
+previous version.
 
 
 REQUIREMENTS
