@@ -236,7 +236,8 @@ sub make_bind() {
       print BINDFILE "\nlogging {\n";
       for $j (1..$#{$server{logging}}) {
 	($val=$server{logging}[$j][1]) =~ s/\;\s*$//;
-	print BINDFILE "\t$val;\n";
+	$val .= ";" unless ($val =~ /[\;\{]\s*$/);
+	print BINDFILE "\t$val\n";
       }
       print BINDFILE "};\n";
     }
