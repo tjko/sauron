@@ -29,6 +29,7 @@ $VERSION = '$Id$ ';
 	     get_record
 	     get_array_field
 	     get_field
+	     update_field
 	     update_array_field
 	     update_record
 	     add_record_sql
@@ -127,15 +128,16 @@ sub sauron_db_version() {
   return "1.0"; # required db format version for this backend
 }
 
+sub set_muser($) {
+  my($usr)=@_;
+  $muser=$usr;
+}
+
+
 sub get_db_version() {
   my(@q);
   db_query("SELECT value FROM settings WHERE key='dbversion';",\@q);
   return ($q[0][0] =~ /^\d/ ? $q[0][0] : 'ERROR');
-}
-
-sub set_muser($) {
-  my($usr)=@_;
-  $muser=$usr;
 }
 
 
@@ -371,6 +373,43 @@ sub update_array_field($$$$$$) {
     }
   }
 
+  return 0;
+}
+
+sub update_field($$$$$$) {
+  my($table,$field,$rfields,$rvals,$tag,$rec) = @_;
+  my(@rf,@rv,@q,$sqlstr,$i,$rule);
+
+  return -1 unless (ref($rec) eq 'HASH');
+  return -2 unless ($table && $field && $rfields && $rvals && $tag);
+  @rf = split(",",$rfields);
+  @rv = split(",",$rvals);
+  return -3 unless (@rf == @rv);
+  for $i (0..$#rf) {
+    $rule.=" AND " if ($i > 0);
+    $rule.=$rf[$i] . "=" . db_encode_str($rv[$i]);
+  }
+
+  $sqlstr = "SELECT $field FROM $table WHERE $rule";
+  db_query($sqlstr,\@q);
+  if (@q > 0) {
+    unless ($rec->{$tag}) {
+      $sqlstr = "DELETE FROM $table WHERE $rule";
+      return -9 if (db_exec($sqlstr) < 0);
+    } else {
+      if ($q[0][0] ne $rec->{$tag}) {
+	$sqlstr = "UPDATE $table SET $field=".db_encode_str($rec->{$tag}).
+	          " WHERE $rule";
+	return -10 if (db_exec($sqlstr) < 0);
+      }
+    }
+  } else {
+    if ($rec->{$tag}) {
+      $sqlstr = "INSERT INTO $table ($field,$rfields) " .
+	        "VALUES(".db_encode_str($rec->{$tag}).",$rvals)";
+      return -11 if (db_exec($sqlstr) < 0);
+    }
+  }
   return 0;
 }
 
@@ -942,6 +981,9 @@ sub get_zone($$) {
       $rec->{zonehostid}=$hid;
     }
   }
+  elsif ($rec->{type} eq 'S') {
+    get_field("cidr_entries","ip","type=13 AND ref=$id",'transfer_src',$rec);
+  }
 
   get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comments",
 		  "type=2 AND ref=$id ORDER BY dhcp",$rec,'dhcp');
@@ -993,9 +1035,19 @@ sub update_zone($) {
   }
 
   db_begin();
+  $id=$rec->{id};
+
+  if ($rec->{type} eq 'S') {
+    $rec->{transfer_src} .= '/32' if ($rec->{transfer_src} &&
+				      $rec->{transfer_src} !~ /\/32$/);
+    $r=update_field("cidr_entries","ip","type,ref","13,$id",
+		    'transfer_src',$rec);
+    if ($r < 0) { db_rollback(); return -1000+$r; }
+    delete $rec->{transfer_src};
+  }
+
   $r=update_record('zones',$rec);
   if ($r < 0) { db_rollback(); return $r; }
-  $id=$rec->{id};
 
   return -199 unless ($rec->{type});
   if ($rec->{type} eq 'M') {
@@ -1061,7 +1113,8 @@ sub delete_zone($) {
   # cidr_entries
   print "<BR>Deleting CIDR entries...\n";
   $res=db_exec("DELETE FROM cidr_entries WHERE " .
-	       "(type=2 OR type=3 OR type=4 OR type=5 OR type=6 OR type=12) " .
+	       "(type=2 OR type=3 OR type=4 OR type=5 OR type=6 OR " .
+	       " type=12 OR type=13) " .
 	       " AND ref=$id");
   if ($res < 0) { db_rollback(); return -1; }
 
@@ -1165,7 +1218,7 @@ sub delete_zone($) {
 
 sub add_zone($) {
   my($rec) = @_;
-  my($new_net,$res,$id,$hid);
+  my($new_net,$res,$id,$hid,$transfer_src);
 
   $rec->{cdate}=time;
   $rec->{cuser}=$muser;
@@ -1178,10 +1231,21 @@ sub add_zone($) {
       $rec->{reversenet}=$new_net;
   }
 
+  if ($rec->{type} eq 'S') {
+    $transfer_src=$rec->{transfer_src};
+    delete $rec->{transfer_src}
+  }
+
   db_begin();
   $res = add_record('zones',$rec);
   if ($res < 0) { db_rollback(); return -1; }
   $id=$res;
+
+  if ($transfer_src) {
+    $res=update_field("cidr_entries","ip","type,ref","13,$id",
+		      'transfer_src',{transfer_src=>$transfer_src});
+    if ($res < 0) { db_rollback(); return -1000+$res; }
+  }
 
   if ($rec->{type} eq 'M') {
     # zone's host record (@)
@@ -1207,7 +1271,6 @@ sub add_zone($) {
 			   'host',"$hid");
     if ($res < 0) { db_rollback(); return -105; }
   }
-
 
   # dhcp
   $res = add_array_field('dhcp_entries','dhcp,comment','dhcp',$rec,
