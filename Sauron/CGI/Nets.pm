@@ -49,7 +49,7 @@ my %net_form=(
   {ftype=>4, tag=>'id', name=>'ID'},
   {ftype=>4, tag=>'subnet', name=>'Type', type=>'enum',
    enum=>{t=>'Subnet',f=>'Net'}},
-  {ftype=>4, tag=>'dummy', name=>'Virtual subnet', type=>'enum',
+  {ftype=>3, tag=>'dummy', name=>'Virtual subnet', type=>'enum',
    enum=>{t=>'Yes',f=>'No'},iff=>['subnet','t']},
   {ftype=>1, tag=>'net', name=>'Net (CIDR)', type=>'cidr'},
   {ftype=>3, tag=>'vlan', name=>'VLAN', type=>'enum', conv=>'L',
