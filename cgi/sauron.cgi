@@ -495,6 +495,12 @@ sub login_form($$) {
 sub login_auth() {
   my($u,$p);
   my(%user,%h,$ticks,$pwd_chk,$arg,$arg_str);
+  my($login_debug,$login_time,$login_debug_log);
+
+  # 0 == no debug, 1 == debug on
+  $login_debug=0;
+  $login_debug_log="/var/tmp/login-debug.log";
+  $login_time = time;
 
   $ticks=time();
   $state{'auth'}='no';
@@ -507,6 +513,12 @@ sub login_auth() {
     $u=param('login_name');
     $p=param('login_pwd');
   }
+  if ($login_debug) {
+      open (LOGIN_DEBUG, ">>$login_debug_log");
+      printf LOGIN_DEBUG "%s: [%s] %s\n",
+      $login_time,scalar localtime($login_time),$u;
+  }
+
   $p=~s/\ \t\n//g;
   print "<P><CENTER>";
   if (! (valid_safe_string($u,255) && valid_safe_string($p,255))) {
@@ -616,6 +628,10 @@ sub login_auth() {
 	update_lastlog($state{uid},$state{sid},1,
 		       $remote_addr,$remote_host);
       }
+    }
+    if ($login_debug) {
+	print LOGIN_DEBUG $login_time,": ", $u, "\n", 
+	map { "\t$_ => $user{$_}\n" } keys %user;
     }
   }
 
