@@ -6,10 +6,8 @@
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>, 2001-2002.
 # All Rights Reserved.
 #
-use Sys::Syslog;
-use CGI qw/:standard *table/;
+use CGI qw/:standard *table -no_xhtml/;
 use CGI::Carp 'fatalsToBrowser'; # debug stuff
-use Digest::MD5;
 use Net::Netmask;
 use Sauron::DB;
 use Sauron::Util;
@@ -19,21 +17,21 @@ use Sauron::CGIutil;
 $CGI::DISABLE_UPLOADS = 1; # no uploads
 $CGI::POST_MAX = 10000; # max 10k posts
 
+my ($PG_DIR,$PG_NAME) = ($0 =~ /^(.*\/)(.*)$/);
+$0 = $PG_NAME;
 #$|=1;
 $debug_mode = 0;
 
 if (-f "/etc/sauron/config-browser") {
   $conf_dir='/etc/sauron';
 }
-elsif (-f "/opt/etc/sauron/config-browser") {
-  $conf_dir='/opt/etc/sauron';
-}
 elsif (-f "/usr/local/etc/sauron/config-browser") {
   $conf_dir='/usr/local/etc/sauron';
 }
-else {
-  die("cannot find configuration file!\n");
+elsif (-f "/opt/etc/sauron/config-browser") {
+  $conf_dir='/opt/etc/sauron';
 }
+else { die("cannot find configuration file!\n"); }
 
 do "$conf_dir/config-browser" || die("cannot load configuration!");
 die("invalid configuration file") unless ($DB_CONNECT);
@@ -44,7 +42,8 @@ $BROWSER_SHOW_FIELDS = 'huser,location,info,dept'
 
 %host_types=(0=>'Any type',1=>'Host',2=>'Delegation',3=>'Plain MX',
 	     4=>'Alias',5=>'Printer',6=>'Glue record',7=>'AREC Alias',
-	     8=>'SRV record',9=>'DHCP only');
+	     8=>'SRV record',9=>'DHCP only',10=>'Zone',
+	     101=>'Host reservation');
 
 %host_form = (
  data=>[
@@ -149,7 +148,7 @@ $remote_host = remote_host();
 set_muser('browser');
 $bgcolor='white';
 
-print header(-type=>"text/html; charset=$BROWSER_CHARSET"),
+print header(-charset=>$BROWSER_CHARSET),
       start_html(-title=>"Sauron DNS Browser $VER",-BGCOLOR=>$bgcolor,
 		 -meta=>{'keywords'=>'GNU Sauron DNS DHCP tool'}),
       "\n\n<!-- Sauron DNS Browser v$VER -->\n",
@@ -167,11 +166,9 @@ $zone=$$BROWSER_CONF{$key}[1];
 #print "server '$server', zone '$zone'\n";
 
 $serverid=get_server_id($server);
-html_error2("Invalid configuration: cannot find server")
-  unless ($serverid > 0);
+html_error2("Invalid configuration: cannot find server") unless ($serverid>0);
 $zoneid=get_zone_id($zone,$serverid);
-html_error2("Invalid configuration: cannot find zone")
-  unless ($zoneid > 0);
+html_error2("Invalid configuration: cannot find zone") unless ($zoneid>0);
 
 cgi_util_set_zoneid($zoneid);
 cgi_util_set_serverid($serverid);
@@ -228,17 +225,14 @@ if ($debug_mode) {
   print "<br>path_info: " . path_info(),
         "<br>s_url='$s_url' '$selfurl'\n",
         "<br>url()=" . url(),
-        "<p>remote_addr=$remote_addr",
-        "<p>";
+        "<p>remote_addr=$remote_addr<p>";
   @names = param();
   foreach $var (@names) { print "$var = '" . param($var) . "'<br>\n"; }
   print "<hr><p>\n";
 }
 
-
 print "\n<!-- end of page -->\n", end_html();
 exit;
-
 
 #####################################################################
 
