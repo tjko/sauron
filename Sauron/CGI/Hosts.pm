@@ -78,8 +78,8 @@ my %host_form = (
   {ftype=>1, tag=>'misc', name=>'Misc.', type=>'text', len=>50, empty=>1,
    no_empty=>1, iff=>['type','(1|101)']},
 
-  {ftype=>0, name=>'Group/Template selections', iff=>['type','[15]']},
-  {ftype=>10, tag=>'grp', name=>'Group', iff=>['type','[15]']},
+  {ftype=>0, name=>'Group/Template selections', iff=>['type','[159]']},
+  {ftype=>10, tag=>'grp', name=>'Group', iff=>['type','[159]']},
   {ftype=>6, tag=>'mx', name=>'MX template', iff=>['type','[13]']},
   {ftype=>7, tag=>'wks', name=>'WKS template', iff=>['type','1']},
 
@@ -217,7 +217,7 @@ my %new_host_form = (
    len=>10, empty=>0,definfo=>['0','No'], iff=>['type','1']},
   {ftype=>0, name=>'Group/Template selections', iff=>['type','[15]']},
   {ftype=>10, tag=>'grp', name=>'Group', iff=>['type','[15]']},
-  {ftype=>6, tag=>'mx', name=>'MX template', iff=>['type','1']},
+  {ftype=>6, tag=>'mx', name=>'MX template', iff=>['type','[13]']},
   {ftype=>7, tag=>'wks', name=>'WKS template', iff=>['type','1']},
   {ftype=>0, name=>'Host info',iff=>['type','1']},
   {ftype=>1, tag=>'huser', name=>'User', type=>'text', len=>40, empty=>1,
@@ -887,27 +887,23 @@ sub menu_handler {
 	       if (param('csv'));
 
     my $sql;
-    my $sql1="SELECT b.ip,'',$fields FROM hosts a,a_entries b " .
-	  "WHERE a.zone=$zoneid AND b.host=a.id $typerule $typerule2 " .
-	  " $netrule $domainrule $extrarule ";
-    my $sql2="SELECT '0.0.0.0'::cidr,'',$fields FROM hosts a " .
-          "WHERE a.zone=$zoneid AND (a.type!=1 AND a.type!=6 AND a.type!=4) " .
-	  " $typerule $domainrule ";
-    my $sql3="SELECT '0.0.0.0'::cidr,b.domain,$fields FROM hosts a,hosts b " .
-          "WHERE a.zone=$zoneid AND a.alias=b.id AND a.type=4 " .
-	  " $domainrule  ";
-    my $sql4="SELECT '0.0.0.0'::cidr,a.cname_txt,$fields FROM hosts a  " .
-          "WHERE a.zone=$zoneid AND a.alias=-1 AND a.type=4 " .
-	  " $domainrule ";
+    my $sql1="SELECT b.ip,'',$fields " .
+             "FROM hosts a LEFT JOIN a_entries b ON b.host=a.id " .
+	     "WHERE a.zone=$zoneid  $typerule $typerule2 " .
+	     " $netrule $domainrule $extrarule ";
+    my $sql2="SELECT '0.0.0.0'::cidr,b.domain,$fields FROM hosts a,hosts b " .
+             "WHERE a.zone=$zoneid AND a.alias=b.id AND a.type=4 " .
+	     " $domainrule  ";
+    my $sql3="SELECT '0.0.0.0'::cidr,a.cname_txt,$fields FROM hosts a  " .
+             "WHERE a.zone=$zoneid AND a.alias=-1 AND a.type=4 " .
+	     " $domainrule ";
 
-    if ($type == 1 || $type == 6) {
-      $sql="$sql1 ORDER BY $sorder,1";
-    } elsif ($type == 4) {
-      $sql="$sql3 UNION $sql4 ORDER BY $sorder,2";
+    if ($type == 4) {
+      $sql="$sql2 UNION $sql3 ORDER BY $sorder,2";
     } elsif ($type == 0) {
-      $sql="$sql1 UNION $sql2 UNION $sql3 UNION $sql4 ORDER BY $sorder,3";
+      $sql="$sql1 UNION $sql2 UNION $sql3 ORDER BY $sorder,3";
     }
-    else { $sql="$sql2 ORDER BY $sorder"; }
+    else { $sql="$sql1 ORDER BY $sorder,1"; }
     $sql.=" LIMIT $limit OFFSET $offset;";
     #print "<br>$sql";
     db_query($sql,\@q);
@@ -1075,6 +1071,7 @@ sub menu_handler {
     $data{expiration}=time()+$perms->{elimit}*86400 if ($perms->{elimit} > 0);
 
   copy_add_label:
+    $newhostform = \%new_host_form;
     return if (check_perms('zone','RW'));
     if (check_perms('zone','RWX',1)) {
       # check privilege flags if user doesn't have RWX permissions
@@ -1097,12 +1094,10 @@ sub menu_handler {
 	alert1("Access Denied!");
 	return;
       }
+
+      $newhostform = \%restricted_new_host_form if ($type==1);
     }
-    #return if (($type!=1 && $type!=101) && check_perms('zone','RWX'));
-    #return if ($type==101 && check_perms('level',$main::ALEVEL_RESERVATIONS));
-    $newhostform = (check_perms('zone','RWX',1) ? \%restricted_new_host_form :
-		    \%new_host_form);
-    $newhostform = \%new_host_form if ($type == 101);
+
     unless ($host_types{$type}) {
       alert2('Invalid add type!');
       return;
@@ -1163,7 +1158,7 @@ sub menu_handler {
 	    $data{ip}=[[0,$ip,'t','t','']];
 	  } elsif ($data{type} == 9) {
 	    $ip=$data{ip}; delete $data{ip};
-	    $data{ip}=[[0,$ip,'f','f','']];
+	    $data{ip}=[[0,$ip,'f','f','']] if (is_cidr($ip));
 	  }
 	  delete $data{net};
 	  #show_hash(\%data);
