@@ -1,0 +1,396 @@
+#!/usr/bin/perl -w
+#
+# $Id$
+#
+# A dhcpd.leases file viewing utility -- mesrik@cc.jyu.fi
+#
+use strict;
+use Getopt::Long;
+use POSIX qw(strftime);
+use Pod::Usage;
+my (%hash,$i,$j,$block,$ac,$now,%counter);
+my (%attribute,@attributes,@sort_order,@print_columns,@line,@flen);
+my ($all, $debug, $help, $inactive, $noheader, $man, $match, $sep);
+my ($stdio, $verbose,$version,$vers);
+my $keys  = 'ip,hardware,starts,ends'; # default sort keys
+my $columns = $keys;
+sub sortfunc($$);
+sub normalise($);
+
+$debug = 0;
+
+$0 =~ s/.*\///o; # weed the path
+$version = '$Id$';
+
+$now = strftime "%Y/%m/%d %H:%M:%S", gmtime;
+%counter = ();
+
+GetOptions (''                => \$stdio,
+	    'all'             => \$all,
+	    'columns=s'       => \$columns,
+	    'debug:i'         => \$debug,
+	    'help|?'          => \$help,
+	    'inactive'        => \$inactive,
+	    'man'             => \$man,
+	    'match=s'         => \$match,
+	    'noheader'        => \$noheader,
+	    'separate-with=s' => \$sep,
+	    'sort=s'          => \$keys,
+	    'verbose!'        => \$verbose,
+	    'version'         => \$vers
+	    ) or pod2usage(2);
+
+die "$version\n" if ($vers);
+
+pod2usage(1) if $help;
+pod2usage(-verbose => 2) if $man;
+pod2usage(1) unless (@ARGV or (defined($stdio) and $stdio == 1));
+
+if ($all) {
+    $verbose = 1;
+    $inactive = 1;
+    $noheader = 0;
+}
+
+# normalise sort order keys to array
+@sort_order = normalise($keys);
+
+# normalise column print order to array
+@print_columns = normalise($columns);
+
+# read input file(s)
+while (<>) {
+    chomp;
+    next if (/^\s*(#|$)/);
+    if (/^lease\s+(\d+\.\d+\.\d+\.\d+)\s+\{/) { # enter IPv4 addr block
+	$block = 1;
+	$ac++;
+	die "$0: internal failure, \$hash{\$ac} already defined" 
+	    if (defined($hash{$ac}));
+	$hash{$ac} = {};
+	$hash{$ac}->{'ip'} =  pack("C4",split(/\./,$1));
+    } elsif (/^\s*\}/) {                        # exit block
+	undef $block;
+    } elsif (defined($ac) and defined($block) and /^\s+(.*);/) { # process block 
+	if ($1 =~ /^(starts|ends|tstp|tsfp)\s+(\d+\s+([[:alnum:]\/:\s]+)|never)/) {
+	    ($hash{$ac}->{$1} = $2 ) =~ s/^\d+\s+//;
+	} elsif ($1 =~ /^(hardware)\s+(\S+)\s+([[:xdigit:]:]+)/) {
+	    $hash{$ac}->{'hwtype'} = $2;
+	    ($hash{$ac}->{$1} = uc($3)) =~ s/://g;
+	} elsif ($1 =~ /^(uid|client-hostname)\s+\"(.*)\"/) {
+	    $hash{$ac}->{$1} = $2;
+	} elsif ($1 =~ /^(abandoned)/) {
+	    $hash{$ac}->{$1} = $1;
+	}
+    }
+}
+
+# study attributes and values max lengths
+(@attributes = %attribute) = ();
+foreach $i (keys %hash) {    
+    foreach $j (keys %{$hash{$i}}) {
+	# add attribute if it does not yet exist
+	unless (defined($attribute{$j})) {
+	    push(@attributes,$j);
+	    $attribute{$j} = 0;
+	    if ($debug > 4) {
+		printf "added attribute: %s (set length = %d)\n",$j,$attribute{$j};
+	    }
+	}
+	# adjust length
+	if (defined($hash{$i}->{$j})) {
+	    if ($attribute{$j} < length($hash{$i}->{$j})) {
+	        $attribute{$j} = ($j eq 'ip') ? 15 : length($hash{$i}->{$j});
+		if ($debug > 4) {
+		    printf "modified attribute: %s (set length = %d)\n",$j,$attribute{$j};
+		}
+	    }
+	}
+    }
+}
+
+if ($all) {
+    # this is very blunt solution, but I'm 
+    # far too lazy to fix it for now :)
+    @print_columns = sort @attributes;
+}
+
+# debug only: dump stored attributes
+if ($debug > 0) {
+    print "\nattribute\tlength\n";
+    print "-" x 25,"\n";
+    foreach $i (sort @attributes) {
+	printf "%-10s\t%d\n",$i,$attribute{$i};
+    }
+    print "\n";
+}
+
+# report header
+unless ($noheader) {
+    $j = 0;
+    printf "Date: %s [UTC]\n\n",$now;;
+    foreach $i (@print_columns) {
+	if (defined($attribute{$i})) {
+	    print $i," " x ($attribute{$i} - length($i))," ";
+	    $j += $attribute{$i}+1;
+	}
+    }
+    print "\n";
+    print "-" x $j,"\n" unless (defined($sep));
+}
+
+# initialise
+foreach $i qw(active match match+active abandoned) {
+    $counter{$i} = 0;
+}
+
+my $lookup = $match || '/./';
+
+# report body
+foreach $ac (sort sortfunc keys %hash) {
+    $i = ($hash{$ac}->{'ends'} gt $now);
+    next unless ($i or $inactive);
+
+    $counter{'active'}++ if ($i);
+
+    foreach $j (@attributes) {
+	if (defined($hash{$ac}->{$j})) {
+	    if ($j =~ /(ip|hardware)/) {
+		$counter{$j}->{$hash{$ac}->{$j}}++;
+	    } else {
+		$counter{$j}++;
+	    }
+	}
+    }
+
+    # build a array of printable columns
+    (@line = @flen) = ();
+    foreach $j (@print_columns) {
+	if (defined($hash{$ac}->{$j})) { 
+	    if ($j =~ /^ip$/) {
+		print "pushing element: $hash{$ac}->{$j}, length $attribute{$j}]\n" if ($debug >4);
+		push(@line,join('.',unpack('C4',$hash{$ac}->{$j})));
+		push(@flen,$attribute{$j});
+	    } else {
+		print "pushing element: $hash{$ac}->{$j}, length $attribute{$j}]\n" if ($debug >4);
+		push(@line,$hash{$ac}->{$j});
+		push(@flen,$attribute{$j});
+	    }
+	} else {
+	    # need to have equal number of columns
+	    push(@line,'');
+	    push(@flen,$attribute{$j});
+	}
+    }
+
+    # add + tag to active entries while listing expired entries too
+    if ($i and $inactive) {
+	push(@line,"+");
+	push(@flen,1);
+    }
+
+    # match the lines to print
+    next unless grep { eval $lookup } @line;
+
+    $counter{'match'}++;
+    $counter{'match+active'}++ if ($i);
+
+    # format the desired printout from array
+    if (defined($sep)) {
+	print "\"" if ($sep eq '","'); # CSV quoted special ...
+	print join($sep,@line);
+	print "\"" if ($sep eq '","'); # CSV quoted special ...
+    } else {
+        foreach $j (@line) {
+	    printf "%s%s ",$j," " x (shift(@flen)-length($j));
+	}
+    }
+    print "\n";
+}
+
+if ($debug > 2) {
+    # list counters
+    printf "debug: %s\n",join(' ', keys(%counter));
+
+    # traverse and print content of mac counters    
+    foreach $i (keys %{$counter{'hardware'}}) {
+	printf "debug: %s -> %d\n",$i,$counter{'hardware'}->{$i};
+    }
+    # print macs
+    printf "debug: %s\n", join(' ', keys %{$counter{'hardware'}}); 
+ 
+    # number of keys
+    printf "debug: %d macs", scalar keys %{$counter{'hardware'}},"\n";
+}
+
+unless ($noheader) {
+    print "\nSummary\n";
+
+    printf "%10d unique hardware addresses\n",scalar keys %{$counter{'hardware'}};
+    printf "%10d unique ip addresses\n",scalar keys %{$counter{'ip'}};
+    print "\n";
+
+    printf "%10d active leases\n",$counter{'active'};
+    if ($match or $debug > 1 or $verbose) {
+	printf "%10d matching leases\n",$counter{'match'};
+	printf "%10d matching and active leases\n",$counter{'match+active'};
+    }
+    
+    printf "%10d abandoned leases\n",$counter{'abandoned'};
+    printf "%10d total leases\n",$ac;
+    print "\n";
+}
+
+### end of main
+
+# quite clever sort function -- yes, actually it is ;)
+sub sortfunc($$) {
+    my ($a,$b) = (@_);
+    my ($i,$cmp);
+
+    foreach $i (@sort_order) {
+	printf ("debug: key=%s\n",$i) if ($debug > 5 );
+        if (defined($hash{$a}->{$i}) and defined($hash{$b}->{$i})) {
+	    $cmp = $hash{$a}->{$i} cmp $hash{$b}->{$i};
+	    printf ("debug: cmp=%d %s\n",$cmp,$i) if ($debug > 5); 
+	    return $cmp if ($cmp);
+	}
+    }
+
+    return 0;
+};
+
+# split and normalise key string to array
+sub normalise($) {
+    my ($str) = (@_);
+    my (@array); 
+
+    for (@array = split(',',lc($str))) {
+	s/^mac$/hardware/;
+	s/^ether(|net)$/hardware/;
+	s/^begin(|s)$/starts/;
+	s/^start(|s)$/starts/;
+	s/^stop(|s)$/ends/;
+	s/^end(|s)$/ends/; 
+    };
+
+    return @array;
+}
+
+__END__
+
+=head1 NAME
+
+dhcpd-lease-view - A utility studying ISC DHCPD 3.x dhcpd.leases content
+
+=head1 SYNOPSIS
+
+dhcpd-lease-view [options] [file ... | - ]
+
+ Options:
+    -help              brief help message
+    -man               more complete documentation
+    -all               select and print all columns
+    -columns           enumerate printed columns and row order
+    -inactive          include inactive entries too
+    -noheader          omit printing header
+    -match='/regex/'   filter printable records
+    -separate-with=x   defines output field separator
+    -sort=keylist      sort key order definition
+    -verbose           a bit more verbose output
+    -version           prints version
+
+=head1 OPTIONS
+
+=over 8
+
+=item B<-help>
+
+Print a brief help message and exits.
+
+=item B<-man>
+
+Prints the manual page and exits.
+
+=item B<-all>
+
+Selects and prints all columns in sorted order. 
+Also overrides -columns.
+
+=item B<-columns=columnlist>
+
+Enumerates list of columns and column order to print.
+
+=item B<-inactive>
+
+Include and print inactive entries too.
+
+=item B<-match='/regex/'>
+
+Define a regular expression filter to control printed records.
+
+=item B<-separate-with='something'>
+
+Defines outut field separator, use single quotes when
+necessary, please.
+
+=item B<-noheader>
+
+Omit printing the header before report.
+
+=item B<-sort=keylist>
+
+Defines sort key order, keys available are:
+    - ip       sort by ip address
+    - mac      sort by mac/ethernet/hardware address
+    - starts   sort by start/begin time
+    - stops    sort by stop/end time
+
+Try B<-man> option to see some usage EXAMPLES.
+
+=item B<-verbose>
+
+Prints a bit more verbose output.
+
+=item B<-version>
+
+Prints version number and exits.
+
+=back
+
+=head1 DESCRIPTION
+
+B<dhcpd-lease-view> will read the given input file(s) or standard
+input which is expected to be the ISC dhcpd.leases file format and
+generate a compact report of that.
+
+=head1 EXAMPLES
+
+    dhcpd-lease-view --sort=mac,ip,stops /var/lib/dhcp/dhcpd.leases
+
+    cat /var/db/dhcpd.leases | dhcpd-lease-view --columns=mac,ip -
+
+    dhcpd-lease-view --inactive --columns=mac,ip,starts \
+      --sort=mac /var/db/dhcpd.leases
+
+    dhcpd-lease-view --inactive --separate-with='","' \
+      /path/to/dhcpd.leases
+
+=head1 CAVEATS
+
+The program needs to read a full file(s) before it is able to process 
+and produce meaningfull report, thus there is very little use even 
+trying combining it with "tail -f".
+
+=head1 AUTHORS
+
+Riku Meskanen <mesrik@cc.jyu.fi>
+
+=head1 COPYING
+
+This program is free softare. It can be distributed by the
+same license with the Perl itself.
+
+=cut
+
+# eof
