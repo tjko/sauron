@@ -343,18 +343,21 @@ my %new_alias_form = (
 
 my %browse_page_size=(0=>'25',1=>'50',2=>'100',3=>'256',4=>'512',5=>'1000');
 my %browse_search_fields=(0=>'Ether',1=>'Info',2=>'User',3=>'Location',
-		       4=>'Department',5=>'Model',6=>'Serial',7=>'Misc',
-		       8=>'Asset ID',
-		       -1=>'<ANY>');
+			  4=>'Department',5=>'Model',6=>'Serial',7=>'Misc',
+			  8=>'Asset ID',
+			  -1=>'<ANY>');
 my @browse_search_f=('ether','info','huser','location','dept','model',
 		  'serial','misc','asset_id');
+my %browse_search_datefields=(0=>'Last lease (DHCP)',1=>'Last seen (DHCP)',
+			      2=>'Creation',3=>'Modification');
+my @browse_search_df=('dhcp_date','dhcp_last','cdate','mdate');
 
 my %browse_hosts_form=(
  data=>[
   {ftype=>0, name=>'Search scope' },
   {ftype=>3, tag=>'type', name=>'Record type', type=>'enum',
    enum=>\%host_types},
-  {ftype=>3, tag=>'net', name=>'Subnet', type=>'list', listkeys=>'nets_k', 
+  {ftype=>3, tag=>'net', name=>'Subnet', type=>'list', listkeys=>'nets_k',
    list=>'nets'},
   {ftype=>1, tag=>'cidr', name=>'CIDR (block) or IP', type=>'cidr',
    len=>20, empty=>1},
@@ -366,6 +369,11 @@ my %browse_hosts_form=(
   {ftype=>3, tag=>'size', name=>'Entries per page', type=>'enum',
    enum=>\%browse_page_size},
   {ftype=>0, name=>'Search' },
+  {ftype=>3, tag=>'sdtype', name=>'Search field', type=>'enum',
+   enum=>\%browse_search_datefields},
+  {ftype=>1, tag=>'dates',name=>'Dates',type=>'daterange',len=>17,
+   extrainfo=>'Enter date range as -YYYYMMDD, YYYYMMDD-, or YYYYMMDD-YYYYMMDD',
+   empty=>1},
   {ftype=>3, tag=>'stype', name=>'Search field', type=>'enum',
    enum=>\%browse_search_fields},
   {ftype=>1, tag=>'pattern',name=>'Pattern (regexp)',type=>'text',len=>40,
@@ -790,6 +798,8 @@ sub menu_handler {
       if (param('bh_submit') eq 'Clear') {
 	param('bh_pattern','');
 	param('bh_stype','0');
+	param('bh_sdtype','0');
+	param('bh_dates','');
 
 	param('bh_type','1');
 	param('bh_net','');
@@ -806,19 +816,23 @@ sub menu_handler {
       }
       $state->{searchopts}=param('bh_type').",".param('bh_order').",".
                    param('bh_size').",".param('bh_stype').",".
-		   param('bh_net').",".param('bh_cidr');
+		   param('bh_sdtype').",".param('bh_net').",".
+                   param('bh_cidr').",".param('bh_dates');
       $state->{searchdomain}=param('bh_domain');
       $state->{searchpattern}=param('bh_pattern');
       save_state($state->{cookie},$state);
     }
     elsif (param('lastsearch')) {
-      if ($state->{searchopts} =~ /^(\d+),(\d+),(\d+),(-?\d+),(\S*),(\S*)$/) {
+      if ($state->{searchopts} =~
+	  /^(\d+),(\d+),(\d+),(-?\d+),(\d+),(\S*),(\S*),(\S*)$/) {
 	param('bh_type',$1);
 	param('bh_order',$2) unless (param('bh_order'));
 	param('bh_size',$3);
 	param('bh_stype',$4);
-	param('bh_net',$5) if ($5);
-	param('bh_cidr',$6) if ($6);
+	param('bh_sdtype',$5);
+	param('bh_net',$6) if ($6);
+	param('bh_cidr',$7) if ($7);
+	param('bh_dates',$8) if ($8);
       } else {
 	print h2('No previous search found');
 	goto browse_hosts;
@@ -851,7 +865,7 @@ sub menu_handler {
     my $domainrule;
     if (param('bh_domain') ne '') {
       $tmp=param('bh_domain');
-      $domainrule=" AND a.domain ~* " . db_encode_str($tmp) . " "; 
+      $domainrule=" AND a.domain ~* " . db_encode_str($tmp) . " ";
     }
 
     my $sorder;
@@ -883,10 +897,29 @@ sub menu_handler {
       } else {
 	$extrarule= " AND (a.location ~* $tmp2 OR a.huser ~* $tmp2 " .
 	  "OR a.dept ~* $tmp2 OR a.info ~* $tmp2 OR a.serial ~* $tmp2 " .
-	  "OR a.model ~* $tmp2 OR a.misc ~* $tmp2) ";
+	  "OR a.model ~* $tmp2 OR a.misc ~* $tmp2 OR a.asset_id ~* $tmp2) ";
 	#print p,"foobar";
       }
     }
+
+    my $extrarule2;
+    if (param('bh_dates')) {
+      $tmp=$browse_search_df[param('bh_sdtype')];
+      my $dates = decode_daterange_str(param('bh_dates'));
+      if ($tmp) {
+	if ($$dates[0] > 0 && $$dates[1] > 0) {
+	  $extrarule2=" AND (a.$tmp >= $$dates[0] AND a.$tmp <= $$dates[1]) ";
+	}
+	elsif ($$dates[0] > 0) {
+	  $extrarule2=" AND a.$tmp >= $$dates[0] ";
+	}
+	elsif ($$dates[1] > 0) {
+	  $extrarule2.=" AND (a.$tmp <= $$dates[1] OR a.$tmp ISNULL) ";
+	}
+      }
+      #print "extrarule2='$extrarule2'<br>";
+    }
+
 
     undef @q;
     my $fields="a.id,a.type,a.domain,a.ether,a.info,a.huser,a.dept," .
@@ -899,7 +932,7 @@ sub menu_handler {
     my $sql1="SELECT b.ip,'',$fields " .
              "FROM hosts a LEFT JOIN a_entries b ON b.host=a.id " .
 	     "WHERE a.zone=$zoneid  $typerule $typerule2 " .
-	     " $netrule $domainrule $extrarule ";
+	     " $netrule $domainrule $extrarule $extrarule2 ";
     my $sql2="SELECT '0.0.0.0'::cidr,b.domain,$fields FROM hosts a,hosts b " .
              "WHERE a.zone=$zoneid AND a.alias=b.id AND a.type=4 " .
 	     " $domainrule  ";
@@ -1289,14 +1322,17 @@ sub menu_handler {
   make_net_list($serverid,1,\%nethash,\@netkeys,0,$perms);
 
   %bdata=(domain=>'',net=>'ANY',nets=>\%nethash,nets_k=>\@netkeys,
-	    type=>1,order=>2,stype=>0,size=>3);
-  if ($state->{searchopts} =~ /^(\d+),(\d+),(\d+),(-?\d+),(\S*),(\S*)$/) {
+	    type=>1,order=>2,stype=>0,size=>3,sdtype=>0);
+  if ($state->{searchopts} =~
+      /^(\d+),(\d+),(\d+),(-?\d+),(\d+),(\S*),(\S*),(\S*)$/) {
     $bdata{type}=$1;
     $bdata{order}=$2;
     $bdata{size}=$3;
     $bdata{stype}=$4;
-    $bdata{net}=$5 if ($5);
-    $bdata{cidr}=$6 if ($6);
+    $bdata{sdtype}=$5;
+    $bdata{net}=$6 if ($6);
+    $bdata{cidr}=$7 if ($7);
+    $bdata{dates}=$8 if ($8);
   }
   $bdata{domain}=$state->{searchdomain} if ($state->{searchdomain});
   $bdata{pattern}=$state->{searchpattern} if ($state->{searchpattern});

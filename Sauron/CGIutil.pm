@@ -182,6 +182,11 @@ sub form_check_field($$$) {
     return 'Invalid expiration date specification'
       unless ($value =~ /^(\d{1,2}[\-\.\/]\d{1,2}[\-\.\/]\d{4}|\+\d+[dmy])$/);
     return '';
+  } elsif ($type eq 'daterange') {
+    return 'Invalid date range specification'
+      unless ($value =~ /^\s*(\d{8})?-(\d{8})?\s*$/);
+    return 'Invalid (empty) date range' unless ($value =~ /\d+/);
+    return '';
   } else {
     return "unknown typecheck for form_check_field: $type !";
   }
@@ -503,7 +508,9 @@ sub form_magic($$$) {
 	print textfield(-name=>$p1,-size=>$rec->{len},-maxlength=>$maxlen,
 		    -value=>param($p1));
       }
-      if ($rec->{type} eq 'expiration') {
+      if ($rec->{extrainfo}) {
+	print '<BR><FONT size=-2 color="blue">'.$rec->{extrainfo}.'</FONT>';
+      } elsif ($rec->{type} eq 'expiration') {
 	print '<BR><FONT size=-1 color="blue">' .
 	      'Enter expiration date as DD-MM-YYYY '.
               'or +&lt;number&gt;d (Days), +&lt;number&gt;m (Months), ' .

@@ -25,12 +25,9 @@ sauron:
 
 sauron.cgi:
 	- fix timeout problem with huge zone/server deletes...(faster server :)
-	- add search by dhcp_date field...
 	- add quick search like in browser.cgi
-	- remove confirm from logout
+	- remove confirm from logout (?)
 	- templates for adding hosts
-	- advertise "Save settings" feature if user doesn't have any
-          default settings	
 	- allow user to list her previous sessions (similar to
           "last" command-line command)
         - more detailed logging (especially  host add/edit/delete)

@@ -5,6 +5,7 @@
 #
 package Sauron::Util;
 require Exporter;
+use Time::Local 'timelocal_nocheck';
 use Digest::MD5;
 use Net::Netmask;
 use strict;
@@ -48,6 +49,7 @@ $VERSION = '$Id$ ';
 	     parse_csv
 	     join_strings
 	     new_serial
+	     decode_daterange_str
 	    );
 
 
@@ -757,7 +759,28 @@ sub new_serial($) {
   return $s;
 }
 
+sub decode_daterange_str($) {
+  my($str) = @_;
 
+  my $start = -1;
+  my $end = -1;
+
+  if ($str =~ /^\s*((\d\d\d\d)(\d\d)(\d\d))?-((\d\d\d\d)(\d\d)(\d\d))?\s*$/) {
+    my $y1=$2;
+    my $m1=$3;
+    my $d1=$4;
+    my $y2=$6;
+    my $m2=$7;
+    my $d2=$8;
+
+    $start=timelocal_nocheck(0,0,0,$d1,$m1-1,$y1)
+      if ($y1 > 1900 && $m1 >= 1 && $m1 <= 12 && $d1 >= 1 && $d1 <= 31);
+    $end=timelocal_nocheck(0,0,0,$d2,$m2-1,$y2)
+      if ($y2 > 1900 && $m2 >= 1 && $m2 <= 12 && $d2 >= 1 && $d2 <= 31);
+  }
+
+  return [$start,$end];
+}
 
 1;
 # eof

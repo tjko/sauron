@@ -1,6 +1,10 @@
 $Id$
 
 0.7.1beta
+	- CGI interface: added ability to search by date(ranges)
+	  (by host creation/modification and last dhcp lease)
+	- CGI interface: now advertises "Save Defaults" command to
+	  users without saved defaults
 	- CGI interface: added ability to search by asset IDs
 	- initial "plugin" support for CGI interface 
 	  (one sample/test plugin provided as an example)
