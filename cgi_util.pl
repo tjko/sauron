@@ -394,6 +394,10 @@ sub form_magic($$$) {
     $rec=$$formdata[$i];
     $p1=$prefix."_".$rec->{tag};
 
+    if ($rec->{hidden}) {
+      print hidden($p1,param($p1));
+      next;
+    }
     if ($rec->{restricted}) {
 	next unless ($rec->{restricted} eq $form->{mode});
     }
@@ -453,7 +457,7 @@ sub form_magic($$$) {
       #if ($a > 50) { $a = 50; }
       print hidden(-name=>$p1."_count",-value=>$a);
       for $k (1..$rec->{fields}) { 
-	print "<TD>",${$rec->{elabels}}[$k-1],"</TD>"; 
+	print "<TH><FONT size=-2>",${$rec->{elabels}}[$k-1],"</FONT></TH>";
       }
       print "</TR>";
       for $j (1..$a) {
@@ -461,11 +465,12 @@ sub form_magic($$$) {
 	print "<TR>",hidden(-name=>$p2."_id",param($p2."_id"));
 	for $k (1..$rec->{fields}) {
 	  $n=$p2."_".$k;
+	  $maxlen=${$rec->{maxlen}}[$k-1];
+	  $maxlen=${$rec->{len}}[$k-1] unless ($maxlen > 0);
 	  print "<TD>",textfield(-name=>$n,-size=>${$rec->{len}}[$k-1],
-	                         -value=>param($n));
+                                 -maxlength=>$maxlen,-value=>param($n));
 	  print "<FONT size=-1 color=\"red\"><BR>",
-              form_check_field($rec,param($n),$k),
-              "</FONT></TD>";
+                form_check_field($rec,param($n),$k),"</FONT></TD>";
         }
         print td(checkbox(-label=>' Delete',
 	             -name=>$p2."_del",-checked=>param($p2."_del") )),
@@ -475,8 +480,10 @@ sub form_magic($$$) {
       $j=$a+1;
       for $k (1..$rec->{fields}) {
 	$n=$prefix."_".$rec->{tag}."_".$j."_".$k;
+	$maxlen=${$rec->{maxlen}}[$k-1];
+	$maxlen=${$rec->{len}}[$k-1] unless ($maxlen > 0);
 	print td(textfield(-name=>$n,-size=>${$rec->{len}}[$k-1],
-		 -value=>param($n)));
+		 -maxlength=>$maxlen,-value=>param($n)));
       }
       print td(submit(-name=>$prefix."_".$rec->{tag}."_add",-value=>'Add'));
       print "</TR></TABLE></TD>\n";
@@ -500,7 +507,7 @@ sub form_magic($$$) {
       $val=param($p1);
       $val=${$rec->{enum}}{$val}  if ($rec->{type} eq 'enum');
       print td($rec->{name}),"<TD><FONT color=\"$form->{ro_color}\">",
-	    "$val</FONT></TD>",hidden($p1,param($p1));
+	    "$val</FONT></TD>", hidden($p1,param($p1));
     } elsif ($rec->{ftype} == 5) {
       $rec->{fields}=5;
       $rec->{type}=['ip','text','text','text'];
@@ -698,6 +705,7 @@ sub display_form($$) {
     if ($form->{heading_bg}) { $h_bg=$form->{heading_bg}; }
     else { $h_bg='#ddddff'; }
 
+    next if ($rec->{hidden});
     if ($rec->{restricted}) {
 	next unless ($rec->{restricted} eq $form->{mode});
     }
@@ -751,10 +759,12 @@ sub display_form($$) {
       $a=$data->{$rec->{tag}};
       next if ($rec->{no_empty} && @{$a}<2);
       print td($rec->{name}),
-	    "<TD><TABLE width=\"100%\" bgcolor=\"#e0e0e0\">";
+	    "<TD><TABLE width=\"100%\" bgcolor=\"#e0e0e0\">",
+            "<TR bgcolor=\"#efefef\">";
       for $k (1..$rec->{fields}) { 
-	#print "<TH>",$$a[0][$k-1],"</TH>";
+	print "<TH><FONT size=-2>&nbsp;",$$a[0][$k-1],"&nbsp;</FONT></TH>";
       }
+      print "</TR>";
       for $j (1..$#{$a}) {
 	print "<TR>";
 	for $k (1..$rec->{fields}) {
@@ -827,7 +837,8 @@ sub print_mx_template($) {
   my($i,$l);
 
   return unless ($rec);
-  print "<TABLE WIDTH=\"95%\" BGCOLOR=\"#aaeae0\"><TR><TD colspan=\"2\">",
+  print "<TABLE WIDTH=\"95%\" BGCOLOR=\"#aaeae0\">",
+        "<TR bgcolor=\"#afffe0\"><TD colspan=\"2\">",
         $rec->{name},"</TH></TR>";
   $l=$rec->{mx_l};
   for $i (1..$#{$l}) {
@@ -841,7 +852,8 @@ sub print_wks_template($) {
   my($i,$l);
 
   return unless ($rec);
-  print "<TABLE WIDTH=\"95%\" BGCOLOR=\"#aaeae0\"><TR><TD colspan=\"2\">",
+  print "<TABLE WIDTH=\"95%\" BGCOLOR=\"#aaeae0\">",
+        "<TR bgcolor=\"#afffe0\"><TD colspan=\"2\">",
         $rec->{name},"</TD></TR>";
   $l=$rec->{wks_l};
   for $i (1..$#{$l}) {

@@ -9,25 +9,16 @@
 /* servers.sql */
 
 ALTER TABLE servers ADD COLUMN transfer_source INET;
+ALTER TABLE servers ADD COLUMN hostaddr INET;
 ALTER TABLE servers ADD COLUMN version TEXT;
 ALTER TABLE servers ADD COLUMN memstats_file TEXT;
+
+ALTER TABLE servers ALTER COLUMN named_ca SET DEFAULT 'named.ca';
 
 
 ALTER TABLE servers ADD COLUMN dialup CHAR(1);
 ALTER TABLE servers ALTER COLUMN dialup SET DEFAULT 'D';
 UPDATE servers SET dialup='D';
-
-ALTER TABLE servers ADD COLUMN fake_iquery CHAR(1);
-ALTER TABLE servers ALTER COLUMN fake_iquery SET DEFAULT 'D';
-UPDATE servers SET fake_iquery='D';
-
-ALTER TABLE servers ADD COLUMN fetch_glue CHAR(1);
-ALTER TABLE servers ALTER COLUMN fetch_glue SET DEFAULT 'D';
-UPDATE servers SET fetch_glue='D';
-
-ALTER TABLE servers ADD COLUMN has_old_clients CHAR(1);
-ALTER TABLE servers ALTER COLUMN has_old_clients SET DEFAULT 'D';
-UPDATE servers SET has_old_clients='D';
 
 ALTER TABLE servers ADD COLUMN multiple_cnames CHAR(1);
 ALTER TABLE servers ALTER COLUMN multiple_cnames SET DEFAULT 'D';
@@ -36,18 +27,6 @@ UPDATE servers SET multiple_cnames='D';
 ALTER TABLE servers ADD COLUMN rfc2308_type1 CHAR(1);
 ALTER TABLE servers ALTER COLUMN rfc2308_type1 SET DEFAULT 'D';
 UPDATE servers SET rfc2308_type1='D';
-
-ALTER TABLE servers ADD COLUMN use_id_pool CHAR(1);
-ALTER TABLE servers ALTER COLUMN use_id_pool SET DEFAULT 'D';
-UPDATE servers SET use_id_pool='D';
-
-ALTER TABLE servers ADD COLUMN treat_cr_space CHAR(1);
-ALTER TABLE servers ALTER COLUMN treat_cr_space SET DEFAULT 'D';
-UPDATE servers SET treat_cr_space='D';
-
-ALTER TABLE servers ADD COLUMN also_notify CHAR(1);
-ALTER TABLE servers ALTER COLUMN also_notify SET DEFAULT 'D';
-UPDATE servers SET also_notify='D';
 
 
 ALTER TABLE servers ADD COLUMN forward CHAR(1);

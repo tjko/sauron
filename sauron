@@ -34,8 +34,19 @@ $dhcp2_mode = ($SAURON_DHCP2_MODE ? 1 : 0);
 %yes_no_enum = (D=>'',Y=>'yes',N=>'no');
 %check_names_enum = (D=>'',W=>'warn',F=>'fail',I=>'ignore');
 %zone_type_enum = (M=>'master',S=>'slave',H=>'hint',F=>'forward');
+%forward_enum = (D=>'', O=>'only', F=>'first');
 
 $ZFORMAT = "%-22s %6s %2s  %-6s %s\n";
+
+@bind_options = ( ['nnotify','notify'],
+		  ['recursion','recursion'],
+		  ['authnxdomain','auth-nxdomain'],
+		  ['dialup','dialup'],
+		  ['multiple_cnames','multiple-cnames'],
+		  ['rfc2308_type1','rfc2308-type1']
+		);
+
+$failover_peer_name = 'foobar';
 
 ##############################
 
@@ -94,22 +105,38 @@ $serverid = get_server_id($servername);
 fatal("Cannot find server '$servername' from database.") if ($serverid < 0);
 fatal("Cannot get server record!") if (get_server($serverid,\%server));
 
-$dhcp_auto_domainnames = ($server{dhcp_flags} & 0x01 ? 1 : 0);
-
+$dhcp_auto_domainnames = $server{dhcp_flags_ad};
+$failover_mode = ($server{dhcp_flags_fo} ? 1 : 0);
 
 $zonelist = get_zone_list($serverid);
-#$zonelist2 = get_zone_list(0);
-#$zonelist = [@{$zonelist1},@{$zonelist2}];
+$normalzones = @{$zonelist};
+if ($server{masterserver} > 0) {
+  fatal("Cannot get master server record!") 
+    if (get_server($server{masterserver},\%masterserver));
+  push @{master_server_ips}, [$masterserver{hostaddr}];
+  $zonelist2 = get_zone_list($server{masterserver});
+  push @{$zonelist}, @{$zonelist2};
 
+  $dhcp_auto_domainnames = $masterserver{dhcp_flags_ad};
+
+  # disable dynamic addresses unless failover protocol is enabled...
+  if ($masterserver{dhcp_flags_fo}) { $failover_mode=2; }
+  else { 
+    $dhcp2_mode=1; 
+    print "disabling dynamic pools for slave\n";
+  }
+}
 $zones = @{$zonelist};
+
 print "Server '$servername' has $zones zones.\n";
 
 clean_up() if ($opt_clean);
 make_bind() if ($bind_conf);
-make_dhcp() if ($dhcp_conf);
 make_printcap() if ($printer_conf);
+make_dhcp() if ($dhcp_conf);
 
-exit;
+exit(0);
+
 ###########################################################################
 
 sub clean_up() {
@@ -127,6 +154,7 @@ sub clean_up() {
   error(db_errormsg()) if (db_errormsg());
   $count=@q;
 
+  # delete expired hosts
   for $i (0..$#q) {
     print "Purging: $q[$i][2] (id=$q[$i][0])   ".localtime($q[$i][1])."\n"
       if ($verbose);
@@ -154,8 +182,8 @@ sub make_bind() {
   open(BINDFILE,">$bind_filename") || fatal("Cannot create $bind_filename!");
   print BINDFILE 
     "// $bind_filename -- automagically generated using $0 $VER\n//\n",
-    "// created by $user\@$host at $time_now\n//\n";
-
+    "// created by $user\@$host at $time_now\n//\n",
+    "// server: $server{name} -- $server{comment}\n//\n\n";
 
   #options section
   unless ($zones_only) {
@@ -166,15 +194,25 @@ sub make_bind() {
       if ($server{'pid_file'} ne '');
     print BINDFILE "\tdump-file \"$server{'dump_file'}\";\n"
       if ($server{'dump_file'} ne '');
-    print BINDFILE "\tstats-file \"$server{'stats_file'}\";\n"
-      if ($server{'stats_file'} ne '');
+    if ($dhcp2_mode) {
+      print BINDFILE "\tstats-file \"$server{'stats_file'}\";\n"
+	if ($server{'stats_file'} ne '');
+    } else {
+      print BINDFILE "\tstatistics-file \"$server{'stats_file'}\";\n"
+	if ($server{'stats_file'} ne '');
+      print BINDFILE "\tmemstatistics-file \"$server{'memstats_file'}\";\n"
+	if ($server{'memstats_file'} ne '');
+    }
     print BINDFILE "\tnamed-xfer \"$server{'named_xfer'}\";\n"
       if ($server{'named_xfer'} ne '');
 
-    $val=$yes_no_enum{$server{nnotify}};
-    print BINDFILE "\tnotify $val;\n" if ($val ne '');
-    $val=$yes_no_enum{$server{recursion}};
-    print BINDFILE "\trecursion $val;\n" if ($val ne '');
+    ($val=$server{version}) =~ s/\"//g;
+    print BINDFILE "\tversion \"$val\";\n" if ($val);
+
+    for $j (0..$#bind_options) {
+      $val=$yes_no_enum{$server{$bind_options[$j][0]}};
+      print BINDFILE "\t$bind_options[$j][1] $val;\n" if ($val);
+    }
 
     $val=$check_names_enum{$server{checknames_m}};
     print BINDFILE "\tcheck-names master $val;\n" if ($val ne '');
@@ -183,18 +221,52 @@ sub make_bind() {
     $val=$check_names_enum{$server{checknames_r}};
     print BINDFILE "\tcheck-names response $val;\n" if ($val ne '');
 
-    undef @q;
-    db_query("SELECT ip FROM cidr_entries WHERE type=1 AND ref=$serverid " .
-	     "ORDER BY ip;",
-	     \@q);
-    error(db_errormsg()) if (db_errormsg());
-    if (@q > 0) {
-      print BINDFILE "\tallow-transfer {\n";
-      for $j (0..(@q-1)) { print BINDFILE "\t\t$q[$j][0];\n"; }
-      print BINDFILE "\t};\n";
+    print BINDFILE "\n\ttransfer-source $server{transfer_source};\n"
+      if (is_cidr($server{transfer_source}));
+    if ($server{query_src_ip} || $server{query_src_port} > 0) {
+      $val="address " .
+           (is_cidr($server{query_src_ip}) ? $server{query_src_ip} : '*') .
+           " port " .
+	   ($server{query_src_port} > 0 ? $server{query_src_port} : '*');
+      print BINDFILE "\tquery-source $val;\n";
     }
 
-    print BINDFILE "};\n";
+    print BINDFILE "\n";
+    $tmpserverid=($server{named_flags_ac} ? $server{masterserver} : $serverid);
+    print_cidr_list('allow-transfer',1,$tmpserverid,"\t");
+    print_cidr_list('allow-query',7,$tmpserverid,"\t");
+    print_cidr_list('allow-recursion',8,$tmpserverid,"\t");
+    print_cidr_list('blackhole',9,$tmpserverid,"\t");
+
+    print_cidr_list("listen-on ".
+  	    ($server{listen_on_port}?"port $server{listen_on_port}":""),
+	    10,$serverid,"\t");
+
+    print BINDFILE "\n";
+    print BINDFILE "\tforward $forward_enum{$server{forward}};\n"
+      if ($forward_enum{$server{forward}});
+    print_cidr_list('forwarders',11,$serverid,"\t");
+
+
+    print BINDFILE "};\n\n";
+
+
+    # logging section
+
+    undef @q;
+    db_query("SELECT txt FROM txt_entries " .
+	     "WHERE type=10 AND ref=$serverid ORDER BY txt",\@q);
+    error(db_errormsg()) if (db_errormsg());
+    if (@q > 0) {
+      print BINDFILE "logging {\n";
+      for $j (0..$#q) {
+	($val=$q[$j][0]) =~ s/\;\s*$//;
+	print BINDFILE "\t$val;\n";
+      }
+      print BINDFILE "};\n";
+    }
+    print BINDFILE "\n";
+
   }
 
 
@@ -245,6 +317,18 @@ sub make_bind() {
 
     $type=$zone_type_enum{$zone{type}};
     fatal("uknown zone type '$zone{type}'!") unless ($type ne '');
+    if ($loopcounter >= $normalzones) {
+      # process zones from master server
+      if ($processed_zones{$zonename}) {
+	warn("Zone from master server skipped: $zonename");
+	next;
+      }
+      #print "slavezone: $zonename $type\n";
+      if ($type eq 'master') {
+	$type='slave';
+      }
+    }
+    $processed_zones{$zonename}++;
 
     if ($type eq 'master') { $zfile=$server{'pzone_path'}; } 
     elsif ($type eq 'slave') { $zfile=$server{'szone_path'}; }
@@ -308,10 +392,13 @@ sub make_bind() {
     # masters
     if ($type eq 'slave') {
       undef @q;
-      db_query("SELECT ip FROM cidr_entries WHERE type=3 AND ref=$zoneid " .
-	       "ORDER BY ip;",
-	       \@q);
-      error(db_errormsg()) if (db_errormsg());
+      if ($loopcounter >= $normalzones) {
+	@q=@master_server_ips;
+      } else {
+	db_query("SELECT ip FROM cidr_entries WHERE type=3 AND ref=$zoneid " .
+		 "ORDER BY ip;",\@q);
+	error(db_errormsg()) if (db_errormsg());
+      }
       if (@q > 0) {
 	print BINDFILE "\tmasters { ";
 	for $j (0..(@q-1)) {
@@ -972,6 +1059,28 @@ sub make_bind() {
 }
 
 
+sub print_cidr_list($$$$) {
+  my($name,$type,$ref,$hdr) = @_;
+  my(@q,$j,$val,$com);
+
+  db_query("SELECT ip,comment FROM cidr_entries " .
+	   "WHERE type=$type AND ref=$ref " .
+	   "ORDER BY ip;",\@q);
+
+    error(db_errormsg()) if (db_errormsg());
+    if (@q > 0) {
+      print BINDFILE "${hdr}${name} {\n";
+      for $j (0..(@q-1)) {
+	($val=$q[$j][0]) =~ s/\/32\s*$//;
+	$com=($q[$j][1] ? "// $q[$j][1]" : "");
+	printf BINDFILE "$hdr\t%-20s %s\n","$val;",$com;
+      }
+      print BINDFILE "\t};\n";
+    }
+
+}
+
+
 ######################################################################
 # DHCP
 
@@ -984,7 +1093,46 @@ sub make_dhcp() {
 
   open(DHCPFILE,">dhcpd.conf") || fatal("Cannot create dhcpd.conf!");
   print DHCPFILE "# dhcpd.conf -- automagically generated using $0 $VER\n";
-  print DHCPFILE "#               created by $user at $time_now\n#\n";
+  print DHCPFILE "#               created by $user at $time_now\n#\n",
+                 "# server: $server{name} -- $server{comment}\n#\n\n";
+
+  $serverid=$server{masterserver} if ($server{masterserver} > 0);
+
+  # failover stuff
+  if ($failover_mode) {
+    $foserver=($failover_mode == 1 ? \%server : \%masterserver);
+    $fo_host=$server{hostname};
+    $fo_port=$fo_pport=$foserver->{df_port};
+    $fo_mrd=$foserver->{df_max_delay};
+    $fo_muu=$foserver->{df_max_uupdates};
+    $fo_mclt=$foserver->{df_mclt};
+    $fo_split=$foserver->{df_split};
+    $fo_lbm=$foserver->{df_loadbalmax};
+    if ($failover_mode == 1) {
+      undef @q;
+      db_query("SELECT hostname FROM servers " .
+	       "WHERE masterserver=$server{id}",\@q);
+      error("cannot find secondary failover peer!") unless ($q[0][0]);
+      $fo_peer=$q[0][0];
+    } else {
+      $fo_peer=$foserver->{hostname};
+    }
+    $fo_host =~ s/\.\s*$//;
+    $fo_peer =~ s/\.\s*$//;
+
+
+    print DHCPFILE "failover peer \"$failover_peer_name\" {\n",
+                   "\t".($failover_mode == 1 ? 'primary':'secondary').";\n",
+		   "\taddress $fo_host;\n",
+		   "\tport $fo_port;\n",
+		   "\tpeer address $fo_peer;\n",
+		   "\tpeer port $fo_pport;\n",
+		   "\tmax-response-delay $fo_mrd;\n",
+		   "\tmax-unacked-updates $fo_muu;\n",
+		   "\tmclt $fo_mclt;\n",
+		   "\tsplit $fo_split;\n",
+		   "\tload balance max seconds $fo_lbm;\n};\n\n";
+  }
 
   # ether hash
   undef @q;
@@ -1406,6 +1554,10 @@ sub print_subnets() {
       print DHCPFILE "\n\t# dynamic IP pools\n\n" if ($first_pool);
       $first_pool=0;
       print DHCPFILE "\tpool {  # $dpools[$j][1]\n";
+      if ($failover_mode) {
+	print DHCPFILE "\t\tfailover peer \"$failover_peer_name\";\n",
+	               "\t\tdeny dynamic bootp clients;\n";
+      }
       for $k (0..$#{$dpools_dhcp{$j}}) {
 	print DHCPFILE "\t\t${$dpools_dhcp{$j}}[$k];\n";
       }

@@ -2,7 +2,7 @@
 #
 # sauron.cgi
 # $Id$
-# åäö
+# [åäö]
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>, 2000,2001.
 # All Rights Reserved.
 #
@@ -47,42 +47,13 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>0, name=>'Server' },
   {ftype=>1, tag=>'name', name=>'Server name', type=>'text', len=>20},
   {ftype=>4, tag=>'id', name=>'Server ID'},
+  {ftype=>4, tag=>'masterserver', name=>'Masterserver ID', hidden=>1},
   {ftype=>4, tag=>'server_type', name=>'Server type'},
   {ftype=>1, tag=>'hostname', name=>'Hostname',type=>'fqdn', len=>40,
    default=>'ns.my.domain.'},
+  {ftype=>1, tag=>'hostaddr', name=>'IP address',type=>'ip',empty=>0,len=>15},
   {ftype=>3, tag=>'zones_only', name=>'Output mode', type=>'enum',
    conv=>'L', enum=>{t=>'Generate named.zones',f=>'Generate full named.conf'}},
-	 
-  {ftype=>3, tag=>'nnotify', name=>'Notify', type=>'enum',
-   conv=>'U', enum=>\%yes_no_enum},
-  {ftype=>3, tag=>'also_notify', name=>'Also-Notify', type=>'enum',
-   conv=>'U', enum=>\%yes_no_enum},
-  {ftype=>3, tag=>'recursion', name=>'Recursion', type=>'enum',
-   conv=>'U', enum=>\%yes_no_enum},
-  {ftype=>3, tag=>'dialup', name=>'Dialup mode', type=>'enum',
-   conv=>'U', enum=>\%yes_no_enum},
-  {ftype=>3, tag=>'fake_iquery', name=>'Fake-Iquery', type=>'enum',
-   conv=>'U', enum=>\%yes_no_enum},
-  {ftype=>3, tag=>'fetch_glue', name=>'Fetch-Glue', type=>'enum',
-   conv=>'U', enum=>\%yes_no_enum},
-  {ftype=>3, tag=>'multiple_cnames', name=>'Allow multiple CNAMEs', 
-   type=>'enum',conv=>'U', enum=>\%yes_no_enum},
-  {ftype=>3, tag=>'has_old_clients', name=>'Has-Old-Clients', 
-   type=>'enum',conv=>'U', enum=>\%yes_no_enum},
-  {ftype=>3, tag=>'treat_cr_space', name=>'Treat CR as SPACE', 
-   type=>'enum',conv=>'U', enum=>\%yes_no_enum},
-  {ftype=>3, tag=>'rfc2308_type1', name=>'RFC2308 Type 1 mode', 
-   type=>'enum',conv=>'U', enum=>\%yes_no_enum},
-  {ftype=>3, tag=>'use_id_pool', name=>'Use-ID-Pool', 
-   type=>'enum',conv=>'U', enum=>\%yes_no_enum},
-  {ftype=>3, tag=>'checknames_m', name=>'Check-names (Masters)', type=>'enum',
-   conv=>'U', enum=>\%check_names_enum},
-  {ftype=>3, tag=>'checknames_s', name=>'Check-names (Slaves)', type=>'enum',
-   conv=>'U', enum=>\%check_names_enum},
-  {ftype=>3, tag=>'checknames_r', name=>'Check-names (Responses)',type=>'enum',
-   conv=>'U', enum=>\%check_names_enum},
-  {ftype=>1, tag=>'version', name=>'Version string',  type=>'text', len=>40,
-   empty=>1},
   {ftype=>1, tag=>'comment', name=>'Comments',  type=>'text', len=>60,
    empty=>1},
 
@@ -122,8 +93,7 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>3, tag=>'forward', name=>'Forward (mode)', type=>'enum',
    conv=>'U', enum=>{'D'=>'Default','O'=>'Only','F'=>'First'}},
   {ftype=>2, tag=>'forwarders', name=>'Forwarders', fields=>2,
-   type=>['ip','text'], len=>[20,30], empty=>[0,1],
-   elabels=>['IP','comment']},
+   type=>['ip','text'], len=>[20,30], empty=>[0,1],elabels=>['IP','comment']},
   {ftype=>1, tag=>'transfer_source', name=>'Transfer source IP', 
    type=>'ip', empty=>1, definfo=>['','Default'], len=>15},
   {ftype=>1, tag=>'query_src_ip', name=>'Query source IP', 
@@ -134,42 +104,71 @@ do "$PROG_DIR/cgi_util.pl";
    type=>'port', empty=>1, definfo=>['','Default port'], len=>5},
   {ftype=>2, tag=>'listen_on', name=>'Listen-on', fields=>2,
    type=>['cidr','text'], len=>[20,30], empty=>[0,1],
-   elabels=>['IP','comment']},
-  
+   elabels=>['CIDR','comment']},
 
   {ftype=>0, name=>'Access control'},
+  {ftype=>3, tag=>'named_flags_ac', name=>'Use access control from master',
+   type=>'enum', enum=>{0=>'No',1=>'Yes'}, iff=>['masterserver','\d+']},
   {ftype=>2, tag=>'allow_transfer', name=>'Allow-transfer', fields=>2,
    type=>['cidr','text'], len=>[20,30], empty=>[0,1],
-   elabels=>['IP','comment']},
+   elabels=>['CIDR','comment'], iff=>['named_flags_ac','0']},
   {ftype=>2, tag=>'allow_query', name=>'Allow-query', fields=>2,
    type=>['cidr','text'], len=>[20,30], empty=>[0,1],
-   elabels=>['IP','comment']},
+   elabels=>['CIDR','comment'], iff=>['named_flags_ac','0']},
   {ftype=>2, tag=>'allow_recursion', name=>'Allow-recursion', fields=>2,
    type=>['cidr','text'], len=>[20,30], empty=>[0,1],
-   elabels=>['IP','comment']},
+   elabels=>['CIDR','comment'], iff=>['named_flags_ac','0']},
   {ftype=>2, tag=>'blackhole', name=>'Blackhole', fields=>2,
    type=>['cidr','text'], len=>[20,30], empty=>[0,1],
-   elabels=>['IP','comment']},
+   elabels=>['CIDR','comment'], iff=>['named_flags_ac','0']},
+
+  {ftype=>0, name=>'BIND options' },
+  {ftype=>3, tag=>'nnotify', name=>'Notify', type=>'enum',
+   conv=>'U', enum=>\%yes_no_enum},
+  {ftype=>3, tag=>'authnxdomain', name=>'Auth-nxdomain', type=>'enum',
+   conv=>'U', enum=>\%yes_no_enum},
+  {ftype=>3, tag=>'recursion', name=>'Recursion', type=>'enum',
+   conv=>'U', enum=>\%yes_no_enum},
+  {ftype=>3, tag=>'dialup', name=>'Dialup mode', type=>'enum',
+   conv=>'U', enum=>\%yes_no_enum},
+  {ftype=>3, tag=>'multiple_cnames', name=>'Allow multiple CNAMEs', 
+   type=>'enum',conv=>'U', enum=>\%yes_no_enum},
+  {ftype=>3, tag=>'rfc2308_type1', name=>'RFC2308 Type 1 mode', 
+   type=>'enum',conv=>'U', enum=>\%yes_no_enum},
+  {ftype=>3, tag=>'checknames_m', name=>'Check-names (Masters)', type=>'enum',
+   conv=>'U', enum=>\%check_names_enum},
+  {ftype=>3, tag=>'checknames_s', name=>'Check-names (Slaves)', type=>'enum',
+   conv=>'U', enum=>\%check_names_enum},
+  {ftype=>3, tag=>'checknames_r', name=>'Check-names (Responses)',type=>'enum',
+   conv=>'U', enum=>\%check_names_enum},
+  {ftype=>1, tag=>'version', name=>'Version string',  type=>'text', len=>60,
+   empty=>1, definfo=>['','Default']},
+  {ftype=>2, tag=>'logging', name=>'Logging options', type=>['text','text'],
+   fields=>2, len=>[50,20], maxlen=>[100,20], empty=>[0,1],
+   elabels=>['logging option','comment']},
 
   {ftype=>0, name=>'DHCP Settings'},
   {ftype=>3, tag=>'dhcp_flags_ad', name=>'auto-domainnames',
-   type=>'enum', enum=>{0=>'No',1=>'Yes'}},
+   type=>'enum', enum=>{0=>'No',1=>'Yes'}, iff=>['masterserver','-1']},
   {ftype=>2, tag=>'dhcp', name=>'Global DHCP Settings', type=>['text','text'],
-   fields=>2, len=>[35,20], empty=>[0,1],elabels=>['dhcptab line','comment']},
+   fields=>2, len=>[50,20], maxlen=>[100,20], empty=>[0,1],
+   elabels=>['dhcptab line','comment'], iff=>['masterserver','-1']},
 
   {ftype=>0, name=>'DHCP Failover Settings'},
   {ftype=>3, tag=>'dhcp_flags_fo', name=>'Enable failover protocol',
-   type=>'enum', enum=>{0=>'No',1=>'Yes'}},
-  {ftype=>1, tag=>'df_port', name=>'Port number', type=>'int', len=>5},
-  {ftype=>1, tag=>'df_max_delay', name=>'Max Response Delay', 
-   type=>'int', len=>5},
-  {ftype=>1, tag=>'df_max_uupdates', name=>'Max Unacked Updates', 
-   type=>'int', len=>5},
-  {ftype=>1, tag=>'df_mclt', name=>'MCLT', type=>'int', len=>5},
-  {ftype=>1, tag=>'df_split', name=>'Split', type=>'int', len=>5},
-  {ftype=>1, tag=>'df_loadbalmax', name=>'Load balance max (seconds)', 
-   type=>'int', len=>5},
-    
+   type=>'enum', enum=>{0=>'No',1=>'Yes'}, iff=>['masterserver','-1']},
+  {ftype=>1, tag=>'df_port', name=>'Port number', type=>'int', len=>5,
+   iff=>['masterserver','-1']},
+  {ftype=>1, tag=>'df_max_delay', name=>'Max Response Delay',
+   type=>'int', len=>5, iff=>['masterserver','-1']},
+  {ftype=>1, tag=>'df_max_uupdates', name=>'Max Unacked Updates',
+   type=>'int', len=>5, iff=>['masterserver','-1']},
+  {ftype=>1, tag=>'df_mclt', name=>'MCLT', type=>'int', len=>6,
+   iff=>['masterserver','-1']},
+  {ftype=>1, tag=>'df_split', name=>'Split', type=>'int', len=>5,
+   iff=>['masterserver','-1']},
+  {ftype=>1, tag=>'df_loadbalmax', name=>'Load balance max (seconds)',
+   type=>'int', len=>5, iff=>['masterserver','-1']},
 
   {ftype=>0, name=>'Record info', no_edit=>1},
   {ftype=>4, name=>'Record created', tag=>'cdate_str', no_edit=>1},
@@ -180,6 +179,24 @@ do "$PROG_DIR/cgi_util.pl";
 # width=>'100%',
 # nwidth=>'30%',
 # heading_bg=>'#aaaaff'
+);
+
+%new_server_form=(
+ data=>[
+  {ftype=>1, tag=>'name', name=>'Name', type=>'text',
+   len=>20, empty=>0},
+  {ftype=>1, tag=>'hostname', name=>'Hostname',type=>'fqdn', len=>40,
+   default=>'ns.my.domain.'},
+  {ftype=>1, tag=>'hostaddr', name=>'IP address',type=>'ip',empty=>0,len=>15},
+  {ftype=>1, tag=>'hostmaster', name=>'Hostmaster', type=>'fqdn', len=>30,
+   default=>'hostmaster.my.domain.'},
+  {ftype=>1, tag=>'directory', name=>'Configuration directory', type=>'path',
+   len=>30, empty=>0},
+  {ftype=>3, tag=>'masterserver', name=>'Slave for', type=>'enum',
+   enum=>\%master_servers,elist=>\@master_serversl},
+  {ftype=>1, tag=>'comment', name=>'Comment', type=>'text',
+   len=>60, empty=>1}
+ ]
 );
 
 %new_zone_form=(
@@ -630,15 +647,6 @@ do "$PROG_DIR/cgi_util.pl";
  ]
 );
 
-
-%new_server_form=(
- data=>[
-  {ftype=>1, tag=>'name', name=>'Name', type=>'text',
-   len=>20, empty=>0},
-  {ftype=>1, tag=>'comment', name=>'Comment', type=>'text',
-   len=>60, empty=>1}
- ]
-);
 
 %new_net_form=(
  data=>[
@@ -1118,15 +1126,16 @@ sub servers_menu() {
 
   goto select_server if ($serverid && check_perms('server','R'));
 
+
   if ($sub eq 'add') {
     return if (check_perms('superuser',''));
-
+    get_server_list($serverid,\%master_servers,\@master_serversl);
+    $data{masterserver}=-1;
     $res=add_magic('srvadd','Server','servers',\%new_server_form,
 		   \&add_server,\%data);
     if ($res > 0) {
-      print "<p>$res $data{name}";
-      #param('server_list',$data{'name'});
-      $server=$data{name};
+      #print "<p>$res $data{name}";
+      $serverid=$res;
       goto display_new_server;
     }
 
@@ -1168,19 +1177,18 @@ sub servers_menu() {
   }
 
 
-  $server=param('server_list');
-  $server=$state{'server'} unless ($server);
+  $serverid=param('server_list') if (param('server_list'));
  display_new_server:
-  if ($server && $sub ne 'select') {
+  if ($serverid && $sub ne 'select') {
     #display selected server info
-    $serverid=get_server_id($server);
     if ($serverid < 1) {
       print h3("Cannot select server!"),p;
       goto select_server;
     }
     goto select_server if(check_perms('server','R'));
-    print h2("Selected server: $server"),p;
     get_server($serverid,\%serv);
+    $server=$serv{name};
+    print h2("Selected server: $server"),p;
     if ($state{'serverid'} ne $serverid) {
       $state{'zone'}='';
       $state{'zoneid'}=-1;
@@ -1194,16 +1202,15 @@ sub servers_menu() {
 
   select_server:
   #display server selection dialig
-  $list=get_server_list();
-  for $i (0 .. $#{$list}) {
-    push @l,$$list[$i][0];
-  }
+  get_server_list(-1,\%srec,\@l);
+  delete $srec{-1};
+  shift @l;
   print h2("Select server:"),p,
     startform(-method=>'POST',-action=>$selfurl),
     hidden('menu','servers'),p,
     "Available servers:",p,
       scrolling_list(-width=>'100%',-name=>'server_list',
-		   -size=>'10',-values=>\@l),
+		   -size=>'10',-values=>\@l,-labels=>\%srec),
       br,submit(-name=>'server_select_submit',-value=>'Select server'),
       end_form;
 

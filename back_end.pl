@@ -354,12 +354,22 @@ sub get_server_id($) {
   return db_getvalue(0,0);
 }
 
-sub get_server_list() {
-  my ($res,$list,$i,$id,$name,$rec,$comment);
+sub get_server_list($$$) {
+  my($serverid,$rec,$lst) = @_;
+  my(@q,$i);
 
-  $list=[];
-  db_query("SELECT name,id,comment FROM servers ORDER BY name;",$list);
-  return $list;
+  undef @{$lst};
+  push @{$lst},  -1;
+  undef %{$rec};
+  $$rec{-1}='None';
+
+  db_query("SELECT id,name,comment FROM servers " .
+	   "ORDER BY name;",\@q);
+  for $i (0..$#q) {
+    next if ($q[$i][0] == $serverid);
+    push @{$lst}, $q[$i][0];
+    $$rec{$q[$i][0]}="$q[$i][1] -- $q[$i][2]";
+  }
 }
 
 
@@ -375,21 +385,20 @@ sub get_server($$) {
 		    "pzone_path,szone_path,hostname,hostmaster,comment," .
 		    "dhcp_flags,named_flags,domain,masterserver,version," .
 		    "memstats_file,transfer_source,forward,dialup," .
-		    "fake_iquery,fetch_glue,has_old_clients,multiple_cnames," .
-		    "rfc2308_type1,use_id_pool,treat_cr_space,also_notify," .
+		    "multiple_cnames,rfc2308_type1,authnxdomain," .
 		    "df_port,df_max_delay,df_max_uupdates,df_mclt,df_split,".
-		    "df_loadbalmax,".
+		    "df_loadbalmax,hostaddr,".
 		    "cdate,cuser,mdate,muser",
 		    $id,$rec,"id");
   return -1 if ($res < 0);
 
-  get_array_field("cidr_entries",3,"id,ip,comment","IP,Comments",
+  get_array_field("cidr_entries",3,"id,ip,comment","CIDR,Comments",
 		  "type=1 AND ref=$id ORDER BY ip",$rec,'allow_transfer');
-  get_array_field("cidr_entries",3,"id,ip,comment","IP,Comments",
+  get_array_field("cidr_entries",3,"id,ip,comment","CIDR,Comments",
 		  "type=7 AND ref=$id ORDER BY ip",$rec,'allow_query');
-  get_array_field("cidr_entries",3,"id,ip,comment","IP,Comments",
+  get_array_field("cidr_entries",3,"id,ip,comment","CIDR,Comments",
 		  "type=8 AND ref=$id ORDER BY ip",$rec,'allow_recursion');
-  get_array_field("cidr_entries",3,"id,ip,comment","IP,Comments",
+  get_array_field("cidr_entries",3,"id,ip,comment","CIDR,Comments",
 		  "type=9 AND ref=$id ORDER BY ip",$rec,'blackhole');
   get_array_field("cidr_entries",3,"id,ip,comment","IP,Comments",
 		  "type=10 AND ref=$id ORDER BY ip",$rec,'listen_on');
@@ -399,6 +408,8 @@ sub get_server($$) {
 		  "type=1 AND ref=$id ORDER BY dhcp",$rec,'dhcp');
   get_array_field("txt_entries",3,"id,txt,comment","TXT,Comments",
 		  "type=3 AND ref=$id ORDER BY id",$rec,'txt');
+  get_array_field("txt_entries",3,"id,txt,comment","TXT,Comments",
+		  "type=10 AND ref=$id ORDER BY id",$rec,'logging');
 
   $rec->{cdate_str}=($rec->{cdate} > 0 ?
 		     localtime($rec->{cdate}).' by '.$rec->{cuser} : 'UNKOWN');
@@ -407,6 +418,7 @@ sub get_server($$) {
 
   $rec->{dhcp_flags_ad}=($rec->{dhcp_flags} & 0x01 ? 1 : 0);
   $rec->{dhcp_flags_fo}=($rec->{dhcp_flags} & 0x02 ? 1 : 0);
+  $rec->{named_flags_ac}=($rec->{named_flags} & 0x01 ? 1 : 0);
 
   if ($rec->{masterserver} > 0) {
     db_query("SELECT name FROM servers WHERE id=$rec->{masterserver}",\@q);
@@ -438,6 +450,9 @@ sub update_server($) {
   $rec->{dhcp_flags}|=0x02 if ($rec->{dhcp_flags_fo});
   delete $rec->{dhcp_flags_ad};
   delete $rec->{dhcp_flags_fo};
+  $rec->{named_flags}=0;
+  $rec->{named_flags}|=0x01 if ($rec->{named_flags_ac});
+  delete $rec->{named_flags_ac};
 
   db_begin();
   $r=update_record('servers',$rec);
@@ -466,6 +481,9 @@ sub update_server($) {
   if ($r < 0) { db_rollback(); return -18; }
   $r=update_array_field("cidr_entries",3,"ip,comment,type,ref",
 			 'forwarders',$rec,"11,$id");
+  if ($r < 0) { db_rollback(); return -19; }
+  $r=update_array_field("txt_entries",3,"txt,comment,type,ref",
+			 'logging',$rec,"10,$id");
   if ($r < 0) { db_rollback(); return -19; }
 
   return db_commit();
@@ -572,7 +590,8 @@ sub delete_server($) {
 
 
   # txt_entries
-  $res=db_exec("DELETE FROM txt_entries WHERE type=3 AND ref=$id;");
+  $res=db_exec("DELETE FROM txt_entries " .
+	       "WHERE (type=3 OR type=10) AND ref=$id;");
   if ($res < 0) { db_rollback(); return -160; }
   $res=db_exec("DELETE FROM txt_entries WHERE id IN ( " .
 	       "SELECT a.id FROM txt_entries a, zones z " .

@@ -10,7 +10,8 @@ CREATE TABLE txt_entries (
 	type        INT4 NOT NULL,  /* type:
 					1=zone,
 					2=host,
-					3=server */
+					3=server
+					10=server (BIND logging entry) */
         ref         INT4 NOT NULL , /* ptr to table speciefied by type field
 					-->zones.id
 					-->hosts.id

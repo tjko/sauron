@@ -23,8 +23,10 @@ CREATE TABLE servers (
 						0 = use VLANs,
 						1 = use networks */
 	dhcp_flags	INT DEFAULT 0, /* DHCP option flags:
-					0x01 = auto-generate domainnames */
-	named_flags	INT DEFAULT 0, /* named option flags (RESERVED) */
+					0x01 = auto-generate domainnames
+					0x02 = enable failover protocol */
+	named_flags	INT DEFAULT 0, /* named option flags:
+			      0x01 = access control from master (slave only) */
 	masterserver	INT DEFAULT -1, /* dynamically add slave zones
 					   for all zones in master server */
 
@@ -36,7 +38,7 @@ CREATE TABLE servers (
 	named_xfer	TEXT, /* named-xfer pathname (optional) */
 	stats_file	TEXT, /* statistics-file pathname (optional) */
 	memstats_file	TEXT, /* memstatistics-file pathname (optional) */
-	named_ca	TEXT, /* root servers filename */
+	named_ca	TEXT DEFAULT 'named.ca', /* root servers filename */
 	pzone_path	TEXT DEFAULT '',     /* relative path for master
 					        zone files */
 	szone_path	TEXT DEFAULT 'NS2/', /* relative path for slave 
@@ -45,7 +47,8 @@ CREATE TABLE servers (
 	query_src_port 	TEXT,  /* query source port (optional) (port | '*') */
 	listen_on_port	TEXT,  /* listen on port (optional) */
 	transfer_source INET,  /* transfer-source (optional) */
-	forward		CHAR(1) DEFAULT 'D', /* forward (reserved) */
+	forward		CHAR(1) DEFAULT 'D', /* forward: D=default
+	                                        O=only, F=first */
 
 	/* check-names: D=default, W=warn, F=fail, I=ignore */
 	checknames_m	CHAR(1) DEFAULT 'D', /* check-names master */
@@ -57,14 +60,8 @@ CREATE TABLE servers (
 	recursion	CHAR(1) DEFAULT 'D', /* recursion */
 	authnxdomain	CHAR(1) DEFAULT 'D', /* auth-nxdomain */
 	dialup		CHAR(1) DEFAULT 'D', /* dialup */
-	fake_iquery	CHAR(1) DEFAULT 'D', /* fake-iquery */
-	fetch_glue	CHAR(1) DEFAULT 'D', /* fetch-glue */
-	has_old_clients	CHAR(1) DEFAULT 'D', /* has-old-clients */
 	multiple_cnames	CHAR(1) DEFAULT 'D', /* multiple-cnames */
 	rfc2308_type1	CHAR(1) DEFAULT 'D', /* rfc2308-type1 */
-	use_id_pool	CHAR(1) DEFAULT 'D', /* use-id-pool */
-	treat_cr_space	CHAR(1) DEFAULT 'D', /* treat-cr-as-space */
-	also_notify	CHAR(1) DEFAULT 'D', /* also-notify */
 	
 
 	/* default TTLs */
@@ -88,6 +85,7 @@ CREATE TABLE servers (
 
 	/* defaults to use in zones */
 	hostname	TEXT,  /* primary servername for sibling zone SOAs */
+	hostaddr	INET,  /* primary server IP address */
 	hostmaster	TEXT,  /* hostmaster name for sibling zone SOAs
 	                          unless overided in zone */
 
