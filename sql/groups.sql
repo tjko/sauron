@@ -1,21 +1,20 @@
 /* groups table creation
  *
- * group descriptions, linked to server record. Hosts can "belong" to
- *  one group and get DHCP/printer/etc definitions from that group. 
  *
  * $Id$
  */
 
+/** Group descriptions, linked to server record. Hosts can "belong" to
+    one group and get DHCP/printer/etc definitions from that group. **/
+
 CREATE TABLE groups (
-       id	    SERIAL,
-       server	    INT4 NOT NULL,
+       id	    SERIAL PRIMARY KEY, /* unique ID */
+       server	    INT4 NOT NULL, /* ptr to a servers table record
+					-->servers.id */
 
-       name	    TEXT NOT NULL CHECK(name <> ''),
-       /* dhcp	    TEXT[], */
-       /* printer    TEXT[], */
-
+       name	    TEXT NOT NULL CHECK(name <> ''), /* group name */
        comment	    TEXT,
 
-       CONSTRAINT   groups_key  PRIMARY KEY (name,server)
+       CONSTRAINT   groups_key UNIQUE(name,server)
 ) INHERITS(pokemon);
 

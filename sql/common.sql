@@ -4,7 +4,8 @@
  */
 
 
-/* virtual table; generic fields for most of the tables */
+/** virtual table; generic fields for most of the tables **/
+
 CREATE TABLE pokemon ( 
        cdate	   TIMESTAMP DEFAULT CURRENT_TIMESTAMP, /* creation date */
        cuser	   CHAR(32) DEFAULT 'unknown',   /* creating user */
@@ -14,11 +15,12 @@ CREATE TABLE pokemon (
 );
 
 
-/* global settings table */
+/** global settings table **/
+
 CREATE TABLE settings (
-	key	TEXT NOT NULL CHECK(key <> ''),
-	value	TEXT,
-	ivalue  INT4,
+	key	TEXT NOT NULL CHECK(key <> ''), /* name os setting tuple */
+	value	TEXT, /* string value of setting */
+	ivalue  INT4, /* interger value of setting */
 	
 	CONSTRAINT global_key PRIMARY KEY (key)
 );

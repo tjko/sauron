@@ -51,17 +51,23 @@ INSTALL_PROGRAM = @INSTALL_PROGRAM@
 # there should be no reason to modify lines below this
 #########################################################################
 
-SQL_TABLES = 	sql/common.sql \
+SQL_TABLES =	sql/servers.sql \
+		sql/zones.sql \
+		sql/hosts.sql \
+		sql/groups.sql \
+		sql/nets.sql \
+	 	sql/common.sql \
 		sql/cidr_entries.sql sql/dhcp_entries.sql sql/ether_info.sql \
-		sql/groups.sql sql/host_info.sql sql/hosts.sql \
 		sql/mx_entries.sql sql/mx_templates.sql \
-		sql/nets.sql sql/ns_entries.sql \
+		sql/ns_entries.sql \
 		sql/printer_classes.sql sql/printer_entries.sql \
-		sql/a_entries.sql sql/servers.sql sql/txt_entries.sql \
-	        sql/user_rights.sql sql/users.sql \
+		sql/a_entries.sql sql/txt_entries.sql \
+	        sql/users.sql sql/user_rights.sql \
 		sql/wks_entries.sql sql/wks_templates.sql \
-		sql/zones.sql sql/utmp.sql sql/hinfo_templates.sql \
+		sql/utmp.sql sql/hinfo_templates.sql \
 		sql/arec_entries.sql sql/root_servers.sql
+
+#		sql/host_info.sql \
 
 
 DIRNAME = $(shell basename `pwd`) 
@@ -109,6 +115,11 @@ init_tables:
 	@echo "Inserting default HINFO templates..."
 	$(RUNSQL) contrib/hinfo_hw.sql
 	$(RUNSQL) contrib/hinfo_sw.sql
+
+docs:	
+	@echo "Generating docs..."
+	cd $(srcdir)
+	$(srcdir)/contrib/htmldoc-sql --title "Sauron: SQL table descriptions" $(SQL_TABLES) > doc/tables.html
 
 grant_full:
 	perl -e 'while (<>) { s/:user:/tjko/g; print; }' init/full-privileges.sql | psql sauron

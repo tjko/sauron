@@ -6,9 +6,13 @@
  * $Id$
  */
 
+/** This table contains servers that are managed with this system.
+   For each server named/dhcpd/printer configuration files can be
+   automagically generated from the database. **/
+
 CREATE TABLE servers ( 
-	id		SERIAL PRIMARY KEY,
-	name		TEXT UNIQUE NOT NULL CHECK(name <> ''),
+	id		SERIAL PRIMARY KEY, /* unique ID */
+	name		TEXT NOT NULL CHECK(name <> ''), /* server name */
 
 	zones_only	BOOL DEFAULT false, /* if true, generate named.zones 
 					       file otherwise generate 
@@ -16,17 +20,19 @@ CREATE TABLE servers (
 	no_roots	BOOL DEFAULT false, /* ? */
 
 	/* named.conf options...more to be added as needed... */
-	directory	TEXT,
-	pid_file	TEXT,
-	dump_file	TEXT,
-	named_xfer	TEXT,
-	stats_file	TEXT,
-	named_ca	TEXT,
-	pzone_path	TEXT DEFAULT '',
-	szone_path	TEXT DEFAULT 'NS2/', 
-	query_src_ip	TEXT,  /* ip | '*' */
-	query_src_port 	TEXT,  /* port | '*' */
-	listen_on_port	TEXT,
+	directory	TEXT, /* base directory for named (optional) */
+	pid_file	TEXT, /* pid-file pathname (optional) */
+	dump_file	TEXT, /* dump-file pathname (optiona) */
+	named_xfer	TEXT, /* named-xfer pathname (optional) */
+	stats_file	TEXT, /* stats-file pathname (optional) */
+	named_ca	TEXT, /* root servers filename */
+	pzone_path	TEXT DEFAULT '',     /* relative path for master
+					        zone files */
+	szone_path	TEXT DEFAULT 'NS2/', /* relative path for slave 
+						zone files */
+	query_src_ip	TEXT,  /* query source ip (optional) (ip | '*') */ 
+	query_src_port 	TEXT,  /* query source port (optional) (port | '*') */
+	listen_on_port	TEXT,  /* listen on port (optional) */
 
 	/* check-names: D=default, W=warn, F=fail, I=ignore */
 	checknames_m	CHAR(1) DEFAULT 'D', /* check-names master */
@@ -38,11 +44,12 @@ CREATE TABLE servers (
 	recursion	CHAR(1) DEFAULT 'D', /* recursion */
 
 	/* default TTLs */
-	ttl		INT4 DEFAULT 86400,
-	refresh		INT4 DEFAULT 43200,
-	retry		INT4 DEFAULT 3600,
-	expire		INT4 DEFAULT 604800,
-	minimum		INT4 DEFAULT 86400,
+	ttl		INT4 DEFAULT 86400,  /* default TTL for RR records */
+	refresh		INT4 DEFAULT 43200,  /* default SOA refresh */
+	retry		INT4 DEFAULT 3600,   /* default SOA retry */
+	expire		INT4 DEFAULT 604800, /* default SOA expire */
+	minimum		INT4 DEFAULT 86400,  /* default SOA minimum 
+						(negative caching ttl) */
 
 
 	/* defaults to use in zones */
@@ -50,10 +57,9 @@ CREATE TABLE servers (
 	hostmaster	TEXT,  /* hostmaster name for sibling zone SOAs
 	                          unless overided in zone */
 
-	comment		TEXT
+	comment		TEXT,
 	
-       /* allow_transfer (cird_entries) */
-       /* dhcp */
+	CONSTRAINTS	servers_name_key UNIQUE(name)
 ) INHERITS(pokemon);
 
 

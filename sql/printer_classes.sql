@@ -1,19 +1,15 @@
 /* printer_classes table creation
  *
- * global table to store printer classes (printcap stuff)
- * these classess maybe referred to in PRINTER fields in other tables. 
- *
  * $Id$
  */
 
+/** Global table to store printer classes (printcap stuff)
+    these classess maybe referred to in PRINTER fields in other tables. **/
+
 CREATE TABLE printer_classes (
-       id           SERIAL PRIMARY KEY,
-       name	    TEXT UNIQUE NOT NULL CHECK(name <> ''),
+       id           SERIAL PRIMARY KEY, /* unique ID */
+       name	    TEXT UNIQUE NOT NULL CHECK(name <> ''), /* class name */
 
-       comment	    TEXT
-
-       /* printer (printer_entries) */
-       /* dentries */
-
+       comment	    TEXT 
 ) INHERITS(pokemon);
 

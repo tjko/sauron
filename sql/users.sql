@@ -1,21 +1,22 @@
 /* users table creation
  *
- * This table contains user account information.
- *
  * $Id$
  */
 
+/** This table contains (user interface) user account information. **/
+
 CREATE TABLE users (
-	id		SERIAL PRIMARY KEY,
-	username	TEXT UNIQUE NOT NULL CHECK(username <> ''),
-	password	TEXT,
-	name		TEXT,
-	superuser	BOOL DEFAULT false,
-	server		INT4 DEFAULT -1,
-	zone		INT4 DEFAULT -1,
-	last		INT4 DEFAULT 0,	
-	last_pwd	INT4 DEFAULT 0,
-	search_opts	TEXT,
+	id		SERIAL PRIMARY KEY, /* unique ID */
+	username	TEXT UNIQUE NOT NULL CHECK(username <> ''), /* login
+									name */
+	password	TEXT, /* encrypted password (MD5) */
+	name		TEXT, /* long user name */
+	superuser	BOOL DEFAULT false, /* superuser flag */
+	server		INT4 DEFAULT -1, /* default server id */
+	zone		INT4 DEFAULT -1, /* default zone id */
+	last		INT4 DEFAULT 0,	/* last login time */
+	last_pwd	INT4 DEFAULT 0, /* las password change time */
+	search_opts	TEXT, /* default search options */
 
 	comment	    TEXT
 ) INHERITS(pokemon);
