@@ -777,10 +777,39 @@
 </section>
 
 
+<section id="remove-hosts-cmd">
+<title>remove-hosts</>
+<para>
+  Utility for deleting hosts from server using list of
+  Ethernet (MAC) addresses or IP addresses that are read from a file.
+</para>
+<cmdsynopsis>
+  <command>remove-hosts</>
+  <arg>--help</>
+  <group choice=req>
+    <arg>--ip</>
+    <arg>--mac</>
+  </group>
+  <arg>--commit</>
+  <arg choice=req><replaceable>servername</></>
+  <arg choice=req><replaceable>filename</></>
+</cmdsynopsis>
+<para>
+  Either <option>-ip</> or <option>--mac</> is required to specify
+  wheter to look for IP or Ethernet addresses from input file. 
+  Input file is parsed line by line and is expected to contain only
+  one address per line. Otherwise input file format is free, everything
+  else put IP or Ethernet addresses is ignored when input file is parsed.
+  Without <option>--commit</> this command only prints out what
+  hosts would be removed and no changes to database is made.
+</para>
+</section>
+
+
 <section id="runsql-cmd">
 <title>runsql</>
 <para>
-  Utility for sunning SQL code from a file into Sauron database. This
+  Utility for running SQL code from a file into Sauron database. This
   utility is used by <command>createtables</> to initialize Sauron
   database.
 </para>

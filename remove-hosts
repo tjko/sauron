@@ -1,0 +1,100 @@
+#!/usr/bin/perl -I/usr/local/sauron
+#
+# remove-hosts -- removes hosts based on list of MACs read from a file
+#
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2003.
+# $Id$
+#
+use Getopt::Long;
+use Sauron::DB;
+use Sauron::BackEnd;
+use Sauron::Util;
+use Sauron::Sauron;
+
+load_config();
+
+GetOptions("help|h","mac","ip","commit");
+
+if ($opt_help || @ARGV < 2) {
+  print "syntax: $0 [OPTIONS] <servername> <inputfile>\n\n",
+        "\toptions:\n",
+	"\t--mac\t\tinput file contains MAC addresses (one per line)\n",
+	"\t--ip\t\tinput file contains IP addresses (one per line)\n\n",
+	"\t--commit\tcommit changes (without this no changes are made)\n\n";
+  exit(1);
+}
+
+$server=shift;
+$filename=shift;
+
+fatal("cannot find mohosts script in PROG_DIR ($PROG_DIR)")
+  unless (-x "$PROG_DIR/modhosts");
+fatal("cannot read input file: $filename")
+  if ($filename ne '-' && ! -r $filename);
+fatal("cannot specify both --ip and --mac options")  if ($opt_ip && $opt_mac);
+fatal("neither --ip or --mac option specified") unless ($opt_ip || $opt_mac);
+
+fatal("DB_CONNECT not defined in configuration!") unless ($DB_CONNECT);
+db_connect($DB_CONNECT);
+
+$serverid=get_server_id($server);
+fatal("cannot find server '$server'") unless ($serverid > 0);
+
+
+
+open(FILE,$filename) || fatal("cannot open file: $filename");
+
+while(<FILE>) {
+  chomp;
+  next if /^\s*$/;
+
+  $ip=''; $mac='';
+
+  if ($opt_mac) {
+    s/[\s:-]//g;
+    next unless /([0-9A-Fa-f]{12})/;
+    $mac=uc($1);
+    print "MAC=$mac ";
+    db_query("SELECT h.id,h.domain FROM hosts h, zones z " .
+	     "WHERE z.server=$serverid AND h.zone=z.id " .
+	     " AND h.ether = '$mac'",\@q);
+    if ($q[0][0] > 0) {
+      print "$q[0][1] (id=$q[0][0])\n";
+      $delhash{$q[0][0]}++;
+    } else {
+      print "not found\n";
+    }
+  }
+  elsif ($opt_ip) {
+    next unless /((\d){1,3}\.(\d){1,3}\.(\d){1,3}\.(\d){1,3})/;
+    $ip=$1;
+    print "IP=$ip ";
+    db_query("SELECT h.id,h.domain FROM hosts h, zones z, a_entries a " .
+	     "WHERE z.server=$serverid AND h.zone=z.id AND a.host=h.id " .
+	     " AND a.ip='$ip'",\@q);
+    if ($q[0][0] > 0) {
+      print "$q[0][1] (id=$q[0][0])\n";
+      $delhash{$q[0][0]}++;
+    } else {
+      print "not found\n";
+    }
+  }
+
+}
+
+close(FILE);
+
+unless ($opt_commit) {
+  print "Found ". (keys %delhash) . " hosts to delete. (no changes made)\n";
+  exit;
+}
+
+print "Deleting " . (keys %delhash) . " hosts:\n";
+
+foreach $id (sort keys %delhash) {
+  print "Deleting host (id=$id)...\n";
+  fatal("failed to delete host (id=$id)") if (delete_host($id) < 0);
+}
+
+
+# eof

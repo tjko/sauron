@@ -2,6 +2,11 @@ $Id$
 
 	
 0.6.1	
+	- added new utility remove-hosts that removes hosts based on
+	  list of IPs or MACs read from a file
+	- sauron: bug fixes for $DOMAIN substitution in MX records and
+	  CNAME alias generation for zone A record.
+	- sauron: added --dhcpclass option	
 	- check-pending: added --dir & --cmd options for easily running
 	  given command if there is pending hosts for server
 	- sauron.cgi: added "Ping Sweep" button to scan selected network
