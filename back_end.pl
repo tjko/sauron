@@ -100,15 +100,16 @@ sub get_server_id($) {
 }
 
 sub get_server_list() {
-  my ($res,$list,$i,$id,$name,$rec);
+  my ($res,$list,$i,$id,$name,$rec,$comment);
 
   $list=[];
-  $res=db_exec("SELECT name,id FROM servers ORDER BY name;");
+  $res=db_exec("SELECT name,id,comment FROM servers ORDER BY name;");
 
   for($i=0; $i < $res; $i++) {
     $name=db_getvalue($i,0);
     $id=db_getvalue($i,1);
-    $rec=[$name,$id];
+    $comment=db_getvalue($i,2);
+    $rec=[$name,$id,$comment];
     push @{$list}, $rec;
   }
   return $list;
