@@ -341,7 +341,7 @@ do "$PROG_DIR/cgi_util.pl";
    empty=>1, iff=>['type','1']},
   {ftype=>1, tag=>'misc', name=>'Misc.', type=>'text', len=>40, empty=>1, 
    iff=>['type','1']},
-  {ftype=>0, name=>'Group/Template selections', iff=>['type','[15]']},
+#  {ftype=>0, name=>'Group/Template selections', iff=>['type','[15]']},
   {ftype=>10, tag=>'grp', name=>'Group', iff=>['type','[15]']},
   {ftype=>6, tag=>'mx', name=>'MX template', iff=>['type','1']},
   {ftype=>7, tag=>'wks', name=>'WKS template', iff=>['type','1']},
@@ -438,7 +438,7 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>2, tag=>'printer_l', name=>'PRINTER entries', 
    type=>['text','text'], fields=>2,len=>[40,20], empty=>[0,1], 
    elabels=>['PRINTER','comment'], iff=>['type','5']},
-  {ftype=>0, name=>'Group/Template selections', iff=>['type','[15]']},
+ # {ftype=>0, name=>'Group/Template selections', iff=>['type','[15]']},
   {ftype=>10, tag=>'grp', name=>'Group', iff=>['type','[15]']},
   {ftype=>6, tag=>'mx', name=>'MX template', iff=>['type','1']},
   {ftype=>7, tag=>'wks', name=>'WKS template', iff=>['type','1']},
@@ -567,10 +567,8 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>4, tag=>'subnet', name=>'Type', type=>'enum',
    enum=>{t=>'Subnet',f=>'Net'}},
   {ftype=>1, tag=>'net', name=>'Net (CIDR)', type=>'cidr'},
-#  {ftype=>1, tag=>'vlan', name=>'VLAN', type=>'text', len=>15,
-#   empty=>1, iff=>['subnet','t']},
   {ftype=>3, tag=>'vlan', name=>'VLAN', type=>'enum', conv=>'L',
-   enum=>\%vlan_list_hash},
+   enum=>\%vlan_list_hash, restricted=>1},
   {ftype=>1, tag=>'comment', name=>'Comment', type=>'text',
    len=>60, empty=>1},
   {ftype=>0, name=>'Auto assign address range', iff=>['subnet','t']},
@@ -588,7 +586,8 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>0, name=>'Record info', no_edit=>0},
   {ftype=>4, name=>'Record created', tag=>'cdate_str', no_edit=>1},
   {ftype=>4, name=>'Last modified', tag=>'mdate_str', no_edit=>1}
- ]
+ ],
+ mode=>1
 );
 
 
@@ -2003,19 +2002,19 @@ sub nets_menu() {
 
   return if (check_perms('server','R'));
   
-  get_vlan_list($serverid,\%vlan_list_hash,\@vlan_list)
-      unless ($v_id > 0);
 
 
  show_vlan_record:
   if ($v_id > 0) {
+      return if (check_perms('superuser',''));
+
       if (get_vlan($v_id,\%vlan)) {
 	  alert2("Cannot get vlan record (id=$v_id)");
 	  return;
       }
 
       if ($sub eq 'Edit') {
-	  return if (check_perms('superuser',''));
+	  # return if (check_perms('superuser',''));
 	  $res=edit_magic('vlan','VLAN','vlans',\%vlan_form,
 			  \&get_vlan,\&update_vlan,$v_id);
 	  goto browse_vlans if ($res == -1);
@@ -2023,7 +2022,7 @@ sub nets_menu() {
 	  get_vlan($v_id,\%vlan);
       }
       elsif ($sub eq 'Delete') {
-	  return if (check_perms('superuser',''));
+	  # return if (check_perms('superuser',''));
 	  $res=delete_magic('vlan','VLAN','vlans',\%vlan_form,\&get_vlan,
 			    \&delete_vlan,$v_id);
 	  return unless ($res == 2);
@@ -2042,6 +2041,7 @@ sub nets_menu() {
 
   if ($sub eq 'vlans') {
     browse_vlans:
+      return if (check_perms('superuser',''));
       undef @q;
       db_query("SELECT id,name,description,comment FROM vlans " .
 	       "WHERE server=$serverid ORDER BY name;",\@q);
@@ -2102,6 +2102,7 @@ sub nets_menu() {
   }
   elsif ($sub eq 'Edit') {
     return if (check_perms('superuser',''));
+    get_vlan_list($serverid,\%vlan_list_hash,\@vlan_list);
     $res=edit_magic('net','Net','nets',\%net_form,\&get_net,\&update_net,$id);
     goto browse_nets if ($res == -1);
     goto show_net_record if ($res > 0);
@@ -2192,6 +2193,11 @@ sub nets_menu() {
       print h2("Cannot get net record (id=$id)!");
       return;
     }
+    if (check_perms('superuser','',1)) {
+	$net_form{mode}=0;
+    } else {
+	get_vlan_list($serverid,\%vlan_list_hash,\@vlan_list);
+    }
     display_form(\%net,\%net_form);
     print p,startform(-method=>'GET',-action=>$selfurl),
           hidden('menu','nets');
@@ -2214,7 +2220,7 @@ sub nets_menu() {
 
   print "<TABLE cellspacing=2 border=0><TR bgcolor=\"#aaaaff\">",
         "<TH>Net</TH>",th("NetName"),th("Description"),th("Type"),
-        th("DHCP"),th("VLAN"),th("Comments"),"</TR>";
+        th("DHCP"),th("Comments"),"</TR>";
 
   for $i (0..$#q) {
       $dhcp=($q[$i][5] eq 't' ? 'No' : 'Yes' );
@@ -2227,14 +2233,15 @@ sub nets_menu() {
 	$type='Network';
       }
 
-      $vlan=($q[$i][6] > 0 ? $vlan_list_hash{$q[$i][6]} : '&nbsp;');
+      # $vlan=($q[$i][6] > 0 ? $vlan_list_hash{$q[$i][6]} : '&nbsp;');
       $netname=($q[$i][7] eq '' ? '&nbsp;' : $q[$i][7]);
       $name=($q[$i][1] eq '' ? '&nbsp;' : $q[$i][1]);
       $comment=$q[$i][4];
       $comment='&nbsp;' if ($comment eq '');
       print "<td><a href=\"$selfurl?menu=nets&net_id=$q[$i][0]\">",
 	  "$q[$i][2]</a></td>",td($netname),
-          td("<FONT size=-1>$name</FONT>"),td($type),td($dhcp),td($vlan),
+          td("<FONT size=-1>$name</FONT>"),td("<FONT size=-1>$type</FONT>"),
+          td("<FONT size=-1>$dhcp</FONT>"), # td("<FONT size=-1>$vlan</FONT>"),
 	    td("<FONT size=-1>$comment</FONT>"),"</TR>";
   }
 

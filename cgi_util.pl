@@ -138,6 +138,9 @@ sub form_check_form($$$) {
     $tag=$rec->{tag};
     $p=$prefix."_".$tag;
 
+    if ($rec->{restricted}) {
+	next unless ($rec->{restricted} eq $form->{mode});
+    }
     if ($rec->{iff}) {
       $val=param($prefix."_".${$rec->{iff}}[0]);
       $e=${$rec->{iff}}[1];
@@ -367,6 +370,9 @@ sub form_magic($$$) {
     $rec=$$formdata[$i];
     $p1=$prefix."_".$rec->{tag};
 
+    if ($rec->{restricted}) {
+	next unless ($rec->{restricted} eq $form->{mode});
+    }
     if ($rec->{iff}) {
       $val=param($prefix."_".${$rec->{iff}}[0]);
       $e=${$rec->{iff}}[1];
@@ -662,6 +668,10 @@ sub display_form($$) {
 
     if ($form->{heading_bg}) { $h_bg=$form->{heading_bg}; }
     else { $h_bg='#ddddff'; }
+
+    if ($rec->{restricted}) {
+	next unless ($rec->{restricted} eq $form->{mode});
+    }
     if ($rec->{iff}) {
       $val=$data->{${$rec->{iff}}[0]};
       $e=${$rec->{iff}}[1];
