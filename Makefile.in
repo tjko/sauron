@@ -81,6 +81,7 @@ PROGS = sauron addgroup adduser deluser modhosts \
 	export-networks generatehosts addhosts check-pending
 
 PLFILES = back_end.pl db.pl parseconf.pl util.pl util_zone.pl cgi_util.pl
+MODULES = Sauron/Util.pm Sauron/DB.pm Sauron/BackEnd.pm Sauron/CGIutil.pm
 
 CGIFILES = cgi/sauron.cgi cgi/browser.cgi
 LOGOFILES = cgi/logo.png cgi/logo_large.png
@@ -163,7 +164,9 @@ install: all make_dirs
 	$(INSTALL) -m 644 $(MISCFILES) $(bindir)
 	$(INSTALL) -m 755 $(CGIFILES) $(bindir)/cgi
 	$(INSTALL) -m 644 $(LOGOFILES) $(bindir)/cgi
-	-ln -s moduser $(bindir)/modgroup
+	$(INSTALL) -m 644 $(MODULES) $(bindir)/Sauron
+	@[ -f $(bindir)/modgroup ] && rm -f $(bindir)/modgroup || :
+	@ln -s moduser $(bindir)/modgroup
 
 
 make_dirs:
@@ -171,6 +174,7 @@ make_dirs:
 	$(INSTALL) -m 755 -d $(bindir)
 	$(INSTALL) -m 755 -d $(bindir)/backups
 	$(INSTALL) -m 755 -d $(bindir)/cgi
+	$(INSTALL) -m 755 -d $(bindir)/Sauron
 #	$(INSTALL) -m 755 -d $(bindir)/contrib
 
 

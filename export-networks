@@ -1,4 +1,4 @@
-#!/usr/bin/perl
+#!/usr/bin/perl -I/usr/local/sauron
 #
 # export-networks  generates /etc/networks file (from given server)
 #
@@ -8,6 +8,9 @@
 require 5;
 use Getopt::Long;
 use Time::Local;
+use Sauron::DB;
+use Sauron::Util;
+use Sauron::BackEnd;
 
 my ($PG_DIR,$PG_NAME) = ($0 =~ /^(.*\/)(.*)$/);
 $0 = $PG_NAME;
@@ -21,11 +24,6 @@ if (-r "/etc/sauron/config") {
 }
 
 do "$config_file" || die("cannot load config: $config_file");
-do "$PG_DIR/util.pl";
-do "$PG_DIR/db.pl";
-do "$PG_DIR/util_zone.pl";
-do "$PG_DIR/back_end.pl";
-
 
 ###################################################################
 
@@ -45,7 +43,7 @@ $verbose=1 if (defined $opt_verbose);
 $servername=$ARGV[0];
 $no_comments = ($opt_comments ? 0 : 1);
 
-db_connect();
+db_connect($DB_CONNECT);
 
 $serverid=get_server_id($servername);
 fatal("cannot find server '$servername'") unless ($serverid > 0);
@@ -100,7 +98,7 @@ for $i (0..$#q) {
   } else {
     $nname='#';
   }
-  
+
   $comment = $q[$i][3] . ($q[$i][2] ? ", $q[$i][2]":"");
   printf "# %s\n", $comment unless ($no_comments);
   printf "%-40s %-15s\n", $nname, $net;

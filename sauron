@@ -1,13 +1,16 @@
-#!/usr/bin/perl
+#!/usr/bin/perl -I/usr/local/sauron
 #
 # sauron - generates BIND/DHCP/printer configuration files from database
 #
-# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000,2001.
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000-2002.
 # $Id$
 #
 require 5;
 use Net::Netmask;
 use Getopt::Long;
+use Sauron::Util;
+use Sauron::DB;
+use Sauron::BackEnd;
 
 ($PG_DIR,$PG_NAME) = ($0 =~ /^(.*\/)(.*)$/);
 $0 = $PG_NAME;
@@ -21,9 +24,6 @@ if (-r "/etc/sauron/config") {
 }
 
 do "$config_file" || die("cannot load config: $config_file");
-do "$PG_DIR/util.pl";
-do "$PG_DIR/db.pl";
-do "$PG_DIR/back_end.pl";
 
 $bind_conf=0;
 $dhcp_conf=0;
@@ -51,6 +51,7 @@ $failover_peer_name = 'foobar';
 ##############################
 
 $VER = sauron_version();
+
 
 $result=GetOptions("help|h","all|a","bind|b","dhcp|d","printer|p","nomail",
 		   "updateserial","noupdateserial","verbose","dhcp2","clean");
@@ -105,7 +106,7 @@ $mailnotify_mode = 0 if ($opt_nomail);
 print "Email notification sending: " . 
       ($mailnotify_mode ? 'enabled':'disabled') . "\n" if ($verbose);
 
-db_connect();
+db_connect($DB_CONNECT);
 
 $time_now_ticks = time;
 
@@ -118,7 +119,7 @@ fatal("Cannot get server record!".db_errormsg()) if (get_server($serverid,\%serv
 $dhcp_auto_domainnames = $server{dhcp_flags_ad};
 $failover_mode = ($server{dhcp_flags_fo} ? 1 : 0);
 
-$zonelist = get_zone_list($serverid);
+$zonelist = get_zone_list($serverid,0,0);
 undef %zonelist_hash;
 foreach $zone (@{$zonelist}) { $zonelist_hash{$$zone[0]}=$zone; }
 
@@ -129,7 +130,7 @@ if ($server{masterserver} > 0) {
     if (get_server($server{masterserver},\%masterserver));
   push @{master_server_ips}, [$masterserver{hostaddr}];
 
-  $zonelist2 = get_zone_list($server{masterserver});
+  $zonelist2 = get_zone_list($server{masterserver},0,0);
   # add selected zones from master server to slave...
   foreach $zone (@{$zonelist2}) {
     #print "zone: $$zone[0]\n";

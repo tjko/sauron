@@ -8,6 +8,7 @@ general:
 	- IPv6 support
 	- fix "wrong year" bug in update-dhcp-info
 	- add DHCP v3 support to update-dhcp-info
+	- fix addgroup / implement delgroup
 
 import:
 	- fix import(s) to work with new table layout

@@ -1,4 +1,4 @@
-#!/usr/bin/perl
+#!/usr/bin/perl -I/usr/local/sauron
 #
 # sauron.cgi
 # $Id$
@@ -11,6 +11,10 @@ use CGI qw/:standard *table -no_xhtml/;
 use CGI::Carp 'fatalsToBrowser'; # debug stuff
 use Digest::MD5;
 use Net::Netmask;
+use Sauron::DB;
+use Sauron::Util;
+use Sauron::BackEnd;
+use Sauron::CGIutil;
 
 $CGI::DISABLE_UPLOADS = 1; # no uploads
 $CGI::POST_MAX = 100000; # max 100k posts
@@ -32,11 +36,6 @@ else {
 }
 
 do "$conf_dir/config" || die("cannot load configuration!");
-
-do "$PROG_DIR/util.pl";
-do "$PROG_DIR/db.pl";
-do "$PROG_DIR/back_end.pl";
-do "$PROG_DIR/cgi_util.pl";
 
 %check_names_enum = (D=>'Default',W=>'Warn',F=>'Fail',I=>'Ignore');
 %yes_no_enum = (D=>'Default',Y=>'Yes', N=>'No');
@@ -1063,9 +1062,10 @@ sub logmsg($$) {
 
 #####################################################################
 
-db_connect2() || error("Cannot estabilish connection with database");
-if (($res=cgi_disabled())) { error("CGI interface disabled: $res"); }
-error("Invalid log path") unless (-d $LOG_DIR);
+db_connect2($DB_CONNECT) ||
+  html_error("Cannot estabilish connection with database");
+html_error("CGI interface disabled: $res") if (($res=cgi_disabled()));
+html_error("Invalid log path") unless (-d $LOG_DIR);
 
 $frame_mode=0;
 $pathinfo = path_info();
@@ -1122,7 +1122,7 @@ if ($remote_addr ne $state{'addr'}) {
   logmsg("notice",
 	 "cookie reseived from wrong host: " . $remote_addr .
 	 " ($state{user})");
-  error("Unauthorized Access denied!");
+  html_error("Unauthorized Access denied!");
 }
 
 
@@ -1155,7 +1155,7 @@ $bgcolor='black';
 $bgcolor='white' if ($frame_mode);
 
 unless ($state{superuser} eq 'yes') {
-  error("cannot get permissions!")
+  html_error("cannot get permissions!")
     if (get_permissions($state{uid},$state{gid},\%perms));
 } else {
   $perms{alevel}=999 if ($state{superuser});
@@ -1501,7 +1501,7 @@ sub zones_menu() {
 
   print h2("Select zone:"),p,"<TABLE width=98% bgcolor=white border=0>",
         "<TR bgcolor=\"#aaaaff\">",th(['Zone','Type','Reverse','Comments']);
-  $list=get_zone_list($serverid);
+  $list=get_zone_list($serverid,0,0);
   for $i (0 .. $#{$list}) {
     $type=$ztypenames{$$list[$i][2]};
     $color=$ztypecolors{$$list[$i][2]};
@@ -1524,7 +1524,7 @@ sub zones_menu() {
     print h4("Zones from master server:"),
           p,"<TABLE width=98% bgcolor=white border=0>",
         "<TR bgcolor=\"#aaaaff\">",th(['Zone','Type','Reverse','Comments']);
-    $list=get_zone_list($server{masterserver});
+    $list=get_zone_list($server{masterserver},0,0);
     for $i (0 .. $#{$list}) {
       $type=$$list[$i][2];
       next if ($server{named_flags_isz}!=1 && $type !~ /^M/);
@@ -3773,7 +3773,7 @@ sub save_state($) {
 	       ", superuser=$s_superuser $other " .
 	       "WHERE cookie='$id';");
 
-  error("cannot save stat '$id'") if ($res < 0);
+  html_error("cannot save stat '$id'") if ($res < 0);
 }
 
 

@@ -1,12 +1,15 @@
-#!/usr/bin/perl
+#!/usr/bin/perl -I/usr/local/sauron
 #
 # deluser - utility to delete users
 #
-# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000.
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000-2002.
 # $Id$
 #
 require 5;
 use Getopt::Long;
+use Sauron::DB;
+use Sauron::Util;
+use Sauron::BackEnd;
 
 my ($PG_DIR,$PG_NAME) = ($0 =~ /^(.*\/)(.*)$/);
 $0 = $PG_NAME;
@@ -20,15 +23,6 @@ if (-r "/etc/sauron/config") {
 }
 
 do "$config_file" || die("cannot load config: $config_file");
-do "$PROG_DIR/util.pl";
-do "$PROG_DIR/db.pl";
-do "$PROG_DIR/back_end.pl";
-
-sub fatal($) {
-  my ($msg) = @_;
-  print STDERR "$0: $msg\n";
-  exit(1);
-}
 
 ##############################################
 
@@ -45,7 +39,7 @@ if ($opt_help) {
   exit(0);
 }
 
-db_connect();
+db_connect($DB_CONNECT);
 
 
 unless ($opt_user) {

@@ -1,13 +1,15 @@
-#!/usr/bin/perl
+#!/usr/bin/perl -I/usr/local/sauron
 #
 # addgroup - utility to create users
 #
-# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000.
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000,2002.
 # $Id$
 #
 require 5;
 use Getopt::Long;
 use Term::ReadKey;
+use Sauron::DB;
+use Sauron::Util;
 
 my ($PG_DIR,$PG_NAME) = ($0 =~ /^(.*\/)(.*)$/);
 $0 = $PG_NAME;
@@ -21,18 +23,9 @@ if (-r "/etc/sauron/config") {
 }
 
 do "$config_file" || die("cannot load config: $config_file");
-do "$PG_DIR/util.pl";
-do "$PG_DIR/db.pl";
-
 
 $cdate = time;
 $user = (getpwuid($<))[0];
-
-sub fatal($) {
-  my ($msg) = @_;
-  print STDERR "$0: $msg\n";
-  exit(1);
-}
 
 ##############################################
 
@@ -43,16 +36,17 @@ if ($opt_help) {
   exit(0);
 }
 
-db_connect();
+db_connect($DB_CONNECT);
 
 
 unless ($opt_group) {
   print "Enter group name: ";
-  $opt_group = ReadLine 0;
+  $opt_group = lc(ReadLine 0);
   chomp $opt_group;
   $i=1;
 }
-fatal("Invalid groupname '$opt_group'!") unless ($opt_group =~ /^\S+$/);
+fatal("Invalid groupname '$opt_group'!") 
+  unless ($opt_group =~ /^[a-z0-9_\-]+$/);
 
 
 unless ($opt_name) {

@@ -1,4 +1,4 @@
-#!/usr/bin/perl
+#!/usr/bin/perl -I/usr/local/sauron
 #
 # browser.cgi
 # $Id$
@@ -11,6 +11,10 @@ use CGI qw/:standard *table/;
 use CGI::Carp 'fatalsToBrowser'; # debug stuff
 use Digest::MD5;
 use Net::Netmask;
+use Sauron::DB;
+use Sauron::Util;
+use Sauron::BackEnd;
+use Sauron::CGIutil;
 
 $CGI::DISABLE_UPLOADS = 1; # no uploads
 $CGI::POST_MAX = 10000; # max 10k posts
@@ -33,11 +37,6 @@ else {
 
 do "$conf_dir/config-browser" || die("cannot load configuration!");
 die("invalid configuration file") unless ($DB_CONNECT);
-
-do "$PROG_DIR/util.pl";
-do "$PROG_DIR/db.pl";
-do "$PROG_DIR/back_end.pl";
-do "$PROG_DIR/cgi_util.pl";
 
 %yes_no_enum = (D=>'Default',Y=>'Yes', N=>'No');
 
@@ -131,8 +130,9 @@ do "$PROG_DIR/cgi_util.pl";
 
 #####################################################################
 
-db_connect2() || error("Cannot estabilish connection with database");
-if (($res=cgi_disabled())) { error("CGI interface disabled: $res"); }
+db_connect2($DB_CONNECT) ||
+  html_error("Cannot estabilish connection with database");
+html_error("CGI interface disabled: $res") if (($res=cgi_disabled()));
 
 $pathinfo = path_info();
 $script_name = script_name();
@@ -155,16 +155,18 @@ print header(-type=>'text/html; charset=iso-8859-1'),
 $key = $pathinfo;
 $key =~ s/[^a-z0-9\-]//g;
 
-error2("Invalid parameters!") unless (@{$$BROWSER_CONF{$key}} == 2);
+html_error2("Invalid parameters!") unless (@{$$BROWSER_CONF{$key}} == 2);
 $server=$$BROWSER_CONF{$key}[0];
 $zone=$$BROWSER_CONF{$key}[1];
 
 #print "server '$server', zone '$zone'\n";
 
 $serverid=get_server_id($server);
-error2("Invalid configuration: cannot find server") unless ($serverid > 0);
+html_error2("Invalid configuration: cannot find server")
+  unless ($serverid > 0);
 $zoneid=get_zone_id($zone,$serverid);
-error2("Invalid configuration: cannot find zone") unless ($zoneid > 0);
+html_error2("Invalid configuration: cannot find zone")
+  unless ($zoneid > 0);
 
 cgi_util_set_zoneid($zoneid);
 cgi_util_set_serverid($serverid);

@@ -1,4 +1,4 @@
-#!/usr/bin/perl
+#!/usr/bin/perl -I/usr/local/sauron
 #
 # status -- utlity to query/modify system status
 #
@@ -7,6 +7,9 @@
 #
 require 5;
 use Getopt::Long;
+use Sauron::DB;
+use Sauron::Util;
+use Sauron::BackEnd;
 
 my ($PG_DIR,$PG_NAME) = ($0 =~ /^(.*\/)(.*)$/);
 $0 = $PG_NAME;
@@ -20,21 +23,10 @@ if (-r "/etc/sauron/config") {
 }
 
 do "$config_file" || die("cannot load config: $config_file");
-do "$PG_DIR/util.pl";
-do "$PG_DIR/db.pl";
-do "$PG_DIR/back_end.pl";
-
-sub fatal($) {
-  my ($msg) = @_;
-  print STDERR "$0: $msg\n";
-  exit(1);
-}
 
 ##############################################
 
 $argcount=@ARGV;
-
-
 
 $result = GetOptions("cgi-enable","cgi-disable=s","help|h","pending:s",
 		     "quiet");
@@ -51,7 +43,7 @@ if ($opt_help || not $result) {
   exit(0);
 }
 
-$db_ok = db_connect2();
+$db_ok = db_connect2($DB_CONNECT);
 
 $VER=sauron_version();
 
@@ -67,13 +59,14 @@ if (defined $opt_pending) {
   unless ($opt_pending) {
     unless ($opt_quiet) {
       print "Pending host record modifications:\n\n",
-	    "Server                         Hosts\n",
-	    "-----------------------------  -----\n";
+	    "Server                                             Hosts\n",
+	    "------------------------------------------------   -----\n";
     }
-    $servers=get_server_list();
-    for $i (0..$#{$servers}) {
-      $server=$$servers[$i][0];
-      $serverid=$$servers[$i][1];
+    get_server_list(-1,\%servers_h,\@servers);
+    for $i (0..$#servers) {
+      $serverid=$servers[$i];
+      next if ($serverid < 0);
+      $server=$servers_h{$serverid};
 
       undef @q;
       db_query("SELECT COUNT(h.id) FROM hosts h, zones z " .
@@ -81,7 +74,7 @@ if (defined $opt_pending) {
 	       " AND (h.mdate > z.serial_date OR h.cdate > z.serial_date);",
 	       \@q);
       next if ($opt_quiet && $q[0][0] < 1);
-      printf "%-30s %d\n",$server,$q[0][0];
+      printf "%-50s %d\n",substr($server,0,50),$q[0][0];
     }
     exit;
   }
