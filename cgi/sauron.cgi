@@ -1070,7 +1070,9 @@ html_error("No database connection defined (DB_CONNECT)")
 html_error("Cannot estabilish connection with database")
   unless (db_connect2($DB_CONNECT));
 html_error("CGI interface disabled: $res") if (($res=cgi_disabled()));
-html_error("Invalid log path") unless (-d $LOG_DIR);
+html_error("Invalid log path (LOG_DIR)") unless (-d $LOG_DIR);
+html_error("Cannot write to log file")
+  unless (-w "$LOG_DIR/sauron.log" or -w $LOG_DIR);
 html_error("Database format mismatch!")
   if (sauron_db_version() ne get_db_version());
 
