@@ -24,8 +24,6 @@ sauron.cgi:
 	- templates for adding hosts
 	- advertise "Save settings" feature if user doesn't have any
           default settings	
-	- sort VLANs in alphabetical order in drop-down boxes
-	- add support to do ping sweeps for subnets (using nmap)
 	- module support for easily extending user interface
 
 browser.cgi:
@@ -37,6 +35,9 @@ browser.cgi:
 next database format (1.1):
 	- lastlog: host CHAR(40) --> TEXT
 	- hosts: change ether_key to server wide (instead of just zone)
-	- 
+	- remove 'gid' from users table (implement groups memberships using 
+          user_rights table)
+        - hosts: new "dhcp_date" fields for "last seen by DHCP server" use
+
 
 
