@@ -1,6 +1,6 @@
 # Sauron::CGI::Hosts.pm
 #
-# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2003.
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2003-2005.
 # $Id$
 #
 package Sauron::CGI::Hosts;
@@ -628,18 +628,61 @@ sub menu_handler {
       display_form(\%host,\%host_form);
       return;
     }
+    elsif (param('move_confirm2')) {
+	my %newzone;
+	my $newzoneid = param('move_zone');
+	my %mystate = %main::state;
+	$mystate{zoneid}=$newzoneid;
+	if ($zoneid == $newzoneid) {
+	    alert1("Cannot move to same zone!")
+	}
+	elsif (chk_perms(\%mystate,'zone','RW',1)) {
+	    alert1("Not authorized to move hosts to this zone");
+	}
+	elsif (get_zone($newzoneid,\%newzone) < 0) {
+	    alert1("Cannot get zone record (id=$newzoneid)");
+	}
+	else {
+	    my $newzone = $newzone{name};
+	    if ($newzone =~ /^(.*)\.($zone)\.?$/) {
+		my $tmp = ".$1";
+		if ($host{domain} =~ /^($.)($tmp)$/) {
+		    my $newdomain = $1;
+		    print "(renaming host record from '$host{domain}' " .
+			  "to '$newdomain')<br>";
+		    $host{domain}=$newdomain;
+		}
+	    }
+	    $host{zone}=$newzoneid;
+	    $host{mx}=-1;
+	    $res=update_host(\%host);
+	    unless ($res < 0 ) {
+		print h2("Host moved from $zone to $newzone{name}");
+		return;
+	    }
+	    alert1("Failed to move host to another zone ($res)");
+	}
+    }
     make_net_list($serverid,0,\%nethash,\@netkeys,1,$perms);
+    my(%zonehash,@zonelist);
+    get_zone_list2($serverid,\%zonehash,\@zonelist);
     $ip=$host{ip}[1][1];
     undef @q;
     db_query("SELECT net FROM nets WHERE server=$serverid AND subnet=true " .
 	     "AND net >> '$ip';",\@q);
-    print h2("Move host to another subnet: ");
+    print h2("Move host to another subnet or zone: ");
     print p,startform(-method=>'GET',-action=>$selfurl),
-          hidden('menu','hosts'),hidden('h_id',$id),hidden('sub','Move'),
-          p,"Move host to: ",
-          popup_menu(-name=>'move_net',-values=>\@netkeys,-default=>'ANY',
-		     -default=>$q[0][0],-labels=>\%nethash),
-          submit(-name=>'move_confirm',-value=>'Move'), " ",
+          hidden('menu','hosts'),hidden('h_id',$id),
+          hidden('sub','Move'),
+          "Move host to: <TABLE><TR><TD>",
+          popup_menu(-name=>'move_net',-values=>\@netkeys,
+		     -default=>$q[0][0],-labels=>\%nethash),"</TD><TD>",
+          submit(-name=>'move_confirm',-value=>'Move (to another subnet)'), 
+          "</TD></TR><TR><TD>",
+          popup_menu(-name=>'move_zone',-values=>\@zonelist,
+		     -default=>$host{zone},-labels=>\%zonehash),"</TD><TD>",
+          submit(-name=>'move_confirm2',-value=>'Move (to another zone)'), 
+          "</TD></TR></TABLE>",
           submit(-name=>'move_cancel',-value=>'Cancel'), " ",
           end_form;
     display_form(\%host,\%host_form);

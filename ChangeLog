@@ -1,6 +1,7 @@
 $Id$
 
 0.7.2beta
+	- CGI interface: added support for moving host to another zone
 	- ACL & address match list support added . New menu 'ACLs' in web
 	  interface (new configuration variable ALEVEL_ACLS).
 	- new utility for managing (TSIG) keys: keygen

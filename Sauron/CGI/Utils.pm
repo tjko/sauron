@@ -18,6 +18,7 @@ $VERSION = '$Id$ ';
 
 @ISA = qw(Exporter); # Inherit from Exporter
 @EXPORT = qw(
+	     chk_perms
 	     check_perms
 	     make_cookie
 	     add_default_zones
@@ -47,17 +48,17 @@ our %host_types;
 	     101=>'Host reservation');
 
 
-sub check_perms {
-  my($type,$rule,$quiet) = @_;
+sub chk_perms($$$$) {
+  my($state,$type,$rule,$quiet) = @_;
   my($i,$re,@n,$s,$e,$ip);
 
-  my %state = %main::state;
   my %perms = %main::perms;
+  $state = \%main::state unless ($state);
 
-  my $serverid = $state{serverid};
-  my $zoneid = $state{zoneid};
+  my $serverid = $state->{serverid};
+  my $zoneid = $state->{zoneid};
 
-  return 0 if ($state{superuser} eq 'yes');
+  return 0 if ($state->{superuser} eq 'yes');
 
   if ($type eq 'superuser') {
     return 1 if ($quiet);
@@ -147,6 +148,10 @@ sub check_perms {
   return 1;
 }
 
+sub check_perms {
+  my($type,$rule,$quiet) = @_;
+  return chk_perms(\%main::state,$type,$rule,$quiet);
+}
 
 sub make_cookie($$) {
   my($path,$ref) = @_;
