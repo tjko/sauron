@@ -406,7 +406,10 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>1, tag=>'serial', name=>'Serial no.', type=>'text', len=>20,
    empty=>1, iff=>['type','1']},
   {ftype=>1, tag=>'misc', name=>'Misc.', type=>'text', len=>40, empty=>1, 
-   iff=>['type','1']}
+   iff=>['type','1']},
+  {ftype=>0, name=>'Record info'},
+  {ftype=>1, name=>'Expiration date', tag=>'expiration', len=>30,
+   type=>'expiration', empty=>1, iff=>['type','[147]']}
  ]
 );
 
@@ -462,7 +465,10 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>1, tag=>'serial', name=>'Serial no.', type=>'text', len=>20,
    empty=>1, iff=>['type','1']},
   {ftype=>1, tag=>'misc', name=>'Misc.', type=>'text', len=>40, empty=>1, 
-   iff=>['type','1']}
+   iff=>['type','1']},
+  {ftype=>0, name=>'Record info'},
+  {ftype=>1, name=>'Expiration date', tag=>'expiration', len=>30,
+   type=>'expiration', empty=>1, iff=>['type','[147]']}
  ]
 );
 
