@@ -41,6 +41,18 @@ $SERVER_ID = "fooserver";
 # $SAURON_TRACEROUTE_TIMEOUT = 15;
 # $ALEVEL_TRACEROUTE = 1; # authorization level needed to use traceroute
 
+# set to enable dhcpd.conf validation from sauron
+# $SAURON_DHCP_CHK_PROG = '/usr/sbin/dhcpd';
+# $SAURON_DHCP_CHK_ARGS = '-q -t -cf';
+
+# set to enable named.conf validation from sauron
+# $SAURON_NAMED_CHK_PROG = '/usr/sbin/named-checkconf';
+# $SAURON_NAMED_CHK_ARGS = '';
+
+# set to enable zone file validation from sauron
+# $SAURON_ZONE_CHK_PROG = '/usr/sbin/named-checkzone';
+# $SAURON_ZONE_CHK_ARGS = '-q';
+
 # sauron --clean will remove all hosts that have been expired longer 
 # than days defined here
 # $SAURON_REMOVE_EXPIRED_DELAY = 30;
