@@ -219,13 +219,13 @@ do "$PROG_DIR/back_end.pl";
   {ftype=>4, tag=>'class', name=>'Class'},
   {ftype=>1, tag=>'ttl', name=>'TTL', type=>'int', len=>10, empty=>1,
    definfo=>['','Default']},
-  {ftype=>1, tag=>'info', name=>'Info', type=>'text', len=>50, empty=>1,
-   iff=>['type','1']},
   {ftype=>1, tag=>'huser', name=>'User', type=>'text', len=>25, empty=>1,
    iff=>['type','1']},
   {ftype=>1, tag=>'dept', name=>'Dept.', type=>'text', len=>25, empty=>1,
    iff=>['type','1']},
   {ftype=>1, tag=>'location', name=>'Location', type=>'text', len=>25,
+   empty=>1, iff=>['type','1']},
+  {ftype=>1, tag=>'info', name=>'[Extra] Info', type=>'text', len=>50, 
    empty=>1, iff=>['type','1']},
   {ftype=>0, name=>'Equipment info', iff=>['type','1']},
   {ftype=>1, tag=>'hinfo_hw', name=>'HINFO hardware', type=>'hinfo', len=>20,
@@ -296,14 +296,14 @@ do "$PROG_DIR/back_end.pl";
    len=>60, iff=>['type','4'], iff2=>['alias','-1']},
   {ftype=>4, tag=>'id', name=>'Host ID'},
   {ftype=>4, tag=>'type', name=>'Type', type=>'enum', enum=>\%host_types},
-  {ftype=>1, tag=>'info', name=>'Info', type=>'text', len=>50, empty=>1,
-   iff=>['type','1']},
   {ftype=>1, tag=>'huser', name=>'User', type=>'text', len=>25, empty=>0,
    iff=>['type','1']},
   {ftype=>1, tag=>'dept', name=>'Dept.', type=>'text', len=>25, empty=>0,
    iff=>['type','1']},
   {ftype=>1, tag=>'location', name=>'Location', type=>'text', len=>25,
    empty=>0, iff=>['type','1']},
+  {ftype=>1, tag=>'info', name=>'[Extra] Info', type=>'text', len=>50, 
+   empty=>1, iff=>['type','1']},
   {ftype=>0, name=>'Equipment info', iff=>['type','1']},
   {ftype=>1, tag=>'hinfo_hw', name=>'HINFO hardware', type=>'hinfo', len=>20,
    empty=>1, iff=>['type','1']},
@@ -416,7 +416,8 @@ do "$PROG_DIR/back_end.pl";
    iff=>['type','1']},
   {ftype=>1, tag=>'location', name=>'Location', type=>'text', len=>25,
    empty=>0, iff=>['type','1']},
-  {ftype=>1, tag=>'info', name=>'Info', type=>'text', len=>50, empty=>1 },
+  {ftype=>1, tag=>'info', name=>'[Extra] Info', type=>'text', len=>50, 
+   empty=>1 },
   {ftype=>0, name=>'Equipment info',iff=>['type','1']},
   {ftype=>101, tag=>'hinfo_hw', name=>'HINFO hardware', type=>'hinfo', len=>20,
    sql=>"SELECT hinfo FROM hinfo_templates WHERE type=0 ORDER BY pri,hinfo;",
@@ -1905,7 +1906,8 @@ sub nets_menu() {
 
     if ($net{subnet} eq 't') {
       print "<TABLE cellspacing=0 cellpadding=3 border=0 bgcolor=\"eeeeef\">",
-          "<TR><TH colspan=3 bgcolor=\"#aaaaff\">Net usage map</TH></TR>";
+          "<TR><TH colspan=3 bgcolor=\"#ffffff\">Net usage map</TH></TR>",
+	  "<TR bgcolor=\"#aaaaff\">",td("Size"),td("Start"),td("End"),"</TR>";
       $state=0;
       $state=1 if ($q[0][0] =~ /^($net{first})(\/32)?/);
       for $i (0..$#blocks) {
@@ -3437,7 +3439,7 @@ sub form_magic($$$) {
 # netscape sekoilee muuten no-frame modessa...
 #  print "WIDTH=\"" . $form->{width} . "\" " if ($form->{width});
   print "BORDER=\"" . $form->{border} . "\" " if ($form->{border});
-  print ">\n";
+  print " cellspacing=\"0\" cellpadding=\"1\">\n";
 
 
   for $i (0..$#{$formdata}) {
@@ -3720,7 +3722,7 @@ sub display_form($$) {
   print "FGCOLOR=\"" . $form->{fgcolor} . "\" " if ($form->{fgcolor});
   print "WIDTH=\"" . $form->{width} . "\" " if ($form->{width});
   print "BORDER=\"" . $form->{border} . "\" " if ($form->{border});
-  print ">";
+  print " cellspacing=\"0\" cellpadding=\"1\">";
 
   for $i (0..$#{$formdata}) {
     $rec=$$formdata[$i];
@@ -3747,7 +3749,7 @@ sub display_form($$) {
 
     if ($rec->{ftype} == 0) {
       print "<TR><TH COLSPAN=2 ALIGN=\"left\" BGCOLOR=\"$h_bg\">",
-            $rec->{name},"</TH>\n";
+            $rec->{name},"</TH></TR>\n";
     } elsif ($rec->{ftype} == 1 || $rec->{ftype} == 101) {
       next if ($rec->{no_empty} && $val eq '');
 
@@ -3760,12 +3762,12 @@ sub display_form($$) {
       }
 
       $val='&nbsp;' if ($val eq '');
-      print Tr,"<TD WIDTH=\"",$form->{nwidth},"\">",$rec->{name},"</TD><TD>",
-            "$val</TD>\n";
+      print "<TR><TD WIDTH=\"",$form->{nwidth},"\">",$rec->{name},"</TD><TD>",
+            "$val</TD></TR>\n";
     } elsif ($rec->{ftype} == 2) {
       $a=$data->{$rec->{tag}};
       next if ($rec->{no_empty} && @{$a}<2);
-      print Tr,td($rec->{name}),
+      print "<TR>",td($rec->{name}),
 	    "<TD><TABLE width=\"100%\" bgcolor=\"#e0e0e0\">";
       for $k (1..$rec->{fields}) { 
 	#print "<TH>",$$a[0][$k-1],"</TH>";
@@ -3780,16 +3782,16 @@ sub display_form($$) {
 	}
 	print "</TR>";
       }
-      print "</TABLE></TD>\n";
+      print "</TABLE></TD></TR>\n";
     } elsif ($rec->{ftype} == 3) {
-      print Tr,"<TD WIDTH=\"",$form->{nwidth},"\">",$rec->{name},"</TD><TD>",
-            "$val</TD>\n";
+      print "<TR><TD WIDTH=\"",$form->{nwidth},"\">",$rec->{name},"</TD><TD>",
+            "$val</TD></TR>\n";
     } elsif ($rec->{ftype} == 4) {
       $val='&nbsp;' if ($val eq '');
       print "<TR><TD WIDTH=\"",$form->{nwidth},"\">",$rec->{name},"</TD><TD>",
             "<FONT color=\"$form->{ro_color}\">$val</FONT></TD></TR>\n";
     } elsif ($rec->{ftype} == 5) {
-      print Tr,td($rec->{name}),"<TD><TABLE>",Tr;
+      print "<TR>",td($rec->{name}),"<TD><TABLE>",Tr;
       $a=$data->{$rec->{tag}};
       for $j (1..$#{$a}) {
 	#$com=$$a[$j][4];
@@ -3800,7 +3802,7 @@ sub display_form($$) {
 	$ipinfo.=' (no A record)' if ($$a[$j][3] ne 't');
 	print Tr(td($ip),td($ipinfo));
       }
-      print "</TABLE></TD>\n";
+      print "</TABLE></TD></TR>\n";
     } elsif (($rec->{ftype} == 6) || ($rec->{ftype} ==7) ||
 	     ($rec->{ftype} == 10)) {
       print "<TR>",td($rec->{name});
@@ -3824,7 +3826,7 @@ sub display_form($$) {
 	print "<TR>",td("<a href=\"$url$$a[$j][1]\">".$$a[$j][2]."</a> "),
 	          td($k),"</TR>";
       }
-      print "</TABLE></TD>\n";
+      print "</TABLE></TD></TR>\n";
     } elsif ($rec->{ftype} == 9) {
       $url=$form->{$rec->{tag}."_url"}.$data->{$rec->{idtag}};
       print "<TR>",td($rec->{name}),td("<a href=\"$url\">$val</a>"),"</TR>";
