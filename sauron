@@ -119,20 +119,34 @@ $dhcp_auto_domainnames = $server{dhcp_flags_ad};
 $failover_mode = ($server{dhcp_flags_fo} ? 1 : 0);
 
 $zonelist = get_zone_list($serverid);
+undef %zonelist_hash;
+foreach $zone (@{$zonelist}) { $zonelist_hash{$$zone[0]}=$zone; }
+
 $normalzones = @{$zonelist};
 if ($server{masterserver} > 0) {
-  fatal("Cannot get master server record!") 
+  print "this server is slave (for id=$server{masterserver})\n" if ($verbose);
+  fatal("Cannot get master server record!")
     if (get_server($server{masterserver},\%masterserver));
   push @{master_server_ips}, [$masterserver{hostaddr}];
+
   $zonelist2 = get_zone_list($server{masterserver});
-  push @{$zonelist}, @{$zonelist2};
+  # add selected zones from master server to slave...
+  foreach $zone (@{$zonelist2}) {
+    #print "zone: $$zone[0]\n";
+    if ($zonelist_hash{$$zone[0]}) {
+      print "skipping duplicate zone from master ($$zone[0])\n"	if ($verbose);
+      next;
+    }
+    next unless ($$zone[2] =~ /^[MS]$/);
+    push @{$zonelist}, $zone;
+  }
 
   $dhcp_auto_domainnames = $masterserver{dhcp_flags_ad};
 
   # disable dynamic addresses unless failover protocol is enabled...
   if ($masterserver{dhcp_flags_fo}) { $failover_mode=2; }
-  else { 
-    $dhcp2_mode=1; 
+  else {
+    $dhcp2_mode=1;
     print "disabling dynamic pools for slave\n";
   }
 }
@@ -376,6 +390,7 @@ sub make_bind() {
     $type=$zone_type_enum{$zone{type}};
     fatal("uknown zone type '$zone{type}'!") unless ($type ne '');
     if ($loopcounter >= $normalzones) {
+      $subtype=$type;
       # process zones from master server
       if ($processed_zones{$zonename}) {
 	warn("Zone from master server skipped: $zonename");
@@ -447,10 +462,10 @@ sub make_bind() {
       }
       print BINDFILE "\t};\n";
     }
-    # masters
+    # masters (IPs)
     if ($type eq 'slave') {
       undef @q;
-      if ($loopcounter >= $normalzones) {
+      if (($loopcounter >= $normalzones) && ($subtype eq 'master')) {
 	@q=@master_server_ips;
       } else {
 	db_query("SELECT ip FROM cidr_entries WHERE type=3 AND ref=$zoneid " .
@@ -462,7 +477,7 @@ sub make_bind() {
 	for $j (0..(@q-1)) {
 	  $ip=$q[$j][0];
 	  $ip =~ s/\/32$//g;
-	  print BINDFILE " $ip; "; 
+	  print BINDFILE " $ip; ";
 	}
 	print BINDFILE " };\n";
       }

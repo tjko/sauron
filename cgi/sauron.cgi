@@ -1393,9 +1393,9 @@ sub zones_menu() {
 
  select_zone:
   #display zone selection list
+
   print h2("Select zone:"),p,"<TABLE width=98% bgcolor=white border=0>",
         "<TR bgcolor=\"#aaaaff\">",th(['Zone','Type','Reverse','Comments']);
-
   $list=get_zone_list($serverid);
   for $i (0 .. $#{$list}) {
     $type=$$list[$i][2];
@@ -1409,8 +1409,29 @@ sub zones_menu() {
 	"<a href=\"$selfurl?menu=zones&selected_zone=$name\">$name</a>",
 				    $type,$rev,$comment]);
   }
-
   print "</TABLE><BR>";
+
+  get_server($serverid,\%server);
+  if ($server{masterserver} > 0) {
+    print h4("Zones from master server:"),
+          p,"<TABLE width=98% bgcolor=white border=0>",
+        "<TR bgcolor=\"#aaaaff\">",th(['Zone','Type','Reverse','Comments']);
+    $list=get_zone_list($server{masterserver});
+    for $i (0 .. $#{$list}) {
+      $type=$$list[$i][2];
+      next unless ($type =~ /^[MS]$/);
+      if ($type eq 'M') { $type='Master'; $color='#f0f000'; }
+      elsif ($type eq 'S') { $type='Slave'; $color='#eeeebf'; }
+      $rev=($$list[$i][3] eq 't' ? 'Yes' : 'No');
+      $id=$$list[$i][1];
+      $name=$$list[$i][0];
+      $comment=$$list[$i][4].'&nbsp;';
+      print "<TR bgcolor=$color>",td([$name,$type,$rev,$comment]);
+    }
+    print "</TABLE><BR>";
+
+  }
+
 
 }
 
