@@ -27,7 +27,9 @@ sauron.cgi:
         - add "show hosts" button to network entry display
 	- display conflicting domainname/MAC when host update/insert fails
 	- option to "download" search results in CSV format
-	
+	- remove confirm from logout
+
+
 
 browser.cgi:
 
