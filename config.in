@@ -127,6 +127,24 @@ $SERVER_ID = "fooserver";
 # $SAURON_RHF{serial}   = 1; # Serial
 # $SAURON_RHF{misc}     = 1; # Misc.
 
+# Optional custom restictions for host record fields. 
+# Restrictions can be defined by server and for each
+# field list of restrictiongs (regexps) can be specified.
+# First restriction that matches user's group is enforced.
+# Currently supported host record fields are:
+#   location, dept, asset_id
+#
+# $SAURON_CHR = {
+#     'servername' => {
+#          'location' => [ ['.*','^(SiteA|SiteB)\d+$'] ],
+#	   'dept' => [ 
+#         	       ['^groupa','^(Sales|Development|Research)$'],
+#		       ['^groubb','^(Manufacturing|Shipping)$' ]
+#          ],
+#	   'asset_id' => [ ['.*', '^[A-Z]{2}\d{4,5}$'] ]
+#     }
+# };	
+
 # Set this to enable more restrictive user privilege intepretation.
 #  1 = zone read (write) access is not inherited from server privileges
 #      (user sees only zones she has explicitly given read (write) access)

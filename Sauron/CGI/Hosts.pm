@@ -22,6 +22,8 @@ $VERSION = '$Id$ ';
 	    );
 
 
+my $chr_group;
+
 my %host_form = (
  data=>[
   {ftype=>0, name=>'Host' },
@@ -49,9 +51,9 @@ my %host_form = (
   {ftype=>1, tag=>'huser', name=>'User', type=>'text', len=>40, empty=>1,
    iff=>['type','1']},
   {ftype=>1, tag=>'dept', name=>'Dept.', type=>'text', len=>30, empty=>1,
-   iff=>['type','1']},
+   chr=>1, iff=>['type','1']},
   {ftype=>1, tag=>'location', name=>'Location', type=>'text', len=>30,
-   empty=>1, iff=>['type','1']},
+   chr=>1, empty=>1, iff=>['type','1']},
   {ftype=>1, tag=>'info', name=>'[Extra] Info', type=>'text', len=>50,
    empty=>1},
 
@@ -70,7 +72,7 @@ my %host_form = (
    empty=>1, type=>'domain', len=>30, iff=>['type','1'] },
 
   {ftype=>1, tag=>'asset_id', name=>'Asset ID', type=>'text', len=>20,
-   empty=>1, no_empty=>1, iff=>['type','1']},
+   empty=>1, no_empty=>1, chr=>1, iff=>['type','1']},
   {ftype=>1, tag=>'model', name=>'Model', type=>'text', len=>50, empty=>1,
    no_empty=>1, iff=>['type','1']},
   {ftype=>1, tag=>'serial', name=>'Serial no.', type=>'text', len=>35,
@@ -120,7 +122,8 @@ my %host_form = (
    type=>'expiration', empty=>1, iff=>['type','[147]']},
   {ftype=>4, name=>'Last lease issued by DHCP server', tag=>'dhcp_date_str',
    no_edit=>1, iff=>['type','[19]']}
- ]
+ ],
+ chr_group=>\$chr_group
 );
 
 
@@ -138,9 +141,9 @@ my %restricted_host_form = (
   {ftype=>1, tag=>'huser', name=>'User', type=>'text', len=>40,
    empty=>$main::SAURON_RHF{huser}, iff=>['type','1']},
   {ftype=>1, tag=>'dept', name=>'Dept.', type=>'text', len=>30,
-   empty=>$main::SAURON_RHF{dept}, iff=>['type','1']},
+   empty=>$main::SAURON_RHF{dept}, chr=>1, iff=>['type','1']},
   {ftype=>1, tag=>'location', name=>'Location', type=>'text', len=>30,
-   empty=>$main::SAURON_RHF{location}, iff=>['type','1']},
+   empty=>$main::SAURON_RHF{location}, chr=>1, iff=>['type','1']},
   {ftype=>1, tag=>'info', name=>'[Extra] Info', type=>'text', len=>50,
    empty=>$main::SAURON_RHF{info}},
 
@@ -160,7 +163,7 @@ my %restricted_host_form = (
    iff=>['type','1']},
 
   {ftype=>1, tag=>'asset_id', name=>'Asset ID', type=>'text', len=>20,
-   empty=>$main::SAURON_RHF{asset_id}, no_empty=>1, iff=>['type','1']},
+   empty=>$main::SAURON_RHF{asset_id}, no_empty=>1, chr=>1, iff=>['type','1']},
   {ftype=>1, tag=>'model', name=>'Model', type=>'text', len=>50,
    empty=>$main::SAURON_RHF{model}, iff=>['type','1']},
   {ftype=>1, tag=>'serial', name=>'Serial no.', type=>'text', len=>35,
@@ -175,7 +178,8 @@ my %restricted_host_form = (
   {ftype=>0, name=>'Record info'},
   {ftype=>1, name=>'Expiration date', tag=>'expiration', len=>30,
    type=>'expiration', empty=>1, iff=>['type','[147]']}
- ]
+ ],
+ chr_group=>\$chr_group
 );
 
 
@@ -210,10 +214,10 @@ my %new_host_form = (
   {ftype=>2, tag=>'ns_l', name=>'Name servers (NS)', type=>['domain','text'],
    fields=>2,
    len=>[30,20], empty=>[0,1], elabels=>['NS','comment'], iff=>['type','2']},
-  {ftype=>2, tag=>'printer_l', name=>'PRINTER entries', 
-   type=>['text','text'], fields=>2,len=>[40,20], empty=>[0,1], 
+  {ftype=>2, tag=>'printer_l', name=>'PRINTER entries',
+   type=>['text','text'], fields=>2,len=>[40,20], empty=>[0,1],
    elabels=>['PRINTER','comment'], iff=>['type','5']},
-  {ftype=>1, tag=>'router', name=>'Router (priority)', type=>'priority', 
+  {ftype=>1, tag=>'router', name=>'Router (priority)', type=>'priority',
    len=>10, empty=>0,definfo=>['0','No'], iff=>['type','1']},
   {ftype=>0, name=>'Group/Template selections', iff=>['type','[15]']},
   {ftype=>10, tag=>'grp', name=>'Group', iff=>['type','[15]']},
@@ -223,9 +227,9 @@ my %new_host_form = (
   {ftype=>1, tag=>'huser', name=>'User', type=>'text', len=>40, empty=>1,
    iff=>['type','1']},
   {ftype=>1, tag=>'dept', name=>'Dept.', type=>'text', len=>30, empty=>1,
-   iff=>['type','1']},
+   chr=>1, iff=>['type','1']},
   {ftype=>1, tag=>'location', name=>'Location', type=>'text', len=>30,
-   empty=>1, iff=>['type','1']},
+   empty=>1, chr=>1, iff=>['type','1']},
   {ftype=>1, tag=>'info', name=>'Info', type=>'text', len=>50, empty=>1 },
   {ftype=>0, name=>'Equipment info',iff=>['type','1']},
   {ftype=>101, tag=>'hinfo_hw', name=>'HINFO hardware', type=>'hinfo', len=>20,
@@ -237,13 +241,13 @@ my %new_host_form = (
   {ftype=>1, tag=>'ether', name=>'Ethernet address', type=>'mac', len=>17,
    conv=>'U', iff=>['type','(1|9|101)'], empty=>1},
 
-  {ftype=>1, tag=>'asset_id', name=>'Asset ID', type=>'text', len=>20, 
-   empty=>1, no_empty=>1, iff=>['type','1']},
-  {ftype=>1, tag=>'model', name=>'Model', type=>'text', len=>50, empty=>1, 
+  {ftype=>1, tag=>'asset_id', name=>'Asset ID', type=>'text', len=>20,
+   empty=>1, no_empty=>1, chr=>1, iff=>['type','1']},
+  {ftype=>1, tag=>'model', name=>'Model', type=>'text', len=>50, empty=>1,
    iff=>['type','1']},
   {ftype=>1, tag=>'serial', name=>'Serial no.', type=>'text', len=>35,
    empty=>1, iff=>['type','1']},
-  {ftype=>1, tag=>'misc', name=>'Misc.', type=>'text', len=>50, empty=>1, 
+  {ftype=>1, tag=>'misc', name=>'Misc.', type=>'text', len=>50, empty=>1,
    iff=>['type','(1|101)']},
 
   {ftype=>0, name=>'SRV records', no_edit=>1, iff=>['type','8']},
@@ -255,7 +259,8 @@ my %new_host_form = (
   {ftype=>0, name=>'Record info', iff=>['type','[147]']},
   {ftype=>1, name=>'Expiration date', tag=>'expiration', len=>30,
    type=>'expiration', empty=>1, iff=>['type','[147]']}
- ]
+ ],
+ chr_group=>\$chr_group
 );
 
 my %restricted_new_host_form = (
@@ -291,9 +296,9 @@ my %restricted_new_host_form = (
   {ftype=>1, tag=>'huser', name=>'User', type=>'text', len=>40,
    empty=>$main::SAURON_RHF{huser}, iff=>['type','1']},
   {ftype=>1, tag=>'dept', name=>'Dept.', type=>'text', len=>30,
-   empty=>$main::SAURON_RHF{dept}, iff=>['type','1']},
+   empty=>$main::SAURON_RHF{dept}, chr=>1, iff=>['type','1']},
   {ftype=>1, tag=>'location', name=>'Location', type=>'text', len=>30,
-   empty=>$main::SAURON_RHF{location}, iff=>['type','1']},
+   empty=>$main::SAURON_RHF{location}, chr=>1, iff=>['type','1']},
   {ftype=>1, tag=>'info', name=>'[Extra] Info', type=>'text', len=>50,
    empty=>$main::SAURON_RHF{info} },
   {ftype=>0, name=>'Equipment info',iff=>['type','1']},
@@ -307,7 +312,7 @@ my %restricted_new_host_form = (
    conv=>'U', iff=>['type','[19]'], empty=>$main::SAURON_RHF{ether}},
 
   {ftype=>1, tag=>'asset_id', name=>'Asset ID', type=>'text', len=>20,
-   empty=>$main::SAURON_RHF{asset_id}, no_empty=>1, iff=>['type','1']},
+   empty=>$main::SAURON_RHF{asset_id}, no_empty=>1, chr=>1, iff=>['type','1']},
   {ftype=>1, tag=>'model', name=>'Model', type=>'text', len=>50,
    empty=>$main::SAURON_RHF{model}, iff=>['type','1']},
   {ftype=>1, tag=>'serial', name=>'Serial no.', type=>'text', len=>35,
@@ -317,7 +322,8 @@ my %restricted_new_host_form = (
   {ftype=>0, name=>'Record info'},
   {ftype=>1, name=>'Expiration date', tag=>'expiration', len=>30,
    type=>'expiration', empty=>1, iff=>['type','[147]']}
- ]
+ ],
+ chr_group=>\$chr_group
 );
 
 
@@ -439,6 +445,7 @@ sub menu_handler {
   my $serverid = $state->{serverid};
   my $zoneid = $state->{zoneid};
   my $zone = $state->{zone};
+  $chr_group=$perms->{groups};
 
   unless ($serverid > 0) {
     alert1("Server not selected!");
