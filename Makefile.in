@@ -79,7 +79,7 @@ SQL_TABLES =	sql/common.sql \
 		sql/arec_entries.sql sql/root_servers.sql \
 		sql/history.sql sql/lastlog.sql sql/news.sql \
 		sql/vlans.sql sql/vmps.sql sql/group_entries.sql \
-		sql/keys.sql
+		sql/keys.sql sql/acls.sql
 
 
 SQL_MISC =      sql/DEFAULTS.sql sql/misc.sql sql/copy_tables.sql \
