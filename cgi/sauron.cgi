@@ -237,6 +237,9 @@ load_config();
    enum=>\%yes_no_enum, iff=>['type','M']},
   {ftype=>3, tag=>'forward', name=>'Forward', type=>'enum', conv=>'U',
    enum=>{D=>'Default',O=>'Only',F=>'First'}, iff=>['type','F'] },
+  {ftype=>1, tag=>'transfer_src', name=>'Transfer-Source (address)',
+   type=>'ip', len=>12, 
+   empty=>1, definfo=>['','Default (from server)'], iff=>['type','S']},
   {ftype=>4, tag=>'serial', name=>'Serial', iff=>['type','M']},
   {ftype=>1, tag=>'refresh', name=>'Refresh', type=>'int', len=>10, 
    empty=>1, definfo=>['','Default (from server)'], iff=>['type','M']},
@@ -1070,7 +1073,8 @@ $remote_host = remote_host();
 
 html_error("Invalid log path (LOG_DIR)") unless (-d $LOG_DIR);
 html_error("Cannot write to log file")
-  if (logmsg("debug","CGI access from $remote_addr") < 0);
+  if (logmsg(($debug_mode ? "debug":"test"),"CGI access from $remote_addr")
+      < 0);
 html_error("No database connection defined (DB_CONNECT)") unless ($DB_CONNECT);
 html_error("Cannot connect to database") unless (db_connect2($DB_CONNECT));
 html_error("Database format mismatch!")
@@ -1298,6 +1302,7 @@ sub servers_menu() {
     $res=edit_magic('srv','Server','servers',\%server_form,
 		    \&get_server,\&update_server,$serverid);
     goto select_zone if ($res == -1);
+    goto display_new_server if ($res == 1 || $res == 2);
     return;
   }
 
@@ -1347,7 +1352,7 @@ sub servers_menu() {
 sub zones_menu() {
   $sub=param('sub');
 
-  if ($server eq '') { 
+  unless ($serverid > 0) {
     print h2("Server not selected!");
     return;
   }
@@ -1411,7 +1416,7 @@ sub zones_menu() {
     $res=edit_magic('zn','Zone','zones',\%zone_form,\&get_zone,\&update_zone,
 		    $zoneid);
     goto select_zone if ($res == -1);
-    goto display_zone if ($res == 2);
+    goto display_zone if ($res == 2 || $res == 1);
     return;
   }
   elsif ($sub eq 'Copy') {
