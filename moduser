@@ -158,7 +158,7 @@ sub list_privs($$) {
 ##############################################
 
 GetOptions("help|h","list!","add:s","delall!","del=s","passwd:s",
-	   "group=s","name=s","superuser=s","lock!","unlock!","edit!",
+	   "name=s","superuser=s","lock!","unlock!","edit!",
 	   "email=s","comment=s","expiration=s");
 
 $opt_user=$ARGV[0];
@@ -173,7 +173,6 @@ if ($opt_help || ($opt_user eq '' &&  $opt_list eq '')) {
        "   --expiration=<DD-MM-YYYY> | NONE      set account expiration\n",
        "   --superuser=<yes|no>                  toggle superuser flag\n",
        "   --passwd                              set password (interactive)\n",
-       "   --group=<groupname> | NONE            set user group\n",
        "   --passwd=<password>                   set password\n",
        "   --list                                list all $fooname\n",
        "   --lock                                lock account\n",
@@ -185,6 +184,7 @@ if ($opt_help || ($opt_user eq '' &&  $opt_list eq '')) {
 
   print "                                         Priviliges\n",
         "   --add                                 interactive add\n",
+	"   --add=\"group,<groupname>\"             add group membership\n",
         "   --add=\"server,<servername>,<mode>\"    add server (mode=R|RW|RWX)\n",
         "   --add=\"zone,<servername>:<zonename>,<mode>\"\n",
         "                                         add zone (mode=R|RW|RWX)\n",
@@ -228,16 +228,13 @@ if ($opt_list) {
      "Login      Group      Name                      Email                  Superusr\n",
      "---------- ---------- ------------------------- ---------------------- --------\n";
     undef @q;
-    db_query("SELECT id,username,name,superuser,comment,email,gid FROM users ".
+    db_query("SELECT id,username,name,superuser,comment,email FROM users ".
 	     "ORDER BY username;",\@q);
     for $i (0..$#q) {
-	$gid=$q[$i][6];
-	if ($gid > 0) {
-	    db_query("SELECT name FROM user_groups WHERE id=$gid",\@qq);
-	    $group=substr($qq[0][0],0,10);
-	} else {
-	    $group='';
-	}
+      db_query("SELECT g.name FROM user_groups g, user_rights r " .
+               "WHERE g.id=r.rref AND r.rtype=0 AND r.type=2 AND " .
+	       " r.ref=$q[$i][0] ORDER BY g.id",\@qq);
+      $group=substr($qq[0][0],0,10);
       printf "%-10s %-10s %-25s %-25s %-5s\n", 
               $q[$i][1],$group,substr($q[$i][2],0,25),
 	      substr($q[$i][5],0,25),($q[$i][3] =~ /^(t|1)$/ ? 'Yes' : '');
@@ -309,21 +306,6 @@ if ($modgroup) {
       print "User account expiration successfully updated.\n";
   }
 
-  if ($opt_group) {
-      if ($opt_group eq 'NONE') {
-	  $group_id=-1;
-      } else {
-	  undef @q;
-	  db_query("SELECT id FROM user_groups WHERE name='$opt_group';",\@q);
-	  fatal("Cannot find group: $opt_group") unless ($q[0][0] > 0);
-	  $group_id=$q[0][0];
-      }
-      $res=db_exec("UPDATE users SET gid=$group_id, " .
-		   " muser='$user',mdate='$mdate' WHERE id=$id;");
-      fatal("Cannot update user description!") if ($res < 0);
-      print "User description successfully updated.\n";
-  }
-
   if ($opt_superuser) {
     if ($opt_superuser eq 'yes') { $superuser='true'; }
     elsif ($opt_superuser eq 'no') { $superuser='false'; }
@@ -370,7 +352,7 @@ if ($modgroup) {
 
 
   undef @q;
-  db_query("SELECT u.id,u.name,u.superuser,u.comment,u.password,u.gid, " .
+  db_query("SELECT u.id,u.name,u.superuser,u.comment,u.password,-1, " .
 	   " u.cdate,u.cuser,u.mdate,u.muser,u.expiration,u.email, ".
 	   " u.last_from,u.last,u.last_pwd " .
 	   "FROM users u " .
@@ -388,24 +370,26 @@ if ($modgroup) {
   $cdate_str=($q[0][6] > 0 ? localtime($q[0][6])." by $q[0][7]" : '<never>');
   $mdate_str=($q[0][8] > 0 ? localtime($q[0][8])." by $q[0][9]" : '<never>');
   $edate_str=($q[0][10] > 0 ? localtime($q[0][10])."" : '<never>');
-  $gid=$q[0][5];
-  $gidname='<none>';
   $longname=$q[0][1];
   $comment=$q[0][3];
   $email=$q[0][11];
   $last_from=($q[0][13] > 0 ? localtime($q[0][13])." from $q[0][12]" : '');
-  if ($gid > 0) {
-    undef @q;
-    db_query("SELECT name FROM user_groups WHERE id=$gid;",\@q);
-    $gidname=$q[0][0] if (@q > 0);
+
+  db_query("SELECT g.id,g.name FROM user_groups g, user_rights r " .
+	   "WHERE g.id=r.rref AND r.rtype=0 AND r.type=2 AND " .
+	   " r.ref=$id ORDER BY g.id",\@groups);
+  $groupnames='';
+  for $i (0..$#groups) {
+    $groupnames.=", " if ($groupnames);
+    $groupnames.=$groups[$i][1];
   }
 
   print "\n           Username: $opt_user (id=$id)\n",
         "           longname: $longname\n",
         "              email: $email\n",
         "               info: $comment\n",
+	"             groups: $groupnames\n",
         "          superuser: " ,($q[0][2] =~ /^(t|1)$/ ? 'Yes':'No'), "\n",
-        "              group: $gidname (gid=$gid)\n",
 	"      passwd status: $status\n",
 	"         last login: $last_from\n",
 	" account expiration: $edate_str\n",
@@ -427,9 +411,11 @@ unless (defined $opt_add || defined $opt_del || defined $opt_delall) {
   list_privs($id,$utype);
   print "\n";
 
-  if ($utype == 2 && $gid > 0) {
-    print "[Group ($gidname) priviliges]\n";
-    list_privs($gid,1);
+  if ($utype == 2) {
+    for $i (0..$#groups) {
+      print "[Group ($groups[$i][1]) priviliges]\n";
+      list_privs($groups[$i][0],1);
+    }
   }
 
   exit;
@@ -439,13 +425,23 @@ unless (defined $opt_add || defined $opt_del || defined $opt_delall) {
 if (defined $opt_add) {
   unless ($opt_add) {
   add_i:
-    print "Record types ",
-      "1=server,2=zone,3=net,4=hostmask,5=IP-mask,6=priv.level,7=elimit,\n",
-      "\t     8=defdept,9=Template-mask,10=Group-mask,11=Delete-mask\n",
-      "\t     12=ReqHostField\n",
+    print "Record types:\t",
+      "0=group,1=server,2=zone,3=net,4=hostmask,5=IP-mask,6=priv.level\n",
+      "\t\t7=elimit,8=defdept,9=Template-mask,10=Group-mask,11=Delete-mask\n",
+      "\t\t12=ReqHostField\n",
       "Record type: ";
     chomp($type = <STDIN>);
-    unless ($type >= 1 && $type <=12) { print "invalid type!\n"; goto add_i; }
+    unless ($type ne '' && $type >= 0 && $type <=12) {
+      print "invalid type!\n";
+      goto add_i;
+    }
+    if ($type==0) {
+      print "Enter group name: ";
+      chomp($tmp = <STDIN>);
+      db_query("SELECT id,name FROM user_groups WHERE name='$tmp';",\@d);
+      if (@d < 1) { print "cannot find group: $tmp\n"; goto add_i; }
+      $ref=$d[0][0];
+    }
     if ($type==1 || $type==2 || $type==3) {
       print "Enter server name: ";
       chomp($tmp = <STDIN>);

@@ -3,7 +3,7 @@
 # 
 # Makefile for sauron
 #
-Version = 0.6.2
+Version = 0.7.0
 PKGNAME = sauron
 
 DBASE = sauron
@@ -78,11 +78,12 @@ SQL_TABLES =	sql/common.sql \
 		sql/utmp.sql sql/hinfo_templates.sql \
 		sql/arec_entries.sql sql/root_servers.sql \
 		sql/history.sql sql/lastlog.sql sql/news.sql \
-		sql/vlans.sql 
+		sql/vlans.sql sql/vmps.sql
 
 
 SQL_MISC =      sql/DEFAULTS.sql sql/misc.sql sql/copy_tables.sql \
-		sql/drop_tables.sql sql/hinfo_hw.sql sql/hinfo_sw.sql
+		sql/drop_tables.sql sql/hinfo_hw.sql sql/hinfo_sw.sql \
+		sql/dbconvert_1.0to1.1
 
 
 PROGS = sauron addgroup adduser deluser delgroup modhosts \

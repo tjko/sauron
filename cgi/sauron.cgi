@@ -268,7 +268,7 @@ $bgcolor='white' if ($frame_mode);
 
 unless ($state{superuser} eq 'yes') {
   html_error("cannot get permissions!")
-    if (get_permissions($state{uid},$state{gid},\%perms));
+    if (get_permissions($state{uid},\%perms));
   foreach $rhf_key (keys %{$perms{rhf}}) {
     $SAURON_RHF{$rhf_key}=$perms{rhf}->{$rhf_key};
   }
@@ -910,7 +910,7 @@ if (param('csv')) {
   {ftype=>0, name=>'User info' },
   {ftype=>4, tag=>'user', name=>'Login'},
   {ftype=>4, tag=>'name', name=>'User Name'},
-  {ftype=>4, tag=>'groupname', name=>'Group'},
+  {ftype=>4, tag=>'groupname', name=>'Group(s)'},
   {ftype=>4, tag=>'login', name=>'Last login', type=>'localtime'},
   {ftype=>4, tag=>'addr', name=>'Host'},
   {ftype=>4, tag=>'last_pwd', name=>'Last password change', type=>'localtime'},
@@ -3391,12 +3391,13 @@ sub login_menu() {
     $state{expiration}=($user{expiration} > 0 ? 
 			localtime($user{expiration}) : 'None');
     $state{email_notify}=$user{email_notify};
-    if ($state{gid} > 0) {
-	undef @q;
-	db_query("SELECT name FROM user_groups WHERE id=$state{gid}",\@q);
-	$state{groupname}=$q[0][0];
-    } else {
-	$state{groupname}='&lt;None&gt;';
+    db_query("SELECT g.name FROM user_groups g, user_rights r " .
+	     "WHERE g.id=r.rref AND r.rtype=0 AND r.type=2 " .
+	     " AND r.ref=$state{uid} ORDER BY g.id",\@q);
+    $state{groupname}='';
+    for $i (0..$#q) {
+      $state{groupname}.=", " if ($state{groupname});
+      $state{groupname}.=$q[$i][0];
     }
     display_form(\%state,\%user_info_form);
 
@@ -3427,7 +3428,7 @@ sub login_menu() {
       undef @q; 
       db_query("SELECT s.name,n.net,n.range_start,n.range_end " .
 	       "FROM servers s, nets n WHERE n.server=s.id AND n.id=$s;",\@q);
-      $z_name="$q[0][0]:$q[0][1]" . db_lasterrormsg();
+      $z_name="$q[0][0]:$q[0][1]";
       print "<TR bgcolor=\"#dddddd\">",td("Net"),td("$z_name"),
 	     td($perms{net}->{$s}[0]." - ".$perms{net}->{$s}[1]),"</TR>";
     }
@@ -3734,7 +3735,6 @@ sub login_auth() {
 	$state{'auth'}='yes';
 	$state{'user'}=$u;
 	$state{'uid'}=$user{'id'};
-	$state{'gid'}=$user{'gid'};
 	$state{'sid'}=new_sid();
 	$state{'login'}=$ticks;
 	$state{'serverid'}=$user{'server'};
@@ -4038,7 +4038,6 @@ sub save_state($) {
 
   $other='';
   if ($state{'uid'}) { $other.=", uid=".$state{'uid'}." ";  }
-  if ($state{'gid'}) { $other.=", gid=".$state{'gid'}." ";  }
   if ($state{'sid'}) { $other.=", sid=".$state{'sid'}." ";  }
   if ($state{'serverid'}) {
     $other.=", serverid=".$state{'serverid'}." ";
@@ -4076,7 +4075,7 @@ sub load_state($) {
 
   db_query("SELECT uid,addr,auth,mode,serverid,server,zoneid,zone," .
 	   " uname,last,login,searchopts,searchdomain,searchpattern," .
-           " superuser,gid,sid " .
+           " superuser,sid " .
            "FROM utmp WHERE cookie='$id'",\@q);
 
   if (@q > 0) {
@@ -4100,8 +4099,7 @@ sub load_state($) {
     $state{'searchdomain'}=$q[0][12];
     $state{'searchpattern'}=$q[0][13];
     $state{'superuser'}='yes' if ($q[0][14] eq 't' || $q[0][14] == 1);
-    $state{'gid'}=$q[0][15];
-    $state{'sid'}=$q[0][16];
+    $state{'sid'}=$q[0][15];
 
     #logmsg("debug","load_state: " . join(',',@{$q[0]}));
     db_exec("UPDATE utmp SET last=" . time() . " WHERE cookie='$id';");

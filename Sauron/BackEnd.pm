@@ -137,7 +137,7 @@ sub fix_bools($$) {
 }
 
 sub sauron_db_version() {
-  return "1.0"; # required db format version for this backend
+  return "1.1"; # required db format version for this backend
 }
 
 sub set_muser($) {
@@ -2305,7 +2305,7 @@ sub get_user($$) {
   my ($res);
 
   $res = get_record("users",
-	       "username,password,name,superuser,server,zone,comment,gid,".
+	       "username,password,name,superuser,server,zone,comment,".
 	       "email,flags,expiration,last,last_pwd,id,cdate,cuser,".
 	       "mdate,muser",
 	       $uname,$rec,"username");
@@ -2387,14 +2387,19 @@ sub delete_user_group($$) {
 
   db_begin();
 
-  $res = db_exec("DELETE FROM user_rights WHERE type=1 AND ref=$id;");
+  $res = db_exec("DELETE FROM user_rights WHERE type=1 AND ref=$id");
   if ($res < 0) { db_rollback(); return -1; }
-  $res = db_exec("DELETE FROM user_groups WHERE id=$id;");
+  $res = db_exec("DELETE FROM user_groups WHERE id=$id");
   if ($res < 0) { db_rollback(); return -2; }
 
   if ($newid > 0) {
-    $res = db_exec("UPDATE users SET gid=$newid WHERE gid=$id;");
+    $res = db_exec("UPDATE user_rights SET rref=$newid " .
+		   "WHERE type=2 AND rtype=0 AND rref=$id");
     if ($res < 0) { db_rollback(); return -3; }
+  } else {
+    $res = db_exec("DELETE FROM user_rights ".
+		   "WHERE type=2 AND rtype=0 AND rref=$id");
+    if ($res < 0) { db_rollback(); return -4; }
   }
 
   return db_commit();
@@ -2692,13 +2697,12 @@ sub cgi_disabled() {
   return $q[0][0];
 }
 
-sub get_permissions($$$) {
-  my($uid,$gid,$rec) = @_;
+sub get_permissions($$) {
+  my($uid,$rec) = @_;
   my(@q,$i,$type,$ref,$mode,$s,$e,$sql);
 
   return -1 unless ($uid > 0);
-  return -2 unless ($gid >= -1);
-  return -3 unless ($rec);
+  return -2 unless ($rec);
 
   $rec->{server}={};
   $rec->{zone}={};
@@ -2713,12 +2717,12 @@ sub get_permissions($$$) {
 
   undef @q;
   $sql = "SELECT a.rtype,a.rref,a.rule,n.range_start,n.range_end " .
-	   "FROM user_rights a, nets n " .
-	   "WHERE ((a.type=2 AND a.ref=$uid) OR (a.type=1 AND a.ref=$gid)) " .
+	 "FROM user_rights a, nets n " .
+	 "WHERE ((a.type=2 AND a.ref=$uid) OR (a.type=1 AND a.ref IN (SELECT rref FROM user_rights WHERE type=2 AND ref=$uid AND rtype=0))) " .
            "  AND a.rtype=3 AND a.rref=n.id " .
 	   "UNION " .
 	   "SELECT rtype,rref,rule,NULL,NULL FROM user_rights " .
-	   "WHERE ((ref=$uid AND type=2) OR (ref=$gid AND type=1)) " .
+	   "WHERE ((ref=$uid AND type=2) OR (type=1 AND ref IN (SELECT rref FROM user_rights WHERE type=2 AND ref=$uid AND rtype=0))) " .
 	   " AND rtype<>3 ORDER BY 1;";
   db_query($sql,\@q);
   #print "<p>$sql\n";

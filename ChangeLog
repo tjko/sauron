@@ -3,7 +3,14 @@ $Id$
 0.7.0beta
 	- changed DBI (DBD::Pg) as default database access method
 	  (use --with-pg option when running configure to use Pg)
-	
+	- user can now be member of more than one user group
+	- database format changes (1.1):
+	    - lastlog: changed host from CHAR(40) --> TEXT
+	    - hosts: added new columns: vmps, dhcp_last
+	    - users: removed column 'gid' (group memberships are treated
+	             now as with any other priviliges)
+	    - utmp: removed obsolete column 'gid'
+	    - new table 'vmps'
 0.6.2
 	- fixed dates displayed (month was off by one) by last command
 	  and lastlog display in web-interface
