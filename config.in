@@ -90,9 +90,14 @@ $SERVER_ID = "fooserver";
 # specify charset for CGI interface (default is iso-8859-1)
 # $SAURON_CHARSET = 'iso-8859-15';
 
-# Set this 1 to enable secure cookies. Note, this may cause problems
+# Set this to 1 to enable secure cookies. Note, this may cause problems
 # with some broken browsers, so it's not enabled by default.
 # $SAURON_SECURE_COOKIES = 0;
+
+# To disable user remote address checking set this to 1. 
+# (by default Sauron is so paranoid that cookies will be accepted
+# only from the address they were initially issued to)
+# $SAURON_NO_REMOTE_ADDR_AUTH = 1;
 
 # restricted host form field defaults: 0=required, 1=optional
 # $SAURON_RHF{huser}    = 0; # User
