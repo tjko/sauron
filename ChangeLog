@@ -1,6 +1,8 @@
 $Id$
 
 0.7.2beta
+        - new utility dhcpd-lease-view for viewing dhcpd.leases file
+          by Riku Meskanen
 	- sauron: slave server now inherits also "forward" zones patch
 	  by Ken McKinlay
 	- sauron: fixed router entry generatio (dhcpd.conf) if more than
