@@ -289,6 +289,8 @@ sub get_zone($$) {
 		  "type=2 AND ref=$id ORDER BY ip",$rec,'allow_update');
   get_array_field("cidr_entries",3,"id,ip,comment","IP,Comments",
 		  "type=3 AND ref=$id ORDER BY ip",$rec,'masters');
+
+  return 0;
 }
 
 sub update_zone($) {
@@ -321,6 +323,38 @@ sub update_zone($) {
 
   return db_commit();
 }
+
+
+############################################################################
+# hosts table functions
+
+sub get_host($$) {
+  my ($id,$rec) = @_;
+  my ($res);
+ 
+  $res = get_record("hosts",
+	       "zone,type,domain,ttl,class,grp,alias,cname,cname_txt," .
+	       "hinfo_hw,hinfo_sw,wks,mx,rp_mbox,rp_txt,router," .
+	       "prn,ether,info,comment",$id,$rec,"id");
+
+  return -1 if ($res < 0);
+
+  get_array_field("ns_entries",3,"id,ns,comment","NS,Comments",
+		  "type=2 AND ref=$id ORDER BY ns",$rec,'ns_l');
+  get_array_field("wks_entries",4,"id,proto,services,comment",
+		  "Proto,Services,Comments",
+		  "type=1 AND ref=$id ORDER BY proto,services",$rec,'wks_l');
+  get_array_field("mx_entries",4,"id,pri,mx,comment","Priority,MX,Comments",
+		  "type=2 AND ref=$id ORDER BY pri,mx",$rec,'mx_l');
+  get_array_field("txt_entries",3,"id,txt,comment","TXT,Comments",
+		  "type=2 AND ref=$id ORDER BY id",$rec,'txt_l');
+  get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comments",
+		  "type=3 AND ref=$id ORDER BY dhcp",$rec,'dhcp_l');
+  get_array_field("printer_entries",3,"id,printer,comment","PRINTER,Comments",
+		  "type=2 AND ref=$id ORDER BY printer",$rec,'printer_l');
+  return 0;
+}
+
 
 
 

@@ -13,6 +13,7 @@ use Digest::MD5;
 $CGI::DISABLE_UPLOADS =1; # no uploads
 $CGI::POST_MAX = 10000; # max 100k posts
 
+
 $debug_mode = 1;
 
 if (-f "/etc/sauron/config") { 
@@ -123,8 +124,42 @@ error("invalid directory configuration")
  heading_bg=>'#aaaaff'
 );
 
+
+
 %host_types=(0=>'Any type',1=>'Host',2=>'Delegation',3=>'Plain MX',
 	     4=>'Alias',5=>'Printer',6=>'Glue record');
+
+
+%host_form = (
+ data=>[	    
+  {ftype=>0, name=>'Host' },
+  {ftype=>1, tag=>'domain', name=>'Hostname', type=>'domain', len=>30},
+  {ftype=>4, tag=>'id', name=>'Host ID'},
+  {ftype=>4, tag=>'type', name=>'Type', type=>'enum', enum=>\%host_types},
+  {ftype=>4, tag=>'class', name=>'Class'},
+  {ftype=>1, tag=>'ttl', name=>'TTL', type=>'int', len=>10},
+  {ftype=>2, tag=>'ns_l', name=>'Name servers (NS)', type=>['text','text'], 
+   fields=>2,
+   len=>[30,20], empty=>[0,1], elabels=>['NS','comment'], iff=>['type','2']},
+  {ftype=>2, tag=>'wks_l', name=>'WKS', 
+   type=>['text','text','text'], fields=>3, len=>[10,30,10], empty=>[0,0,1], 
+   elabels=>['Protocol','Services','comment'], iff=>['type','1']},
+  {ftype=>2, tag=>'mx_l', name=>'Mail exchanges (MX)', 
+   type=>['int','text','text'], fields=>3, len=>[5,30,20], empty=>[0,0,1], 
+   elabels=>['Priority','MX','comment'], iff=>['type','[13]']},
+  {ftype=>1, tag=>'info', name=>'Info', type=>'text', len=>50, empty=>1},
+  {ftype=>2, tag=>'txt_l', name=>'TXT', type=>['text','text'], 
+   fields=>2,
+   len=>[40,15], empty=>[0,1], elabels=>['TXT','comment'], iff=>['type','1']}
+
+ ],
+ bgcolor=>'#bfee00',
+ border=>'0',		
+ width=>'100%',
+ nwidth=>'30%',
+ heading_bg=>'#aaaaff'
+);
+
 
 %browse_hosts_form=(
  data=>[
@@ -146,6 +181,8 @@ error("invalid directory configuration")
  nwidth=>'30%',
  heading_bg=>'#aaaaff'
 );
+
+
 
 #####################################################################
 
@@ -464,6 +501,16 @@ sub hosts_menu() {
   if ($sub eq 'edit') {
     print p,'edit...';
   }
+  elsif ($sub eq 'viewhost') {
+    $id=param('id');
+    if (get_host($id,\%host)) {
+      print h2("Cannot get host record (id=$id)!");
+      return;
+    }
+
+    display_form(\%host,\%host_form);
+
+  }
   elsif ($sub eq 'browse') {
     %bdata=(domain=>'',net=>'ANY',nets=>\%nethash,nets_k=>\@netkeys,
 	    type=>1,order=>2);
@@ -492,7 +539,9 @@ sub hosts_menu() {
     }
     undef $domainrule;
     if (param('bh_domain') ne '') {
-      $domainrule=" AND a.domain ~ '".param('bh_domain')."' "; 
+      $tmp=param('bh_domain');
+      $tmp =~ s/\\/\\\\/g;
+      $domainrule=" AND a.domain ~ '$tmp' "; 
     }
     if (param('bh_order') == 1) { $sorder='5,1';  }
     else { $sorder='1,5'; }
@@ -541,7 +590,9 @@ sub hosts_menu() {
       $ip='N/A' if ($ip eq '0.0.0.0');
       $ether=$q[$i][5];
       $ether='N/A' unless($ether);
-      $hostname=add_origin($q[$i][4],$zone);
+      #$hostname=add_origin($q[$i][4],$zone);
+      $hostname="<A HREF=\"$selfurl?menu=hosts&sub=viewhost&id=$q[$i][2]\">".
+	        "$q[$i][4]</A>";
       print Tr,td([$hostname,$host_types{$q[$i][3]},$ip,
 		   "<PRE>$ether</PRE>",$q[$i][6]]);
       last if ($i > 50);
@@ -833,7 +884,7 @@ sub make_cookie() {
   $ctx=new Digest::MD5;
   $ctx->add($val);
   $ctx->add(time);
-  $val=$ctx->b64digest;
+  $val=$ctx->hexdigest;
   
   undef %state;
   $state{'auth'}='no';
