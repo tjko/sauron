@@ -12,7 +12,7 @@ use CGI::Carp 'fatalsToBrowser'; # debug stuff
 use Digest::MD5;
 use Net::Netmask;
 
-$CGI::DISABLE_UPLOADS =1; # no uploads
+$CGI::DISABLE_UPLOADS = 1; # no uploads
 $CGI::POST_MAX = 100000; # max 100k posts
 
 #$|=1;
@@ -199,21 +199,24 @@ do "$PROG_DIR/back_end.pl";
   {ftype=>1, tag=>'domain', name=>'Hostname', type=>'domain', len=>30},
   {ftype=>5, tag=>'ip', name=>'IP address', iff=>['type','[16]']},
   {ftype=>9, tag=>'alias_d', name=>'Alias for', idtag=>'alias',
-   iff=>['type','4']},
+   iff=>['type','4'], iff2=>['alias','\d+']},
+  {ftype=>1, tag=>'cname_txt', name=>'Static alias for', type=>'domain',
+   len=>60, iff=>['type','4'], iff2=>['alias','-1']},
   {ftype=>8, tag=>'alias_a', name=>'Alias for host(s)', fields=>3,
    arec=>1, iff=>['type','7']},
   {ftype=>4, tag=>'id', name=>'Host ID'},
   {ftype=>4, tag=>'type', name=>'Type', type=>'enum', enum=>\%host_types},
   {ftype=>4, tag=>'class', name=>'Class'},
-  {ftype=>1, tag=>'ttl', name=>'TTL', type=>'int', len=>10},
+  {ftype=>1, tag=>'ttl', name=>'TTL', type=>'int', len=>10, empty=>1,
+   definfo=>['','Default']},
   {ftype=>1, tag=>'info', name=>'Info', type=>'text', len=>50, empty=>1,
-   iff=>['type','1']},
-  {ftype=>1, tag=>'location', name=>'Location', type=>'text', len=>25,
-   empty=>1, iff=>['type','1']},
-  {ftype=>1, tag=>'dept', name=>'Dept.', type=>'text', len=>25, empty=>1,
    iff=>['type','1']},
   {ftype=>1, tag=>'huser', name=>'User', type=>'text', len=>25, empty=>1,
    iff=>['type','1']},
+  {ftype=>1, tag=>'dept', name=>'Dept.', type=>'text', len=>25, empty=>1,
+   iff=>['type','1']},
+  {ftype=>1, tag=>'location', name=>'Location', type=>'text', len=>25,
+   empty=>1, iff=>['type','1']},
   {ftype=>0, name=>'Equipment info', iff=>['type','1']},
   {ftype=>1, tag=>'hinfo_hw', name=>'HINFO hardware', type=>'hinfo', len=>20,
    iff=>['type','1']},
@@ -262,6 +265,8 @@ do "$PROG_DIR/back_end.pl";
   {ftype=>0, name=>'New record' },
   {ftype=>4, tag=>'type', name=>'Type', type=>'enum', enum=>\%host_types},
   {ftype=>1, tag=>'domain', name=>'Hostname', type=>'domain', len=>40},
+  {ftype=>1, tag=>'cname_txt', name=>'Alias for', type=>'fqdn', len=>60,
+   iff=>['type','4']},
   {ftype=>3, tag=>'net', name=>'Subnet', type=>'enum',
    enum=>\%new_host_nets,elist=>\@new_host_netsl,iff=>['type','1']},
   {ftype=>1, tag=>'ip', 
@@ -317,8 +322,9 @@ do "$PROG_DIR/back_end.pl";
   {ftype=>0, name=>'Alias for'},
   {ftype=>4, tag=>'aliasname', name=>'Host'},
   {ftype=>4, tag=>'alias', name=>'ID'}
-]
+ ]
 );
+
 
 %browse_page_size=(0=>'25',1=>'50',2=>'100',3=>'256',4=>'512',5=>'1000');
 %browse_search_fields=(0=>'Ether',1=>'Info',2=>'User',3=>'Location',
@@ -345,7 +351,8 @@ do "$PROG_DIR/back_end.pl";
   {ftype=>0, name=>'Search' },
   {ftype=>3, tag=>'stype', name=>'Search field', type=>'enum',
    enum=>\%browse_search_fields},
-  {ftype=>1, tag=>'pattern',name=>'Pattern (substring)',type=>'text',len=>40,empty=>1}
+  {ftype=>1, tag=>'pattern',name=>'Pattern (substring)',type=>'text',len=>40,
+   empty=>1}
  ]
 );
 
@@ -625,6 +632,10 @@ if ($pathinfo ne '') {
   frame_2() if ($pathinfo =~ /^\/frame2/);
 }
 
+unless ($state{superuser} eq 'yes') {
+  error("cannot get permissions!") if (get_permissions($state{uid},\%perms));
+}
+
 $bgcolor='black';
 $bgcolor='white' if ($frame_mode);
 
@@ -666,7 +677,7 @@ if ($debug_mode) {
          "<br>cookie='$scookie'\n",
         "<br>s_url='$s_url' '$selfurl'\n",
         "<br>url()=" . url(),
-#       "<p>remote_addr=$remote_addr",
+        "<p>remote_addr=$remote_addr",
         "<p>";
   @names = param();
   foreach $var (@names) {
@@ -678,9 +689,6 @@ if ($debug_mode) {
     print " $key=" . $state{$key} . "<br>";
   }
   print "<hr><p>\n";
-  foreach $key (keys %server_form) {
-    print "$key,";
-  }
 }
 
 unless ($frame_mode) {
@@ -2326,6 +2334,7 @@ sub login_auth() {
 	$state{'login'}=$ticks;
 	$state{'serverid'}=$user{'server'};
 	$state{'zoneid'}=$user{'zone'};
+	$state{'superuser'}='yes' if ($user{superuser} eq 't');
 	if ($state{'serverid'} > 0) {
 	  $state{'server'}=$h{'name'} 
 	    unless(get_server($state{'serverid'},\%h));
@@ -2465,7 +2474,8 @@ sub left_menu($) {
     print Tr(td("<a href=\"$url\">Search</a>")),
           Tr(td("<a href=\"$url&sub=browse&lastsearch=1\">Last Search</a>")),
           Tr(),Tr(),Tr(td("<a href=\"$url&sub=add&type=1\">Add host</a>")),
-          Tr(),Tr(),Tr(td("<a href=\"$url&sub=add&type=3\">Add MX entry</a>")),
+          Tr(),Tr(),Tr(td("<a href=\"$url&sub=add&type=4\">Add alias</a>")),
+	  Tr(td("<a href=\"$url&sub=add&type=3\">Add MX entry</a>")),
           Tr(td("<a href=\"$url&sub=add&type=2\">Add delegation</a>")),
           Tr(td("<a href=\"$url&sub=add&type=6\">Add glue rec.</a>")),
           Tr(td("<a href=\"$url&sub=add&type=5\">Add printer</a>"));
@@ -2576,7 +2586,7 @@ sub make_cookie() {
   $ctx->add(time);
   $ctx->add(rand 1000000);
   $val=$ctx->hexdigest;
-  
+
   undef %state;
   $state{'auth'}='no';
   #$state{'host'}=remote_host();
@@ -2595,9 +2605,9 @@ sub save_state($id) {
   unless (@q > 0) {
     db_exec("INSERT INTO utmp (uid,cookie,auth) VALUES(-1,'$id',false);");
   }
-  
-  $s_auth='false';
-  $s_auth='true' if ($state{'auth'} eq 'yes');
+
+  $s_superuser = ($state{'superuser'} eq 'yes' ? 'true' : 'false');
+  $s_auth=($state{'auth'} eq 'yes' ? 'true' : 'false');
   $s_mode=0;
   $s_mode=$state{'mode'} if ($state{'mode'});
   $s_addr=$state{'addr'};
@@ -2619,7 +2629,7 @@ sub save_state($id) {
   $other.=", searchpattern=". db_encode_str($state{'searchpattern'}) . " ";
 
   $res=db_exec("UPDATE utmp SET auth=$s_auth, addr='$s_addr', mode=$s_mode " .
-	       " $other " .
+	       ", superuser=$s_superuser $other " .
 	       "WHERE cookie='$id';");
 
   error("cannot save stat '$id'") if ($res < 0);
@@ -2635,8 +2645,8 @@ sub load_state($) {
 
   undef @q;
   db_query("SELECT uid,addr,auth,mode,serverid,server,zoneid,zone," .
-	   "uname,last,login,searchopts,searchdomain,searchpattern " .
-	   "FROM utmp WHERE cookie='$id';",\@q);
+       "uname,last,login,searchopts,searchdomain,searchpattern,superuser " .
+       "FROM utmp WHERE cookie='$id';",\@q);
   if (@q > 0) {
     $state{'uid'}=$q[0][0];
     $state{'addr'}=$q[0][1];
@@ -2657,7 +2667,8 @@ sub load_state($) {
     $state{'searchopts'}=$q[0][11];
     $state{'searchdomain'}=$q[0][12];
     $state{'searchpattern'}=$q[0][13];
-    
+    $state{'superuser'}='yes' if ($q[0][14] eq 't');
+
     db_exec("UPDATE utmp SET last=" . time() . " WHERE cookie='$id';");
     return 1;
   }

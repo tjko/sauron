@@ -8,6 +8,7 @@ CREATE TABLE utmp (
 	uid		INT4,
 	uname		TEXT,
 	addr		CIDR,
+	superuser	BOOL DEFAULT false,
 	auth		BOOL DEFAULT false,
 	mode		INT4,
 	w		TEXT,

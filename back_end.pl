@@ -1609,3 +1609,32 @@ sub cgi_disabled() {
   return ''if ($q[0][0] =~ /^\s*$/);
   return $q[0][0];
 }
+
+sub get_permissions($$) {
+  my($uid,$rec) = @_;
+  my(@q,$i,$type,$ref,$mode,$s,$e);
+
+  return -1 unless ($uid > 0);
+  return -2 unless ($rec);
+
+  $rec->{server}={};
+  $rec->{zone}={};
+  $rec->{net}={};
+  $rec->{hostname}=[];
+
+  undef @q;
+  db_query("SELECT a.type,a.ref,a.mode,n.range_start,n.range_end " .
+	   "FROM user_rights a, nets n " .
+	   "WHERE a.uref=$uid AND a.type=3 AND a.ref=n.id " .
+	   "UNION " .
+	   "SELECT type,ref,mode,NULL,NULL FROM user_rights " .
+	   "WHERE type<>3 AND uref=$uid;",\@q);
+  for $i (0..$#q) {
+    ($type,$ref,$mode,$s,$e)=$q[$i];
+    if ($type == 1) { $$rec->{server}{$ref}=$mode; }
+    elsif ($type == 2) { $$rec->{zone}{$ref}=$mode; }
+    elsif ($type == 3) { $$rec->{net}{$ref}=[$s,$e]; }
+    elsif ($type == 4) { push @{$rec->{hostname}}, $mode; }
+  }
+  return 0;
+}

@@ -146,46 +146,46 @@ $status="Invalid password" unless $pwd =~ /^(LOCKED|MD5)/;
 
 print " Username: $opt_user (id=$id)\n",
       " Longname: $q[0][1]\n",
-      "superuser: $q[0][2]\n",
+      "superuser: " ,($q[0][2] eq 't' ? 'Yes':'No'), "\n",
       "   status: $status\n\n";
 
 
 
 if ($opt_list) {
   print 
-    "Type     Ref.                      Mode       Comments\n",
-    "-------- ------------------------- ---------- ----------------------\n";
-  
+    "Type     Ref.                      Mode\n",
+    "-------- ------------------------- --------------------------------\n";
+
   undef @d;
-  db_query("SELECT a.mode,a.comment,b.name FROM user_rights a, servers b " .
+  db_query("SELECT a.mode,b.name FROM user_rights a, servers b " .
 	   "WHERE a.type=1 AND a.ref=b.id AND a.uref=$id;",\@d);
   #print "Server records:\n";
   for $i (0..$#d) { 
-    printf "%-8s %-25s %-10s %s\n","server",$d[$i][2],$d[$i][0],$d[$i][1];
+    printf "%-8s %-25s %s\n","server",$d[$i][1],$d[$i][0];
   }
 
   undef @d;
-  db_query("SELECT a.mode,a.comment,b.name FROM user_rights a, zones b " .
+  db_query("SELECT a.mode,b.name FROM user_rights a, zones b " .
 	   "WHERE a.type=2 AND a.ref=b.id AND a.uref=$id;",\@d);
   #print "Zone   records:\n";
   for $i (0..$#d) { 
-    printf "%-8% %-25s %-10s %s\n","zone",$d[$i][2],$d[$i][0],$d[$i][1];
+    printf "%-8s %-25s %s\n","zone",$d[$i][1],$d[$i][0];
   }
 
   undef @d;
-  db_query("SELECT a.mode,a.comment,b.net FROM user_rights a, nets b " .
+  db_query("SELECT a.mode,b.net FROM user_rights a, nets b " .
 	   "WHERE a.type=3 AND a.ref=b.id AND a.uref=$id;",\@d);
   #print "Net    records:\n";
   for $i (0..$#d) { 
-    printf "%-8s %-25s %-10s %s\n","net",$d[$i][2],$d[$i][0],$d[$i][1];
+    printf "%-8s %-25s %s\n","net",$d[$i][1],$d[$i][0];
   }
 
   undef @d;
-  db_query("SELECT a.mode,a.comment  FROM user_rights a " .
+  db_query("SELECT a.mode  FROM user_rights a " .
 	   "WHERE a.type=4 AND a.uref=$id;",\@d);
   #print "hostnamemask    records:\n";
   for $i (0..$#d) { 
-    printf "%-8s %-25s %-10s %s\n","hostname",$d[$i][0],"(hostnamemask)",$d[$i][1];
+    printf "%-8s %-25s %s\n","hostname",$d[$i][0],"(hostnamemask)";
   }
 
   print "\n";

@@ -16,8 +16,8 @@ CREATE TABLE nets (
        rp_mbox	   TEXT DEFAULT '.',
        rp_txt	   TEXT DEFAULT '.',
        no_dhcp     BOOL DEFAULT false, 
-       range_start CIDR,
-       range_end   CIDR,
+       range_start INET,
+       range_end   INET,
        comment	   TEXT,
 
 	/* dhcp	(dhcp_entries) */
