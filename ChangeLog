@@ -1,6 +1,8 @@
 $Id$
 	
+	
 0.50
+	- fixed SRV record support	
 	- fixed nondeterministic behaviour with multiple IPs in 
 	  'fixed-address' lines in dhcpd.conf
 	- search results sorting a'la browser.cgi
