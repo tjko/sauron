@@ -87,6 +87,10 @@ sub form_check_field($$$) {
       unless ($value =~ /^([A-Z0-9-\+\/]+)$/);
   } elsif ($type eq 'textarea') {
     return '';
+  } elsif ($type eq 'expiration') {
+    return 'Invalid expiration date specification'
+      unless ($value =~ /^(\d{1,2}[\-\.\/]\d{1,2}[\-\.\/]\d{4}|\+\d+[dmy])$/);
+    return '';
   } else {
     return "unknown typecheck for form_check_field: $type !";
   }
@@ -156,6 +160,20 @@ sub form_check_form($$$) {
       #print "<br>check $p ",param($p);
       return 1 if (form_check_field($rec,$val,0) ne '');
       #print p,"$p changed! '",$data->{$tag},"' '",param($p),"'\n" if ($data->{$tag} ne param($p));
+      if ($rec->{type} eq 'expiration') {
+        if ($val =~ /^\+(\d+)d/) {
+	  $val=time()+int($1 * 86400);
+	} elsif ($val =~ /^\+(\d+)m/) {
+	  $val=time()+int($1 * 86400*30);
+	} elsif ($val =~ /^\+(\d+)y/) {
+	  $val=time()+int($1 * 86400*365);
+	} elsif ($val =~ /^(\d{1,2})[\-\.\/](\d{1,2})[\-\.\/](\d{4})/) {
+	  $val=timelocal(0,0,0,$1,$2-1,$3-1900);
+	} else {
+	  $val=0;
+	}
+      }
+
       $data->{$tag}=$val;
     }
     elsif ($type == 101) {
@@ -249,7 +267,7 @@ sub form_magic($$$) {
   my($prefix,$data,$form) = @_;
   my($i,$j,$k,$n,$key,$rec,$a,$formdata,$h_bg,$e_str,$p1,$p2,$val,$e,$enum);
   my($values,$ip,$t,@lst,%lsth,%tmpl_rec,$maxlen,$len,@q,$tmp,$def_info,$id);
-  my($invalid_host,$unknown_host,%host);
+  my($invalid_host,$unknown_host,%host,$tmpd,$tmpm,$tmpy);
 
   form_get_defaults($form);
   $formdata=$form->{data};
@@ -270,6 +288,15 @@ sub form_magic($$$) {
 
       if ($rec->{ftype} == 1 || $rec->{ftype} == 101) {
 	$val =~ s/\/32$// if ($rec->{type} eq 'ip');
+        if ($rec->{type} eq 'expiration') {
+	  if ($val > 0) {
+	    ($tmpd,$tmpm,$tmpy)=(localtime($val))[3,4,5];
+	    $tmpm++; $tmpy+=1900;
+	    $val="$tmpd-$tmpm-$tmpy";
+	  } else {
+	    $val='';
+	  }
+	}
 	param($p1,$val);
       }
       elsif ($rec->{ftype} == 2 || $rec->{ftype} == 8) {
@@ -360,6 +387,12 @@ sub form_magic($$$) {
       } else {
 	print textfield(-name=>$p1,-size=>$rec->{len},-maxlength=>$maxlen,
 		    -value=>param($p1));
+      }
+      if ($rec->{type} eq 'expiration') {
+	print '<BR><FONT size=-1 color="blue">' .
+	      'Enter expiration date as DD-MM-YYYY '.
+              'or +&lt;number&gt;d (Days), +&lt;number&gt;m (Months), ' .
+              ' +&lt;number&gt;y (Years)</FONT>';
       }
       if ($rec->{definfo}) {
 	$def_info=$rec->{definfo}[0];
@@ -647,6 +680,14 @@ sub display_form($$) {
       next if ($rec->{no_empty} && $val eq '');
 
       $val =~ s/\/32$// if ($rec->{type} eq 'ip');
+      if ($rec->{type} eq 'expiration') {
+	unless ($val > 0) {
+	  $val = '<FONT color="blue">NO expiration date set</FONT>';
+	} else {
+	  $val = localtime($val);
+	}
+      }
+
       #print Tr,td([$rec->{name},$data->{$rec->{tag}}]);
       if ($rec->{definfo}) {
 	if ($val eq $rec->{definfo}[0]) {

@@ -5,6 +5,7 @@
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000.
 # $Id$
 #
+use Net::Netmask;
 use strict;
 
 my($muser);
@@ -111,6 +112,38 @@ sub new_sid() {
   $sid=db_getvalue(0,0);
   $sid=-1 unless ($sid > 0);
   return $sid;
+}
+
+sub get_host_network_settings($$$) {
+  my($serverid,$ip,$rec) = @_;
+  my(@q,$tmp,$net);
+  
+  return -1 unless (is_cidr($ip) && ($serverid > 0));
+  $rec->{ip}=$ip;
+  
+  db_query("SELECT id,name,net FROM nets " .
+	   "WHERE server=$serverid AND '$ip' << net " .
+	   "ORDER BY subnet,net",\@q);
+  return -2 unless (@q > 0);
+  return -3 unless ($q[$#q][0] > 0);
+  $net = $q[$#q][2];
+  $tmp = new Net::Netmask($net);
+  $rec->{net}=$tmp->desc();
+  $rec->{base}=$tmp->base();
+  $rec->{mask}=$tmp->mask();
+  $rec->{broadcast}=$tmp->broadcast();
+
+  undef @q;
+  db_query("SELECT a.ip FROM hosts h, a_entries a " .
+	   "WHERE a.host=h.id AND h.router>0 AND a.ip << '$net' " .
+	   "ORDER BY 1",\@q);
+  if (@q > 0) {
+    $rec->{gateway}=$q[0][0];
+  } else {
+    $rec->{gateway}='';
+  }
+
+  return 0;
 }
 
 #####################################################################
@@ -948,7 +981,8 @@ sub get_host($$) {
 	       "zone,type,domain,ttl,class,grp,alias,cname_txt," .
 	       "hinfo_hw,hinfo_sw,wks,mx,rp_mbox,rp_txt,router," .
 	       "prn,ether,ether_alias,info,location,dept,huser,model," .
-	       "serial,misc,cdate,cuser,muser,mdate,comment,dhcp_date",
+	       "serial,misc,cdate,cuser,muser,mdate,comment,dhcp_date," .
+	       "expiration",
 	       $id,$rec,"id");
 
   return -1 if ($res < 0);

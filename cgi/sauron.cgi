@@ -292,6 +292,8 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>0, name=>'Record info', no_edit=>0},
   {ftype=>4, name=>'Record created', tag=>'cdate_str', no_edit=>1},
   {ftype=>4, name=>'Last modified', tag=>'mdate_str', no_edit=>1},
+  {ftype=>1, name=>'Expiration date', tag=>'expiration', len=>30,
+   type=>'expiration', empty=>1},
   {ftype=>4, name=>'Last seen by DHCP server', tag=>'dhcp_date_str', 
    no_edit=>1, iff=>['type','[19]']}
  ]
@@ -342,7 +344,10 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>0, name=>'Group/Template selections', iff=>['type','[15]']},
   {ftype=>10, tag=>'grp', name=>'Group', iff=>['type','[15]']},
   {ftype=>6, tag=>'mx', name=>'MX template', iff=>['type','1']},
-  {ftype=>7, tag=>'wks', name=>'WKS template', iff=>['type','1']}
+  {ftype=>7, tag=>'wks', name=>'WKS template', iff=>['type','1']},
+  {ftype=>0, name=>'Record info'},
+  {ftype=>1, name=>'Expiration date', tag=>'expiration', len=>30,
+   type=>'expiration', empty=>1}
  ]
 );
 
@@ -593,6 +598,21 @@ do "$PROG_DIR/cgi_util.pl";
  ],
  nwidth=>'40%'
 );
+
+
+%host_net_info_form=(
+ data=>[
+  {ftype=>0, name=>'Host Network Settings'},
+  {ftype=>1, tag=>'ip', name=>'IP', type=>'cidr'},
+  {ftype=>1, tag=>'mask', name=>'Netmask', type=>'cidr'},
+  {ftype=>1, tag=>'gateway', name=>'Gateway (default)', type=>'cidr'},
+  {ftype=>0, name=>'Additional Network Settings'},
+  {ftype=>1, tag=>'base', name=>'Network address', type=>'cidr'},
+  {ftype=>1, tag=>'broadcast', name=>'Broadcast address', type=>'cidr'}
+ ],
+ nwidth=>'40%'
+);
+
 
 %group_form=(
  data=>[
@@ -1418,6 +1438,18 @@ sub hosts_menu() {
           submit(-name=>'h_cancel',-value=>'Cancel'),end_form;
     return;
   }
+  elsif ($sub eq 'Show Network Settings') {
+    $id=param('h_id');
+    if (get_host($id,\%host)) {
+	alert2("Cannot get host record (id=$id)!");
+	return;
+    }
+    get_host_network_settings($serverid,$host{ip}[1][1],\%data);
+    print "Current network settings for: $host{domain}<p>";
+    display_form(\%data,\%host_net_info_form);
+    print "<br><hr noshade><br>";
+    goto show_host_record;
+  }
   elsif ($sub eq 'browse') {
     %bdata=(domain=>'',net=>'ANY',nets=>\%nethash,nets_k=>\@netkeys,
 	    type=>1,order=>2,stype=>0,size=>3);
@@ -1712,7 +1744,10 @@ sub hosts_menu() {
       print submit(-name=>'sub',-value=>'Move'), " " if ($host{type} == 1);
       print submit(-name=>'sub',-value=>'Alias'), " " if ($host{type} == 1);
     }
-    print "&nbsp;&nbsp;",submit(-name=>'sub',-value=>'Refresh'), " ",end_form;
+    print "&nbsp;&nbsp;",submit(-name=>'sub',-value=>'Refresh'), " ",
+           "&nbsp;&nbsp; <FONT size=-1>",
+	   submit(-name=>'sub',-value=>'Show Network Settings'),
+	   "</FONT>",end_form;
     return;
   }
 
