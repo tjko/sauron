@@ -6,6 +6,20 @@ general:
 	  number of host entries, and to import interactively hosts
 	  from text files in standard zonefile format...
 	- IPv6 support
+	- fix "wrong year" bug in update-dhcp-info
+	- add DHCP v3 support to update-dhcp-info
+	- more named.conf option support:
+		- logging
+		- allow-query
+		- allow-recursion
+		- blackhole
+		- statistic-interval
+		- version
+		- recursion
+		- forwarders
+		- query-source
+		- listen-on
+		
 
 import:
 	- fix import(s) to work with new table layout

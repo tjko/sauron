@@ -1,5 +1,4 @@
-<!doctype book PUBLIC "-//OASIS//DTD DocBook V4.0//EN" [
-
+<!DOCTYPE book PUBLIC "-//OASIS//DTD DocBook V4.0//EN" [
 <!ENTITY sauron-logo SYSTEM "sauron_tower_bare.eps" NDATA EPS>
 <!ENTITY overview-pic SYSTEM "overview.eps" NDATA EPS>
 <!ENTITY relations-pic SYSTEM "relations.eps" NDATA EPS>
