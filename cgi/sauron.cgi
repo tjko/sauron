@@ -1420,9 +1420,15 @@ sub hosts_menu() {
     undef %extrarule;
     if (param('bh_pattern')) {
       $tmp=$browse_search_f[param('bh_stype')];
+      $tmp2=param('bh_pattern');
+      if ($tmp eq 'ether') {
+	$tmp2 = "\U$tmp2";
+	$tmp2 =~ s/[^0-9A-F]//g;
+	#print "<br>ether=$tmp2";
+      }
       if ($tmp) {
 	$extrarule=" AND a.$tmp LIKE " .
-	           db_encode_str('%' . param('bh_pattern') . '%') . " ";
+	           db_encode_str('%' . $tmp2 . '%') . " ";
 	#print p,$extrarule;
       }
     }
