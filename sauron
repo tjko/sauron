@@ -403,7 +403,7 @@ sub make_bind() {
 	print "Updating serial $zone{serial} --> $serial\n";
 	fatal("Cannot update zone $zonename serial!")
 	  if (update_record('zones',{id=>$zoneid,serial=>$serial,
-				     serial_date=>$serial_date}));
+				     serial_date=>$serial_date}) < 0);
       }
     }
     $hostname=$server{'hostname'};
