@@ -312,9 +312,10 @@ foreach $host (keys %zonedata) {
 	  die("cannot insert printer_class '$host2'") ;
 	  $lastid=-1;
 	} else {
-	  $res=db_exec("SELECT id FROM printer_classes WHERE name='$host2';");
-	  die("Cannot get printer_class record id!") if ($res < 0);
-	  $lastid=db_getvalue(0,0);	
+	  undef @q;
+	  db_query("SELECT id FROM printer_classes WHERE name='$host2'",\@q);
+	  die("Cannot get printer_class record id!") unless ($q[0][0] > 0);
+	  $lastid=$q[0][0];
 	}
       }
     } else {
@@ -330,10 +331,11 @@ foreach $host (keys %zonedata) {
 	die("cannot insert virtual printer '$host2'");
 	$lastid=-1;
       } else {
-	$res=db_exec("SELECT id FROM hosts WHERE zone=$zoneid AND " .
-		     " domain='$host2';");
-	die("Cannot get printer(host) record id!") if ($res < 0);
-	$lastid=db_getvalue(0,0);	
+	undef @q;
+	db_query("SELECT id FROM hosts WHERE zone=$zoneid AND " .
+		     " domain='$host2';",\@q);
+	die("Cannot get printer(host) record id!") unless ($q[0][0] > 0);
+	$lastid=$q[0][0];
       }
     }
 
