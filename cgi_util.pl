@@ -264,6 +264,9 @@ sub form_magic($$$) {
       $val="\U$val" if ($rec->{conv} eq 'U');
       $val=~ s/\s+$//;
       $p1=$prefix."_".$rec->{tag};
+#      if ($val eq '' && $rec->{default}) {
+#	$val=$rec->{default};
+#      }
 
       if ($rec->{ftype} == 1 || $rec->{ftype} == 101) {
 	$val =~ s/\/32$// if ($rec->{type} eq 'ip');
