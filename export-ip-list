@@ -30,7 +30,7 @@ GetOptions("help|h","verbose|v","inverse|i","optimize|o");
 if ($opt_help || @ARGV < 1) {
   print "syntax: $0 [--help] [OPTIONS] <servername> [[networknamemask] ...]\n",
         "\noptions:\n",
-	"\t--inverse\t\tlist IPs not in use\n",
+#	"\t--inverse\t\tlist IPs not in use\n",
 	"\t--optimize\tcombine continuous IP blocks into CIDRs\n",
 	"\t--verbose\tmore verbose output\n";
   print "\n" if ($opt_help);
@@ -107,7 +107,6 @@ for $i (0..$#ips) {
 }
 
 $ipcount=@iplist;
-
 @iplist=optimize_ip_list(\@iplist) if ($opt_optimize);
 
 
@@ -119,17 +118,37 @@ for $i (0..$#iplist) {
   $counter++;
 }
 
-print "#\n# $counter CIDRs\n" if ($opt_verbose);
+print "#\n# $counter CIDRs" .
+      ($opt_optimize?" (before optimization $ipcount CIDRs)":"") .
+      "\n"
+  if ($opt_verbose);
+
+
 exit 0;
 
+#################################
 
+
+sub maxblock($) {
+  my($ip) = @_;
+
+  my $mask=1;
+  my $i;
+
+  for $i (1..32) {
+    $mask = (1 << ($i-1));
+    return ($i-1) if ($ip & $mask);
+  }
+  return ($i-1);
+}
 
 sub optimize_ip_list($) {
   my($list) = @_;
 
-  my ($i,$ip,$begin,$end,$last,$len);
+  my ($i,$j,$ip,$begin,$end,$last,$len);
   my %iphash;
   my @ranges;
+  my @newlist;
 
 
   # build hash of IPs (takes care of ordering and duplicates)
@@ -138,7 +157,6 @@ sub optimize_ip_list($) {
     $ip=$$list[$i];
     $iphash{ip2int($ip)}++;
   }
-
 
   # build list of continuous IP ranges...
 
@@ -150,9 +168,9 @@ sub optimize_ip_list($) {
     }
     elsif ($mode==1) {
       if ($i > $last+1) {
-	$len=$i-$begin;
-	#print "range $begin .. $i ($len)\n";
-	push @ranges, [$begin,$i];
+	$len=$last-$begin;
+	#print "range $begin .. $last ($len)\n";
+	push @ranges, [$begin,$last];
 	$mode=0;
       }
     }
@@ -172,12 +190,20 @@ sub optimize_ip_list($) {
   for $i (0..$#ranges) {
     ($begin,$end) = @{$ranges[$i]};
     $len=$end-$begin;
-    print "[$begin,$end] $len\n";
+    #print "[$begin,$end] $len (".int2ip($begin)." - ".int2ip($end).")\n";
+
+    $ip=$begin;
+    while ($ip <= $end) {
+      my $l = maxblock($ip);
+      while (($l>0) && ((2**$l) > ($end-$ip+1))) { $l-- };
+      push @newlist, int2ip($ip)."/".(32-$l);
+      #print int2ip($ip)."/".(32-$l)."  ($ip,$l) ".maxblock($ip)."\n";
+      $ip+=2**$l;
+    }
 
   }
 
-
-  return @{$list};
+  return @newlist;
 }
 
 
