@@ -1197,6 +1197,10 @@ sub delete_host($) {
   $res=db_exec("DELETE FROM hosts WHERE type=4 AND alias=$id;");
   if ($res < 0) { db_rollback(); return -9; }
 
+  # ether_aliases
+  $res=db_exec("UPDATE hosts SET ether_alias=-1 WHERE ether_alias=$id;");
+  if ($res < 0) { db_rollback(); return -10; }
+
   $res=db_exec("DELETE FROM hosts WHERE id=$id;");
   if ($res < 0) { db_rollback(); return -50; }
 

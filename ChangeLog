@@ -1,0 +1,9 @@
+$Id$
+	
+0.50		
+	- clear ether_alias ptrs from other hosts when deleting a host
+	- "Show Network Settings" button added to host display
+	- expiration (date) field now in use in hosts table	
+	
+	
+	
