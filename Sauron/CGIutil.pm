@@ -176,7 +176,7 @@ sub form_check_field($$$) {
     return '';
   } elsif ($type eq 'texthandle') {
     return 'Valid handle string required!'
-      unless ($value =~ /^[a-zA-Z0-9_\-]+$/);
+      unless ($value =~ /^[a-zA-Z0-9_\-\.]+$/);
     return '';
   } elsif ($type eq 'expiration') {
     return 'Invalid expiration date specification'

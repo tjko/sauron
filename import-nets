@@ -138,7 +138,7 @@ while(<FILE>) {
   }
   if ($opt_vlan) {
     $vlan=$l[$opt_vlan-1];
-    unless ($vlan =~ /^[A-Za-z0-9_\-]+$/) {
+    unless ($vlan =~ /^[A-Za-z0-9_\-\.]+$/) {
       error("$filename($.): invalid vlan name: $vlan");
       next;
     }
