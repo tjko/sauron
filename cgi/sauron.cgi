@@ -16,7 +16,7 @@ $CGI::DISABLE_UPLOADS = 1; # no uploads
 $CGI::POST_MAX = 100000; # max 100k posts
 
 #$|=1;
-$debug_mode = 1;
+$debug_mode = 0;
 
 if (-f "/etc/sauron/config") {
   $conf_dir='/etc/sauron';
@@ -200,14 +200,14 @@ do "$PROG_DIR/cgi_util.pl";
 
 %host_types=(0=>'Any type',1=>'Host',2=>'Delegation',3=>'Plain MX',
 	     4=>'Alias',5=>'Printer',6=>'Glue record',7=>'AREC Alias',
-	     8=>'SRV record');
+	     8=>'SRV record',9=>'DHCP only');
 
 
 %host_form = (
  data=>[
   {ftype=>0, name=>'Host' },
   {ftype=>1, tag=>'domain', name=>'Hostname', type=>'domain', len=>30},
-  {ftype=>5, tag=>'ip', name=>'IP address', iff=>['type','[16]']},
+  {ftype=>5, tag=>'ip', name=>'IP address', iff=>['type','[169]']},
   {ftype=>9, tag=>'alias_d', name=>'Alias for', idtag=>'alias',
    iff=>['type','4'], iff2=>['alias','\d+']},
   {ftype=>1, tag=>'cname_txt', name=>'Static alias for', type=>'domain',
@@ -234,8 +234,9 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>1, tag=>'hinfo_sw', name=>'HINFO software', type=>'hinfo', len=>20,
    empty=>1, iff=>['type','1']},
   {ftype=>1, tag=>'ether', name=>'Ethernet address', type=>'mac', len=>12,
-   iff=>['type','1'], empty=>1},
-  {ftype=>4, tag=>'card_info', name=>'Card manufacturer', iff=>['type','1']},
+   iff=>['type','[19]'], empty=>1},
+  {ftype=>4, tag=>'card_info', name=>'Card manufacturer', 
+   iff=>['type','[19]']},
   {ftype=>1, tag=>'ether_alias_info', name=>'Ethernet alias', no_empty=>1,
    empty=>1, type=>'domain', len=>30, iff=>['type','1'] },
 
@@ -292,7 +293,7 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>0, name=>'Host (restricted edit)' },
   {ftype=>1, tag=>'domain', name=>'Hostname', type=>'domain', len=>30},
   {ftype=>5, tag=>'ip', name=>'IP address', restricted=>1,
-   iff=>['type','[16]']},
+   iff=>['type','[169]']},
   {ftype=>1, tag=>'cname_txt', name=>'Static alias for', type=>'domain',
    len=>60, iff=>['type','4'], iff2=>['alias','-1']},
   {ftype=>4, tag=>'id', name=>'Host ID'},
@@ -311,7 +312,7 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>1, tag=>'hinfo_sw', name=>'HINFO software', type=>'hinfo', len=>20,
    empty=>1, iff=>['type','1']},
   {ftype=>1, tag=>'ether', name=>'Ethernet address', type=>'mac', len=>12,
-   iff=>['type','1'], iff2=>['ether_alias_info',''], empty=>0},
+   iff=>['type','[19]'], iff2=>['ether_alias_info',''], empty=>0},
   {ftype=>4, tag=>'ether_alias_info', name=>'Ethernet alias', 
    iff=>['type','1']}, 
 
@@ -344,6 +345,8 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>1, tag=>'ip', 
    name=>'IP<FONT size=-1>(only if "Manual IP" selected from above)</FONT>', 
    type=>'ip', len=>15, empty=>1, iff=>['type','1']},
+  {ftype=>1, tag=>'ip', name=>'IP', 
+   type=>'ip', len=>15, empty=>1, iff=>['type','9']},
   {ftype=>1, tag=>'glue',name=>'IP',type=>'ip', len=>15, iff=>['type','6']},
   {ftype=>2, tag=>'mx_l', name=>'Mail exchanges (MX)',
    type=>['priority','mx','text'], fields=>3, len=>[5,30,20], empty=>[0,0,1],
@@ -374,7 +377,7 @@ do "$PROG_DIR/cgi_util.pl";
    sql=>"SELECT hinfo FROM hinfo_templates WHERE type=1 ORDER BY pri,hinfo;",
    lastempty=>1, empty=>1, iff=>['type','1']},
   {ftype=>1, tag=>'ether', name=>'Ethernet address', type=>'mac', len=>12,
-   iff=>['type','1'], empty=>1},
+   iff=>['type','[19]'], empty=>1},
   {ftype=>1, tag=>'model', name=>'Model', type=>'text', len=>30, empty=>1, 
    iff=>['type','1']},
   {ftype=>1, tag=>'serial', name=>'Serial no.', type=>'text', len=>20,
@@ -396,6 +399,8 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>1, tag=>'ip', 
    name=>'IP<FONT size=-1>(only if "Manual IP" selected from above)</FONT>', 
    type=>'ip', len=>15, empty=>1, iff=>['type','1']},
+  {ftype=>1, tag=>'ip', name=>'IP', 
+   type=>'ip', len=>15, empty=>1, iff=>['type','9']},
   {ftype=>1, tag=>'glue',name=>'IP',type=>'ip', len=>15, iff=>['type','6']},
   {ftype=>2, tag=>'mx_l', name=>'Mail exchanges (MX)',
    type=>['priority','mx','text'], fields=>3, len=>[5,30,20], empty=>[0,0,1],
@@ -427,7 +432,7 @@ do "$PROG_DIR/cgi_util.pl";
    sql=>"SELECT hinfo FROM hinfo_templates WHERE type=1 ORDER BY pri,hinfo;",
    lastempty=>0, empty=>0, iff=>['type','1']},
   {ftype=>1, tag=>'ether', name=>'Ethernet address', type=>'mac', len=>12,
-   iff=>['type','1'], empty=>0},
+   iff=>['type','[19]'], empty=>0},
   {ftype=>1, tag=>'model', name=>'Model', type=>'text', len=>30, empty=>1, 
    iff=>['type','1']},
   {ftype=>1, tag=>'serial', name=>'Serial no.', type=>'text', len=>20,
@@ -855,6 +860,7 @@ print "\n<!-- end of page -->\n";
 print end_html();
 
 exit;
+
 #####################################################################
 
 # SERVERS menu
@@ -1569,6 +1575,9 @@ sub hosts_menu() {
 	  } elsif ($data{type} == 6) {
 	    $ip=$data{glue}; delete $data{glue};
 	    $data{ip}=[[$ip,'t','t','']];
+	  } elsif ($data{type} == 9) {
+	    $ip=$data{ip}; delete $data{ip};
+	    $data{ip}=[[$ip,'f','f','']];
 	  }
 	  delete $data{net};
 	  #show_hash(\%data);
@@ -2920,6 +2929,7 @@ sub left_menu($) {
 	  Tr(td("<a href=\"$url&sub=add&type=3\">Add MX entry</a>")),
           Tr(td("<a href=\"$url&sub=add&type=2\">Add delegation</a>")),
           Tr(td("<a href=\"$url&sub=add&type=6\">Add glue rec.</a>")),
+          Tr(td("<a href=\"$url&sub=add&type=9\">Add DHCP entry</a>")),
           Tr(td("<a href=\"$url&sub=add&type=5\">Add printer</a>"));
   } elsif ($menu eq 'login') {
     $url.='?menu=login';

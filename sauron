@@ -492,7 +492,8 @@ sub make_bind() {
       undef @q;
       db_query("SELECT a.ip,h.domain,h.ttl,z.name " .
 	       "FROM hosts h,zones z,a_entries a " .
-	       "WHERE z.server=$serverid AND h.zone=z.id AND a.host=h.id " .
+	       "WHERE z.server=$serverid AND h.zone=z.id AND h.type=1 " .
+	       " AND a.host=h.id " .
 	       " AND a.reverse=true AND a.ip << '$zone{reversenet}' " .
 	       "ORDER BY ip;",\@q);
       error(db_errormsg()) if (db_errormsg());
@@ -1067,7 +1068,7 @@ sub make_dhcp() {
   undef @ghosts;
   db_query("SELECT h.grp,h.ether,a.ip,h.domain,z.name,h.id " .
 	   "FROM hosts h, zones z, a_entries a " .
-	   "WHERE h.zone=z.id AND a.host=h.id AND h.type=1 " .
+	   "WHERE h.zone=z.id AND a.host=h.id AND ( h.type=1 OR h.type=9 ) " .
 	   "AND h.ether NOTNULL AND z.server=$serverid " .
 	   "AND h.grp<0 " .
 	   "ORDER BY a.ip;",\@ghosts);
