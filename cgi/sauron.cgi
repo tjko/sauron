@@ -1632,6 +1632,8 @@ sub hosts_menu() {
 	  $old_ip=$host{ip}[1][1];
 	  $host{ip}[1][1]=param('new_ip');
 	  $host{ip}[1][4]=1;
+	  $host{huser}=param('new_user') unless (param('new_user') =~ /^\s*$/);
+	  $host{dept}=param('new_dept') unless (param('new_dept') =~ /^\s*$/);
 	  $host{location}=param('new_loc') 
 	    unless (param('new_loc') =~ /^\s*$/);
 	  unless (update_host(\%host)) {
@@ -1658,14 +1660,25 @@ sub hosts_menu() {
       $newloc=$host{location};
       print p,startform(-method=>'GET',-action=>$selfurl),
             hidden('menu','hosts'),hidden('h_id',$id),hidden('sub','Move'),
-            hidden('move_confirm'),hidden('move_net'),p,
-	    "<TABLE><TR><TD>New IP:</TD>",
-            td(textfield(-name=>'new_ip',-maxlength=>15,-default=>$newip)),
-            "<TD>",submit(-name=>'move_confirm2',-value=>'Update'), " ",
-            submit(-name=>'move_cancel',-value=>'Cancel'), "</TD></TR>",
-	    "<TR><TD>New Location:</TD>",
-	    td(textfield(-name=>'new_loc',-maxlength=>15,-default=>$newloc)),
-	    td(),"</TR></TABLE>",end_form;
+            hidden('move_confirm'),hidden('move_net'),p,"<TABLE>",
+	    Tr(td("New IP:"),
+	       td(textfield(-name=>'new_ip',-size=>15, -maxlength=>15,
+			    -default=>$newip))),
+#	       td(submit(-name=>'move_confirm2',-value=>'Update'), " ",
+#		  submit(-name=>'move_cancel',-value=>'Cancel'))),
+	    Tr(td("New User:"),
+	       td(textfield(-name=>'new_user',-size=>25,-maxlength=>35,
+			 -default=>$host{huser}))),
+	    Tr(td("New Department:"),
+	       td(textfield(-name=>'new_dept',-size=>25,-maxlength=>35,
+			 -default=>$host{dept}))),
+	    Tr(td("New Location:"),
+	       td(textfield(-name=>'new_loc',-size=>25,-maxlength=>35,
+			    -default=>$newloc))),
+	    "</TR></TABLE><BR>",
+	    submit(-name=>'move_confirm2',-value=>'Update'), " ",
+	    submit(-name=>'move_cancel',-value=>'Cancel'),p,
+	    end_form;
       display_form(\%host,\%host_form);
       return;
     }
