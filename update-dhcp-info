@@ -45,7 +45,7 @@ if ($opt_year) {
   fatal("invalid year specified: $opt_year") unless ($year > 0);
 }
 
-print "Using year ($opt_year) as the year for data in logfile.\n"
+print "Using year (".($year+1900).") as the year for data in logfile.\n"
   if ($opt_verbose);
 
 
@@ -160,6 +160,9 @@ for $i (0..$#q) {
     $via = $hash{$mac}->{'BOOTREPLY-via'};
     $ip = $hash{$mac}->{'BOOTREPLY-ip'};
   }
+  
+  next unless ($t > 0); # skip unless time from DHCPACK/BOOTREPLY
+
   if ( ($t <= $date) &&
        ($date < ($timenow + 30*86400)) # handle bogus host dhcp_dates
      ) {
