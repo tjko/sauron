@@ -419,27 +419,31 @@ sub process_zonedns($$$$) {
 
 # convert the shortform time found in the SOA record to seconds
 sub process_zonefile_soa_time($) {
-       my ($time) = @_;
-       my $returnTime = 0;
+  my ($time) = @_;
+  my $returnTime = 0;
+  my ($value,$unit);
 
-       if ( $time =~ m/^\d+[mhdw]/ ) {
-               my ($value,$unit) = ( $time =~ m/^(\d+)([mhdw])/ );
-               if ( $unit eq "m" ) {
-                       $returnTime = $value * 60;
-               } elsif ( $unit eq "h" ) {
-                       $returnTime = $value * 60 * 60;
-               } elsif ( $unit eq "d" ) {
-                       $returnTime = $value * 60 * 60 * 24;
-               } elsif ( $unit eq "w" ) {
-                       $returnTime = $value * 60 * 60 * 24 * 7;
-               } else {
-                       $returnTime = $value;
-               }
-       } else {
-               $returnTime = $time;
-       }
+  $time =~ s/^\s+|\s+$//g;
 
-       return $returnTime;
+  # check if short date formatted text is in the soa
+  while ( (($value,$unit) = ($time =~ m/^(\d+)([smhdw])/)) ) {
+    if ( $unit eq "m" ) {
+      $returnTime += $value * 60;
+    } elsif ( $unit eq "h" ) {
+      $returnTime += $value * 60 * 60;
+    } elsif ( $unit eq "d" ) {
+      $returnTime += $value * 60 * 60 * 24;
+    } elsif ( $unit eq "w" ) {
+      $returnTime += $value * 60 * 60 * 24 * 7;
+    } else {
+      $returnTime += $value;
+    }
+    $time =~ s/^\d+[smhdw]//;
+  }
+
+  $returnTime += $time if ($time =~ /^\d+$/);
+
+  return $returnTime;
 }
 
 
