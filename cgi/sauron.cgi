@@ -1054,27 +1054,8 @@ sub frame_set2();
 sub frame_1();
 sub frame_2();
 
-sub logmsg($$) {
-  my($type,$msg)=@_;
-
-  open(LOGFILE,">>$LOG_DIR/sauron.log");
-  print LOGFILE localtime(time) . " sauron[$$]: $msg\n";
-  close(LOGFILE);
-}
-
 
 #####################################################################
-
-html_error("No database connection defined (DB_CONNECT)")
-  unless ($DB_CONNECT);
-html_error("Cannot estabilish connection with database")
-  unless (db_connect2($DB_CONNECT));
-html_error("CGI interface disabled: $res") if (($res=cgi_disabled()));
-html_error("Invalid log path (LOG_DIR)") unless (-d $LOG_DIR);
-html_error("Cannot write to log file")
-  unless (-w "$LOG_DIR/sauron.log" or -w $LOG_DIR);
-html_error("Database format mismatch!")
-  if (sauron_db_version() ne get_db_version());
 
 $frame_mode=0;
 $pathinfo = path_info();
@@ -1086,6 +1067,15 @@ $menu=param('menu');
 #$menu='login' unless ($menu);
 $remote_addr = $ENV{'REMOTE_ADDR'};
 $remote_host = remote_host();
+
+html_error("Invalid log path (LOG_DIR)") unless (-d $LOG_DIR);
+html_error("Cannot write to log file")
+  if (logmsg("debug","CGI access from $remote_addr") < 0);
+html_error("No database connection defined (DB_CONNECT)") unless ($DB_CONNECT);
+html_error("Cannot connect to database") unless (db_connect2($DB_CONNECT));
+html_error("Database format mismatch!")
+  if (sauron_db_version() ne get_db_version());
+html_error("CGI interface disabled: $res") if (($res=cgi_disabled()));
 
 unless (is_cidr($remote_addr)) {
   logmsg("notice","Warning: www server does not set standard CGI " .
@@ -3866,7 +3856,7 @@ sub save_state($) {
   my(@q,$res,$s_auth,$s_addr,$other,$s_mode);
 
   undef @q;
-  db_query("SELECT uid FROM utmp WHERE cookie='$id';",\@q);
+  db_query("SELECT uid,cookie FROM utmp WHERE cookie='$id';",\@q);
   unless (@q > 0) {
       if (db_exec("INSERT INTO utmp (uid,cookie,auth) " .
 		  "VALUES(-1,'$id',false);") < 0) {
@@ -3878,9 +3868,9 @@ sub save_state($) {
 
   $s_superuser = ($state{'superuser'} eq 'yes' ? 'true' : 'false');
   $s_auth=($state{'auth'} eq 'yes' ? 'true' : 'false');
-  $s_mode=0;
-  $s_mode=$state{'mode'} if ($state{'mode'});
+  $s_mode=($state{'mode'} ? $state{'mode'} : 0);
   $s_addr=$state{'addr'};
+
   $other='';
   if ($state{'uid'}) { $other.=", uid=".$state{'uid'}." ";  }
   if ($state{'gid'}) { $other.=", gid=".$state{'gid'}." ";  }
@@ -3895,7 +3885,6 @@ sub save_state($) {
   }
   if ($state{'user'}) { $other.=", uname='".$state{'user'}."' "; }
   if ($state{'login'}) { $other.=", login=".$state{'login'}." "; }
-
   $other.=", searchopts=". db_encode_str($state{'searchopts'}) . " ";
   $other.=", searchdomain=". db_encode_str($state{'searchdomain'}) . " ";
   $other.=", searchpattern=". db_encode_str($state{'searchpattern'}) . " ";
@@ -3906,7 +3895,7 @@ sub save_state($) {
 
   if ($res < 0) {
     logmsg("notice","cannot save state '$id' " .
-	            "($s_addr,$state{uid},$state{user}): " .
+	            "(addr=$s_addr,uid=$state{uid},user=$state{user}): " .
                     db_errormsg());
     html_error("cannot save state '$id' ($state{uid},$state{user})");
   }
@@ -3920,11 +3909,11 @@ sub load_state($) {
   undef %state;
   $state{'auth'}='no';
 
-  undef @q;
   db_query("SELECT uid,addr,auth,mode,serverid,server,zoneid,zone," .
-      "uname,last,login,searchopts,searchdomain,searchpattern,superuser, " .
-      "gid,sid " .
-       "FROM utmp WHERE cookie='$id';",\@q);
+	   " uname,last,login,searchopts,searchdomain,searchpattern," .
+           " superuser,gid,sid " .
+           "FROM utmp WHERE cookie='$id'",\@q);
+
   if (@q > 0) {
     $state{'uid'}=$q[0][0];
     $state{'addr'}=$q[0][1];
