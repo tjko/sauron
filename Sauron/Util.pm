@@ -23,6 +23,7 @@ require Exporter;
 	     pwd_crypt_unix
 	     pwd_make
 	     pwd_check
+	     pwd_external_check
 	     fatal
 	     error
 	     show_hash
@@ -323,6 +324,38 @@ sub pwd_check($$) {
   }
 
   return -2;
+}
+
+sub pwd_external_check($$$) {
+  my($cmd,$user,$password) = @_;
+
+  my($res);
+
+  return 1 unless ($cmd && -x $cmd);
+  return 2 unless ($user);
+  return 3 unless (defined $password);
+
+  open(OLDOUT,">&STDOUT");
+  open(OLDERR,">&STDERR");
+  open(STDOUT,"> /dev/null");
+  open(STDERR,">&STDOUT");
+
+  $res=-1;
+  if (open(PIPE,"| $cmd")) {
+    print PIPE "$user $password\n";
+    close(PIPE);
+    $res = $?;
+  }
+
+  close(STDOUT);
+  close(STDERR);
+
+  open(STDOUT,">&OLDOUT");
+  open(STDERR,">&OLDERR");
+  close(OLDOUT);
+  close(OLDERR);
+
+  return ($res >> 8);
 }
 
 # print error message and exit program
