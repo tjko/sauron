@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/perl
 #
 # check-pending -- utility (to be run from cron) to check for pending host
 #                  changes in Sauron database
@@ -6,20 +6,40 @@
 # $Id$
 #
 
-SAURONHOME=/opt/sauron
-
-
+$SAURONHOME = "/opt/sauron";
+$MAILCOMMAND = "/bin/mail -s 'Sauron: pending host changes' nobody@localhost";
+$MAXLINES = 100;
 
 ######################################################################
 
-if [ "$1x" == "x" ]; then
-   echo "Usage: $0 <servername>"
-   exit 1
-fi
+$server = shift;
+
+unless ($server) {
+    print "syntax: $0 <servername>\n\n";
+    exit(1);
+}
 
 
-${SAURONHOME}/status --quiet --pending=$1
+open(PIPE,"$SAURONHOME/status --quiet --pending=$server |") 
+    || die("status command pipe failed");
 
+while(<PIPE>) {
+    next if /^\s*$/;
+    push @output, $_;
+    last if (@output > $MAXLINES);
+}
+close(PIPE);
+
+if (@output > 1) {
+    open(PIPE,"| $MAILCOMMAND") || die("mail pipe failed");
+    foreach $line (@output) {
+	print PIPE $line;
+    }
+    print PIPE "\n\n";
+    close(PIPE);
+}
+
+exit 0
 
 # eof
 
