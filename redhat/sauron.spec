@@ -1,7 +1,7 @@
 Summary: Sauron - DNS/DHCP management system
 Name: sauron
 Version: 0.5.0
-Release: 4
+Release: 5
 URL: http://sauron.jyu.fi/
 Packager: Timo Kokkonen <tjko@iki.fi>
 License: GPL
@@ -38,12 +38,13 @@ make
 rm -rf $RPM_BUILD_ROOT
 make install INSTALL_ROOT=$RPM_BUILD_ROOT
 
-install -d -m 755 $RPM_BUILD_ROOT/var/www/cgi-bin
-install -d -m 755 $RPM_BUILD_ROOT/var/www/html/sauron/icons
+install -d -m 755 $RPM_BUILD_ROOT/var/www
+install -d -m 751 $RPM_BUILD_ROOT/var/www/cgi-bin
+install -d -m 751 $RPM_BUILD_ROOT/var/www/html/sauron/icons
 ln -s /opt/sauron/cgi/sauron.cgi $RPM_BUILD_ROOT/var/www/cgi-bin/sauron.cgi
 ln -s /opt/sauron/cgi/browser.cgi $RPM_BUILD_ROOT/var/www/cgi-bin/browser.cgi
 ln -s /opt/sauron/icons/logo_large.png $RPM_BUILD_ROOT/var/www/html/sauron/icons/logo_large.png
-ln -s /sauron/icons/logo.png $RPM_BUILD_ROOT/var/www/html/sauron/icons/logo.png
+ln -s /opt/sauron/icons/logo.png $RPM_BUILD_ROOT/var/www/html/sauron/icons/logo.png
 
 %clean
 rm -rf $RPM_BUILD_ROOT
@@ -54,7 +55,7 @@ rm -rf $RPM_BUILD_ROOT
 /etc/sauron/config.in
 /etc/sauron/config-browser.in
 /var/www/cgi-bin/*
-/var/www/html/sauron/icons/*
+/var/www/html/sauron
 %config /etc/sauron/config
 %config /etc/sauron/config-browser
 %doc README COPYRIGHT ChangeLog
@@ -62,6 +63,9 @@ rm -rf $RPM_BUILD_ROOT
 %doc doc
 
 %changelog
+* Thu Jan  9 2003 Timo Kokkonen <tjko@iki.fi> 0.5.0-5
+- fixed broken symlinks & some directory permissions
+
 * Thu Jan  9 2003 Timo Kokkonen <tjko@iki.fi> 0.5.0-4
 - now installs symlinks under /var/www
 
