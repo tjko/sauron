@@ -4,6 +4,9 @@
 <!ENTITY relations-pic SYSTEM "relations.eps" NDATA EPS>
 <!ENTITY gpl SYSTEM "gpl.sgml">
 <!ENTITY sql-tables SYSTEM "tables.sgml">
+<!ENTITY form-new-server SYSTEM "form-new-server.sgml">
+<!ENTITY form-new-zone SYSTEM "form-new-zone.sgml">
+<!ENTITY form-edit-zone SYSTEM "form-edit-zone.sgml">
 ]>
 
 
@@ -558,6 +561,8 @@ Sauron v0.5.0 status
 Database connection:   OK
 Database version:      1.0
 CGI interface:         Enabled
+
+No servers found in database!
         </screen>
       </para>
       </section>
@@ -723,8 +728,59 @@ User admin added succesfully.
       <section> 
       <title>Using Web Interface</>
       <para>
-        
+        First, login using the web interface as an administrator into Sauron.
+        You should now be in <quote>Select server</> dialog, 
+        with empty list of servers to choose from. Now select <quote>Add</>
+        to add a new server. 
+
+        &form-new-server;
       </para>
+
+      <para>
+        Next step is to define global DHCP server settings, by choosing
+        <guimenuitem>Edit</> from <guimenu>Servers</> menu. Now you
+        can add desired DHCP settings in the 
+        <guimenuitem>Global DHCP Settings</> field, one setting per line
+        without the semicolon (;) at the end of line. Here's some
+        typical global DHCP settings:
+        <screen>
+        authoritative
+        allow bootp
+        use-host-decl-names on
+        default-lease-time 7200
+        max-lease-time 38400
+        option domain-name-servers ns1.middle.earth,ns2.middle.earth
+        option ntp-servers ntp1.middle.earth,ntp2.middle.earth
+        </screen>
+      </para>
+
+      <para>
+        Next step is to add the deault zones (localhost and reverse
+        zones for 0.0.0.0/8, 127.0.0.0/8, and 255.0.0.0/8) into the server.
+        This can be done from <guimenu>Zones</> menu using
+        <guimenuitem>Add Default Zones</>, which should produce following
+        output:
+        <screen>
+Adding zone: localhost...OK (id=1)
+Adding zone: 127.in-addr.arpa...OK (id=2)
+Adding zone: 0.in-addr.arpa...OK (id=3)
+Adding zone: 255.in-addr.arpa...OK (id=4)
+        </screen>
+      </para>
+
+      <para>
+        Now its time to add your zone(s) into the server. This can be
+        done from <guimenu>Zones</> using the <guimenuitem>Add</> command.
+
+        &form-new-zone;
+
+        After creating a zone, edit the zone by selecting <guimenuitem>Edit</>
+        from <guimenu>Zones</> menu, and add Name server (<acronym>NS</>) 
+        entries and other needed entries for the zone.
+
+        &form-edit-zone;
+      </para>
+
       </section>
 
       <section>
