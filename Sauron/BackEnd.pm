@@ -1347,7 +1347,7 @@ sub add_zone($) {
 sub copy_zone($$$$) {
   my($id,$serverid,$newname,$verbose)=@_;
   my($newid,%z,$res,@q,@ids,@hids,$i,$j,%h,@t,$fields,$fields2,%aids);
-  my($timenow,%eaids,%hidh);
+  my($timenow,%eaids,%hidh,$new_net);
 
   return -1 if (get_zone($id,\%z) < 0);
   del_std_fields(\%z);
@@ -1355,7 +1355,14 @@ sub copy_zone($$$$) {
   delete $z{zonehostid};
   delete $z{txt_auto_generation};
 
-  db_begin();
+
+  if ($z{reverse} =~ /^(t|true)$/) {
+    $new_net=arpa2cidr($newname);
+    if (($new_net eq '0.0.0.0/0') or ($new_net eq '')) {
+      return -100;
+    }
+    $z{reversenet}=$new_net;
+  }
 
   print "<BR>Copying zone record..." if ($verbose);
   delete $z{id};
@@ -1363,6 +1370,8 @@ sub copy_zone($$$$) {
   $z{name}=$newname;
   $z{cuser}=$muser;
   $z{cdate}=time;
+
+  db_begin();
   $newid=add_record('zones',\%z);
   if ($newid < 1) { db_rollback(); return -2; }
 
