@@ -336,8 +336,8 @@ sub make_bind() {
       $serial_date=time;
       print "Updating serial $zone{serial} --> $serial\n";
       fatal("Cannot update zone $zonename serial!")
-	if (update_zone({id=>$zoneid,serial=>$serial,
-			 serial_date=>$serial_date}));
+	if (update_record('zones',{id=>$zoneid,serial=>$serial,
+				   serial_date=>$serial_date}));
     }
     $hostname=$server{'hostname'};
     $hostmaster=$zone{'hostmaster'};
