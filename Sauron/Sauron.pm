@@ -5,11 +5,11 @@
 #
 package Sauron::Sauron;
 require Exporter;
-use strict;
 use Sauron::Util;
+use strict;
 use vars qw($VERSION @ISA @EXPORT);
 
-$VERSION = '$Id$';
+$VERSION = '$Id$ ';
 
 @ISA = qw(Exporter); # Inherit from Exporter
 @EXPORT = qw(

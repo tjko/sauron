@@ -5,6 +5,13 @@
 #
 package Sauron::UtilZone;
 require Exporter;
+use IO::File;
+use Net::DNS;
+use Sauron::Util;
+use strict;
+use vars qw($VERSION @ISA @EXPORT);
+
+$VERSION = '$Id$ ';
 
 @ISA = qw(Exporter); # Inherit from Exporter
 @EXPORT = qw(
@@ -12,10 +19,6 @@ require Exporter;
 	     process_zonedns
 	    );
 
-use IO::File;
-use Net::DNS;
-use Sauron::Util;
-use strict;
 
 sub process_zonefile($$$$);
 

@@ -5,6 +5,13 @@
 #
 package Sauron::BackEnd;
 require Exporter;
+use Net::Netmask;
+use Sauron::DB;
+use Sauron::Util;
+use strict;
+use vars qw($VERSION @ISA @EXPORT);
+
+$VERSION = '$Id$ ';
 
 @ISA = qw(Exporter); # Inherit from Exporter
 @EXPORT = qw(
@@ -115,10 +122,6 @@ require Exporter;
 	     get_history_session
 	    );
 
-use Net::Netmask;
-use Sauron::DB;
-use Sauron::Util;
-use strict;
 
 my($muser);
 

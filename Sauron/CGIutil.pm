@@ -5,6 +5,15 @@
 #
 package Sauron::CGIutil;
 require Exporter;
+use CGI qw/:standard/;
+use Time::Local;
+use Sauron::DB;
+use Sauron::Util;
+use Sauron::BackEnd;
+use strict;
+use vars qw($VERSION @ISA @EXPORT);
+
+$VERSION = '$Id$ ';
 
 @ISA = qw(Exporter); # Inherit from Exporter
 @EXPORT = qw(
@@ -27,12 +36,6 @@ require Exporter;
 	     html_error2
 	    );
 
-use CGI qw/:standard/;
-use Time::Local;
-use Sauron::DB;
-use Sauron::Util;
-use Sauron::BackEnd;
-use strict;
 
 my($CGI_UTIL_zoneid,$CGI_UTIL_serverid);
 

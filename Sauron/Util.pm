@@ -5,6 +5,11 @@
 #
 package Sauron::Util;
 require Exporter;
+use Digest::MD5;
+use strict;
+use vars qw($VERSION @ISA @EXPORT);
+
+$VERSION = '$Id$ ';
 
 @ISA = qw(Exporter); # Inherit from Exporter
 @EXPORT = qw(
@@ -33,9 +38,6 @@ require Exporter;
 	     print_csv
 	    );
 
-
-use Digest::MD5;
-use strict;
 
 
 # returns nonzero in case given domainname is valid

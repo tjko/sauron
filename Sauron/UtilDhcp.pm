@@ -5,13 +5,16 @@
 #
 package Sauron::UtilDhcp;
 require Exporter;
+use IO::File;
+use Sauron::Util;
+use strict;
+use vars qw($VERSION @ISA @EXPORT);
+
+$VERSION = '$Id$ ';
 
 @ISA = qw(Exporter); # Inherit from Exporter
 @EXPORT = qw(process_dhcpdconf);
 
-use IO::File;
-use Sauron::Util;
-use strict;
 
 my $debug = 0;
 

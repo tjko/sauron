@@ -4,6 +4,12 @@
 #
 package Sauron::DB;
 require Exporter;
+use Time::Local;
+use Pg;
+use strict;
+use vars qw($VERSION @ISA @EXPORT);
+
+$VERSION = '$Id$ ';
 
 @ISA = qw(Exporter); # Inherit from Exporter
 @EXPORT = qw(
@@ -32,9 +38,6 @@ require Exporter;
 	     db_insert
 	    );
 
-use Time::Local;
-use Pg;
-use strict;
 
 sub sql_print_result($) {
   my($res)=@_;
