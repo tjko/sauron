@@ -15,7 +15,7 @@ $CGI::DISABLE_UPLOADS =1; # no uploads
 $CGI::POST_MAX = 100000; # max 100k posts
 
 #$|=1;
-$debug_mode = 1;
+$debug_mode = 0;
 
 if (-f "/etc/sauron/config") { 
   $conf_dir='/etc/sauron'; 
@@ -625,24 +625,18 @@ sub hosts_menu() {
   
   $sub=param('sub');
   
-  if ($sub eq 'Edit') {
+  if ($sub eq 'Delete') {
+    $res=delete_magic('h','Host','hosts',\%host_form,\&get_host,\&delete_host,
+		      param('h_id'));
+    goto show_host_record if ($res == 2);
+    return;
+  }
+  elsif ($sub eq 'Edit') {
     $res=edit_magic('h','Host','hosts',\%host_form,\&get_host,\&update_host,
 		   param('h_id'));
     goto browse_hosts if ($res == -1);
+    goto show_host_record if ($res > 0);
     return;
-  }
-  elsif ($sub eq 'viewhost') {
-    $id=param('id');
-    if (get_host($id,\%host)) {
-      print h2("Cannot get host record (id=$id)!");
-      return;
-    }
-
-    display_form(\%host,\%host_form);
-    print p,startform(-method=>'GET',-action=>$selfurl),
-          hidden('menu','hosts'),hidden('h_id',$id),
-          submit(-name=>'sub',-value=>'Edit')," ",
-          submit(-name=>'sub',-value=>'Delete'),end_form;
   }
   elsif ($sub eq 'browse') {
     %bdata=(domain=>'',net=>'ANY',nets=>\%nethash,nets_k=>\@netkeys,
@@ -724,7 +718,7 @@ sub hosts_menu() {
       $ether=$q[$i][5];
       $ether='N/A' unless($ether);
       #$hostname=add_origin($q[$i][4],$zone);
-      $hostname="<A HREF=\"$selfurl?menu=hosts&sub=viewhost&id=$q[$i][2]\">".
+      $hostname="<A HREF=\"$selfurl?menu=hosts&h_id=$q[$i][2]\">".
 	        "$q[$i][4]</A>";
       print Tr,td([$hostname,$host_types{$q[$i][3]},$ip,
 		   "<PRE>$ether</PRE>",$q[$i][6]]);
@@ -749,28 +743,47 @@ sub hosts_menu() {
     } else { print "next"; }
     
     print "]</CENTER><BR>";
+    return;
   }
-  else {
-  browse_hosts:
-    param('sub','browse');
-    #$nethash=get_nets($serverid);
-    $nets=get_net_list($serverid,1);
-    undef %nethash; undef @netkeys;
-    $nethash{'ANY'}='Any net';
-    $netkeys[0]='ANY';
-    for $i (0..$#{$nets}) { 
-      #print p,$$nets[$i][0]; 
-      $nethash{$$nets[$i][0]}="$$nets[$i][0] - $$nets[$i][2]";
-      push @netkeys, $$nets[$i][0];
+
+
+  if (param('h_id')) {
+  show_host_record:
+    $id=param('h_id');
+    if (get_host($id,\%host)) {
+      print h2("Cannot get host record (id=$id)!");
+      return;
     }
-    %bdata=(domain=>'',net=>'ANY',nets=>\%nethash,nets_k=>\@netkeys,
+
+    display_form(\%host,\%host_form);
+    print p,startform(-method=>'GET',-action=>$selfurl),
+          hidden('menu','hosts'),hidden('h_id',$id),
+          submit(-name=>'sub',-value=>'Edit')," ",
+          submit(-name=>'sub',-value=>'Delete'),end_form;
+    return;
+  }
+
+
+ browse_hosts:
+  param('sub','browse');
+  #$nethash=get_nets($serverid);
+  $nets=get_net_list($serverid,1);
+  undef %nethash; undef @netkeys;
+  $nethash{'ANY'}='Any net';
+  $netkeys[0]='ANY';
+  for $i (0..$#{$nets}) { 
+    #print p,$$nets[$i][0]; 
+    $nethash{$$nets[$i][0]}="$$nets[$i][0] - $$nets[$i][2]";
+    push @netkeys, $$nets[$i][0];
+  }
+  %bdata=(domain=>'',net=>'ANY',nets=>\%nethash,nets_k=>\@netkeys,
 	    type=>1,order=>2);
-    print start_form(-method=>'POST',-action=>$selfurl),
+  print start_form(-method=>'POST',-action=>$selfurl),
           hidden('menu','hosts'),hidden('sub','browse'),
           hidden('bh_page','0'),hidden('bh_psize','50');
-    form_magic('bh',\%bdata,\%browse_hosts_form);
-    print submit(-name=>'bh_submit',-value=>'Search'),end_form;
-  }
+  form_magic('bh',\%bdata,\%browse_hosts_form);
+  print submit(-name=>'bh_submit',-value=>'Search'),end_form;
+
 }
 
 
@@ -1247,7 +1260,7 @@ sub left_menu($) {
   } elsif ($menu eq 'hosts') {
     $url.='?menu=hosts';
     print p,"<a href=\"$url\">Browse hosts</a><br>",
-          "<a href=\"$url&sub=edit\">Edit hosts</a><br>";
+          "<br><a href=\"$url&sub=add\">Add host</a><br>";
   } elsif ($menu eq 'login') {
     $url.='?menu=login';
     print "<a href=\"$url&sub=login\">Login</a>",

@@ -688,6 +688,50 @@ sub update_host($) {
   return db_commit();
 }
 
+sub delete_host($) {
+  my($id) = @_;
+  my($res);
+
+  return -100 unless ($id > 0);
+
+  db_begin();
+
+  # dhcp_entries
+  $res=db_exec("DELETE FROM dhcp_entries WHERE type=3 AND ref=$id;");
+  if ($res < 0) { db_rollback(); return -1; }
+
+  # mx_entries
+  $res=db_exec("DELETE FROM mx_entries WHERE type=2 AND ref=$id;");
+  if ($res < 0) { db_rollback(); return -2; }
+  
+  # wks_entries
+  $res=db_exec("DELETE FROM wks_entries WHERE type=1 AND ref=$id;");
+  if ($res < 0) { db_rollback(); return -3; }
+
+  # ns_entries
+  $res=db_exec("DELETE FROM ns_entries WHERE type=2 AND ref=$id;");
+  if ($res < 0) { db_rollback(); return -4; }
+
+  # printer_entries
+  $res=db_exec("DELETE FROM printer_entries WHERE type=2 AND ref=$id;");
+  if ($res < 0) { db_rollback(); return -5; }
+
+  # txt_entries
+  $res=db_exec("DELETE FROM txt_entries WHERE type=2 AND ref=$id;");
+  if ($res < 0) { db_rollback(); return -6; }
+
+  # rr_a
+  $res=db_exec("DELETE FROM rr_a WHERE host=$id;");
+  if ($res < 0) { db_rollback(); return -7; }
+
+
+  $res=db_exec("DELETE FROM hosts WHERE id=$id;");
+  if ($res < 0) { db_rollback(); return -50; }
+
+  #return db_commit();
+  return db_rollback();
+}
+
 
 ############################################################################
 # MX template functions
