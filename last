@@ -50,9 +50,14 @@ db_query("SELECT l.sid,l.uid,l.date,l.state,l.ldate,l.ip,l.host,u.username ".
 
 $count=@q;
 
+printf "%-9s %5s %-15s %14s - %s\n",
+        'User','SID','Host','Login','Logout';
+print "-" x 78 . "\n";
+
 for $i (0..$#q) {
   $j=$count-$i-1;
-  $t=localtime($q[$j][2]);
+  ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst)=localtime($q[$j][2]);
+  $t=sprintf("%02d/%02d/%02d %02d:%02d",$mday,$mon,$year%100,$hour,$min);
   $host=substr($q[$j][6],0,15);
   $state=$q[$j][3];
   if ($state < 2) {
@@ -67,8 +72,8 @@ for $i (0..$#q) {
     $info.=" (reconnect) " if ($state == 4);
     $info.=" (autologout)" if ($state == 3);
   }
-  printf "%-9s %-15s %20s - %s\n",
-        $q[$j][7],$host,$t,$info;
+  printf "%-9s %5d %-15s %14s - %s\n",
+        $q[$j][7],$q[$j][0],$host,$t,$info;
 }
 
 

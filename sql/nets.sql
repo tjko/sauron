@@ -15,7 +15,7 @@ CREATE TABLE nets (
        name	   TEXT, /* name of net/subnet */
        net	   CIDR NOT NULL, /* net CIDR */
        subnet      BOOL DEFAULT true, /* subnet flag */
-       vlan	   INT4 DEFAULT 1, /* VLAN */
+       vlan	   CHAR(15) DEFAULT 'default', /* VLAN */
 
        rp_mbox	   TEXT DEFAULT '.', /* RP mbox */
        rp_txt	   TEXT DEFAULT '.', /* RP txt */

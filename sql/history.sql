@@ -18,6 +18,7 @@ CREATE TABLE history (
 				  	  3=servers 
 					  4=nets
 				      	  5=users */
+	ref		INT,      /* optional reference */
 	action		CHAR(25), /* operation performed */
 	info		CHAR(80)  /* extra info */	
 );

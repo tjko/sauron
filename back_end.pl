@@ -922,7 +922,7 @@ sub get_host($$) {
 	       "zone,type,domain,ttl,class,grp,alias,cname_txt," .
 	       "hinfo_hw,hinfo_sw,wks,mx,rp_mbox,rp_txt,router," .
 	       "prn,ether,ether_alias,info,location,dept,huser,model," .
-	       "serial,misc,comment",
+	       "serial,misc,cdate,cuser,muser,mdate,comment",
 	       $id,$rec,"id");
 
   return -1 if ($res < 0);
@@ -969,7 +969,7 @@ sub get_host($$) {
     get_field("hosts","domain","id=$rec->{ether_alias}",
 	      'ether_alias_info',$rec);
   }
-  $rec->{ether_alias_info}='&nbsp;' unless ($rec->{ether_alias_info});
+  #$rec->{ether_alias_info}='' unless ($rec->{ether_alias_info});
 
   if ($rec->{wks} > 0) {
     $wrec={};
@@ -1005,6 +1005,12 @@ sub get_host($$) {
 		    $rec,'alias_a');
   }
 
+
+  $rec->{cdate_str}=($rec->{cdate} > 0 ?
+		     localtime($rec->{cdate}).' by '.$rec->{cuser} : 'UNKOWN');
+  $rec->{mdate_str}=($rec->{mdate} > 0 ?
+		     localtime($rec->{mdate}).' by '.$rec->{muser} : '');
+
   return 0;
 }
 
@@ -1020,6 +1026,10 @@ sub update_host($) {
   delete $rec->{grp_rec};
   delete $rec->{alias_l};
   delete $rec->{alias_d};
+  delete $rec->{mdate_str};
+  delete $rec->{cdate_str};
+  delete $rec->{cdate};
+  delete $rec->{cuser};
   $rec->{mdate}=time;
   $rec->{muser}=$muser;
 
@@ -1125,6 +1135,8 @@ sub add_host($) {
     $a_id=$rec->{alias};
     delete $rec->{alias};
   }
+  $rec->{cuser}=$muser;
+  $rec->{cdate}=time;
   $res=add_record('hosts',$rec);
   if ($res < 0) { db_rollback(); return -1; }
   $id=$res;
@@ -1709,20 +1721,22 @@ sub update_lastlog($$$$$) {
   return 0;
 }
 
-sub update_history($$$$$) {
-  my($uid,$sid,$type,$action,$info) = @_;
-  my($date,$a,$i);
+sub update_history($$$$$$) {
+  my($uid,$sid,$type,$action,$info,$ref) = @_;
+  my($date,$a,$i,$sql);
 
   return -1 unless ($uid > 0);
   return -2 unless ($sid > 0);
   return -3 unless ($type > 0);
   $date=time;
   $a=db_encode_str($action);
-  $i=db_encode_str($i);
+  $i=db_encode_str($info);
+  $ref='NULL' unless ($ref > 0);
 
-  return -10 
-    if (db_exec("INSERT INTO history (sid,uid,date,type,action,info) " .
-		" VALUES($sid,$uid,$date,$a,$i);") < 0);
+  $sql = "INSERT INTO history (sid,uid,date,type,action,info,ref) " .
+         " VALUES($sid,$uid,$date,$type,$a,$i,$ref);";
+  return -10 if (db_exec($sql)<0);
+
   return 0;
 }
 

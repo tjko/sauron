@@ -20,10 +20,10 @@ $debug_mode = 1;
 
 if (-f "/etc/sauron/config") {
   $conf_dir='/etc/sauron';
-} 
+}
 elsif (-f "/opt/etc/sauron/config") {
   $conf_dir='/opt/etc/sauron';
-} 
+}
 elsif (-f "/usr/local/etc/sauron/config") {
   $conf_dir='/usr/local/etc/sauron';
 }
@@ -221,41 +221,44 @@ do "$PROG_DIR/back_end.pl";
   {ftype=>0, name=>'Equipment info', iff=>['type','1']},
   {ftype=>1, tag=>'hinfo_hw', name=>'HINFO hardware', type=>'hinfo', len=>20,
    iff=>['type','1']},
-  {ftype=>1, tag=>'hinfo_sw', name=>'HINFO sowftware', type=>'hinfo', len=>20,
+  {ftype=>1, tag=>'hinfo_sw', name=>'HINFO software', type=>'hinfo', len=>20,
    iff=>['type','1']},
   {ftype=>1, tag=>'ether', name=>'Ethernet address', type=>'mac', len=>12,
-   iff=>['type','1'], iff2=>['ether_alias','-1'], empty=>1},
-  {ftype=>4, tag=>'ether_alias_info', name=>'ETHER2', 
-   iff=>['type','1'], iff2=>['ether_alias','\d+']},
-
+   iff=>['type','1'], empty=>1},
   {ftype=>4, tag=>'card_info', name=>'Card manufacturer', iff=>['type','1']},
+  {ftype=>1, tag=>'ether_alias_info', name=>'Ethernet alias', no_empty=>1,
+   empty=>1, type=>'domain', len=>30, iff=>['type','1'] },
+
   {ftype=>1, tag=>'model', name=>'Model', type=>'text', len=>30, empty=>1, 
-   iff=>['type','1']},
+   no_empty=>1, iff=>['type','1']},
   {ftype=>1, tag=>'serial', name=>'Serial no.', type=>'text', len=>20,
-   empty=>1, iff=>['type','1']},
+   empty=>1, no_empty=>1, iff=>['type','1']},
   {ftype=>1, tag=>'misc', name=>'Misc.', type=>'text', len=>40, empty=>1, 
-   iff=>['type','1']},
+   no_empty=>1, iff=>['type','1']},
+
   {ftype=>0, name=>'Group/Template selections', iff=>['type','[15]']},
   {ftype=>10, tag=>'grp', name=>'Group', iff=>['type','[15]']},
   {ftype=>6, tag=>'mx', name=>'MX template', iff=>['type','1']},
   {ftype=>7, tag=>'wks', name=>'WKS template', iff=>['type','1']},
+
   {ftype=>0, name=>'Host specific',iff=>['type','[12]']},
   {ftype=>2, tag=>'ns_l', name=>'Name servers (NS)', type=>['text','text'], 
-   fields=>2,
+   fields=>2, 
    len=>[30,20], empty=>[0,1], elabels=>['NS','comment'], iff=>['type','2']},
-  {ftype=>2, tag=>'wks_l', name=>'WKS', 
+  {ftype=>2, tag=>'wks_l', name=>'WKS', no_empty=>1,
    type=>['text','text','text'], fields=>3, len=>[10,30,10], empty=>[0,0,1], 
    elabels=>['Protocol','Services','comment'], iff=>['type','1']},
   {ftype=>2, tag=>'mx_l', name=>'Mail exchanges (MX)', 
    type=>['priority','mx','text'], fields=>3, len=>[5,30,20], 
-   empty=>[0,0,1], 
+   empty=>[0,0,1], no_empty=>1,
    elabels=>['Priority','MX','comment'], iff=>['type','[13]']},
   {ftype=>2, tag=>'txt_l', name=>'TXT', type=>['text','text'], 
-   fields=>2,
+   fields=>2, no_empty=>1,
    len=>[40,15], empty=>[0,1], elabels=>['TXT','comment'], iff=>['type','1']},
-  {ftype=>2, tag=>'printer_l', name=>'PRINTER entries', 
+  {ftype=>2, tag=>'printer_l', name=>'PRINTER entries', no_empty=>1,
    type=>['text','text'], fields=>2,len=>[40,20], empty=>[0,1], 
    elabels=>['PRINTER','comment'], iff=>['type','[15]']},
+
   {ftype=>0, name=>'Aliases', no_edit=>1, iff=>['type','1']},
   {ftype=>8, tag=>'alias_l', name=>'Aliases', fields=>3, iff=>['type','1']},
 
@@ -263,7 +266,11 @@ do "$PROG_DIR/back_end.pl";
   {ftype=>2, tag=>'srv_l', name=>'SRV entries', fields=>5,len=>[5,5,5,30,10],
    empty=>[0,0,0,0,1],elabels=>['Priority','Weight','Port','Target','Comment'],
    type=>['priority','priority','priority','fqdn','text'],
-   iff=>['type','8']}
+   iff=>['type','8']},
+
+  {ftype=>0, name=>'Record info', no_edit=>0},
+  {ftype=>4, name=>'Record created', tag=>'cdate_str', no_edit=>1},
+  {ftype=>4, name=>'Last modified', tag=>'mdate_str', no_edit=>1}
  ]
 );
 
@@ -289,12 +296,12 @@ do "$PROG_DIR/back_end.pl";
   {ftype=>0, name=>'Equipment info', iff=>['type','1']},
   {ftype=>1, tag=>'hinfo_hw', name=>'HINFO hardware', type=>'hinfo', len=>20,
    iff=>['type','1']},
-  {ftype=>1, tag=>'hinfo_sw', name=>'HINFO sowftware', type=>'hinfo', len=>20,
+  {ftype=>1, tag=>'hinfo_sw', name=>'HINFO software', type=>'hinfo', len=>20,
    iff=>['type','1']},
   {ftype=>1, tag=>'ether', name=>'Ethernet address', type=>'mac', len=>12,
-   iff=>['type','1'], iff2=>['ether_alias','-1'], empty=>0},
-  {ftype=>4, tag=>'ether_alias_info', name=>'ETHER2', 
-   iff=>['type','1'], iff2=>['ether_alias','\d+']},
+   iff=>['type','1'], iff2=>['ether_alias_info','-1'], empty=>0},
+  {ftype=>4, tag=>'ether_alias_info', name=>'Ethernet alias', 
+   iff=>['type','1']}, 
 
   {ftype=>1, tag=>'model', name=>'Model', type=>'text', len=>30, empty=>1, 
    iff=>['type','1']},
@@ -402,10 +409,10 @@ do "$PROG_DIR/back_end.pl";
   {ftype=>0, name=>'Equipment info',iff=>['type','1']},
   {ftype=>101, tag=>'hinfo_hw', name=>'HINFO hardware', type=>'hinfo', len=>20,
    sql=>"SELECT hinfo FROM hinfo_templates WHERE type=0 ORDER BY pri,hinfo;",
-   lastempty=>1, empty=>0, iff=>['type','1']},
+   lastempty=>0, empty=>0, iff=>['type','1']},
   {ftype=>101, tag=>'hinfo_sw', name=>'HINFO sowftware', type=>'hinfo',len=>20,
    sql=>"SELECT hinfo FROM hinfo_templates WHERE type=1 ORDER BY pri,hinfo;",
-   lastempty=>1, empty=>0, iff=>['type','1']},
+   lastempty=>0, empty=>0, iff=>['type','1']},
   {ftype=>1, tag=>'ether', name=>'Ethernet address', type=>'mac', len=>12,
    iff=>['type','1'], empty=>0},
   {ftype=>1, tag=>'model', name=>'Model', type=>'text', len=>30, empty=>1, 
@@ -469,7 +476,8 @@ do "$PROG_DIR/back_end.pl";
   {ftype=>4, tag=>'addr', name=>'Host'},
   {ftype=>0, name=>'Current selections'},
   {ftype=>4, tag=>'server', name=>'Server'},
-  {ftype=>4, tag=>'zone', name=>'Zone'}
+  {ftype=>4, tag=>'zone', name=>'Zone'},
+  {ftype=>4, tag=>'sid', name=>'Session ID (SID)'}
  ]
 );
 
@@ -506,7 +514,7 @@ do "$PROG_DIR/back_end.pl";
   {ftype=>4, tag=>'subnet', name=>'Type', type=>'enum',
    enum=>{t=>'Subnet',f=>'Net'}},
   {ftype=>1, tag=>'net', name=>'Net (CIDR)', type=>'cidr'},
-  {ftype=>1, tag=>'vlan', name=>'VLAN', type=>'int',
+  {ftype=>1, tag=>'vlan', name=>'VLAN', type=>'text', len=>15,
    iff=>['subnet','t']},
   {ftype=>1, tag=>'comment', name=>'Comment', type=>'text',
    len=>60, empty=>1},
@@ -1107,6 +1115,11 @@ sub hosts_menu() {
     $res=delete_magic('h','Host','hosts',\%host_form,\&get_host,\&delete_host,
 		      param('h_id'));
     goto show_host_record if ($res == 2);
+    if ($res==1) {
+      update_history($state{uid},$state{sid},1,
+		    "DELETE: $host_types{$host{type}} ",
+		    "domain: $host{domain}",$host{id});
+    }
     return;
   }
   elsif ($sub eq 'Alias') {
@@ -1118,15 +1131,19 @@ sub hosts_menu() {
 	return;
       }
       $data{aliasname}=$host{domain};
+
+      goto show_host_record if (check_perms('host',$host{domain}));
     }
-    goto show_host_record if (check_perms('host',$host{domain}));
 
     $data{type}=4;
     $data{zone}=$zoneid;
     $data{alias}=param('aliasadd_alias') if (param('aliasadd_alias'));
     $res=add_magic('aliasadd','ALIAS','hosts',\%new_alias_form,
-		   \&add_host,\%data);
+		   \&restricted_add_host,\%data);
     if ($res > 0) {
+      update_history($state{uid},$state{sid},1,
+	   	    "ALIAS: $host_types{$data{type}} ",
+		    "domain: $data{domain}, alias=$data{alias}",$res);
       param('h_id',$res);
       goto show_host_record;
     }
@@ -1158,10 +1175,17 @@ sub hosts_menu() {
 	  alert1('Invalid IP!');
 	} elsif (ip_in_use($serverid,param('new_ip'))) {
 	  alert1('IP already in use!');
+	} elsif (check_perms('ip',param('new_ip'),1)) {
+	  alert1('Invalid IP number: outside allowed range(s)');
 	} else {
-	  $host{ip}[1][1]=param('new_ip'); 
+	  $old_ip=$host{ip}[1][1];
+	  $host{ip}[1][1]=param('new_ip');
 	  $host{ip}[1][4]=1;
 	  unless (update_host(\%host)) {
+	    update_history($state{uid},$state{sid},1,
+			   "MOVE: $host_types{$host{type}} ",
+		   "domain: $host{domain}, IP: $old_ip --> $host{ip}[1][1]",
+			  $host{id});
 	    print h2('Host moved.');
 	    goto show_host_record;
 	  } else {
@@ -1217,18 +1241,54 @@ sub hosts_menu() {
     }
 
     if (param('h_submit')) {
+      for $i (1..$#{$host{ip}}) { $old_ips[$i]=$host{ip}[$i][1]; }
+
       unless (($res=form_check_form('h',\%host,$hform))) {
 	if (check_perms('host',$host{domain},1)) {
-	  alert2("Invalid hostname: does not conform your restrictions");
+	  alert2("Invalid hostname: does not conform to your restrictions");
 	} else {
-	  if (check_perms('ip',$host{ip}[1][1],1)) {
-	    alert2("Invalid IP number: outside allowed range(s)");
-	  } else {
+	  $update_ok=1;
+
+	  if ($host{type}==1) {
+	    for $i (1..($#{$host{ip}})) {
+	      #print "<p>check $i, $old_ips[$i], $host{ip}[$i][1]";
+	      if (check_perms('ip',$host{ip}[$i][1],1)) {
+		alert2("Invalid IP number: outside allowed range(s) " .
+		       $host{ip}[$i][1]);
+		$update_ok=0;
+	      }
+	      if (($old_ips[$i] ne $host{ip}[$i][1]) &&
+		  ip_in_use($serverid,$host{ip}[$i][1])) {
+		alert2("IP number already in use: $host{ip}[$i][1]");
+		$update_ok=0;
+	      }
+	    }
+
+	    if ($host{ether_alias_info}) {
+	      undef @q;
+	      db_query("SELECT id FROM hosts WHERE zone=$zoneid " .
+		       " AND domain='$host{ether_alias_info}';",\@q);
+	      unless ($q[0][0] > 0) {
+		alert2("Cannot find host specified in 'Ethernet alias' field");
+		$update_ok=0;
+	      } else { 
+		$host{ether_alias}=$q[0][0];
+	      }
+	    } else {
+	      $host{ether_alias}=-1;
+	    }
+	  }
+
+	  if ($update_ok) {
+	    $host{ether_alias}=-1 if ($host{ether});
 	    $res=update_host(\%host);
 	    if ($res < 0) {
 	      alert1("Host record update failed! ($res)");
 	      alert2(db_lasterrormsg());
 	    } else {
+	      update_history($state{uid},$state{sid},1,
+			    "EDIT: $host_types{$host{type}} ",
+			   "domain: $host{domain}",$host{id});
 	      print h2("Host record succesfully updated.");
 	      goto show_host_record;
 	    }
@@ -1350,10 +1410,10 @@ sub hosts_menu() {
     if ($type == 1 || $type == 6) { 
       $sql="$sql1 ORDER BY $sorder,1"; 
     } elsif ($type == 4) { 
-      $sql="$sql3 UNION $sql4 ORDER BY $sorder,2"; 
-    } elsif ($type == 0) { 
-      $sql="$sql1 UNION $sql2 UNION $sql3 UNION $sql4 ORDER BY $sorder,3"; 
-    } 
+      $sql="$sql3 UNION $sql4 ORDER BY $sorder,2";
+    } elsif ($type == 0) {
+      $sql="$sql1 UNION $sql2 UNION $sql3 UNION $sql4 ORDER BY $sorder,3";
+    }
     else { $sql="$sql2 ORDER BY $sorder"; }
     $sql.=" LIMIT $limit OFFSET $offset;";
     #print "<br>$sql";
@@ -1475,14 +1535,19 @@ sub hosts_menu() {
 	  #show_hash(\%data);
 	  $res=add_host(\%data);
 	  if ($res > 0) {
+	    update_history($state{uid},$state{sid},1,
+			   "ADD: $host_types{$data{type}} ",
+			   "domain: $data{domain}",$res);
 	    print h2("Host added successfully");
 	    param('h_id',$res);
 	    goto show_host_record;
+	  } else {
+	    alert1("Cannot add host record!");
+	    alert2(db_lasterrormsg());
 	  }
-	  alert1("Cannot add host record!") if ($res < 0);
 	}
       } else {
-	alert1("Invalid data in form! $res");
+	alert1("Invalid data in form!");
       }
     }
     print h2("Add $host_types{$type} record");
@@ -3501,9 +3566,10 @@ sub form_magic($$$) {
 	push @lst,'';
 	$lsth{''}='<none>';
       }
-      param($p1."_l",$lst[0]) if (($lst[0] ne '') && (not param($p1."_l")));
+      param($p1."_l",$lst[0]) 
+	if (param($p1) eq '' && ($lst[0] ne '') && (not param($p1."_l")));
 
-      if ($lsth{param($p1)}) {
+      if ($lsth{param($p1)} && (param($p1) ne '')) {
 	param($p1."_l",param($p1));
 	param($p1,'');
       }
@@ -3573,6 +3639,8 @@ sub display_form($$) {
       print "<TR><TH COLSPAN=2 ALIGN=\"left\" BGCOLOR=\"$h_bg\">",
             $rec->{name},"</TH>\n";
     } elsif ($rec->{ftype} == 1 || $rec->{ftype} == 101) {
+      next if ($rec->{no_empty} && $val eq '');
+
       $val =~ s/\/32$// if ($rec->{type} eq 'ip');
       #print Tr,td([$rec->{name},$data->{$rec->{tag}}]);
       if ($rec->{definfo}) {
@@ -3585,26 +3653,29 @@ sub display_form($$) {
       print Tr,"<TD WIDTH=\"",$form->{nwidth},"\">",$rec->{name},"</TD><TD>",
             "$val</TD>\n";
     } elsif ($rec->{ftype} == 2) {
-      print Tr,td($rec->{name}),
-	"<TD><TABLE width=\"100%\" bgcolor=\"#e0e0e0\">",Tr;
       $a=$data->{$rec->{tag}};
+      next if ($rec->{no_empty} && @{$a}<2);
+      print Tr,td($rec->{name}),
+	    "<TD><TABLE width=\"100%\" bgcolor=\"#e0e0e0\">";
       for $k (1..$rec->{fields}) { 
 	#print "<TH>",$$a[0][$k-1],"</TH>";
       }
       for $j (1..$#{$a}) {
-	print Tr;
+	print "<TR>";
 	for $k (1..$rec->{fields}) {
 	  $val=$$a[$j][$k];
 	  $val =~ s/\/32$// if ($rec->{type}[$k-1] eq 'ip');
 	  $val='&nbsp;' if ($val eq '');
 	  print td($val);
 	}
+	print "</TR>";
       }
       print "</TABLE></TD>\n";
     } elsif ($rec->{ftype} == 3) {
       print Tr,"<TD WIDTH=\"",$form->{nwidth},"\">",$rec->{name},"</TD><TD>",
             "$val</TD>\n";
     } elsif ($rec->{ftype} == 4) {
+      $val='&nbsp;' if ($val eq '');
       print "<TR><TD WIDTH=\"",$form->{nwidth},"\">",$rec->{name},"</TD><TD>",
             "<FONT color=\"$form->{ro_color}\">$val</FONT></TD></TR>\n";
     } elsif ($rec->{ftype} == 5) {
@@ -3632,9 +3703,10 @@ sub display_form($$) {
       } else { print td("Not selected"); }
       print "</TR>";
     } elsif ($rec->{ftype} == 8) {
-      print "<TR>",td($rec->{name}),"<TD><TABLE><TR>";
       $a=$data->{$rec->{tag}};
       $url=$form->{$rec->{tag}."_url"};
+      next unless (@{$a}>1);
+      print "<TR>",td($rec->{name}),"<TD><TABLE><TR>";
       #for $k (1..$rec->{fields}) { print "<TH>",$$a[0][$k-1],"</TH>";  }
       for $j (1..$#{$a}) {
 	$k=' ';
@@ -3710,6 +3782,18 @@ sub alert2($) {
   print "<H3><FONT color=\"red\">$msg</FONT></H3>";
 }
 
+
+sub restricted_add_host($) {
+  my($rec)=@_;
+
+  if (check_perms('host',$rec->{domain},1)) {
+    alert1("Invalid hostname: doest not conform your restrictions");
+    return -101;
+  }
+
+  return add_host($rec);
+}
+			
 
 # eof
 
