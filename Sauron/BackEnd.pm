@@ -2510,7 +2510,7 @@ sub get_net($$) {
 		      "range_start,range_end,vlan,cdate,cuser,mdate,muser,".
                       "netname,alevel,type,dummy", $id,$rec,"id"));
 
-  fix_bools($rec,"subnet,no_dhcp");
+  fix_bools($rec,"subnet,no_dhcp,dummy");
   get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comment",
 		  "type=4 AND ref=$id ORDER BY id",$rec,'dhcp_l');
 
