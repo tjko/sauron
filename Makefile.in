@@ -106,6 +106,8 @@ CONTRIB_FILES = contrib/additional-ether-codes.txt \
 		contrib/htmldoc-sql \
 		contrib/kerberos-auth
 
+PLUGINS = sample
+
 CGIFILES = cgi/sauron.cgi cgi/browser.cgi
 LOGOFILES = icons/logo.png icons/logo_large.png
 MISCFILES = COPYING COPYRIGHT
@@ -232,6 +234,10 @@ install: make_dirs
 	@for f in $(CONTRIB_FILES); do \
 		$(INSTALL) -m 644 $$f $(INSTALL_ROOT)/$(bindir)/contrib; \
 	done
+	@for f in $(PLUGINS); do \
+		$(INSTALL) -m 644 plugins/$$f.conf $(INSTALL_ROOT)/$(bindir)/plugins; \
+		$(INSTALL) -m 644 plugins/$$f.pm $(INSTALL_ROOT)/$(bindir)/plugins; \
+	done
 	@[ -f $(INSTALL_ROOT)/$(bindir)/modgroup ] && \
 		 rm -f $(INSTALL_ROOT)/$(bindir)/modgroup || :
 	@ln -s moduser $(INSTALL_ROOT)/$(bindir)/modgroup
@@ -258,6 +264,7 @@ make_dirs:
 	$(INSTALL) -m 755 -d $(INSTALL_ROOT)/$(bindir)/logs
 	$(INSTALL) -m 755 -d $(INSTALL_ROOT)/$(bindir)/contrib
 	$(INSTALL) -m 755 -d $(INSTALL_ROOT)/$(bindir)/icons
+	$(INSTALL) -m 755 -d $(INSTALL_ROOT)/$(bindir)/plugins
 
 
 printable.man:

@@ -51,7 +51,9 @@ $debug_mode = $SAURON_DEBUG_MODE;
 	  'templates'=>'Sauron::CGI::Templates'
 );
 
-%menuhash=(
+%menuhooks = ();
+
+%menuhash =(
 	    'servers'=>[
 			['Show Current',''],
 			['Select','sub=select'],
@@ -157,6 +159,7 @@ sub frame_set();
 sub frame_set2();
 sub frame_1();
 sub frame_2();
+sub init_plugins($);
 
 
 #####################################################################
@@ -266,6 +269,7 @@ if ($pathinfo ne '') {
 }
 
 
+init_plugins($SAURON_PLUGINS);
 cgi_util_set_zone($zoneid,$zone);
 cgi_util_set_server($serverid,$server);
 set_muser($state{user});
@@ -329,11 +333,22 @@ if ($menu eq 'about') {
   about_menu();
 }
 elsif ($menuref=$menus{$menu}) {
+  my $fail = 0;
+  my $module = $menuref;
+
+  # check if we should call a plugin instead of default menu handler module
+  if (($hook = $menuhooks{$menu}->{param('sub')})) {
+    #print h2("HOOK: $$hook[0] ($$hook[1])");
+    $module="\"$$hook[1]\"";
+    $menuref="Sauron::Plugins::$$hook[0]";
+  }
+
   # load module containing menu handler
-  eval "require $menuref;";
+  eval "require $module;";
   if ($@) {
-    alert2("Failed to load module: $menuref");
-  } else {
+    alert2("Failed to load module: $module");
+  }
+  else {
     $state{selfurl}=$selfurl;
     # call menu_hanlder() routine in the module
     $menuref .= '::menu_handler(\%state,\%perms)';
@@ -773,6 +788,37 @@ sub frame_2() {
   exit 0;
 }
 
+
+sub init_plugins($) {
+  my($plugins) = @_;
+
+  my(@plugs) = split(/,/,$plugins);
+  my($ret,$i,$file,$file2);
+
+  for $i (0..$#plugs) {
+    $file="$PROG_DIR/plugins/$plugs[$i].conf";
+    $file2="$PROG_DIR/plugins/$plugs[$i].pm";
+    if (-r $file) {
+      $ret = do "$file";
+      if ($@) {
+	logmsg("notice","parse error in plugin info: $file");
+      } elsif (not $ret) {
+	logmsg("notice", "failed to process plugin info: $file");
+      }
+
+      # add commands defined by plugin into appropriate menu...
+      for $j (0..$#{$MENUDATA}) {
+	push @{$menuhash{$MENU}}, [$$MENUDATA[$j][0],$$MENUDATA[$j][1]];
+
+	# add hook for command (if necessary)...
+	if ($$MENUDATA[$j][2]) {
+	  $menuhooks{$MENU}->{$$MENUDATA[$j][2]}=[$NAME,$file2];
+	}
+      }
+    }
+  }
+
+}
 
 # eof
 

@@ -162,6 +162,15 @@ $SERVER_ID = "fooserver";
 #
 # $SAURON_HINFO_MODE = 1;
 
+# CGI interface plugins
+#
+# plugins consist of a defition file (.conf) and actual Perl module (.pm)
+# and are expected to be under plugins/ directory.
+#
+# This arguemnt contains comma separated list of plugins to load:
+#
+# $SAURON_PLUGINS = "test";
+
 #########################################################################
 # misc
 

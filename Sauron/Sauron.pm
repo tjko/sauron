@@ -72,6 +72,7 @@ sub set_defaults() {
   $main::SAURON_ZONE_CHK_ARGS = '-q';
   $main::SAURON_NO_REMOTE_ADDR_AUTH = 0;
   $main::SAURON_HINFO_MODE = 1;
+  $main::SAURON_PLUGINS = '';
 
   $main::SAURON_RHF{huser}    = 0; # User
   $main::SAURON_RHF{dept}     = 0; # Dept.
@@ -135,6 +136,7 @@ sub print_config() {
   print "SAURON_ZONE_CHK_ARGS=",$main::SAURON_ZONE_CHK_ARGS,"\n";
   print "SAURON_NO_REMOTE_ADDR_AUTH=",$main::SAURON_NO_REMOTE_ADDR_AUTH,"\n";
   print "SAURON_HINFO_MODE=",$main::SAURON_HINFO_MODE,"\n";
+  print "SAURON_PLUGINS='",$main::SAURON_PLUGINS,"'\n";
 
   print "ALEVEL_VLANS=",$main::ALEVEL_VLANS,"\n";
   print "ALEVEL_RESERVATIONS=",$main::ALEVEL_RESERVATIONS,"\n";
