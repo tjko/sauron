@@ -1,0 +1,19 @@
+; localhost.zone - for sauron testing
+; $Id$
+;
+$TTL 86400
+$ORIGIN localhost.
+
+@		IN	SOA	ns1.middle.earth. hostmaster.middle.earth. (
+					 2002081522	; serial number
+					 43200		; refresh
+					 3600		; retry
+					 604800		; expire
+					 86400		; minimum
+					)
+
+
+                IN  	NS	localhost.
+                IN  	A	127.0.0.1
+
+; eof

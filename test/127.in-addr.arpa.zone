@@ -1,0 +1,17 @@
+; 127.in-addr.arpa zone - for sauron testing
+; $Id$
+
+$TTL 604800
+$ORIGIN 127.in-addr.arpa.
+
+@		IN	SOA	ns1.middle.earth. hostmaster.middle.earth. (
+					 2002080320	; serial number
+					 604800		; refresh
+					 86400		; retry
+					 2419200		; expire
+					 604800		; minimum
+					)
+
+                IN	NS	localhost.
+
+; eof
