@@ -1,0 +1,129 @@
+#!/usr/bin/perl
+#
+# update-dhcp-info  reads dhcpd syslog entries and updates host dhcp_date
+#                   field in hosts table (for given server)
+#
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2001.
+# $Id$
+#
+require 5;
+use Getopt::Long;
+use Time::Local;
+
+my ($PG_DIR,$PG_NAME) = ($0 =~ /^(.*\/)(.*)$/);
+$0 = $PG_NAME;
+
+do "$PG_DIR/config" || die("cannot load config");
+do "$PG_DIR/util.pl";
+do "$PG_DIR/db.pl";
+do "$PG_DIR/util_zone.pl";
+do "$PG_DIR/back_end.pl";
+
+%months = (Jan=>0,Feb=>1,Mar=>2,Apr=>3,May=>4,Jun=>5,
+	   Jul=>6,Aug=>7,Sep=>8,Oct=>9,Nov=>10,Dec=>11);
+
+###################################################################
+
+$result = GetOptions("help|h","verbose|v");
+
+if ($opt_help || @ARGV < 2) {
+  print "syntax: $0 [--help] [--verbose] <servername> <logfile>\n";
+  exit(0);
+}
+
+$verbose=1 if (defined $opt_verbose);
+$servername=$ARGV[0];
+$file=$ARGV[1];
+$year=(localtime(time))[5];
+
+
+fatal("cannot read input file '$file'") unless (-r $file);
+
+db_connect();
+
+$serverid=get_server_id($servername);
+fatal("cannot find server '$servername'") unless ($serverid > 0);
+print "Updating server: $servername ($serverid)\n" if ($verbose);
+
+undef @q;
+db_query("SELECT MAX(h.dhcp_date) FROM hosts h, zones z " .
+	 "WHERE z.server=$serverid AND h.zone=z.id AND dhcp_date > 0;",\@q);
+$latest=($q[0][0] > 0 ? $q[0][0] : 0);
+$latest_str = localtime($latest);
+
+print "Latest dhcp_date for this server: $latest_str ($latest)\n"
+  if ($verbose);
+
+
+print "Reading logfile..." if ($verbose);
+
+if ($file =~ /\.gz$/) {
+  open(FILE,"gzip -dc $file |") || fatal("cannot decompress file: $file");
+} else {
+  open(FILE,"$file") || fatal("cannot open file: $file");
+}
+
+while (<FILE>) {
+  next unless /^(\S+)\s+(\d+)\s+(\d+):(\d+):(\d+)\s+(\S+)\s+dhcpd:\s(.*)$/;
+
+  $m=$months{$1}; $d=$2; $hour=$3; $min=$4; $sec=$5; $host=$6; $rest=$7;
+  $t=timelocal($sec,$min,$hour,$d,$m,$year);
+  #print "$t:$m,$d,$hour,$min,$sec,$host,'$rest'\n";
+
+  if ($rest =~ /^(DHCPDISCOVER|BOOTREQUEST)\s+from\s+(\S+)\s+via\s+(\S+)/) {
+    #print "$1 $2 $3\n";
+    $mac="\U$2";
+    $mac =~ s/[^A-F0-9]//g;
+    next unless (length($mac)==12);
+    #print "$t : $mac\n";
+    $hash{$mac}=$t;
+  }
+
+}
+
+close(FILE);
+$hashcount = (keys %hash);
+print "done. ($hashcount)\n" if ($verbose);
+
+print "Fetching host info from database..." if ($verbose);
+undef @q;
+db_query("SELECT h.id,h.ether,h.dhcp_date,h.domain FROM hosts h,zones z " .
+	 "WHERE z.server=$serverid AND h.zone=z.id AND h.type=1 " .
+	 " AND NOT h.ether ISNULL;",\@q);
+$c=@q;
+print "done. ($c)\n" if ($verbose);
+
+for $i (0..$#q) {
+  $mac="\U$q[$i][1]";
+  next unless ($t=$hash{$mac});
+  $id=$q[$i][0];
+  $date=($q[$i][2] > 0 ? $q[$i][2] : 0);
+  $domain=$q[$i][3];
+  next unless ($t > $date);
+  #print "match: $domain $id $date : $t\n";
+  push @match, [$id,$t];
+}
+
+$mcount=@match;
+unless ($mcount > 0) {
+  print "Nothing to do (no records to be updated)\n" if ($verbose);
+  exit;
+}
+
+print "Updating dhcp_date for $mcount host records..." if ($verbose);
+
+db_begin();
+for $i (0..$#match) {
+  $id=$match[$i][0];
+  $t=$match[$i][1];
+  $res=db_exec("UPDATE hosts SET dhcp_date=$t WHERE id=$id;");
+  fatal("cannot update record id=$id") if ($res < 0);
+}
+fatal("cannot commit changes to database") if (db_commit() < 0);
+
+print "done.\n" if ($verbose);
+
+exit 0;
+
+# eof
+

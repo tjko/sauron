@@ -1,16 +1,12 @@
 
 general:
-	- write utility to update dhcp_date fields in hosts table 
-	  using dhcpd log files...
 	- test whether changing TEXT fiels in hosts table to appropriate
 	  CHAR(n) fields would improve speed...
- 	- make 'addgroup' utility (implement like moduser/modgroup combo)
 	- add 'install' to Makefile.in; directory generation, symlink
-	  generation (moduser->modgroup,adduser->addgroup)
+	  generation (moduser->modgroup)
         - write (command-line :) utility for easily generating large
 	  number of host entries, and to import interactively hosts
 	  from text files in standard zonefile format...
-	- implement session ID (sid) stuff, and history&lastlog table stuff
 
 import:
 	- remove unneccessary (?) quoting (\"...) from dhcp (and other) records
@@ -20,12 +16,9 @@ import:
 
 
 sauron:
-	- implement support for small reverse subnet delegations
-          (automagic CNAME generation on the fly...)
-	- check MX generation for "MX only" records not using MX templates
+	- more sanity checks
 
 sauron.cgi:
-	- finnish access control support
 	- fix timeout problem with huge zone/server deletes...(faster server :)
-	- add "ether2" field add/edit support
+
 
