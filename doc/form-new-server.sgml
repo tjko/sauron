@@ -26,6 +26,15 @@
              <entry>Base directory for BIND configuration files</>
              <entry><filename class=directory>/var/named</></>
         </row>
+        <row><entry>Slave for</>
+             <entry>Option that allows to select a master server for this
+                    server (making it a slave). Slave server will
+                    automatically inherit all the master zones of
+                    it's master as slave zones. Slave server can 
+                    also optionally inherit DNS server access controls
+                    from the master server.</>
+              <entry>None</>
+        </row>
         <row><entry>Comment</>
              <entry>Long description of the server (optional)</>
              <entry>primary name server</>
