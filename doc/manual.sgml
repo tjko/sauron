@@ -594,7 +594,36 @@ CGI interface:         Enabled
     <section>
       <title>WWW Server Configuration</>
       <para>
-      
+        To be able to use Sauron's web interface you need to make
+        <filename>sauron.cgi</> and <filename>browser.cgi</>
+        (if you wan't to use the Sauron DNS browser) available through
+        your www server. To do this you typically would either make symbolic
+        links to these files or copy these files in your 
+        <filename class=directory>cgi-bin</> directory. Note, if you're
+        installing from the <acronym>RPM</> package, these symbolic links
+        are created automatically, so you only need to check that your 
+        web server configuration allow symlinks in your cgi-bin directory.
+
+      </para> 
+      <para>
+          You should use your web server configuration and/or firewall
+          to limit access to <filename>sauron.cgi</> and 
+          <filename>browser.cgi</> cgi scripts only from the machines
+          you need to access Sauron from.
+      </para>
+
+      <para>
+         Sauron web interface uses several icons and images that are
+         by default installed under the top-level sauron directory.
+         You need to make these available through your web server
+         via <filename class=directory>/sauron/icons/</> directory
+         (unless you're installing from the RPM which does this automatically
+         for you).
+         To do this you can create that directory under your
+         www server root and then either make symbolic links or copy
+         all the image files from 
+         <filename class=directory>&lt;sauron top-level directory&gt;/icons/</>
+         into this directory.
       </para>
     </section>
 
