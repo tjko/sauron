@@ -1,5 +1,10 @@
 $Id$
 
+0.6.2beta
+	- fixes to zone file parsing code (UtilZone.pm)
+	- configuration file directory is now patched into Sauron.pm
+	  during install
+	- removed (unnesessary) dependency on "warnings" module
 	
 0.6.1	
 	- sauron: not anymore generating "broken" aliases to expired
