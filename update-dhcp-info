@@ -75,30 +75,52 @@ while (<FILE>) {
 
   $m=$months{$1}; $d=$2; $hour=$3; $min=$4; $sec=$5; $host=$6; $rest=$7;
   $t=timelocal($sec,$min,$hour,$d,$m,$year);
-  #print "$t:$m,$d,$hour,$min,$sec,$host,'$rest'\n";
-  $mac='';
+  $first_date = $t unless (defined $first_date);
+  if (($t+86400) < $firstdate) {
+    fatal("Log contains new year or time shifts backwards");
+  }
+  $mac=''; $cmd='';
 
-  if ($rest =~ /^(DHCPDISCOVER|BOOTREQUEST)\s+from\s+(\S+)\s+via\s+(\S+)/) {
+  if ($rest =~ /^(DHCPDISCOVER|BOOTREQUEST)\s+from\s+(\S+)\s+via\s+(.*)$/) {
     #print "$1 $2 $3\n";
+    $cmd=$1;
     $mac="\U$2";
   }
-  elsif ($rest =~ /^(DHCPREQUEST)\s+for\s+(\S+)\s+from\s+(\S+)\s+via\s+/) {
-    $mac="\U$3";
-    #print "$1 $2 $3 : $mac\n";
+  elsif ($rest =~ /^(DHCPREQUEST)\s+for\s+(\S+)(\s+\((\S+)\))?\s+from\s+(\S+)\s+via\s+(.*)$/) {
+    $cmd=$1;
+    $mac="\U$5";
+    #print "$1 $2 ($4) $5 '$6' : $mac\n";
   }
+  elsif ($rest =~ /^(DHCPACK|DHCPNAK)\s+on\s+(\S+)\s+to\s+(\S+)\s+via\s+(.*)$/) {
+    $cmd=$1;
+    $mac="\U$3";
+    #print "$1 $2 $3 '$4'\n";
+  }
+  elsif ($rest =~ /^(BOOTREPLY)\s+for\s+(\S+)\s+to\s+(\S+)\s+\((\S+)\)\s+via\s+(.*)$/) {
+    $cmd=$1;
+    $mac="\U$4";
+    #print "$1 $2 $3 $4 '$5'\n";
+  }
+
 
   if ($mac) {
     $mac =~ s/[^A-F0-9]//g;
-    next unless (length($mac)==12);
+    next if (length($mac) == 32); # ignore those damn MS RAS requests...
+    unless (length($mac)==12) {
+      print "$file($.): invalid mac addres found ($mac)\n";
+      next;
+    }
     #print "$t : $mac\n";
-    $hash{$mac}=$t;
+    $hash{$mac}={} unless (defined $hash{$mac});
+    $hash{$mac}->{$cmd}=$t;
   }
 
 }
 
 close(FILE);
+
 $hashcount = (keys %hash);
-print "done. ($hashcount)\n" if ($verbose);
+print "done. (found $hashcount different MACs)\n" if ($verbose);
 
 print "Fetching host info from database..." if ($verbose);
 undef @q;
@@ -106,18 +128,29 @@ db_query("SELECT h.id,h.ether,h.dhcp_date,h.domain FROM hosts h,zones z " .
 	 "WHERE z.server=$serverid AND h.zone=z.id AND h.type=1 " .
 	 " AND NOT h.ether ISNULL;",\@q);
 $c=@q;
-print "done. ($c)\n" if ($verbose);
+print "done. ($c MACs found in database)\n" if ($verbose);
 
 for $i (0..$#q) {
   $mac="\U$q[$i][1]";
-  next unless ($t=$hash{$mac});
+  unless (defined $hash{$mac}) {
+    $notfounds++;
+    next;
+  }
   $id=$q[$i][0];
   $date=($q[$i][2] > 0 ? $q[$i][2] : 0);
   $domain=$q[$i][3];
-  next unless ($t > $date);
+  $t = $hash{$mac}->{DHCPACK} > 0  ?  $hash{$mac}->{DHCPACK}  :  0;
+  $t = $hash{$mac}->{BOOTREPLY} if ($hash{$mac}->{BOOTREPLY} > $t);
+  unless ($t > $date) {
+    #print "notupdating: $domain : $t : $date\n";
+    $notupdated++;
+    next;
+  }
   #print "match: $domain $id $date : $t\n";
   push @match, [$id,$t];
 }
+
+#print "$notfound,$notupdated\n";
 
 $mcount=@match;
 unless ($mcount > 0) {

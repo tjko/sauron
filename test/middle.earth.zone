@@ -1,0 +1,52 @@
+; middle.earth. zone - for sauron testing
+; $Id$
+
+$TTL 43200	; default TTL for this zone
+
+$ORIGIN middle.earth.
+@		IN	SOA	ns1.middle.earth. hostmaster.middle.earth. (
+					 2002082227	; serial number
+					 14400		; refresh
+					 1800		; retry
+					 2419200	; expire
+					 43200		; minimum
+					)
+
+; zone nameservers
+                              IN  NS     ns1.middle.earth.
+                              IN  NS     ns2.middle.earth.
+
+; zone mail exchanges
+                              IN  MX     10 mail1
+                              IN  MX     10 mail2
+
+; contact info (zone)
+                              IN  TXT    "Hostmaster: Sauron"
+                              IN  TXT    "Email: hostmaster@middle.earth"
+
+; delegated zones
+north			IN 	NS	ns.north.middle.earth.
+			IN	NS	ns1.middle.earth.
+			IN	NS	ns2.middle.earth.
+
+south			IN	NS	ns.south.middle.earth.
+			IN	NS	ns1.middle.earth.
+			IN	NS	ns2.middle.earth.
+
+
+; glue records
+ns.north		IN	A	10.11.100.10
+ns.south		IN	A	10.12.100.10
+
+
+
+
+ns1			IN	A	10.10.100.10
+			IN	HINFO	SUN-ULTRA UNIX-SOLARIS
+			IN	WKS	10.10.100.10 tcp telnet finger
+			IN	MX	mail1
+			IN	MX	mail2
+			IN	TXT	"primary DNS server"
+
+
+; eof
