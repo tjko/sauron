@@ -3,7 +3,7 @@
 # update-dhcp-info  reads dhcpd syslog entries and updates host dhcp_date
 #                   field in hosts table (for given server)
 #
-# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2001-2003.
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2001-2004.
 # $Id$
 #
 require 5;
@@ -75,15 +75,17 @@ if ($file =~ /\.gz$/) {
 }
 
 while (<FILE>) {
-  next unless /^(\S+)\s+(\d+)\s+(\d+):(\d+):(\d+)\s+(\S+)\s+dhcpd:(\s+\[.+?\])?\s(.*)$/;
+  next unless /^(\S+)\s+(\d+)\s+(\d+):(\d+):(\d+)\s+((\S+)\s+dhcpd:(\s+\[.+?\])?|\[dhcpd\])\s(.*)$/;
 
-  $m=$months{$1}; $d=$2; $hour=$3; $min=$4; $sec=$5; $host=$6; $rest=$8;
+  $m=$months{$1}; $d=$2; $hour=$3; $min=$4; $sec=$5; $host=$7; $rest=$9;
   $t=timelocal($sec,$min,$hour,$d,$m,$year);
   $first_date = $t unless (defined $first_date);
+  # hostname info not currently used anywhere...
   $first_host = $host unless (defined $first_host);
-  fatal("Log contains new year or time shifts backwards")
+  fatal("Log contains new year or time shifts backwards!")
     if (($t+86400) < $first_date);
   $mac=''; $cmd=''; $ip=''; $via='';
+  #print "$m,$d,$hour,$min,$sec,$host,$rest\n";
 
   if ($rest =~ /^(DHCPDISCOVER|BOOTREQUEST)\s+from\s+(\S+)\s+via\s+(.*)$/) {
     #print "$1 $2 $3\n";
