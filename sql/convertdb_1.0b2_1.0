@@ -1,0 +1,89 @@
+#!/usr/bin/perl -I/usr/local/sauron
+#
+# convert database format (beta) to 1.0
+#
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2002.
+# $Id$
+#
+require 5;
+use Getopt::Long;
+use Net::Netmask;
+use Sauron::DB;
+use Sauron::Util;
+use Sauron::UtilZone;
+use Sauron::BackEnd;
+
+my ($PG_DIR,$PG_NAME) = ($0 =~ /^(.*\/)(.*)$/);
+$0 = $PG_NAME;
+
+if (-r "/etc/sauron/config") {
+  $config_file="/etc/sauron/config";
+} elsif (-r "/usr/local/etc/sauron/config") {
+  $config_file="/usr/local/etc/sauron/config"; 
+} else {
+  die("cannot find config file in /etc/sauron or /usr/local/etc/sauron");
+}
+
+do "$config_file" || die("cannot load config: $config_file");
+
+##############################################
+
+$user = (getpwuid($<))[0];
+set_muser($user);
+
+$result = GetOptions("help|h","name=s","commit","noreverse",
+		    "newonly","outofzone","verbose","force=s",
+		    "group=s","info=s");
+
+if ($opt_help || $result < 1) {
+  print "syntax: $0 [options]\n\n","\n";
+  exit(0);
+}
+
+fatal("DB_CONNECT not defined in configuration!") unless ($DB_CONNECT);
+db_connect($DB_CONNECT);
+
+
+db_begin();
+db_ignore_begin_and_commit(1);
+
+print "Starting conversion...\n";
+undef @q;
+db_query("SELECT id,name FROM zones WHERE type='M' ORDER BY id",\@q);
+for $i (0..$#q) {
+  $zoneid=$q[$i][0];
+  print "Zone: $q[$i][1] (id=$zoneid)\n";
+  $id=get_host_id($zoneid,'@');
+  unless ($id > 0) {
+    $id=add_host({zone=>$zoneid,type=>10,domain=>'@',comment=>'zone record'});
+    fatal("failed to add missing zone host record ($id)") if ($id < 0);
+  } else {
+    fatal("failed to update zone host record")
+      if (update_host({id=>$id,type=>10}) < 0);
+  }
+  print "zone host record id=$id\n";
+
+  fatal("cannot update NS entries: ".db_errormsg())
+    if (db_exec("UPDATE ns_entries SET type=2,ref=$id " .
+		    "WHERE type=1 AND ref=$zoneid") < 0);
+
+  fatal("cannot update MX entries: ".db_errormsg())
+    if (db_exec("UPDATE mx_entries SET type=2,ref=$id " .
+		    "WHERE type=1 AND ref=$zoneid") < 0);
+
+  fatal("cannot update TXT entries: ".db_errormsg())
+    if (db_exec("UPDATE txt_entries SET type=2,ref=$id " .
+		    "WHERE type=1 AND ref=$zoneid") < 0);
+}
+
+
+
+
+db_ignore_begin_and_commit(0);
+fatal("commit failed") if (db_commit() < 0);
+
+exit;
+
+
+# eof :-)
+
