@@ -361,7 +361,8 @@ sub pwd_external_check($$$) {
 # print error message and exit program
 sub fatal($) {
   my($msg) = @_;
-  my($prog) = $0 =~ /^.*\/(.*)$/;
+  my($prog) = $0;
+  $prog=$1 if ($prog =~ /^.*\/(.*)$/);
   print STDERR "$prog: $msg\n";
   exit(1);
 }
@@ -369,7 +370,8 @@ sub fatal($) {
 # print error message
 sub error($) {
   my($msg) = @_;
-  my($prog) = $0 =~ /^.*\/(.*)$/;
+  my($prog) = $0;
+  $prog=$1 if ($prog =~ /^.*\/(.*)$/);
   print STDERR "$prog: $msg\n";
 }
 
