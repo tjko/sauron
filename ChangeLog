@@ -4,6 +4,8 @@ $Id$
 	- generatehosts: fix to :N: parameter handling by Ken McKinlay
 	- new utility: export-hosts to export host data in CSV format
 	- moduser: added ability to add group(s) to user from command line
+	- sauron: fix to named.conf "logging" section generation 
+	  by Riku Meskanen
 	- CGI interface: login debugging support by Riku Meskanen
 	- CGI browser: fix to "info" field searching and support for 
 	  "dhcp only" records by Erik Ruwalder
