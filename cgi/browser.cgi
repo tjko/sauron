@@ -18,20 +18,21 @@ $CGI::POST_MAX = 10000; # max 10k posts
 #$|=1;
 $debug_mode = 0;
 
-if (-f "/etc/sauron/config") {
+if (-f "/etc/sauron/config-browser") {
   $conf_dir='/etc/sauron';
 }
-elsif (-f "/opt/etc/sauron/config") {
+elsif (-f "/opt/etc/sauron/config-browser") {
   $conf_dir='/opt/etc/sauron';
 }
-elsif (-f "/usr/local/etc/sauron/config") {
+elsif (-f "/usr/local/etc/sauron/config-browser") {
   $conf_dir='/usr/local/etc/sauron';
 }
 else {
-  error("cannot find configuration file!");
+  die("cannot find configuration file!\n");
 }
 
-do "$conf_dir/config" || error("cannot load configuration!");
+do "$conf_dir/config-browser" || die("cannot load configuration!");
+die("invalid configuration file") unless ($DB_CONNECT);
 
 do "$PROG_DIR/util.pl";
 do "$PROG_DIR/db.pl";
@@ -131,7 +132,6 @@ do "$PROG_DIR/cgi_util.pl";
 
 db_connect2() || error("Cannot estabilish connection with database");
 if (($res=cgi_disabled())) { error("CGI interface disabled: $res"); }
-error("Invalid log path") unless (-d $LOG_DIR);
 
 $pathinfo = path_info();
 $script_name = script_name();
@@ -249,18 +249,15 @@ sub do_search() {
   }
 
   $order = "3";
+  $mask_str = db_encode_str($mask);
 
   if ($type =~ /^Host/) {
-    $mask =~ s/\\/\\\\/g;
-    $mask =~ s/\'/\\\'/g;
-    $rule = " h.domain ~* '$mask' ";
+    $rule = " h.domain ~* $mask_str ";
     $alias=1;
   }
   elsif ($type =~ /^Info/) {
-    $mask =~ s/\\/\\\\/g;
-    $mask =~ s/\'/\\\'/g;
-    $rule = " (h.location ~* '$mask' OR h.huser ~* '$mask'" .
-            " OR h.dept ~* '$mask' OR h.info ~* '$mask')  ";
+    $rule = " (h.location ~* $mask_str OR h.huser ~* $mask_str" .
+            " OR h.dept ~* $mask_str OR h.info ~* $mask_str)  ";
   }
   elsif ($type =~ /^IP/) {
     $mask =~ s/\s//g;
@@ -287,6 +284,9 @@ sub do_search() {
 
     $rule = " h.ether ~ '$mask' ";
     $rule = " h.ether = '$mask' " if ($mask =~ /^[A-F0-9]{12}$/);
+  }
+  else {
+    return;
   }
 
   $sql  = "SELECT h.id,h.type,h.domain,a.ip,''::text,h.ether,h.info,h.huser, ".
@@ -315,6 +315,13 @@ sub do_search() {
     $sql = "$sql UNION $sql2 UNION $sql2b UNION $sql3";
   }
 
+  if (($sortparam=param('sort'))) {
+    $order='3' if ($sortparam == 1);
+    $order='4' if ($sortparam == 2);
+    $order='6' if ($sortparam == 3);
+    $order='7' if ($sortparam == 4);
+  }
+
   $sql .= " ORDER BY $order";
 
   #print "<p>sql '$sql'";
@@ -328,13 +335,19 @@ sub do_search() {
   }
 
   $count=$show_max if ($count > $show_max);
+  $url=self_url();
+  $url =~ s/&sort=\d//g;
 
   print "<TABLE width=\"100%\" cellspacing=2 border=0>\n",
-        "<TR bgcolor=\"aaaaee\">",th("#"),th("Domain"),th("IP (or alias)"),
-	th("Ether"),th("Info"),"</TR>";
+        "<TR bgcolor=\"aaaaee\">",th("#"),
+	th("<a href=\"$url&sort=1\">Domain</a>"),
+	th("<a href=\"$url&sort=2\">IP (or alias)</a>"),
+	th("<a href=\"$url&sort=3\">Ether</a>"),
+	th("<a href=\"$url&sort=4\">Info</a>"),
+	"</TR>";
+
   for $i (0..($count-1)) {
     $color = (($i % 2) ? "#eeeeee" : "#ffffcc");
-    $url=self_url();
     $name="<a href=\"$url&id=$q[$i][0]\">$q[$i][2]</a>";
     $type = $q[$i][1];
     if ($type == 1) {

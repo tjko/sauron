@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 #
-# addhosts - utility to modify (move,delete) host records
+# addhosts - utility to add host records
 #
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>  2001.
 # $Id$

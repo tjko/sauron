@@ -28,10 +28,10 @@ elsif (-f "/usr/local/etc/sauron/config") {
   $conf_dir='/usr/local/etc/sauron';
 }
 else {
-  error("cannot find configuration file!");
+  die("cannot find configuration file!");
 }
 
-do "$conf_dir/config" || error("cannot load configuration!");
+do "$conf_dir/config" || die("cannot load configuration!");
 
 do "$PROG_DIR/util.pl";
 do "$PROG_DIR/db.pl";
@@ -1466,8 +1466,7 @@ sub hosts_menu() {
     undef $domainrule;
     if (param('bh_domain') ne '') {
       $tmp=param('bh_domain');
-      $tmp =~ s/\\/\\\\/g;
-      $domainrule=" AND a.domain ~ '$tmp' "; 
+      $domainrule=" AND a.domain ~* " . db_encode_str($tmp) . " "; 
     }
     if (param('bh_order') == 1) { $sorder='5,1';  }
     else { $sorder='1,5'; }

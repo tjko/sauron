@@ -1,0 +1,35 @@
+# Sample browser.cgi configuration file
+#
+# $Id$
+#
+$VER = "0.5";
+
+#########################################################################
+# general configuration options
+
+$PROG_DIR = "/opt/sauron/";
+
+#$DB_CONNECT = "host=localhost port=5432 dbname=sauron user=foo password=bar";
+#$DB_CONNECT = "dbname=sauron user=foo password=bar";
+$DB_CONNECT = "dbname=sauron";
+
+
+#########################################################################
+# WWW DNS browser (browser.cgi) configuration options 
+
+$BROWSER_CONF = { 
+		  foo=>['servername','zonename'], 
+	          foo2=>['server1','zone2.orgg'] 
+		};
+
+$BROWSER_HELP = { 
+		  foo=>['Help','http://www.zone2.orgg/browserhelp.thml'] 
+		  foo2=>['Info','/browserhelp.thml'] 
+		}
+
+$BROWSER_MAX = 100;
+
+
+# eof
+
+
