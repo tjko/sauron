@@ -16,7 +16,7 @@ $0 = $PG_NAME;
 if (-r "/etc/sauron/config") {
   $config_file="/etc/sauron/config";
 } elsif (-r "/usr/local/etc/sauron/config") {
-  $config_file="/usr/local/etc/sauron/config"; 
+  $config_file="/usr/local/etc/sauron/config";
 } else {
   die("cannot find config file in /etc/sauron or /usr/local/etc/sauron");
 }
@@ -27,9 +27,9 @@ do "$config_file" || die("cannot load config: $config_file");
 ##############################################
 
 # $user = (getpwuid($<))[0];
-$result = GetOptions("help|h","name=s","group=s");
+GetOptions("help|h","name=s","group=s");
 
-if ($opt_help || $result < 1) {
+if ($opt_help || $opt_help > 0) {
   print "syntax: $0 [--help] [--group=name] [--name=\"<groupname>\"]\n";
   exit(0);
 }
@@ -65,18 +65,16 @@ if ($i) { # ask confirmation only in interactive session...
   }
 }
 
+db_query("SELECT id FROM user_groups WHERE name='$opt_group'",\@q);
+fatal("Group allready exists!") if ($q[0][0] > 0);
 
 $res=db_exec("INSERT INTO user_groups " .
 	     "(name,comment) VALUES('$opt_group','$opt_name');");
 
-fatal("Cannot add group! (group already exists?)\n" .  db_errormsg()) 
-	  if ($res < 0);
+fatal("Cannot add group: " .  db_errormsg()) if ($res < 0);
 
 print "Group $opt_group added succesfully.\n";
-
-
 exit;
-
 
 # eof :-)
 
