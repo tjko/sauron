@@ -1,0 +1,186 @@
+#!/usr/bin/perl -I/usr/local/sauron
+#
+# export-ip-list  generates VMPS configuration file (from given server)
+#
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2004.
+# $Id$
+#
+require 5;
+use Getopt::Long;
+use Time::Local;
+use Net::Netmask;
+use Sauron::DB;
+use Sauron::Util;
+use Sauron::BackEnd;
+use Sauron::Sauron;
+
+sub optimize_ip_list($);
+
+load_config();
+
+$user = (getpwuid($<))[0];
+$host = `hostname`;
+$host =~ s/\n//g;
+$time_now = localtime;
+$tnow = time();
+$tmp_extension = ".tmp.$<.$$"; # generate extension for temp files
+
+GetOptions("help|h","verbose|v","inverse|i","optimize|o");
+
+if ($opt_help || @ARGV < 1) {
+  print "syntax: $0 [--help] [OPTIONS] <servername> [[networknamemask] ...]\n",
+        "\noptions:\n",
+	"\t--inverse\t\tlist IPs not in use\n",
+	"\t--optimize\tcombine continuous IP blocks into CIDRs\n",
+	"\t--verbose\tmore verbose output\n";
+  print "\n" if ($opt_help);
+  exit(0);
+}
+
+$opt_optimize = ($opt_optimize ? 1 : 0);
+$opt_verbose = ($opt_verbose ? 1 : 0);
+$opt_inverse = ($opt_inverse ? 1 : 0);
+$servername=shift;
+while (($mask=shift)) {  push @masks, $mask; }
+
+db_connect();
+
+$serverid=get_server_id($servername);
+fatal("cannot find server '$servername'") unless ($serverid > 0);
+
+print "# server: $servername\n# mask(s): ".join(",",@masks).
+      "\n# date: ".localtime(time())." by $user\n#\n"  if ($opt_verbose);
+
+
+# select nets using mask(s) (select all if no masks defined)
+
+my $netblocks = {};
+db_query("SELECT id,net,netname " .
+	 "FROM nets " .
+	 "WHERE server=$serverid AND dummy=false " .
+	 "ORDER BY net",\@allnets);
+
+for $i (0..$#allnets) {
+  ($id,$net,$netname) = @{$allnets[$i]};
+  $match=0;
+
+  if (@masks > 0) {
+    for $j (0..$#masks) {
+      $match++ if ($netname =~ /$masks[$j]/);
+    }
+  } else {
+    $match=-1;
+  }
+
+  if ($match) {
+    push @nets, $net;
+    my $block = new Net::Netmask($net);
+    $block->storeNetblock($netblocks);
+  }
+}
+
+
+
+# select IPs (A records) for this server
+
+db_query("SELECT a.ip,h.domain,z.name,h.expiration " .
+	 "FROM zones z JOIN hosts h ON z.id=h.zone " .
+	 " JOIN a_entries a ON h.id=a.host " .
+	 "WHERE z.server=$serverid AND h.type=1 " .
+	 "ORDER BY a.ip",\@ips);
+
+error("No IPs found for this server!") unless (@ips > 0);
+
+
+# build list of active IPs within selected nets
+
+for $i (0..$#ips) {
+  ($ip,$host,$domain,$edate)=@{$ips[$i]};
+  my $block;
+
+  if (($block=findNetblock($ip,$netblocks))) {
+    unless ($edate > 0 && $edate < $tnow) {
+      push @iplist, $ip if ($ip ne $lastip);
+      $lastip=$ip;
+    }
+  }
+}
+
+$ipcount=@iplist;
+
+@iplist=optimize_ip_list(\@iplist) if ($opt_optimize);
+
+
+# print IPs/CIDRs...
+
+my $counter=0;
+for $i (0..$#iplist) {
+  print "$iplist[$i]\n";
+  $counter++;
+}
+
+print "#\n# $counter CIDRs\n" if ($opt_verbose);
+exit 0;
+
+
+
+sub optimize_ip_list($) {
+  my($list) = @_;
+
+  my ($i,$ip,$begin,$end,$last,$len);
+  my %iphash;
+  my @ranges;
+
+
+  # build hash of IPs (takes care of ordering and duplicates)
+
+  for $i (0..$#{$list}) {
+    $ip=$$list[$i];
+    $iphash{ip2int($ip)}++;
+  }
+
+
+  # build list of continuous IP ranges...
+
+  my $mode=0;
+  foreach $i (sort keys %iphash) {
+    if ($mode==0) {
+      $begin=$i;
+      $mode=1;
+    }
+    elsif ($mode==1) {
+      if ($i > $last+1) {
+	$len=$i-$begin;
+	#print "range $begin .. $i ($len)\n";
+	push @ranges, [$begin,$i];
+	$mode=0;
+      }
+    }
+
+    $last=$i;
+  }
+
+  if ($mode==1) {
+    $len=$last-$begin;
+    #print "range $begin .. $last ($len) LAST\n";
+    push @ranges, [$begin,$last];
+  }
+
+
+  # optimize IP ranges...
+
+  for $i (0..$#ranges) {
+    ($begin,$end) = @{$ranges[$i]};
+    $len=$end-$begin;
+    print "[$begin,$end] $len\n";
+
+  }
+
+
+  return @{$list};
+}
+
+
+
+# eof
+
