@@ -79,6 +79,7 @@ if (defined $opt_pending) {
     exit;
   }
 
+  $totalcount=0;
   $serverid=get_server_id($opt_pending);
   fatal("cannot find server '$opt_pending'") unless ($serverid > 0);
   print "Pending host modifications for server: $opt_pending (id=$serverid)\n"
@@ -95,6 +96,8 @@ if (defined $opt_pending) {
 	     "ORDER BY h.domain;",\@q);
     $count=@q;
     next unless ($count > 0);
+    $totalcount+=$count;
+    next if ($opt_quiet);
     print "Zone: $$zones[$i][0] ($count)\n";
     for $j (0..$#q) {
       if ($q[$j][1] > $q[$j][2]) { 
@@ -106,7 +109,7 @@ if (defined $opt_pending) {
     }
   }
 
-  exit;
+  exit(($totalcount > 0 ? 2 : 0));
 }
 
 
