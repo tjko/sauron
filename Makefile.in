@@ -80,7 +80,7 @@ SQL_TABLES =	sql/common.sql \
 
 
 SQL_MISC =      sql/DEFAULTS.sql sql/misc.sql sql/copy_tables.sql \
-		sql/drop_tables.sql
+		sql/drop_tables.sql sql/hinfo_hw.sql sql/hinfo_sw.sql
 
 
 PROGS = sauron addgroup adduser deluser modhosts \
@@ -90,6 +90,12 @@ PROGS = sauron addgroup adduser deluser modhosts \
 
 MODULES = Sauron/Util.pm Sauron/DB.pm Sauron/BackEnd.pm Sauron/CGIutil.pm \
 	  Sauron/UtilZone.pm
+
+
+CONTRIB_FILES = contrib/additional-ether-codes.txt \
+		contrib/Ethernet.txt \
+		contrib/named.root \
+		contrib/htmldoc-sql
 
 CGIFILES = cgi/sauron.cgi cgi/browser.cgi
 LOGOFILES = cgi/logo.png cgi/logo_large.png
@@ -180,6 +186,7 @@ install: all make_dirs
 	$(INSTALL) -m 644 $(MODULES) $(INSTALL_ROOT)/$(bindir)/Sauron
 	$(INSTALL) -m 644 $(SQL_TABLES) $(SQL_MISC) \
 				 $(INSTALL_ROOT)/$(bindir)/sql
+	$(INSTALL) -m 644 $(CONTRIB_FILES) $(INSTALL_ROOT)/$(bindir)/contrib
 	@[ -f $(INSTALL_ROOT)/$(bindir)/modgroup ] && \
 		 rm -f $(INSTALL_ROOT)/$(bindir)/modgroup || :
 	@ln -s moduser $(INSTALL_ROOT)/$(bindir)/modgroup
@@ -198,7 +205,7 @@ make_dirs:
 	$(INSTALL) -m 755 -d $(INSTALL_ROOT)/$(bindir)/Sauron
 	$(INSTALL) -m 755 -d $(INSTALL_ROOT)/$(bindir)/sql
 	$(INSTALL) -m 755 -d $(INSTALL_ROOT)/$(bindir)/logs
-#	$(INSTALL) -m 755 -d $(INSTALL_ROOT)/$(bindir)/contrib
+	$(INSTALL) -m 755 -d $(INSTALL_ROOT)/$(bindir)/contrib
 
 
 printable.man:
