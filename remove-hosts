@@ -21,11 +21,12 @@ if ($opt_help || @ARGV < 2) {
 	"\t--mac\t\tinput file contains MAC addresses (one per line)\n",
 	"\t--ip\t\tinput file contains IP addresses (one per line)\n\n",
 	"\t--commit\tcommit changes (without this no changes are made)\n\n";
-  exit(1);
+  exit(($opt_help ? 0 : 1));
 }
 
 $server=shift;
 $filename=shift;
+$opt_commit=($opt_commit ? 1 : 0);
 
 fatal("cannot find mohosts script in PROG_DIR ($PROG_DIR)")
   unless (-x "$PROG_DIR/modhosts");
