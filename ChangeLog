@@ -1,5 +1,10 @@
 $Id$
 
+	
+0.6.1	
+	- fixed several bugs in special "CNAME hack" delegations for smaller
+	  than class-C nets
+	
 0.6.0
 	- status: added --versions option for displaying module versions
 	- fixed problem with newer Pg.pm modules that caused
