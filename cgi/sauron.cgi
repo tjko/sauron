@@ -1913,7 +1913,7 @@ sub hosts_menu() {
 
     undef @q;
     $fields="a.id,a.type,a.domain,a.ether,a.info,a.huser,a.dept," .
-	    "a.location,a.expiration";
+	    "a.location,a.expiration,a.ether_alias";
     $fields.=",a.cdate,a.mdate,a.dhcp_date" if (param('csv'));
 
     $sql1="SELECT b.ip,'',$fields FROM hosts a,a_entries b " .
@@ -1929,9 +1929,9 @@ sub hosts_menu() {
           "WHERE a.zone=$zoneid AND a.alias=-1 AND a.type=4 " .
 	  " $domainrule ";
 
-    if ($type == 1 || $type == 6) { 
-      $sql="$sql1 ORDER BY $sorder,1"; 
-    } elsif ($type == 4) { 
+    if ($type == 1 || $type == 6) {
+      $sql="$sql1 ORDER BY $sorder,1";
+    } elsif ($type == 4) {
       $sql="$sql3 UNION $sql4 ORDER BY $sorder,2";
     } elsif ($type == 0) {
       $sql="$sql1 UNION $sql2 UNION $sql3 UNION $sql4 ORDER BY $sorder,3";
@@ -1954,7 +1954,7 @@ sub hosts_menu() {
       for $i (0..$#q) {
 	printf $csv_format,$q[$i][4],$host_types{$q[$i][3]},$q[$i][0],
 	                   $q[$i][5],$q[$i][7],$q[$i][8],$q[$i][9],
-			   $q[$i][6],$q[$i][11],$q[$i][12],$q[$i][13];
+			   $q[$i][6],$q[$i][12],$q[$i][13],$q[$i][14];
       }
       return;
     }
@@ -1987,7 +1987,8 @@ sub hosts_menu() {
       $ip='N/A' if ($ip eq '0.0.0.0');
       $ether=$q[$i][5];
       # $ether =~  s/^(..)(..)(..)(..)(..)(..)$/\1:\2:\3:\4:\5:\6/;
-      $ether='N/A' unless($ether);
+      $ether='<font color="#009900">ALIASED</font>' if ($q[$i][11] > 0);
+      $ether='<font color="#990000">N/A</a>' unless($ether);
       #$hostname=add_origin($q[$i][4],$zone);
       $hostname="<A HREF=\"$selfurl?menu=hosts&h_id=$q[$i][2]\">".
 	        "$q[$i][4]</A>";
@@ -2070,8 +2071,10 @@ sub hosts_menu() {
       unless (($res=form_check_form('addhost',\%data,$newhostform))) {
 	if ($data{net} eq 'MANUAL' && not is_cidr($data{ip})) {
 	  alert1("IP number must be specified if using Manual IP!");
-	} elsif (domain_in_use($zoneid,$data{domain})) {
+	} elsif ($u_id=domain_in_use($zoneid,$data{domain})) {
 	  alert1("Domain name already in use!");
+	  print "Conflicting host: ",
+	     "<a href=\"$selfurl?menu=hosts&h_id=$u_id\">$data{domain}</a>.";
 	} elsif (is_cidr($data{ip}) && ip_in_use($serverid,$data{ip})) {
 	  alert1("IP number already in use!");
 	} elsif (check_perms('host',$data{domain},1)) {
@@ -2120,7 +2123,13 @@ sub hosts_menu() {
 	  } else {
 	    alert1("Cannot add host record!");
 	    if (db_lasterrormsg() =~ /ether_key/) {
-	      alert2("Duplicate Ethernet (MAC) address");
+	      alert2("Duplicate Ethernet (MAC) address $data{ether}");
+	      db_query("SELECT id,domain FROM hosts " .
+		       "WHERE ether='$data{ether}' AND zone=$zoneid",\@q);
+	      if ($q[0][0] > 0) {
+		print "Conflicting host: ",
+  	          "<a href=\"$selfurl?menu=hosts&h_id=$q[0][0]\">$q[0][1]</a>";
+	      }
 	    } else {
 	      alert2(db_lasterrormsg());
 	    }
