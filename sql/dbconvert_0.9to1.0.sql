@@ -77,4 +77,10 @@ UPDATE zones SET forward='D';
 
 UPDATE settings SET value='1.0' WHERE key='dbversion';
 
+
+/* hosts.sql */
+ALTER TABLE hosts ADD COLUMN  flags INT4;
+ALTER TABLE hosts ALTER COLUMN flags SET DEFAULT 0;
+UPDATE hosts SET flags=0;
+
 /* eof */

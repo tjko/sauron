@@ -22,8 +22,9 @@ $CGI::POST_MAX = 100000; # max 100k posts
 $SAURON_CGI_VER = ' $Revision$ $Date$ ';
 
 $ALEVEL_VLANS = 5 unless (defined($ALEVEL_VLANS));
+$ALEVEL_RESERVATIONS = 1 unless (defined($ALEVEL_RESERVATIONS));
 #$|=1;
-$debug_mode = 1;
+$debug_mode = 0;
 
 if (-f "/etc/sauron/config") {
   $conf_dir='/etc/sauron';
@@ -301,18 +302,19 @@ do "$conf_dir/config" || die("cannot load configuration!");
 
 %host_types=(0=>'Any type',1=>'Host',2=>'Delegation',3=>'Plain MX',
 	     4=>'Alias',5=>'Printer',6=>'Glue record',7=>'AREC Alias',
-	     8=>'SRV record',9=>'DHCP only',10=>'zone');
+	     8=>'SRV record',9=>'DHCP only',10=>'zone',
+	     101=>'Host reservation');
 
 %host_form = (
  data=>[
   {ftype=>0, name=>'Host' },
   {ftype=>1, tag=>'domain', name=>'Hostname', type=>'domain',
-   conv=>'L', len=>40, iff=>['type','[^82]']},
+   conv=>'L', len=>40, iff=>['type','([^82]|101)']},
   {ftype=>1, tag=>'domain', name=>'Hostname (delegation)', type=>'zonename', len=>40,
    conv=>'L', iff=>['type','[2]']},
   {ftype=>1, tag=>'domain', name=>'Hostname (SRV)', type=>'srvname', len=>40,
    conv=>'L', iff=>['type','[8]']},
-  {ftype=>5, tag=>'ip', name=>'IP address', iff=>['type','[169]']},
+  {ftype=>5, tag=>'ip', name=>'IP address', iff=>['type','([169]|101)']},
   {ftype=>9, tag=>'alias_d', name=>'Alias for', idtag=>'alias',
    iff=>['type','4'], iff2=>['alias','\d+']},
   {ftype=>1, tag=>'cname_txt', name=>'Static alias for', type=>'domain',
@@ -334,8 +336,9 @@ do "$conf_dir/config" || die("cannot load configuration!");
   {ftype=>1, tag=>'location', name=>'Location', type=>'text', len=>25,
    empty=>1, iff=>['type','1']},
   {ftype=>1, tag=>'info', name=>'[Extra] Info', type=>'text', len=>50, 
-   empty=>1, iff=>['type','1']},
-  {ftype=>0, name=>'Equipment info', iff=>['type','1']},
+   empty=>1, iff=>['type','(1|101)']},
+
+  {ftype=>0, name=>'Equipment info', iff=>['type','1|101']},
   {ftype=>101, tag=>'hinfo_hw', name=>'HINFO hardware', type=>'hinfo', len=>25,
    sql=>"SELECT hinfo FROM hinfo_templates WHERE type=0 ORDER BY pri,hinfo;",
    lastempty=>1, empty=>1, iff=>['type','1']},
@@ -343,7 +346,7 @@ do "$conf_dir/config" || die("cannot load configuration!");
    sql=>"SELECT hinfo FROM hinfo_templates WHERE type=1 ORDER BY pri,hinfo;",
    lastempty=>1, empty=>1, iff=>['type','1']},
   {ftype=>1, tag=>'ether', name=>'Ethernet address', type=>'mac', len=>17,
-   conv=>'U', iff=>['type','[19]'], empty=>1},
+   conv=>'U', iff=>['type','([19]|101)'], empty=>1},
   {ftype=>4, tag=>'card_info', name=>'Card manufacturer', 
    iff=>['type','[19]']},
   {ftype=>1, tag=>'ether_alias_info', name=>'Ethernet alias', no_empty=>1,
@@ -356,7 +359,7 @@ do "$conf_dir/config" || die("cannot load configuration!");
   {ftype=>1, tag=>'serial', name=>'Serial no.', type=>'text', len=>35,
    empty=>1, no_empty=>1, iff=>['type','1']},
   {ftype=>1, tag=>'misc', name=>'Misc.', type=>'text', len=>50, empty=>1, 
-   no_empty=>1, iff=>['type','1']},
+   no_empty=>1, iff=>['type','(1|101)']},
 
   {ftype=>0, name=>'Group/Template selections', iff=>['type','[15]']},
   {ftype=>10, tag=>'grp', name=>'Group', iff=>['type','[15]']},
@@ -410,7 +413,7 @@ do "$conf_dir/config" || die("cannot load configuration!");
   {ftype=>1, tag=>'domain', name=>'Hostname', type=>'domain', 
    conv=>'L', len=>40},
   {ftype=>5, tag=>'ip', name=>'IP address', restricted_mode=>1,
-   iff=>['type','[169]']},
+   iff=>['type','([169]|101)']},
   {ftype=>1, tag=>'cname_txt', name=>'Static alias for', type=>'domain',
    len=>60, iff=>['type','4'], iff2=>['alias','-1']},
   {ftype=>4, tag=>'id', name=>'Host ID'},
@@ -422,8 +425,9 @@ do "$conf_dir/config" || die("cannot load configuration!");
   {ftype=>1, tag=>'location', name=>'Location', type=>'text', len=>25,
    empty=>0, iff=>['type','1']},
   {ftype=>1, tag=>'info', name=>'[Extra] Info', type=>'text', len=>50, 
-   empty=>1, iff=>['type','1']},
-  {ftype=>0, name=>'Equipment info', iff=>['type','1']},
+   empty=>1, iff=>['type','(1|101)']},
+
+  {ftype=>0, name=>'Equipment info', iff=>['type','1|101']},
   {ftype=>101, tag=>'hinfo_hw', name=>'HINFO hardware', type=>'hinfo', len=>25,
    sql=>"SELECT hinfo FROM hinfo_templates WHERE type=0 ORDER BY pri,hinfo;",
    lastempty=>1, empty=>1, iff=>['type','1']},
@@ -432,8 +436,10 @@ do "$conf_dir/config" || die("cannot load configuration!");
    lastempty=>1, empty=>1, iff=>['type','1']},
   {ftype=>1, tag=>'ether', name=>'Ethernet address', type=>'mac', len=>17,
    conv=>'U', iff=>['type','[19]'], iff2=>['ether_alias_info',''], empty=>0},
-  {ftype=>4, tag=>'ether_alias_info', name=>'Ethernet alias', 
-   iff=>['type','1']}, 
+  {ftype=>1, tag=>'ether', name=>'Ethernet address', type=>'mac', len=>17,
+   conv=>'U', iff=>['type','101'], iff2=>['ether_alias_info',''], empty=>1},
+  {ftype=>4, tag=>'ether_alias_info', name=>'Ethernet alias',
+   iff=>['type','1']},
 
   {ftype=>1, tag=>'asset_id', name=>'Asset ID', type=>'text', len=>20, 
    empty=>1, no_empty=>1, iff=>['type','1']},
@@ -442,7 +448,7 @@ do "$conf_dir/config" || die("cannot load configuration!");
   {ftype=>1, tag=>'serial', name=>'Serial no.', type=>'text', len=>35,
    empty=>1, iff=>['type','1']},
   {ftype=>1, tag=>'misc', name=>'Misc.', type=>'text', len=>50, empty=>1, 
-   iff=>['type','1']},
+   iff=>['type','(1|101)']},
 
 #  {ftype=>0, name=>'Group/Template selections', iff=>['type','[15]']},
   {ftype=>10, tag=>'grp', name=>'Group', iff=>['type','[15]']},
@@ -464,18 +470,20 @@ do "$conf_dir/config" || die("cannot load configuration!");
   {ftype=>4, tag=>'type', name=>'Type', type=>'enum', enum=>\%host_types},
   {ftype=>1, tag=>'domain', name=>'Hostname', type=>'domain', len=>40,
    conv=>'L', iff=>['type','[^82]']},
+  {ftype=>1, tag=>'domain', name=>'Hostname (reservation)',
+   type=>'domain', len=>40, conv=>'L', iff=>['type','101']},
   {ftype=>1, tag=>'domain', name=>'Hostname (SRV)', type=>'srvname', len=>40,
    conv=>'L', iff=>['type','[8]']},
-  {ftype=>1, tag=>'domain', name=>'Hostname (delegation)', 
+  {ftype=>1, tag=>'domain', name=>'Hostname (delegation)',
    type=>'zonename', len=>40, conv=>'L', iff=>['type','[2]']},
   {ftype=>1, tag=>'cname_txt', name=>'Alias for', type=>'fqdn', len=>60,
    iff=>['type','4']},
   {ftype=>3, tag=>'net', name=>'Subnet', type=>'enum',
-   enum=>\%new_host_nets,elist=>\@new_host_netsl,iff=>['type','1']},
-  {ftype=>1, tag=>'ip', 
-   name=>'IP<FONT size=-1>(only if "Manual IP" selected from above)</FONT>', 
-   type=>'ip', len=>15, empty=>1, iff=>['type','1']},
-  {ftype=>1, tag=>'ip', name=>'IP', 
+   enum=>\%new_host_nets,elist=>\@new_host_netsl, iff=>['type','(1|101)']},
+  {ftype=>1, tag=>'ip',
+   name=>'IP<FONT size=-1>(only if "Manual IP" selected from above)</FONT>',
+   type=>'ip', len=>15, empty=>1, iff=>['type','(1|101)']},
+  {ftype=>1, tag=>'ip', name=>'IP',
    type=>'ip', len=>15, empty=>1, iff=>['type','9']},
   {ftype=>1, tag=>'glue',name=>'IP',type=>'ip', len=>15, iff=>['type','6']},
   {ftype=>2, tag=>'mx_l', name=>'Mail exchanges (MX)',
@@ -507,7 +515,7 @@ do "$conf_dir/config" || die("cannot load configuration!");
    sql=>"SELECT hinfo FROM hinfo_templates WHERE type=1 ORDER BY pri,hinfo;",
    lastempty=>1, empty=>1, iff=>['type','1']},
   {ftype=>1, tag=>'ether', name=>'Ethernet address', type=>'mac', len=>17,
-   conv=>'U', iff=>['type','[19]'], empty=>1},
+   conv=>'U', iff=>['type','(1|9|101)'], empty=>1},
 
   {ftype=>1, tag=>'asset_id', name=>'Asset ID', type=>'text', len=>20, 
    empty=>1, no_empty=>1, iff=>['type','1']},
@@ -516,7 +524,7 @@ do "$conf_dir/config" || die("cannot load configuration!");
   {ftype=>1, tag=>'serial', name=>'Serial no.', type=>'text', len=>35,
    empty=>1, iff=>['type','1']},
   {ftype=>1, tag=>'misc', name=>'Misc.', type=>'text', len=>50, empty=>1, 
-   iff=>['type','1']},
+   iff=>['type','(1|101)']},
 
   {ftype=>0, name=>'SRV records', no_edit=>1, iff=>['type','8']},
   {ftype=>2, tag=>'srv_l', name=>'SRV entries', fields=>5,len=>[5,5,5,30,10],
@@ -524,7 +532,7 @@ do "$conf_dir/config" || die("cannot load configuration!");
    type=>['priority','priority','priority','fqdn','text'],
    iff=>['type','8']},
 
-  {ftype=>0, name=>'Record info'},
+  {ftype=>0, name=>'Record info', iff=>['type','[147]']},
   {ftype=>1, name=>'Expiration date', tag=>'expiration', len=>30,
    type=>'expiration', empty=>1, iff=>['type','[147]']}
  ]
@@ -1013,7 +1021,9 @@ do "$conf_dir/config" || die("cannot load configuration!");
 		      ['Add glue rec.','sub=add&type=6'],
 		      ['Add DHCP entry','sub=add&type=9'],
 		      ['Add printer','sub=add&type=5'],
-		      ['Add SRV rec.','sub=add&type=8']
+		      ['Add SRV rec.','sub=add&type=8'],
+		      [],
+		      ['Add reservation','sub=add&type=101']
 		     ],
 	    'login'=>[
 		      ['User Info',''],
@@ -1664,8 +1674,6 @@ sub hosts_menu() {
 	    Tr(td("New IP:"),
 	       td(textfield(-name=>'new_ip',-size=>15, -maxlength=>15,
 			    -default=>$newip))),
-#	       td(submit(-name=>'move_confirm2',-value=>'Update'), " ",
-#		  submit(-name=>'move_cancel',-value=>'Cancel'))),
 	    Tr(td("New User:"),
 	       td(textfield(-name=>'new_user',-size=>25,-maxlength=>35,
 			 -default=>$host{huser}))),
@@ -1722,7 +1730,7 @@ sub hosts_menu() {
 	} else {
 	  $update_ok=1;
 
-	  if ($host{type}==1) {
+	  if ($host{type}==1 || $host{type}==101) {
 	    for $i (1..($#{$host{ip}})) {
 	      #print "<p>check $i, $old_ips[$i], $host{ip}[$i][1]";
 	      if (check_perms('ip',$host{ip}[$i][1],1)) {
@@ -1853,6 +1861,7 @@ sub hosts_menu() {
     $type=param('bh_type');
     if ($type > 0) {
       $typerule=" AND a.type=$type ";
+      $typerule=" AND (a.type=$type OR a.type=101) " if ($type==1);
     } else {
       $typerule2=" AND (a.type=1 OR a.type=6) ";
     }
@@ -1989,6 +1998,7 @@ sub hosts_menu() {
       $trcolor='#eeeeee';
       $trcolor='#ffffcc' if ($i % 2 == 0);
       $trcolor='#ffcccc' if ($q[$i][10] > 0 && $q[$i][10] < time());
+      $trcolor='#ccffff' if (param('bh_type')==1 && $type == 101);
       print "<TR bgcolor=\"$trcolor\">",
 	    td(["<FONT size=-1>".($i+1)."</FONT>",$hostname,
 		"<FONT size=-1>$host_types{$q[$i][3]}</FONT>",$ip,
@@ -2024,14 +2034,16 @@ sub hosts_menu() {
   elsif ($sub eq 'add') {
     return if (check_perms('zone','RW'));
     $type=param('type');
-    return if (($type!=1) && check_perms('zone','RWX'));
+    return if (($type!=1 && $type!=101) && check_perms('zone','RWX'));
+    return if ($type==101 && check_perms('level',$ALEVEL_RESERVATIONS));
     $newhostform = (check_perms('zone','RWX',1) ? \%restricted_new_host_form :
 		    \%new_host_form);
+    $newhostform = \%new_host_form if ($type == 101);
     unless ($host_types{$type}) {
       alert2('Invalid add type!');
       return;
     }
-    if ($type == 1) {
+    if ($type == 1 || $type == 101) {
       make_net_list($serverid,0,\%new_host_nets,\@new_host_netsl,1);
       $new_host_nets{MANUAL}='<Manual IP>';
       $data{net}='MANUAL';
@@ -2067,7 +2079,7 @@ sub hosts_menu() {
 	  alert1("Invalid IP number: outside allowed range(s)");
 	} else {
 	  print h2("Add");
-	  if ($data{type} == 1) {
+	  if ($data{type} == 1 || $data{type} == 101) {
 	    if ($data{ip} && $data{net} eq 'MANUAL') {
 	      $ip=$data{ip};
 	      delete $data{ip};
@@ -2138,6 +2150,7 @@ sub hosts_menu() {
 
     $host_form{bgcolor}='#ffcccc' 
 	if ($host{expiration} > 0 && $host{expiration} < time());
+#    $host_form{bgcolor}='#ccffff' if ($host{type}==101);
     display_form(\%host,\%host_form);
     print p,startform(-method=>'GET',-action=>$selfurl),
           hidden('menu','hosts'),hidden('h_id',$id);

@@ -531,7 +531,7 @@ sub form_magic($$$) {
       } elsif ($rec->{type} eq 'list') {
 	$enum=$data->{$rec->{list}};
 	if ($rec->{listkeys}) {
-	  $values=$data->{$rec->{listkeys}}; 
+	  $values=$data->{$rec->{listkeys}};
 	} else {
 	  $values=[sort keys %{$enum}];
 	}
@@ -755,6 +755,10 @@ sub display_form($$) {
       $e=${$rec->{iff2}}[1];
       next unless ($val =~ /^($e)$/);
     }
+    if ($rec->{'no_false'}) {
+      $val=$data->{$rec->{tag}};
+      next if ($val =~ /^[Ff]/);
+    }
 
     $val=$data->{$rec->{tag}};
     $val="\L$val" if ($rec->{conv} eq 'L');
@@ -762,6 +766,7 @@ sub display_form($$) {
     $val=${$rec->{enum}}{$val}  if ($rec->{type} eq 'enum');
     $val=localtime($val) if ($rec->{type} eq 'localtime');
     $val=gmtime($val) if ($rec->{type} eq 'gmtime');
+
 
     print "<TR ".($form->{bgcolor}?" bgcolor=\"$form->{bgcolor}\" ":'').">\n";
 

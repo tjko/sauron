@@ -24,7 +24,8 @@ CREATE TABLE hosts (
 					7=alias (arec),
 					8=srv entry,
 					9=dhcp only,
-					10=zone
+					10=zone,
+					101=host reservation
 					*/
        
        domain	   TEXT NOT NULL CHECK(domain <> ''), /* host domain name */
@@ -48,6 +49,7 @@ CREATE TABLE hosts (
        router      INT4 DEFAULT 0, /* router if > 0, also router priority
 	                              (1 being highest priority) */
        prn         BOOL DEFAULT false, /* true for virtual printer entries */
+       flags       INT4 DEFAULT 0,     /* reserved */
 		
        ether	   CHAR(12),        /* Ethernet address (MAC) */
        ether_alias INT4 DEFAULT -1, /* ptr to another host record
