@@ -8,6 +8,7 @@ Sauron version		database version
 0.5.x			1.0
 0.6.x			1.0
 0.7.0			1.1
+0.7.1			1.2
 
 
 GENERAL UPGRADE PROCEDURE
@@ -23,5 +24,6 @@ GENERAL UPGRADE PROCEDURE
  3) run upgrade scripts: psql sauron -f <filename>
    
  4) vacuum database: psql sauron -c 'VACUUM ANALYZE;'
+    (running 'VACUUM FULL' might be good idea, too)
 
 

@@ -85,6 +85,8 @@ my %host_form = (
 
   {ftype=>0, name=>'Group/Template selections', iff=>['type','[159]']},
   {ftype=>10, tag=>'grp', name=>'Group', iff=>['type','[159]']},
+  {ftype=>11, tag=>'subgroups', name=>'SubGroups', fields=>2,
+   iff=>['type','[159]']},
   {ftype=>6, tag=>'mx', name=>'MX template', iff=>['type','[13]']},
   {ftype=>7, tag=>'wks', name=>'WKS template', iff=>['type','1']},
 
@@ -178,6 +180,8 @@ my %restricted_host_form = (
 
 #  {ftype=>0, name=>'Group/Template selections', iff=>['type','[15]']},
   {ftype=>10, tag=>'grp', name=>'Group', iff=>['type','[15]']},
+  {ftype=>11, tag=>'subgroups', name=>'SubGroups', fields=>2,
+   iff=>['type','[15]']},
   {ftype=>6, tag=>'mx', name=>'MX template', iff=>['type','1']},
   {ftype=>7, tag=>'wks', name=>'WKS template', iff=>['type','1']},
   {ftype=>0, name=>'Record info'},
@@ -226,6 +230,8 @@ my %new_host_form = (
    len=>10, empty=>0,definfo=>['0','No'], iff=>['type','1']},
   {ftype=>0, name=>'Group/Template selections', iff=>['type','[15]']},
   {ftype=>10, tag=>'grp', name=>'Group', iff=>['type','[15]']},
+  {ftype=>11, tag=>'subgroups', name=>'SubGroups', fields=>2,
+   iff=>['type','[15]']},
   {ftype=>6, tag=>'mx', name=>'MX template', iff=>['type','[13]']},
   {ftype=>7, tag=>'wks', name=>'WKS template', iff=>['type','1']},
   {ftype=>0, name=>'Host info',iff=>['type','1']},
@@ -298,6 +304,8 @@ my %restricted_new_host_form = (
    elabels=>['PRINTER','comment'], iff=>['type','5']},
  # {ftype=>0, name=>'Group/Template selections', iff=>['type','[15]']},
   {ftype=>10, tag=>'grp', name=>'Group', iff=>['type','[15]']},
+  {ftype=>11, tag=>'subgroups', name=>'SubGroups', fields=>2,
+   iff=>['type','[15]']},
   {ftype=>6, tag=>'mx', name=>'MX template', iff=>['type','1']},
   {ftype=>7, tag=>'wks', name=>'WKS template', iff=>['type','1']},
   {ftype=>0, name=>'Host info',iff=>['type','1']},
@@ -1134,6 +1142,7 @@ sub menu_handler {
     $data{router}=0;
     $data{grp}=-1; $data{mx}=-1; $data{wks}=-1;
     $data{mx_l}=[]; $data{ns_l}=[]; $data{printer_l}=[]; $data{srv_l}=[];
+    $data{subgroups}=[];
     $data{dept}=$perms->{defdept} if ($perms->{defdept});
     $data{expiration}=time()+$perms->{elimit}*86400 if ($perms->{elimit} > 0);
 

@@ -289,16 +289,17 @@ sub form_check_form($$$) {
       return 101 if (form_check_field($rec,$tmp,0) ne '');
       $data->{$tag}=$tmp;
     }
-    elsif  ($type == 2 || $type==5 || ($type==8 && $rec->{arec})) {
+    elsif  ($type == 2 || $type==5 || $type==11
+	    || ($type==8 && $rec->{arec})) {
       $f=$rec->{fields};
-      $f=1 if ($type==8);
+      $f=1 if ($type==8 || $type==11);
       $f=3 if ($type==5);
       $rec->{type}=['ip','text','text'] if ($type==5);
       $rec->{empty}=[0,1,1] if ($type==5);
       $a=param($p."_count");
       $a=0 unless ($a > 0);
       for $j (1..$a) {
-	next if ($type==8);
+	next if ($type==8 || $type==11);
 	next if (param($p."_".$j."_del") eq 'on'); # skip if 'delete' checked
 	for $k (1..$f) {
 	  return 2
@@ -406,7 +407,7 @@ sub form_magic($$$) {
 	}
 	param($p1,$val);
       }
-      elsif ($rec->{ftype} == 2 || $rec->{ftype} == 8) {
+      elsif ($rec->{ftype} == 2 || $rec->{ftype} == 8 || $rec->{ftype} == 11) {
 	$a=$data->{$rec->{tag}};
 	for $j (1..$#{$a}) {
 	  param($p1."_".$j."_id",$$a[$j][0]);
@@ -722,6 +723,42 @@ sub form_magic($$$) {
 	                  -default=>param($p1),-labels=>\%lsth),
             "</TD>";
     }
+    elsif ($rec->{ftype} == 11) {
+      get_group_list($CGI_UTIL_serverid,\%lsth,\@lst,$form->{alevel});
+      $a=(param($p1."_count") > 0 ? param($p1."_count") : 0);
+
+      if (param($p1."_add")) {
+	my $newid = param($p1."_".($a+1)."_1");
+	my $addok = ($newid > 0 ? 1 : 0);
+
+	for $j (1..$a) { $addok=0 if (param($p1."_".$j."_1") == $newid); }
+	if ($addok) {
+	  $a++;
+	  param($p1."_count",$a);
+	  param($p1."_".$a."_2",$lsth{param($p1."_".$a."_1")});
+	}
+      }
+
+      print td($rec->{name}),"<TD>";
+      print hidden(-name=>$p1."_count",-value=>$a);
+      for $j (1..$a) {
+	$p2=$p1."_".$j;
+	print hidden($p2."_id",param($p2."_id")),
+	      hidden($p2."_1",param($p2."_1")),
+	      hidden($p2."_2",param($p2."_2")),
+	      "[".param($p2."_2")," ",
+	      checkbox(-label=>' (delete)',-name=>$p2."_del",
+		       -checked=>param($p2."_del")),"] ";
+	print "<br>" if ($j % 4 == 0);
+      }
+      $n=$p1."_".($a+1)."_1";
+      param($n,"-1") unless (param($n));
+      print "<br>",
+	    popup_menu(-name=>$n,-values=>\@lst,-default=>param($n),
+		       -labels=>\%lsth), " ",
+	    submit(-name=>$p1."_add",-value=>'Add');
+      print "</TD>";
+    }
     elsif ($rec->{ftype} == 101) {
       undef @q; undef @lst; undef %lsth;
       $maxlen=$rec->{len};
@@ -898,7 +935,7 @@ sub display_form($$) {
 	print_wks_template($data->{wks_rec}) if ($rec->{ftype}==7);
 	print $data->{grp_rec}->{name} if ($rec->{ftype}==10);
 	print "</TD>";
-      } else { print td("Not selected"); }
+      } else { print td("&lt;Not selected&gt;"); }
     } elsif ($rec->{ftype} == 8) {
       $a=$data->{$rec->{tag}};
       $url=$form->{$rec->{tag}."_url"};
@@ -916,6 +953,17 @@ sub display_form($$) {
     } elsif ($rec->{ftype} == 9) {
       $url=$form->{$rec->{tag}."_url"}.$data->{$rec->{idtag}};
       print td($rec->{name}),td("<a href=\"$url\">$val</a>");
+    } elsif ($rec->{ftype} == 11) {
+      $a=$data->{$rec->{tag}};
+      print td($rec->{name}),"<TD>";
+      if (@{$a} > 1) {
+	for $j (1..$#{$a}) {
+	  print "$$a[$j][2] ";
+	}
+      } else {
+	print "&lt;None&gt;";
+      }
+      print "</TD>";
     } else {
       error("internal error (display_form)");
     }

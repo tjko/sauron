@@ -19,6 +19,17 @@ ALTER TABLE servers ALTER COLUMN lastrun SET DEFAULT -1;
 
 ALTER TABLE hosts ADD COLUMN email TEXT;
 
+/* group_entries */
+
+CREATE TABLE group_entries (
+      id	   SERIAL PRIMARY KEY, /* unique ID */
+      host	   INT4 NOT NULL, /* ptr to hosts table id
+					-->hostss.id */
+      grp          INT4 NOT NULL  /* ptr to group (this host) belogs to
+					-->groups.id */
+);
+
+
 
 UPDATE settings SET value='1.2' where setting='dbversion';
 

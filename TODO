@@ -19,6 +19,7 @@ import:
 sauron:
 	- more sanity checks
 	- printcap generation
+	- tinydns support (?)
 
 
 sauron.cgi:

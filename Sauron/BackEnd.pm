@@ -928,6 +928,12 @@ sub delete_server($) {
             "WHERE z.server=$id AND h.zone=z.id AND a.type=1 AND a.ref=h.id)");
   if ($res < 0) { db_rollback(); return -21; }
 
+  # group_entries
+  $res=db_exec("DELETE FROM group_entries WHERE id IN ( " .
+	       "SELECT a.id FROM group_entries a, zones z, hosts h " .
+	       "WHERE z.server=$id AND h.zone=z.id AND a.host=h.id);");
+  if ($res < 0) { db_rollback(); return -22; }
+
   # wks_templates
   $res=db_exec("DELETE FROM wks_templates WHERE server=$id;");
   if ($res < 0) { db_rollback(); return -25; }
@@ -1244,6 +1250,13 @@ sub delete_zone($) {
 	       "SELECT a.id FROM srv_entries a, hosts h " .
 	       "WHERE h.zone=$id AND a.type=1 AND a.ref=h.id)");
   if ($res < 0) { db_rollback(); return -15; }
+
+  # arec_entries
+  print "<BR>Deleting (sub)group entries...\n";
+  $res=db_exec("DELETE FROM group_entries WHERE id IN ( " .
+	       "SELECT a.id FROM group_entries a, hosts h " .
+	       "WHERE h.zone=$id AND a.host=h.id)");
+  if ($res < 0) { db_rollback(); return -16; }
 
   # hosts
   print "<BR>Deleting Hosts...\n";
@@ -1611,6 +1624,11 @@ sub get_host($$) {
   get_array_field("hosts",4,"0,id,domain,type","Domain,cname",
 	          "type=4  AND alias=$id ORDER BY domain",$rec,'alias_l');
 
+  get_array_field("groups b, group_entries a",4,"a.id,a.grp,b.name",
+		  "SubGroup",
+	          "a.host=$id AND a.grp=b.id ORDER BY b.name",
+		  $rec,'subgroups');
+
   get_array_field("hosts h, arec_entries a",4,"a.id,h.id,h.domain,h.type",
 		  "Domain,cname",
 	          "h.type=7 AND a.host=h.id AND a.arec=$id ORDER BY h.domain",
@@ -1751,6 +1769,10 @@ sub update_host($) {
     if ($r < 0) { db_rollback(); return -21; }
   }
 
+  $r=update_array_field("group_entries",2,"grp,host",
+			'subgroups',$rec,"$id");
+  if ($r < 0) { db_rollback(); return -22; }
+
   return db_commit();
 }
 
@@ -1807,9 +1829,13 @@ sub delete_host($) {
   $res=db_exec("DELETE FROM srv_entries WHERE type=1 AND ref=$id;");
   if ($res < 0) { db_rollback(); return -11; }
 
+  # group_entries
+  $res=db_exec("DELETE FROM group_entries WHERE host=$id;");
+  if ($res < 0) { db_rollback(); return -12; }
+
+
   $res=db_exec("DELETE FROM hosts WHERE id=$id;");
   if ($res < 0) { db_rollback(); return -50; }
-
 
   if ($host{zone} > 0) {
     my $t=time();
@@ -1867,6 +1893,12 @@ sub add_host($) {
     $res=db_exec("INSERT INTO arec_entries (host,arec) VALUES($id,$a_id);");
     if ($res < 0) { db_rollback(); return -7; }
   }
+
+  # subgroups
+  show_hash($rec);
+  $res = add_array_field('group_entries','grp',
+			 'subgroups',$rec,'host',"$id");
+  if ($res < 0) { db_rollback(); return -8; }
 
   return -10 if (db_commit() < 0);
   return $id;

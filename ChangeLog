@@ -1,6 +1,8 @@
 $Id$
 
 0.7.1beta
+	- A host can now be a member of one of more "subgroups" in addition
+	  to one (main)group.
 	- Database connection interface changed, new configuration
 	  options DB_DSN,DB_USER,DB_PASSWORD are now used instead of
 	  old DB_CONNECT.
@@ -36,6 +38,7 @@ $Id$
 	   - nets: new columnd 'dummy'
 	   - servers: new column 'lastrun'
 	   - hosts: new column 'email'
+	   - group_entries: new table
 	- new configuration valiablre SAURON_CHR that allows
           limiting what can be used in some host record
 	  fields (dept,location,asset_id) by server and by
