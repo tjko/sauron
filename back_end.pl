@@ -1396,11 +1396,9 @@ sub delete_net($) {
 
 sub get_who_list($$) {
   my($lst,$timeout) = @_;
-  my(@q,$i,$login,$last,$idle,$t,$s,$m,$h,$midle,$ip,$login_s);
+  my(@q,$i,$j,$login,$last,$idle,$t,$s,$m,$h,$midle,$ip,$login_s);
 
   $t=time;
-
-  undef @q;
   db_query("SELECT u.username,u.name,a.addr,a.login,a.last " .
 	   "FROM users u, utmp a " .
 	   "WHERE a.uid=u.id;",\@q);
@@ -1413,13 +1411,13 @@ sub get_who_list($$) {
     $midle=($idle-$s) / 60;
     $m=$midle % 60;
     $h=($midle-$m) / 60;
-    $i= sprintf("%02d:%02d",$h,$m);
-    $i= sprintf(" %02ds ",$s) if ($m <= 0 && $h <= 0);
+    $j= sprintf("%02d:%02d",$h,$m);
+    $j= sprintf(" %02ds ",$s) if ($m <= 0 && $h <= 0);
     $ip = $q[$i][2];
     $ip =~ s/\/32$//;
     $login_s=localtime($login);
     next unless ($idle < $timeout);
-    push @{$lst},[$q[$i][0],$q[$i][1],$ip,$i,$login_s];
+    push @{$lst},[$q[$i][0],$q[$i][1],$ip,$j,$login_s];
   }
 
 }

@@ -89,6 +89,7 @@ do "$PROG_DIR/back_end.pl";
  data=>[
   {ftype=>0, name=>'Zone' },
   {ftype=>1, tag=>'name', name=>'Zone name', type=>'domain', len=>30},
+  {ftype=>4, tag=>'reversenet', name=>'Reverse net', iff=>['reverse','t']},
   {ftype=>4, tag=>'id', name=>'Zone ID'},
   {ftype=>1, tag=>'comment', name=>'Comments', type=>'text', len=>60,
    empty=>1},
@@ -118,19 +119,21 @@ do "$PROG_DIR/back_end.pl";
    len=>[30,20], empty=>[0,1], elabels=>['NS','comment'], iff=>['type','M']},
   {ftype=>2, tag=>'mx', name=>'Mail exchanges (MX)', 
    type=>['int','text','text'], fields=>3, len=>[5,30,20], empty=>[0,0,1], 
-   elabels=>['Priority','MX','comment'], iff=>['type','M']},
+   elabels=>['Priority','MX','comment'], iff=>['type','M'], 
+   iff2=>['reverse','f']},
   {ftype=>2, tag=>'txt', name=>'Info (TXT)', type=>['text','text'], fields=>2,
-   len=>[40,15], empty=>[0,1], elabels=>['TXT','comment'], iff=>['type','M']},
+   len=>[40,15], empty=>[0,1], elabels=>['TXT','comment'], iff=>['type','M'],
+   iff2=>['reverse','f']},
   {ftype=>2, tag=>'allow_update', 
    name=>'Allow dynamic updates (allow-update)', type=>['cidr','text'],
-   fields=>2,
-   len=>[40,15], empty=>[0,1], elabels=>['IP','comment']},
+   fields=>2, len=>[40,15], empty=>[0,1], elabels=>['IP','comment'],
+   iff=>['type','M']},
 
   {ftype=>0, name=>'DHCP', iff=>['type','M']},
   {ftype=>2, tag=>'dhcp', name=>'Zone specific DHCP entries', 
    type=>['text','text'], fields=>2,
    len=>[40,20], empty=>[0,1], elabels=>['DHCP','comment'], iff=>['type','M']}
- ],	      
+ ],
  bgcolor=>'#eeeebf',
  border=>'0',		
  width=>'100%',
@@ -260,23 +263,24 @@ do "$PROG_DIR/back_end.pl";
 
 %browse_hosts_form=(
  data=>[
-  {ftype=>0, name=>'Limit selection' },
+  {ftype=>0, name=>'Search scope' },
   {ftype=>3, tag=>'type', name=>'Record type', type=>'enum',
    enum=>\%host_types},
+  {ftype=>3, tag=>'net', name=>'Subnet', type=>'list', listkeys=>'nets_k', 
+   list=>'nets'},
+  {ftype=>1, tag=>'cidr', name=>'CIDR (block) or IP', type=>'cidr',
+   len=>20, empty=>1},
+  {ftype=>1, tag=>'domain', name=>'Domain pattern (regexp)', type=>'text',
+   len=>40, empty=>1},
+  {ftype=>0, name=>'Options' },
   {ftype=>3, tag=>'order', name=>'Sort order', type=>'enum',
    enum=>{1=>'by hostname',2=>'by IP'}},
   {ftype=>3, tag=>'size', name=>'Entries per page', type=>'enum',
    enum=>\%browse_page_size},
-  {ftype=>3, tag=>'net', name=>'Subnet', type=>'list', listkeys=>'nets_k', 
-   list=>'nets'},
-  {ftype=>1, tag=>'cidr', name=>'CIDR (block)', type=>'cidr',
-   len=>20, empty=>1},
-  {ftype=>1, tag=>'domain', name=>'Domain pattern (regexp)', type=>'text',
-   len=>40, empty=>1},
-  {ftype=>0, name=>'Search (optional)' },
+  {ftype=>0, name=>'Search' },
   {ftype=>3, tag=>'stype', name=>'Search field', type=>'enum',
    enum=>\%browse_search_fields},
-  {ftype=>1, tag=>'pattern',name=>'Pattern',type=>'text',len=>40,empty=>1}
+  {ftype=>1, tag=>'pattern',name=>'Pattern (substring)',type=>'text',len=>40,empty=>1}
  ],
  bgcolor=>'#eeeebf',
  border=>'0',		
@@ -542,7 +546,7 @@ unless ($scookie) {
   $new_cookie=make_cookie();
   print header(-cookie=>$new_cookie,-target=>'_top'),
         start_html(-title=>"Sauron Login",-BGCOLOR=>'white');
-  login_form("Welcome (1)",$ncookie);
+  login_form("Welcome",$ncookie);
 }
 
 if ($state{'mode'} eq '1' && param('login') eq 'yes') {
@@ -556,7 +560,7 @@ if ($state{'auth'} ne 'yes' || $pathinfo eq '/login') {
   logmsg("notice","reconnect from: $remote_addr");
   print header(-target=>'_top'),
         start_html(-title=>"Sauron Login",-BGCOLOR=>'white');
-  login_form("Welcome (2)",$scookie);
+  login_form("Welcome (again)",$scookie);
 }
 
 if ((time() - $state{'last'}) > $USER_TIMEOUT) {
@@ -996,6 +1000,19 @@ sub hosts_menu() {
     %bdata=(domain=>'',net=>'ANY',nets=>\%nethash,nets_k=>\@netkeys,
 	    type=>1,order=>2,stype=>1,size=>3);
     if (param('bh_submit')) {
+      if (param('bh_submit') eq 'Clear') {
+	param('bh_pattern','');
+	param('bh_stype','1');
+
+	param('bh_type','1');
+	param('bh_net','');
+	param('bh_cidr','');
+	param('bh_domain','');
+
+	param('bh_order','2');
+	param('bh_size','3');
+	goto browse_hosts;
+      }
       if (form_check_form('bh',\%bdata,\%browse_hosts_form)) {
 	print p,'<FONT color="red">Invalid parameters.</FONT>';
 	goto browse_hosts;
@@ -1089,14 +1106,13 @@ sub hosts_menu() {
     } 
     else { $sql="$sql2 ORDER BY $sorder"; }
     $sql.=" LIMIT $limit OFFSET $offset;";
-    #print p,$sql;
+    #print "<br>$sql";
     db_query($sql,\@q);
     $count=scalar @q;
     print "<TABLE width=\"99%\" cellspacing=0 cellpadding=1 border=0 " .
           "BGCOLOR=\"aaaaff\">",
           "<TR><TD><B>Zone:</B> $zone</TD>",
           "<TD align=right>Page: ".($page+1)."</TD></TR></TABLE>";
-	    
 
     print "<TABLE width=\"99%\" cellspacing=0 cellpadding=1 BGCOLOR=\"#eeeeff\">",
           Tr,Tr,
@@ -1123,7 +1139,7 @@ sub hosts_menu() {
             "&bh_net=".param('bh_net')."&bh_cidr=".param('bh_cidr').
 	    "&bh_stype=".param('bh_stype')."&bh_pattern=".param('bh_pattern').
 	    "&bh_domain=".param('bh_domain')."&bh_size=".param('bh_size');
-    
+
     if ($page > 0) {
       $npage=$page-1;;
       print "<A HREF=\"$selfurl?menu=hosts&sub=browse&bh_page=$npage&".
@@ -1208,7 +1224,9 @@ sub hosts_menu() {
           hidden('menu','hosts'),hidden('sub','browse'),
           hidden('bh_page','0');
   form_magic('bh',\%bdata,\%browse_hosts_form);
-  print submit(-name=>'bh_submit',-value=>'Search'),end_form;
+  print submit(-name=>'bh_submit',-value=>'Search')," &nbsp;&nbsp; ",
+        submit(-name=>'bh_submit',-value=>'Clear'),
+        end_form;
 
 }
 
@@ -1812,6 +1830,7 @@ sub login_menu() {
       print h2("error: $USER_TIMEOUT not defined in configuration!");
       return;
     }
+    undef @wholist;
     get_who_list(\@wholist,$timeout);
     print h2("Current users:");
     print "<TABLE width=\"100%\"><TR bgcolor=\"#aaaaff\">",
@@ -2219,7 +2238,7 @@ sub left_menu($) {
 sub frame_set() {
   print header;
 
-  print "<HTML><FRAMESET border=\"0\" rows=\"110,*\">\n" .
+  print "<HTML><FRAMESET border=\"0\" rows=\"115,*\" >\n" .
         "  <FRAME src=\"$script_name/frame1\" noresize>\n" .
         "  <FRAME src=\"$script_name/frames2\" name=\"bottom\">\n" .
         "  <NOFRAMES>\n" .
@@ -2447,7 +2466,7 @@ sub form_check_field($$$) {
       unless ($value =~ /^\@[a-zA-Z]+$/);
   } elsif ($type eq 'hinfo') {
     return 'Valid HINFO required!'
-      unless ($value =~ /^[A-Z]+([A-Z-]+[A-Z])?$/);
+      unless ($value =~ /^[A-Z]+([A-Z0-9-]+[A-Z0-9])?$/);
   } else {
     return "unknown typecheck for form_check_field: $type !";
   }
@@ -2455,6 +2474,22 @@ sub form_check_field($$$) {
   return '';
 }
 
+####################################################################
+# form_get_defaults($form)
+#
+# initializes unset form properties to default valuse
+#
+sub form_get_defaults($) {
+  my($form) = @_;
+
+  return unless ($form);
+  $form->{bgcolor}="#eeeebf" unless ($form->{bgcolor});
+  $form->{heading_bg}="#aaaaff" unless ($form->{heading_bg});
+  $form->{ro_color}="#646464" unless ($form->{ro_color});
+  $form->{border}=0 unless ($form->{border});
+  $form->{width}="100%" unless ($form->{width});
+  $form->{nwidth}="30%" unless ($form->{nwidth});
+}
 
 #####################################################################
 # form_check_form($prefix,$data,$form)
@@ -2558,10 +2593,9 @@ sub form_magic($$$) {
   my($i,$j,$k,$n,$key,$rec,$a,$formdata,$h_bg,$e_str,$p1,$p2,$val,$e,$enum,
      $values,$ip,$t,@lst,%lsth,%tmpl_rec,$maxlen,$len,@q,$tmp);
 
+  form_get_defaults($form);
   $formdata=$form->{data};
-  if ($form->{heading_bg}) { $h_bg=$form->{heading_bg}; }
-  else { $h_bg=$SAURON_BGCOLOR; }
-
+  $h_bg=$form->{heading_bg};
 
   # initialize fields
   unless (param($prefix . "_re_edit") eq '1' || ! $data) {
@@ -2640,9 +2674,14 @@ sub form_magic($$$) {
       $e=${$rec->{iff}}[1];
       next unless ($val =~ /^($e)$/);
     }
+    if ($rec->{iff2}) {
+      $val=param($prefix."_".${$rec->{iff2}}[0]);
+      $e=${$rec->{iff2}}[1];
+      next unless ($val =~ /^($e)$/);
+    }
 
     if ($rec->{ftype} == 0) {
-      print "<TR><TH COLSPAN=2 ALIGN=\"left\" BGCOLOR=\"$h_bg\">",
+      print "<TR><TH COLSPAN=2 ALIGN=\"left\" FGCOLOR=\"$rec->{ro_color}\" BGCOLOR=\"$h_bg\">",
              $rec->{name},"</TH></TR>\n" unless ($rec->{no_edit});
     } elsif ($rec->{ftype} == 1) {
       $maxlen=$rec->{len};
@@ -2717,7 +2756,8 @@ sub form_magic($$$) {
     } elsif ($rec->{ftype} == 4) {
       $val=param($p1);
       $val=${$rec->{enum}}{$val}  if ($rec->{type} eq 'enum');
-      print "<TR>",td($rec->{name}),td($val),hidden($p1,param($p1)),"</TR>";
+      print "<TR>",td($rec->{name}),"<TD><FONT color=\"$form->{ro_color}\">",
+	    "$val</FONT></TD>",hidden($p1,param($p1)),"</TR>";
     } elsif ($rec->{ftype} == 5) {
       $rec->{fields}=5;
       $rec->{type}=['ip','text','text','text'];
@@ -2828,6 +2868,7 @@ sub display_form($$) {
   my($i,$j,$k,$a,$rec,$formdata,$h_bg,$val,$e);
   my($ip,$ipinfo,$com,$url);
 
+  form_get_defaults($form);
   $formdata=$form->{data};
 
   print "<TABLE ";
@@ -2847,6 +2888,11 @@ sub display_form($$) {
       $e=${$rec->{iff}}[1];
       next unless ($val =~ /^($e)$/);
     }
+    if ($rec->{iff2}) {
+      $val=$data->{${$rec->{iff2}}[0]};
+      $e=${$rec->{iff2}}[1];
+      next unless ($val =~ /^($e)$/);
+    }
 
     $val=$data->{$rec->{tag}};
     $val="\L$val" if ($rec->{conv} eq 'L');
@@ -2856,8 +2902,7 @@ sub display_form($$) {
     $val=gmtime($val) if ($rec->{type} eq 'gmtime');
 
     if ($rec->{ftype} == 0) {
-      print "<TR><TH COLSPAN=2 ALIGN=\"left\" ",
-            "BGCOLOR=\"$h_bg\">",
+      print "<TR><TH COLSPAN=2 ALIGN=\"left\" BGCOLOR=\"$h_bg\">",
             $rec->{name},"</TH>\n";
     } elsif ($rec->{ftype} == 1 || $rec->{ftype} == 101) {
       $val =~ s/\/32$// if ($rec->{type} eq 'ip');
@@ -2876,9 +2921,12 @@ sub display_form($$) {
 	for $k (1..$rec->{fields}) { print td($$a[$j][$k]); }
       }
       print "</TABLE></TD>\n";
-    } elsif ($rec->{ftype} == 4 || $rec->{ftype} == 3) {
+    } elsif ($rec->{ftype} == 3) {
       print Tr,"<TD WIDTH=\"",$form->{nwidth},"\">",$rec->{name},"</TD><TD>",
             "$val</TD>\n";
+    } elsif ($rec->{ftype} == 4) {
+      print "<TR><TD WIDTH=\"",$form->{nwidth},"\">",$rec->{name},"</TD><TD>",
+            "<FONT color=\"$form->{ro_color}\">$val</FONT></TD></TR>\n";
     } elsif ($rec->{ftype} == 5) {
       print Tr,td($rec->{name}),"<TD><TABLE>",Tr;
       $a=$data->{$rec->{tag}};
