@@ -10,6 +10,7 @@ $Id$
 000102  3Com (PCI cards)
 0001E6  Hewlett-Packard
 0001E7  Hewlett-Packard
+000476  3Com (3c905C-TX-M)
 0020DA  Xylan / IBM
 0030C1	Hewlett-Packard (switches, printers, ...)
 003065  Apple Macintosh	
