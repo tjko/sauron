@@ -302,7 +302,7 @@ if ($modgroup) {
   if ($opt_expiration) {
       unless ($opt_expiration =~ /^(\d{1,2})-(\d{1,2})-(\d\d\d\d)$/) {
 	  if ($opt_expiration eq 'NONE') {
-	      $edate=-1;
+	      $edate=0;
 	  } else {
 	      fatal("Invalid date supplied for option --expiration");
 	  }
