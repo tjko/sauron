@@ -2,22 +2,29 @@
 #
 # $Id$
 #
-$VER = "0.42";
+$VER = "0.5";
 
-$LOG_DIR = "/tmp/";
-$PROG_DIR = "/home/tjko/work/sauron/";
+#########################################################################
+# general configuration options
+
+$LOG_DIR = "/var/log/";
+$PROG_DIR = "/opt/sauron/";
+
+#########################################################################
+# WWW interface (sauron.cgi) configuration options 
+
 $ICON_PATH = "/sauron/icons";
-$SERVER_ID = "foo";   # unique server ID (if using multiple www-server)
+$SERVER_ID = "fooserver";   # unique server ID (if using multiple www-server)
 
-$DB_CONNECT = "host=ns1.jyu.fi port=5432 dbname=sauron user=tjko password=farside";
-
-#$DB_CONNECT = "dbname=sauron user=tjko password=kala";
+#$DB_CONNECT = "host=localhost port=5432 dbname=sauron user=foo password=bar";
+#$DB_CONNECT = "dbname=sauron user=foo password=bar";
+$DB_CONNECT = "dbname=sauron";
 
 $USER_TIMEOUT = 3600;
 
 
 #########################################################################
-# DNS browser
+# WWW DNS browser (browser.cgi) configuration options 
 
 $BROWSER_CONF = { 
 		  foo=>['servername','zonename'], 

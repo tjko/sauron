@@ -1117,7 +1117,7 @@ sub zones_menu() {
 	     "FROM hosts h, zones z " .
 	     "WHERE z.id=$zoneid AND h.zone=z.id " .
 	     " AND (h.mdate > z.serial_date OR h.cdate > z.serial_date) " .
-	     "ORDER BY h.domain;",\@q);
+	     "ORDER BY h.domain LIMIT 100;",\@q);
     print "<TABLE width=\"98%\" bgcolor=\"#eeeebf\" cellspacing=1 border=0>",
           "<TR bgcolor=\"#aaaaff\">",th("#"),th("Hostname"),
 	  "<TH>Action</TH><TH>Date</TH><TH>By</TH></TR>";
@@ -1156,23 +1156,21 @@ sub zones_menu() {
 
  select_zone:
   #display zone selection list
-  print h2("Select zone:"),
-            p,"<TABLE width=98% bgcolor=white border=0>",
-            "<TR bgcolor=\"#aaaaff\">",th(['Zone','Type','Reverse']);
+  print h2("Select zone:"),p,"<TABLE width=98% bgcolor=white border=0>",
+        "<TR bgcolor=\"#aaaaff\">",th(['Zone','Type','Reverse','Comments']);
 
   $list=get_zone_list($serverid);
   for $i (0 .. $#{$list}) {
     $type=$$list[$i][2];
     if ($type eq 'M') { $type='Master'; $color='#f0f000'; }
     elsif ($type eq 'S') { $type='Slave'; $color='#eeeebf'; }
-    $rev='No';
-    $rev='Yes' if ($$list[$i][3] eq 't');
+    $rev=($$list[$i][3] eq 't' ? 'Yes' : 'No');
     $id=$$list[$i][1];
     $name=$$list[$i][0];
-	
+    $comment=$$list[$i][4].'&nbsp;';
     print "<TR bgcolor=$color>",td([
 	"<a href=\"$selfurl?menu=zones&selected_zone=$name\">$name</a>",
-					$type,$rev]);
+				    $type,$rev,$comment]);
   }
 
   print "</TABLE><BR>";
@@ -2029,7 +2027,7 @@ sub nets_menu() {
     return;
   }
 
-  print "<TABLE><TR bgcolor=\"#aaaaff\">",
+  print "<TABLE cellspacing=2 border=0><TR bgcolor=\"#aaaaff\">",
         "<TH>Net</TH>",th("Name"),th("Type"),th("DHCP"),th("VLAN"),
 	  th("Comment"),"</TR>";
 

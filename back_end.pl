@@ -325,15 +325,7 @@ sub get_server_list() {
   my ($res,$list,$i,$id,$name,$rec,$comment);
 
   $list=[];
-  $res=db_exec("SELECT name,id,comment FROM servers ORDER BY name;");
-
-  for($i=0; $i < $res; $i++) {
-    $name=db_getvalue($i,0);
-    $id=db_getvalue($i,1);
-    $comment=db_getvalue($i,2);
-    $rec=[$name,$id,$comment];
-    push @{$list}, $rec;
-  }
+  db_query("SELECT name,id,comment FROM servers ORDER BY name;",$list);
   return $list;
 }
 
@@ -572,31 +564,15 @@ sub get_zone_list($$$) {
   my ($serverid,$type,$reverse) = @_;
   my ($res,$list,$i,$id,$name,$rec);
 
-  if ($type) {
-    $type=" AND type='$type' ";
-  } else {
-    $type='';
-  }
-
-  if ($reverse) {
-    $reverse=" AND reverse='$reverse' ";
-  } else {
-    $reverse='';
-  }
+  $type = ($type ? " AND type='$type' " : '');
+  $reverse = ($reverse ? " AND reverse='$reverse' " : '');
 
   $list=[];
   return $list unless ($serverid >= 0);
 
-  $res=db_exec("SELECT name,id,type,reverse FROM zones " .
-	       "WHERE server=$serverid $type $reverse " .
-	       "ORDER BY type,reverse,reversenet,name;");
-
-  for($i=0; $i < $res; $i++) {
-    $name=db_getvalue($i,0);
-    $id=db_getvalue($i,1);
-    $rec=[$name,$id,db_getvalue($i,2),db_getvalue($i,3)];
-    push @{$list}, $rec;
-  }
+  db_query("SELECT name,id,type,reverse,comment FROM zones " .
+	   "WHERE server=$serverid $type $reverse " .
+	   "ORDER BY type,reverse,reversenet,name;",$list);
   return $list;
 }
 
@@ -824,7 +800,7 @@ sub copy_zone($$$$) {
 	       "SELECT type,$newid,ip,comment FROM cidr_entries " .
 	       "WHERE (type=2 OR type=3) AND ref=$id;");
   if ($res < 0) { db_rollback(); return -3; }
-  
+
   # dhcp_entries
   $res=db_exec("INSERT INTO dhcp_entries (type,ref,dhcp,comment) " .
 	       "SELECT type,$newid,dhcp,comment FROM dhcp_entries " .
@@ -848,7 +824,7 @@ sub copy_zone($$$$) {
 	       "SELECT type,$newid,txt,comment FROM txt_entries " .
 	       "WHERE type=1 AND ref=$id;");
   if ($res < 0) { db_rollback(); return -7; }
-  
+
 
   # mx_templates
   print "<BR>Copying MX templates...";
