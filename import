@@ -7,6 +7,7 @@
 #
 require 5;
 use Net::Netmask;
+use Getopt::Long;
 
 ($PG_DIR,$PG_NAME) = ($0 =~ /^(.*\/)(.*)$/);
 $0 = $PG_NAME;
@@ -18,16 +19,18 @@ do "$PG_DIR/db.pl";
 
 # if these are not defined, then values are taken from first master zone
 # processed...
-# $hostmaster = 'hostmaster.cc.jyu.fi.';
-# $primaryservername = 'tukki.cc.jyu.fi.';
+# $hostmaster = 'hostmaster.foobar.org';
+# $primaryservername = 'ns.foobar.org.';
 
 ##############################
 
+$result = GetOptions("help|h","orphans=s");
 
-if (@ARGV != 2) {
-    print "syntax: $0 <servername> <named.conf file>\n";
+if ($opt_help || @ARGV < 2) {
+    print "syntax: $0 [--help] [--orphans=<zone>] <servername> <named.conf file>\n";
     exit(1);
 }
+
 
 $servername = $ARGV[0];
 $namedf = $ARGV[1];
@@ -43,9 +46,9 @@ db_connect();
 die("cannot open named.conf ($namedf)") if (! -f $namedf);
 
 if ($namedf =~ /(^.*\/)/) { 
-    $dir=$1; 
-} else { 
-    $dir="./"; 
+    $dir=$1;
+} else {
+    $dir="./";
 }
 
 print "servername: $servername\n";
@@ -82,7 +85,7 @@ while (<NAMEDCONF>) {
 
     s/\s+/\ /g;
     next if /^\s*$/;
-	 
+
     if ( /(^.*?)};/ ) {
 	#print "end '$block[$#block]'\n";
 	pop @block;
@@ -282,6 +285,10 @@ for ($i=0; $i <= $#zones; $i+=1) {
   die("unexpected error: Cannot get zone record id!") if ($res != 1);
   $zoneid = db_getvalue(0,0);
   print " (id=$zoneid)";
+  if ($opt_orphans eq "$zone") {
+    $oips_zid=$zoneid;
+  }
+
 
   # allow_update IPs...
   foreach $ip (@{$allowupdate{$zones[$i]}}) {
@@ -479,11 +486,55 @@ for ($i=0; $i <= $#zones; $i+=1) {
     $res = db_exec($sqlstr);
     die("cannot update zone record (id=$zoneid)!") if ($res < 0);
 
+    # find 'orphaned' PTR entries...and add dummy host records for those
+    if ($opt_orphans && $oips_zid > 0) {
+      print "searching for orphaned PTR entries...($opt_orphans,$oips_zid)\n";
+      undef @q;
+      db_query("SELECT a.ip,h.domain,z.name,z.id " .
+	       "FROM hosts h, a_entries a, zones z " .
+	       "WHERE a.host=h.id AND z.id=h.zone AND z.server=$serverid " .
+	       " AND h.type=1 AND a.ip << '$reversenet';",\@q);
+      $oips_count=@q;
+      undef %oips;
+      for $k (0..$#q) { 
+	$oips_name=$q[$k][1];
+	$oips_name.=".$q[$k][2]" unless ($oips_name =~ /\.$/);
+	$oips_name.="." unless ($oips_name =~ /\.$/);
+	$oips_name =~ s/^\@\.//;
+	$oips{$oips_name}=$q[$k][3];
+	#print "foo '$oips_name'\n";
+      }
+      print "oips count=$oips_count\n";
+
+      foreach $host (keys %zonedata) {
+	$rec = $zonedata{$host};
+	next unless ($rec->{PTR});
+	unless ($oips{$rec->{PTR}}) {
+	  $oips_ip=arpa2cidr($host);
+	  $oips_ip=~ s/\/32$//;
+	  $oips_host=$rec->{PTR};
+	  $oips_host =~ s/\.($opt_orphans)\.?$//;
+	  print "Adding host for 'orphaned' PTR: $oips_ip ($oips_host)\n";
+	  fatal("cannot insert into hosts table")
+	    if (db_exec("INSERT INTO hosts (zone,domain,type) " .
+		  "VALUES($oips_zid,'$oips_host',1);") < 0);
+	  $oid=db_lastoid();
+	  die("cannot get id for host record")
+	    if (db_exec("SELECT id FROM hosts WHERE OID=$oid;") < 0);
+	  $oips_id=db_getvalue(0,0);
+	  fatal("cannot insert A record for $oips_host")
+	    if (db_exec("INSERT INTO a_entries (host,ip,reverse,forward) " .
+			"VALUES($oips_id,'$oips_ip','t','f');") < 0);
+	}
+      }
+
+    }
+
     next;
   }
 
 
-  # hande normal zone
+  # handle normal zone
 
 
   # add host record for zone....

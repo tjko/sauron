@@ -49,6 +49,7 @@ $user = (getpwuid($<))[0];
 $origin = "$zonename.";
 $cdate = time;
 
+
 db_connect();
 db_debug(1);
 
@@ -220,7 +221,7 @@ foreach $host (keys %zonedata) {
       die("Cannot update host record for router interface $host") if ($res<0);
       print "FAILED: $sqlstr\n" if (db_status() ne 'UPDATE 1');
 
-      $rhash{$router[0]}={ MASK=>$router[1], NAME=>$host, VLAN=>$router[3]};
+      $rhash{$router[0]}={ MASK=>$router[1], NAME=>$host, VLAN=>$router[2]};
       $rcount++;
     } else {
       $rec2=$rhash{$router[0]};
@@ -246,7 +247,7 @@ foreach $net (keys %rhash) {
   $vlan=($rec->{VLAN} ? "'$rec->{VLAN}'" : 'NULL');
 
   #print "$n $rec->{NAME} $rec->{ETHER}\n" if ($rec->{ETHER} ne '');
-  #print "$n $rec->{NAME} : $net : $rec->{MASK} : $rec2->{INFO}\n";
+  #print "$n $rec->{NAME} : $net : $rec->{MASK} : $rec->{VLAN} : $rec2->{INFO}\n" if ($rec->{VLAN});
 
   $sqlstr = "INSERT INTO nets (cdate,cuser,server,net,comment," .
             "subnet,no_dhcp,range_start,range_end,vlan) " .
@@ -270,6 +271,7 @@ foreach $net (keys %rhash) {
 
   delete $zonedata{$rec->{NAME}};
 }
+
 
 
 # delegated zones

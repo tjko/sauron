@@ -105,7 +105,7 @@ sub process_zonefile($$$$) {
 	      TXT => [],
 	      HINFO => ['',''],
 	      WKS => [],
-	      
+
 	      RP => [],
 	      SRV => [],
 
@@ -121,7 +121,7 @@ sub process_zonefile($$$$) {
 	      INFO => '',
 	      ALIAS => [],
 	      AREC=> [],
-	      
+
 	      ID => -1
 	    };
 
@@ -238,9 +238,9 @@ sub process_zonefile($$$$) {
       $rec->{GROUP}=$1 if (/^(\S+)(\s|$)/);
     } 
     elsif ($type eq 'ROUTER') {
-      if (/^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\s+(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/) {
-	#print "ROUTER '$1' '$2'\n";
-	$rec->{ROUTER} = "$1 $2";
+      if (/^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\s+(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})(\s+(\S+)(\s|$))?/) {
+	#print "ROUTER '$1' '$2' '$4'\n";
+	$rec->{ROUTER} = "$1 $2 $4";
       } else {
 	#print "ROUTER: '$_'\n";
 	push @{$rec->{ROUTER_DHCP}}, $_;
