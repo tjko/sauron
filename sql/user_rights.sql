@@ -19,7 +19,7 @@ CREATE TABLE user_rights (
 				3=net,
 				4=hostnamemask
 				5=IP mask
-				6=privilege level */
+				6=authorization level */
 	rref	INT NOT NULL, /* ptr to table specified by type field */
 	rule	CHAR(40) /* R,RW,RWS or regexp */     
 );

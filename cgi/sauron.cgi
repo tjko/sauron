@@ -17,7 +17,7 @@ $CGI::POST_MAX = 100000; # max 100k posts
 
 $SAURON_CGI_VER = ' $Revision$ $Date$ ';
 
-$PLEVEL_VLANS = 5 unless (defined($PLEVEL_VLANS));
+$ALEVEL_VLANS = 5 unless (defined($ALEVEL_VLANS));
 #$|=1;
 $debug_mode = 0;
 
@@ -250,11 +250,13 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>1, tag=>'ether_alias_info', name=>'Ethernet alias', no_empty=>1,
    empty=>1, type=>'domain', len=>30, iff=>['type','1'] },
 
-  {ftype=>1, tag=>'model', name=>'Model', type=>'text', len=>40, empty=>1, 
-   no_empty=>1, iff=>['type','1']},
-  {ftype=>1, tag=>'serial', name=>'Serial no.', type=>'text', len=>30,
+  {ftype=>1, tag=>'asset_id', name=>'Asset ID', type=>'text', len=>20, 
    empty=>1, no_empty=>1, iff=>['type','1']},
-  {ftype=>1, tag=>'misc', name=>'Misc.', type=>'text', len=>40, empty=>1, 
+  {ftype=>1, tag=>'model', name=>'Model', type=>'text', len=>50, empty=>1, 
+   no_empty=>1, iff=>['type','1']},
+  {ftype=>1, tag=>'serial', name=>'Serial no.', type=>'text', len=>35,
+   empty=>1, no_empty=>1, iff=>['type','1']},
+  {ftype=>1, tag=>'misc', name=>'Misc.', type=>'text', len=>50, empty=>1, 
    no_empty=>1, iff=>['type','1']},
 
   {ftype=>0, name=>'Group/Template selections', iff=>['type','[15]']},
@@ -335,12 +337,15 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>4, tag=>'ether_alias_info', name=>'Ethernet alias', 
    iff=>['type','1']}, 
 
-  {ftype=>1, tag=>'model', name=>'Model', type=>'text', len=>40, empty=>1, 
+  {ftype=>1, tag=>'asset_id', name=>'Asset ID', type=>'text', len=>20, 
+   empty=>1, no_empty=>1, iff=>['type','1']},
+  {ftype=>1, tag=>'model', name=>'Model', type=>'text', len=>50, empty=>1, 
    iff=>['type','1']},
-  {ftype=>1, tag=>'serial', name=>'Serial no.', type=>'text', len=>30,
+  {ftype=>1, tag=>'serial', name=>'Serial no.', type=>'text', len=>35,
    empty=>1, iff=>['type','1']},
-  {ftype=>1, tag=>'misc', name=>'Misc.', type=>'text', len=>40, empty=>1, 
+  {ftype=>1, tag=>'misc', name=>'Misc.', type=>'text', len=>50, empty=>1, 
    iff=>['type','1']},
+
 #  {ftype=>0, name=>'Group/Template selections', iff=>['type','[15]']},
   {ftype=>10, tag=>'grp', name=>'Group', iff=>['type','[15]']},
   {ftype=>6, tag=>'mx', name=>'MX template', iff=>['type','1']},
@@ -401,11 +406,14 @@ do "$PROG_DIR/cgi_util.pl";
    lastempty=>1, empty=>1, iff=>['type','1']},
   {ftype=>1, tag=>'ether', name=>'Ethernet address', type=>'mac', len=>17,
    conv=>'U', iff=>['type','[19]'], empty=>1},
-  {ftype=>1, tag=>'model', name=>'Model', type=>'text', len=>30, empty=>1, 
+
+  {ftype=>1, tag=>'asset_id', name=>'Asset ID', type=>'text', len=>20, 
+   empty=>1, no_empty=>1, iff=>['type','1']},
+  {ftype=>1, tag=>'model', name=>'Model', type=>'text', len=>50, empty=>1, 
    iff=>['type','1']},
-  {ftype=>1, tag=>'serial', name=>'Serial no.', type=>'text', len=>20,
+  {ftype=>1, tag=>'serial', name=>'Serial no.', type=>'text', len=>35,
    empty=>1, iff=>['type','1']},
-  {ftype=>1, tag=>'misc', name=>'Misc.', type=>'text', len=>40, empty=>1, 
+  {ftype=>1, tag=>'misc', name=>'Misc.', type=>'text', len=>50, empty=>1, 
    iff=>['type','1']},
   {ftype=>0, name=>'Record info'},
   {ftype=>1, name=>'Expiration date', tag=>'expiration', len=>30,
@@ -460,11 +468,14 @@ do "$PROG_DIR/cgi_util.pl";
    lastempty=>0, empty=>0, iff=>['type','1']},
   {ftype=>1, tag=>'ether', name=>'Ethernet address', type=>'mac', len=>17,
    conv=>'U', iff=>['type','[19]'], empty=>0},
-  {ftype=>1, tag=>'model', name=>'Model', type=>'text', len=>30, empty=>1, 
+
+  {ftype=>1, tag=>'asset_id', name=>'Asset ID', type=>'text', len=>20, 
+   empty=>1, no_empty=>1, iff=>['type','1']},
+  {ftype=>1, tag=>'model', name=>'Model', type=>'text', len=>50, empty=>1, 
    iff=>['type','1']},
-  {ftype=>1, tag=>'serial', name=>'Serial no.', type=>'text', len=>20,
+  {ftype=>1, tag=>'serial', name=>'Serial no.', type=>'text', len=>35,
    empty=>1, iff=>['type','1']},
-  {ftype=>1, tag=>'misc', name=>'Misc.', type=>'text', len=>40, empty=>1, 
+  {ftype=>1, tag=>'misc', name=>'Misc.', type=>'text', len=>50, empty=>1, 
    iff=>['type','1']},
   {ftype=>0, name=>'Record info'},
   {ftype=>1, name=>'Expiration date', tag=>'expiration', len=>30,
@@ -567,7 +578,7 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>1, tag=>'name', name=>'Description', type=>'text',
    len=>60, empty=>0},
   {ftype=>4, tag=>'id', name=>'ID'},
-  {ftype=>1, tag=>'plevel', name=>'Privilege level', type=>'priority', 
+  {ftype=>1, tag=>'alevel', name=>'Authorization level', type=>'priority', 
    len=>3, empty=>0},
   {ftype=>4, tag=>'subnet', name=>'Type', type=>'enum',
    enum=>{t=>'Subnet',f=>'Net'}},
@@ -671,7 +682,7 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>1, tag=>'name', name=>'Name', type=>'text', len=>40, empty=>0},
   {ftype=>4, tag=>'id', name=>'ID'},
   {ftype=>3, tag=>'type', name=>'Type', type=>'enum', enum=>\%group_type_hash},
-  {ftype=>1, tag=>'plevel', name=>'Privilege level', type=>'priority', 
+  {ftype=>1, tag=>'alevel', name=>'Authorization level', type=>'priority', 
    len=>3, empty=>0},
   {ftype=>1, tag=>'comment', name=>'Comment', type=>'text', len=>60, empty=>1},
   {ftype=>2, tag=>'dhcp', name=>'DHCP entries', 
@@ -724,7 +735,7 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>0, name=>'MX template'},
   {ftype=>1, tag=>'name', name=>'Name', type=>'text',len=>40, empty=>0},
   {ftype=>4, tag=>'id', name=>'ID'},
-  {ftype=>1, tag=>'plevel', name=>'Privilege level', type=>'priority', 
+  {ftype=>1, tag=>'alevel', name=>'Authorization level', type=>'priority', 
    len=>3, empty=>0},
   {ftype=>1, tag=>'comment', name=>'Comment', type=>'text',len=>60, empty=>1},
   {ftype=>2, tag=>'mx_l', name=>'Mail exchanges (MX)', 
@@ -741,7 +752,7 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>0, name=>'WKS template'},
   {ftype=>1, tag=>'name', name=>'Name', type=>'text',len=>40, empty=>0},
   {ftype=>4, tag=>'id', name=>'ID'},
-  {ftype=>1, tag=>'plevel', name=>'Privilege level', type=>'priority', 
+  {ftype=>1, tag=>'alevel', name=>'Authorization level', type=>'priority', 
    len=>3, empty=>0},
   {ftype=>1, tag=>'comment', name=>'Comment', type=>'text',len=>60, empty=>1},
   {ftype=>2, tag=>'wks_l', name=>'WKS', 
@@ -927,7 +938,7 @@ unless ($state{superuser} eq 'yes') {
   error("cannot get permissions!")
     if (get_permissions($state{uid},$state{gid},\%perms));
 } else {
-  $perms{plevel}=999 if ($state{superuser});
+  $perms{alevel}=999 if ($state{superuser});
 }
 
 if (param('csv')) {
@@ -1298,8 +1309,8 @@ sub hosts_menu() {
   $host_form{alias_l_url}="$selfurl?menu=hosts&h_id=";
   $host_form{alias_a_url}="$selfurl?menu=hosts&h_id=";
   $host_form{alias_d_url}="$selfurl?menu=hosts&h_id=";
-  $host_form{plevel}=$restricted_host_form{plevel}=$perms{plevel};
-  $new_host_form{plevel}=$restricted_new_host_form{plevel}=$perms{plevel};
+  $host_form{alevel}=$restricted_host_form{alevel}=$perms{alevel};
+  $new_host_form{alevel}=$restricted_new_host_form{alevel}=$perms{alevel};
 
   if ($sub eq 'Delete') {
     if (get_host(param('h_id'),\%host)) {
@@ -1733,8 +1744,8 @@ sub hosts_menu() {
 
     print "]</CENTER><BR>",
           "<div align=right><font size=-1>",
-          "<a name=\"foo.csv\" href=\"$sorturl&csv=1\">Download results in CSV format</a>",
-          " &nbsp;</font></div>";
+          "<a name=\"foo.csv\" href=\"$sorturl&csv=1\">",
+          "[Download results in CSV format]</a> &nbsp;</font></div>";
     return;
   }
   elsif ($sub eq 'add') {
@@ -1981,7 +1992,7 @@ sub groups_menu() {
     print p,"$q[0][0] host records use this group.",
 	      startform(-method=>'GET',-action=>$selfurl);
     if ($q[0][0] > 0) {
-      get_group_list($serverid,\%lsth,\@lst,$perms{plevel});
+      get_group_list($serverid,\%lsth,\@lst,$perms{alevel});
       print p,"Change those host records to point to: ",
 	        popup_menu(-name=>'grp_new',-values=>\@lst,
 			   -default=>-1,-labels=>\%lsth);
@@ -2011,7 +2022,7 @@ sub groups_menu() {
   }
 
  browse_groups:
-  db_query("SELECT id,name,comment,type,plevel FROM groups " .
+  db_query("SELECT id,name,comment,type,alevel FROM groups " .
 	   "WHERE server=$serverid ORDER BY name;",\@q);
   if (@q < 1) {
     print h2("No groups found!");
@@ -2054,7 +2065,7 @@ sub nets_menu() {
 
  show_vlan_record:
   if ($v_id > 0) {
-      return if (check_perms('level',$PLEVEL_VLANS));
+      return if (check_perms('level',$ALEVEL_VLANS));
 
       if (get_vlan($v_id,\%vlan)) {
 	  alert2("Cannot get vlan record (id=$v_id)");
@@ -2089,7 +2100,7 @@ sub nets_menu() {
 
   if ($sub eq 'vlans') {
     browse_vlans:
-      return if (check_perms('level',$PLEVEL_VLANS));
+      return if (check_perms('level',$ALEVEL_VLANS));
       undef @q;
       db_query("SELECT id,name,description,comment FROM vlans " .
 	       "WHERE server=$serverid ORDER BY name;",\@q);
@@ -2244,7 +2255,7 @@ sub nets_menu() {
       print h2("Cannot get net record (id=$id)!");
       return;
     }
-    if (check_perms('level',$PLEVEL_VLANS,1)) {
+    if (check_perms('level',$ALEVEL_VLANS,1)) {
 	$net_form{mode}=0;
     } else {
 	get_vlan_list($serverid,\%vlan_list_hash,\@vlan_list);
@@ -2261,15 +2272,15 @@ sub nets_menu() {
   }
 
  browse_nets:
-  db_query("SELECT id,name,net,subnet,comment,no_dhcp,vlan,netname,plevel " .
+  db_query("SELECT id,name,net,subnet,comment,no_dhcp,vlan,netname,alevel " .
 	   "FROM nets " .
-	   "WHERE server=$serverid AND plevel <= $perms{plevel} " .
+	   "WHERE server=$serverid AND alevel <= $perms{alevel} " .
 	   "ORDER BY subnet,net;",\@q);
   if (@q < 1) {
     print h2("No networks found!");
     return;
   }
-  if (check_perms('level',$PLEVEL_VLANS,1)) {
+  if (check_perms('level',$ALEVEL_VLANS,1)) {
     $novlans=1;
   } else {
     get_vlan_list($serverid,\%vlan_list_hash,\@vlan_list);
@@ -2330,7 +2341,7 @@ sub templates_menu() {
   $hinfo_id=param('hinfo_id');
 
   if ($sub eq 'mx') {
-    db_query("SELECT id,name,comment,plevel FROM mx_templates " .
+    db_query("SELECT id,name,comment,alevel FROM mx_templates " .
 	     "WHERE zone=$zoneid ORDER BY name;",\@q);
     if (@q < 1) {
       print h2("No MX templates found for this zone!"); 
@@ -2354,7 +2365,7 @@ sub templates_menu() {
     return;
   }
   elsif ($sub eq 'wks') {
-    db_query("SELECT id,name,comment,plevel FROM wks_templates " .
+    db_query("SELECT id,name,comment,alevel FROM wks_templates " .
 	     "WHERE server=$serverid ORDER BY name;",\@q);
     if (@q < 1) {
       print h2("No WKS templates found for this server!");
@@ -2485,7 +2496,7 @@ sub templates_menu() {
       print p,"$q[0][0] host records use this template.",
 	      startform(-method=>'GET',-action=>$selfurl);
       if ($q[0][0] > 0) {
-	get_mx_template_list($zoneid,\%lsth,\@lst,$perms{plevel});
+	get_mx_template_list($zoneid,\%lsth,\@lst,$perms{alevel});
 	print p,"Change those host records to point to: ",
 	        popup_menu(-name=>'mx_new',-values=>\@lst,
 			   -default=>-1,-labels=>\%lsth);
@@ -2531,7 +2542,7 @@ sub templates_menu() {
       print p,"$q[0][0] host records use this template.",
 	      startform(-method=>'GET',-action=>$selfurl);
       if ($q[0][0] > 0) {
-	get_wks_template_list($serverid,\%lsth,\@lst,$perms{plevel});
+	get_wks_template_list($serverid,\%lsth,\@lst,$perms{alevel});
 	print p,"Change those host records to point to: ",
 	        popup_menu(-name=>'wks_new',-values=>\@lst,
 			   -default=>-1,-labels=>\%lsth);
@@ -2902,9 +2913,9 @@ sub login_menu() {
 	     td("(IP address constraint)"),"</TR>";
     }
 
-    # plevel permissions
-    print "<TR bgcolor=\"#dddddd\">",td("Level"),td($perms{plevel}),
-	     td("(general privilege level)"),"</TR>";
+    # alevel permissions
+    print "<TR bgcolor=\"#dddddd\">",td("Level"),td($perms{alevel}),
+	     td("(authorization level)"),"</TR>";
 
 
     print "</TABLE><P>&nbsp;";
@@ -3107,8 +3118,9 @@ sub login_form($$) {
 
   print "<FONT color=\"blue\">";
   print "<CENTER><TABLE width=\"50%\" cellspacing=0 border=0>",
-        "<TR bgcolor=\"#0000ff\"><TD> Sauron</TD>",
-	"<TD align=\"right\">$host </TD>",
+        "<TR bgcolor=\"#0000ff\"><TD><FONT color=\"yellow\">&nbsp; Sauron",
+        "</FONT></TD><TD align=\"right\"><FONT color=\"yellow\">",
+	"$host &nbsp;</FONT></TD></FONT>",
 	"<TR><TD colspan=2 bgcolor=\"#dddddd\">";
 
   print start_form,"<BR><CENTER>",h2($msg),p,"<TABLE>",
@@ -3142,7 +3154,7 @@ sub login_auth() {
   $p=~s/\ \t\n//g;
   print "<P><BR><BR><BR><BR><CENTER>";
   if ($u eq '' || $p eq '') { print p,h1("Username or password empty!");  } 
-  elsif ($u !~ /^[a-zA-Z0-9\.\-]$/) { print p,h1("Invalid usrname!"); }
+  elsif ($u !~ /^[a-zA-Z0-9\.\-]+$/) { print p,h1("Invalid usrname!"); }
   else {
     unless (get_user($u,\%user)) {
       if (pwd_check($p,$user{'password'}) == 0) {
@@ -3187,7 +3199,9 @@ sub login_auth() {
 	}
 
 	logmsg("notice","user ($u) logged in from " . $ENV{'REMOTE_ADDR'});
-	db_exec("UPDATE users SET last=$ticks WHERE id=$user{'id'};");
+	$last_from = db_encode_str($ENV{'REMOTE_ADDR'});
+	db_exec("UPDATE users SET last=$ticks,last_from=$last_from " .
+		"WHERE id=$user{'id'};");
 	update_lastlog($state{uid},$state{sid},1,
 		       $remote_addr,$remote_host);
       }
@@ -3550,8 +3564,8 @@ sub check_perms($$$) {
     return 1;
   }
   elsif ($type eq 'level') {
-    return 0 if ($perms{plevel} >= $rule);
-    alert1("Higher privilege level required") unless($quiet);
+    return 0 if ($perms{alevel} >= $rule);
+    alert1("Higher authorization level required") unless($quiet);
     return 1;
   }
   elsif ($type eq 'server') {

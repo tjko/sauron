@@ -982,7 +982,7 @@ sub get_host($$) {
 	       "hinfo_hw,hinfo_sw,wks,mx,rp_mbox,rp_txt,router," .
 	       "prn,ether,ether_alias,info,location,dept,huser,model," .
 	       "serial,misc,cdate,cuser,muser,mdate,comment,dhcp_date," .
-	       "expiration",
+	       "expiration,asset_id,dhcp_info",
 	       $id,$rec,"id");
 
   return -1 if ($res < 0);
@@ -1108,6 +1108,7 @@ sub update_host($) {
   delete $rec->{cdate};
   delete $rec->{cuser};
   delete $rec->{dhcp_date};
+  delete $rec->{dhcp_info};
   delete $rec->{dhcp_date_str};
   $rec->{mdate}=time;
   $rec->{muser}=$muser;
@@ -1277,7 +1278,7 @@ sub get_mx_template($$) {
   my ($id,$rec) = @_;
 
   return -100 if (get_record("mx_templates",
-			     "name,comment,cdate,cuser,mdate,muser,plevel",
+			     "name,comment,cdate,cuser,mdate,muser,alevel",
 			     $id,$rec,"id"));
 
   get_array_field("mx_entries",4,"id,pri,mx,comment","Priority,MX,Comment",
@@ -1342,7 +1343,7 @@ sub delete_mx_template($) {
 
 
 sub get_mx_template_list($$$$) {
-  my($zoneid,$rec,$lst,$plevel) = @_;
+  my($zoneid,$rec,$lst,$alevel) = @_;
   my(@q,$i);
 
   undef @{$lst};
@@ -1350,10 +1351,10 @@ sub get_mx_template_list($$$$) {
   undef %{$rec};
   $$rec{-1}='None';
   return if ($zoneid < 1);
-  $plevel=0 unless ($plevel>0);
+  $alevel=0 unless ($alevel>0);
 
   db_query("SELECT id,name FROM mx_templates " .
-	   "WHERE zone=$zoneid AND plevel <= $plevel ORDER BY name;",\@q);
+	   "WHERE zone=$zoneid AND alevel <= $alevel ORDER BY name;",\@q);
   for $i (0..$#q) {
     push @{$lst}, $q[$i][0];
     $$rec{$q[$i][0]}=$q[$i][1];
@@ -1367,7 +1368,7 @@ sub get_wks_template($$) {
   my ($id,$rec) = @_;
 
   return -100 if (get_record("wks_templates",
-			     "name,comment,cuser,cdate,muser,mdate,plevel",
+			     "name,comment,cuser,cdate,muser,mdate,alevel",
 			     $id,$rec,"id"));
 
   get_array_field("wks_entries",4,"id,proto,services,comment",
@@ -1432,7 +1433,7 @@ sub delete_wks_template($) {
 }
 
 sub get_wks_template_list($$$$) {
-  my($serverid,$rec,$lst,$plevel) = @_;
+  my($serverid,$rec,$lst,$alevel) = @_;
   my(@q,$i);
 
   undef @{$lst};
@@ -1440,10 +1441,10 @@ sub get_wks_template_list($$$$) {
   undef %{$rec};
   $$rec{-1}='None';
   return if ($serverid < 1);
-  $plevel=0 unless ($plevel > 0);
+  $alevel=0 unless ($alevel > 0);
 
   db_query("SELECT id,name FROM wks_templates " .
-	   "WHERE server=$serverid AND plevel <= $plevel ORDER BY name;",\@q);
+	   "WHERE server=$serverid AND alevel <= $alevel ORDER BY name;",\@q);
   for $i (0..$#q) {
     push @{$lst}, $q[$i][0];
     $$rec{$q[$i][0]}=$q[$i][1];
@@ -1595,7 +1596,7 @@ sub get_group($$) {
   my ($id,$rec) = @_;
 
   return -100 if (get_record("groups",
-		      "name,comment,cdate,cuser,mdate,muser,type,plevel",
+		      "name,comment,cdate,cuser,mdate,muser,type,alevel",
 			     $id,$rec,"id"));
 
   get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comments",
@@ -1667,7 +1668,7 @@ sub delete_group($) {
 }
 
 sub get_group_list($$$$) {
-  my($serverid,$rec,$lst,$plevel) = @_;
+  my($serverid,$rec,$lst,$alevel) = @_;
   my(@q,$i);
 
   undef @{$lst};
@@ -1675,10 +1676,10 @@ sub get_group_list($$$$) {
   undef %{$rec};
   $$rec{-1}='None';
   return if ($serverid < 1);
-  $plevel=0 unless ($plevel > 0);
+  $alevel=0 unless ($alevel > 0);
 
   db_query("SELECT id,name FROM groups " .
-	   "WHERE server=$serverid AND plevel <= $plevel  ORDER BY name;",\@q);
+	   "WHERE server=$serverid AND alevel <= $alevel  ORDER BY name;",\@q);
   for $i (0..$#q) {
     push @{$lst}, $q[$i][0];
     $$rec{$q[$i][0]}=$q[$i][1];
@@ -1741,7 +1742,7 @@ sub get_net($$) {
   return -100 if (get_record("nets",
                       "server,name,net,subnet,rp_mbox,rp_txt,no_dhcp,comment,".
 		      "range_start,range_end,vlan,cdate,cuser,mdate,muser,".
-                      "netname,plevel", $id,$rec,"id"));
+                      "netname,alevel", $id,$rec,"id"));
 
   get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comment",
 		  "type=4 AND ref=$id ORDER BY dhcp",$rec,'dhcp_l');
@@ -1958,7 +1959,7 @@ sub get_permissions($$$) {
   $rec->{net}={};
   $rec->{hostname}=[];
   $rec->{ipmask}=[];
-  $rec->{plevel}=0;
+  $rec->{alevel}=0;
 
   undef @q;
   $sql = "SELECT a.rtype,a.rref,a.rule,n.range_start,n.range_end " .
@@ -1986,7 +1987,7 @@ sub get_permissions($$$) {
     elsif ($type == 3) { $rec->{net}->{$ref}=[$s,$e]; }
     elsif ($type == 4) { push @{$rec->{hostname}}, $mode; }
     elsif ($type == 5) { push @{$rec->{ipmask}}, $mode; }
-    elsif ($type == 6) { $rec->{plevel}=$mode if ($rec->{plevel} < $mode); }
+    elsif ($type == 6) { $rec->{alevel}=$mode if ($rec->{alevel} < $mode); }
   }
 
   return 0;

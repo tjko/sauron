@@ -248,7 +248,8 @@ if ($modgroup) {
 
   undef @q;
   db_query("SELECT u.id,u.name,u.superuser,u.comment,u.password,u.gid, " .
-	   " u.cdate,u.cuser,u.mdate,u.muser,u.expiration,u.email " .
+	   " u.cdate,u.cuser,u.mdate,u.muser,u.expiration,u.email, ".
+	   " u.last_from,u.last " .
 	   "FROM users u " .
 	   "WHERE u.username='$opt_user';",\@q);
   fatal("Cannot find user '$opt_user' from users table!") if (@q < 1);
@@ -268,6 +269,7 @@ if ($modgroup) {
   $longname=$q[0][1];
   $comment=$q[0][3];
   $email=$q[0][11];
+  $last_from=($q[0][13] > 0 ? localtime($q[0][13])." from $q[0][12]" : '');
   if ($gid > 0) {
     undef @q;
     db_query("SELECT name FROM user_groups WHERE id=$gid;",\@q);
@@ -281,6 +283,7 @@ if ($modgroup) {
         "          superuser: " ,($q[0][2] eq 't' ? 'Yes':'No'), "\n",
         "              group: $gidname (gid=$gid)\n",
 	"      passwd status: $status\n",
+	"         last login: $last_from\n",
 	" account expiration: $edate_str\n",
 	"    account created: $cdate_str\n",
 	"      last modified: $mdate_str\n\n";

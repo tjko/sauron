@@ -531,7 +531,7 @@ sub form_magic($$$) {
 
       print "</TABLE></TD></TR>\n";
     } elsif ($rec->{ftype} == 6) {
-      get_mx_template_list($CGI_UTIL_zoneid,\%lsth,\@lst,$form->{plevel});
+      get_mx_template_list($CGI_UTIL_zoneid,\%lsth,\@lst,$form->{alevel});
       get_mx_template(param($p1),\%tmpl_rec);
       print "<TR>",td($rec->{name}),"<TD><TABLE WIDTH=\"99%\">\n<TR>",
 	    td(popup_menu(-name=>$p1,-values=>\@lst,
@@ -542,7 +542,7 @@ sub form_magic($$$) {
       print_mx_template(\%tmpl_rec);
       print "</TD></TR></TABLE></TD></TR>";
     } elsif ($rec->{ftype} == 7) {
-      get_wks_template_list($CGI_UTIL_serverid,\%lsth,\@lst,$form->{plevel});
+      get_wks_template_list($CGI_UTIL_serverid,\%lsth,\@lst,$form->{alevel});
       get_wks_template(param($p1),\%tmpl_rec);
       print "<TR>",td($rec->{name}),"<TD><TABLE WIDTH=\"99%\">\n<TR>",
 	    td(popup_menu(-name=>$p1,-values=>\@lst,
@@ -598,7 +598,7 @@ sub form_magic($$$) {
     elsif ($rec->{ftype} == 9) {
       # do nothing...
     } elsif ($rec->{ftype} == 10) {
-      get_group_list($CGI_UTIL_serverid,\%lsth,\@lst,$form->{plevel});
+      get_group_list($CGI_UTIL_serverid,\%lsth,\@lst,$form->{alevel});
       get_group(param($p1),\%tmpl_rec);
       print "<TR>",td($rec->{name}),"<TD>",
 	    popup_menu(-name=>$p1,-values=>\@lst,

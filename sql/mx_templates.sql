@@ -10,7 +10,7 @@ CREATE TABLE mx_templates (
 	id		SERIAL PRIMARY KEY, /* unique ID */
 	zone		INT4 NOT NULL, /* ptr to a zone table record
 					  -->zones.id */
-        plevel	        INT4 DEFAULT 0, /* required priv.level */
+        alevel	        INT4 DEFAULT 0, /* required authorization level */
 	name		TEXT, /* template name */
 	comment		TEXT 
 ) INHERITS(common_fields);
