@@ -315,7 +315,7 @@ for ($i=0; $i <= $#zones; $i+=1) {
     die("cannot insert NS entries id=$zoneid!") if (db_exec($sqlstr)<0);
   }
   if ($rev eq 'true') {
-    # do nothing
+    # do nothing if reverse zone
   } else {
     foreach $rtmp (@{$rec->{MX}}) {
       next unless $rtmp =~ /^\s*(\d+)\s+(\S+)\s*$/;
@@ -406,7 +406,8 @@ for ($i=0; $i <= $#zones; $i+=1) {
 	  $sqlstr = "SELECT a_entries.id, hosts.domain, zones.name " .
 #	          "hosts.domain || '.' || zones.name || '.' AS dname " .
 		  "FROM a_entries,hosts,zones,servers " .
-	          "WHERE a_entries.host=hosts.id AND hosts.zone=zones.id " .
+	          "WHERE a_entries.type=2 AND a_entries.ref=hosts.id " .
+		  "AND hosts.zone=zones.id " .
 		  "AND zones.server=servers.id AND servers.id=$serverid AND " .
 #		  "AND zones.server=servers.id AND " .
 		   "ip='$ip';";  
@@ -434,7 +435,8 @@ for ($i=0; $i <= $#zones; $i+=1) {
 	    #print "$rid : $rhost : $rflag\n";
 	    $sqlstr = "UPDATE a_entries SET reverse=$rflag WHERE id=$rid;";
 	    $res=db_exec($sqlstr);
-	    die("cannot update a_entries record id=$rid host=$rhost") if ($res < 0);
+	    die("cannot update a_entries record id=$rid host=$rhost") 
+	      if ($res < 0);
 	    warn("fail: $sqlstr") if (db_status() ne 'UPDATE 1');
 	  }
 	  #die("cannot commit a_entries record updates!") if (db_commit() < 0);
@@ -454,7 +456,6 @@ for ($i=0; $i <= $#zones; $i+=1) {
     next;
   }
 
-  
 
   # hande normal zone
 
@@ -529,24 +530,23 @@ for ($i=0; $i <= $#zones; $i+=1) {
   }
   #die("Cannot commit mx_templates inserts!") if (db_commit() < 0);
 
-  
+
   # insert records in hosts table....
   $c = keys %zonedata;
   print STDERR "Inserting $c records...";
   $j=0; $str='';
   #db_begin();
-  
+
   foreach $host (keys %zonedata) {
     $rec = $zonedata{$host};
     next unless ($rec->{CNAME} eq '');
-
+    next if ($host eq $origin);
 
     #print "$host\n";
     $nslist = db_build_list_str($rec->{NS});
     $mxlist = db_build_list_str($rec->{MX});
     $wkslist = db_build_list_str($rec->{WKS});
     #$alist = db_build_list_str($rec->{A});
-    #$a = "\'$rec->{A}[0]\'";
     $txtlist = db_build_list_str($rec->{TXT});
     $hinfo1=$rec->{HINFO}[0];
     $hinfo2=$rec->{HINFO}[1];
@@ -554,19 +554,14 @@ for ($i=0; $i <= $#zones; $i+=1) {
     $wks=$wkshash{$wkslist};
     $mx=-1 if (! $mx);
     $wks=-1 if (! $wks);
-    $a = 'NULL' if ($a eq "''");
     $host2=remove_origin($host,$origin);
-    if ($host2 eq $origin) {
-      $host2='@';
-      $nslist = '';
-      $mx=-1;
-    }
 
     $hosttype=0; # misc / unknown entry type
     $hosttype=1 if (@{$rec->{A}} > 0); # host
     $hosttype=2 if ($nslist ne '' && $host2 ne '@'); # delegated subdomains
     $hosttype=3 if ($nslist eq '' && @{$rec->{A}} < 1 && @{$rec->{MX}} > 0);
-    
+    $hosttype=8 if (@{$rec->{SRV}} > 0);
+
     if ($hosttype == 2) { 
       if ($host =~ /in-addr\.arpa/) {
 	print STDERR "\nIGNORING reverse delegation $host in zone $zone \n",
@@ -585,7 +580,7 @@ for ($i=0; $i <= $#zones; $i+=1) {
     }
 
     if ($hosttype == 0) {
-      print STDERR "\nIGNORING uknown host entry '$host' in zone $zone\n";
+      print STDERR "\nIGNORING unknown host entry '$host' in zone $zone\n";
       delete $zonedata{$host};
       next;
     }
@@ -617,11 +612,11 @@ for ($i=0; $i <= $#zones; $i+=1) {
     die("Cannot insert host record '$host'") if ($res < 0);
   }
   #die("Cannot commit host record inserts!") if (db_commit() < 0);
-  
+
   # fetch id's of records inserted earlier
   $sqlstr = "SELECT id,domain FROM hosts WHERE zone=$zoneid;";
   $res = db_exec($sqlstr);
-  die("Cannot select previously inserted host records!") if ($res < 1);
+  die("Cannot select previously inserted host records!") if ($res < 0);
   print STDERR "($res)";
   for($j=0;$j<$res;$j+=1) {
     $id=db_getvalue($j,0);
@@ -634,6 +629,26 @@ for ($i=0; $i <= $#zones; $i+=1) {
     }
   }
 
+
+  # insert SRV records
+
+  foreach $host (keys %zonedata) {
+    $rec = $zonedata{$host};
+    next unless (@{$rec->{SRV}} > 0);
+    $tmpid= $rec->{ID};
+
+    $sqlstr='';
+    foreach $rtmp (@{$rec->{SRV}}) {
+        @stmp = split (' ',$rtmp);
+	$sqlstr .= "INSERT INTO srv_entries " .
+	           "(type,ref,pri,weight,port,target) " .
+                 " VALUES(1,$tmpid,$stmp[0],$stmp[1],$stmp[2],'$stmp[3]');\n";
+      }
+      print STDERR "=";
+      die("cannot insert entries for host '$host' in srv_entries!") 
+	if (db_exec($sqlstr)<0);
+
+  }
 
 
   # insert alias (CNAME) records
@@ -680,12 +695,13 @@ for ($i=0; $i <= $#zones; $i+=1) {
   }
   #die("Cannot commit alias record inserts!") if (db_commit() < 0);
 
-    
+
   # add A records in a_entries
   $j=0; $str='';
   #db_begin();
 
   foreach $host (keys %zonedata) {
+
     $rec = $zonedata{$host};
     $c = @{$rec->{A}};
     if ($c < 1) {
@@ -693,18 +709,27 @@ for ($i=0; $i <= $#zones; $i+=1) {
 	if (@{$rec->{NS}} < 1  &&  @{$rec->{MX}} < 1 && @{$rec->{SRV}} < 1);
       next;
     }
-    $hostid=$rec->{ID};
+
     $reverse='true';
-    if ($hostid < 1 || !$hostid) {
-      warn("no id found in hash for host $host (adding A records)!") ;
-      next;
+
+    if ($host eq $origin) {
+      $atype=1;
+      $hostid=$zoneid;
     }
-    
+    else {
+      $atype=2;
+      $hostid=$rec->{ID};
+      unless ($hostid > 0) {
+	warn("no id found in hash for host $host (adding A records)!") ;
+	next;
+      }
+    }
+
     for($k=0; $k < $c; $k+=1) {
       $ip=$rec->{A}[$k];
-      $sqlstr = "INSERT INTO a_entries (host,ip,reverse) " .
-	"VALUES($hostid,'$ip',$reverse);";
-      
+      $sqlstr = "INSERT INTO a_entries (type,ref,ip,reverse) " .
+	"VALUES($atype,$hostid,'$ip',$reverse);";
+
       $j++;
       $str.=$sqlstr . "\n";
       if ($j > 100) {
@@ -715,7 +740,7 @@ for ($i=0; $i <= $#zones; $i+=1) {
 	print STDERR "#";
       }
     }
-    
+
   }
   unless ($str eq '') {
     $res = db_exec($str);
@@ -752,7 +777,7 @@ for ($i=0; $i <= $#zones; $i+=1) {
 	$str='';
       }
     }
-  }  
+  }
   unless ($str eq '') {
     die("cannot update MX/WKS pointers!") if (db_exec($str) < 0);
   }
@@ -763,6 +788,8 @@ for ($i=0; $i <= $#zones; $i+=1) {
   #db_begin();
   $j=0;
   foreach $host (keys %zonedata) {
+    next if ($host eq $origin);
+
     $rec = $zonedata{$host};
 
     $mx=$mxhash{db_build_list_str($rec->{MX})};
@@ -802,11 +829,11 @@ for ($i=0; $i <= $#zones; $i+=1) {
       print STDERR "å";
       $j=0;
     }
-  }  
+  }
   #die("Cannot commit MX & WKS tempate pointer updates!") if (db_commit() < 0);
   print "\n";
 
-    
+
   print "Updating glue records...\n";
   #db_begin();
   for $host (@gluelist) {
@@ -854,8 +881,9 @@ sub find_multi_ips($) {
   undef %mips;
 
   $sqlstr = "SELECT a_entries.ip,COUNT(*) FROM a_entries,hosts,zones " .
-	    "WHERE a_entries.host=hosts.id AND hosts.zone=zones.id " .
-	    "  AND zones.server=$serverid " .
+	    "WHERE a_entries.type=2 AND a_entries.ref=hosts.id " .
+	    " AND hosts.zone=zones.id " .
+	    " AND zones.server=$serverid " .
 	    "GROUP BY a_entries.ip " .
 	    "HAVING COUNT(*) >1;";
   $res = db_exec($sqlstr);

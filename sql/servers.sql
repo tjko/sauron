@@ -59,7 +59,7 @@ CREATE TABLE servers (
 
 	comment		TEXT,
 	
-	CONSTRAINTS	servers_name_key UNIQUE(name)
+	CONSTRAINT	servers_name_key UNIQUE(name)
 ) INHERITS(pokemon);
 
 

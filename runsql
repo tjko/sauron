@@ -85,7 +85,7 @@ while ($filename=$ARGV[0]) {
 	print "command: '$cmd'\n" if ($verbose);
 	$res = db_exec($cmd);
 	if ($res < 0) {
-	  error("SQL command failed at $filename($.)");
+	  error("SQL command failed at $filename($.) : " . db_errormsg());
 	  exit(1) unless($opt_notransaction);
 	}
       }

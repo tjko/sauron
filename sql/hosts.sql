@@ -21,7 +21,9 @@ CREATE TABLE hosts (
 					4=alias (cname), 
 					5=printer,
   				      	6=glue record, 
-					7=alias (arec) */
+					7=alias (arec),
+					8=srv entry
+					*/
        
        domain	   TEXT NOT NULL CHECK(domain <> ''), /* host domain name */
        ttl	   INT4,          /* TTL for host records, default if NULL */
@@ -29,7 +31,7 @@ CREATE TABLE hosts (
        
        grp	   INT4 DEFAULT -1,  /* ptr to group
 					-->groups.id */
-       alias	   INT4 DEFAULT -1,  /* ptr to another rr record
+       alias	   INT4 DEFAULT -1,  /* ptr to another host record
 					(for CNAME alias) */
        cname_txt   TEXT,	     /* CNAME value for out-of-zone alias */
        hinfo_hw	   TEXT,	     /* HINFO hardware */
@@ -45,7 +47,9 @@ CREATE TABLE hosts (
 	                              (1 being highest priority) */
        prn         BOOL DEFAULT false, /* true for virtual printer entries */
 		
-       ether	   CHAR(12),   /* Ethernet address (MAC) */
+       ether	   CHAR(12),        /* Ethernet address (MAC) */
+       ether_alias INT4 DEFAULT -1, /* ptr to another host record
+					(for ETHER address) */
        info	   TEXT,       /* Host info (appears as TXT record) */
        location	   TEXT,       /* Host location info */
        dept	   TEXT,       /* Department name */
@@ -55,7 +59,7 @@ CREATE TABLE hosts (
        serial	   TEXT,       /* serial number */
        misc	   TEXT,       /* misc info */
 			       
-       comment	   TEXT,
+       comment	   TEXT,       /* comment */
 
        CONSTRAINT  hosts_key PRIMARY KEY (domain,zone)
 ) INHERITS(pokemon);

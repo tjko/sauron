@@ -15,12 +15,14 @@ CREATE TABLE nets (
        name	   TEXT, /* name of net/subnet */
        net	   CIDR NOT NULL, /* net CIDR */
        subnet      BOOL DEFAULT true, /* subnet flag */
+       vlan	   INT4 DEFAULT 1, /* VLAN */
+
        rp_mbox	   TEXT DEFAULT '.', /* RP mbox */
        rp_txt	   TEXT DEFAULT '.', /* RP txt */
        no_dhcp     BOOL DEFAULT false,  /* no-DHCP flag */
        range_start INET, /* auto assign address range start */
        range_end   INET, /* auto assign address range end */
-       comment	   TEXT,
+       comment	   TEXT, /* comment */
 
        CONSTRAINT  nets_key PRIMARY KEY (net,server)
 ) INHERITS(pokemon);

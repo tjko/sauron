@@ -123,7 +123,6 @@ warn("No SOA record found in hosts file!") unless ($rec);
 # update zone record
 if ($rec) {
   print "Updating zone/server specific stuff...\n";
-  $dhcplist = db_build_list_str($rec->{DHCP});
 
   foreach $rtmp (@{$rec->{DHCP}}) {
     next if ($rtmp =~ /^\s*$/);
@@ -161,8 +160,8 @@ foreach $host (keys %zonedata) {
   for $i (0..$#{$rec->{A}}) {
     $ip=$rec->{A}[$i];
     die("cannot insert A record for host!")
-      if (db_exec("INSERT INTO a_entries (host,ip,reverse,forward) " .
-		  "VALUES($id,'$ip',true,true);") < 0);
+      if (db_exec("INSERT INTO a_entries (type,ref,ip,reverse,forward) " .
+		  "VALUES(2,$id,'$ip',true,true);") < 0);
   }
 
   #delete $zonedata{$host};
@@ -195,7 +194,7 @@ foreach $host (keys %zonedata) {
       next;
     }
     die("cannot delete A records for host id=$id!") 
-      if (db_exec("DELETE FROM a_entries WHERE host=$id;") < 0);
+      if (db_exec("DELETE FROM a_entries WHERE type=2 AND ref=$id;") < 0);
     die("cannot update host record id=$id!")
       if (db_exec("UPDATE hosts SET type=7 WHERE id=$id;") < 0);
     die("cannot add AREC entry")
@@ -241,10 +240,9 @@ foreach $net (keys %rhash) {
 
   $nm = new Net::Netmask($net,$rec->{MASK});
   $n = $nm->desc();
-  $dhcplist = db_build_list_str($rec2->{DHCP});
   $range1 = $nm->nth(1);
   $range2 = $nm->nth(-2);
-  
+
   #print "$n $rec->{NAME} $rec->{ETHER}\n" if ($rec->{ETHER} ne '');
   #print "$n $rec->{NAME} : $net : $rec->{MASK} : $rec2->{INFO}\n";
 
@@ -267,7 +265,7 @@ foreach $net (keys %rhash) {
       die("cannot insert dhcp_entry '$rtmp' for net $net!") if ($res < 0);
     }
   }
-  
+
   delete $zonedata{$rec->{NAME}};
 }
 
@@ -311,15 +309,9 @@ foreach $group (keys %grouphash) {
   }
   if (! $rec) {
     warn("Cannot find group: $group ($host)!");
-    $printerlist='NULL';
-    $dhcplist='NULL';
     $comment='empty group';
-
   } else {
-    $printerlist=db_encode_list_str($rec->{PRINTER}); # voi poistaa!!!!!!
-    $dhcplist = db_encode_list_str($rec->{DHCP});
     $comment=$rec->{INFO};
-
   }
 
   $sqlstr="INSERT INTO groups " .
@@ -371,11 +363,10 @@ foreach $host (keys %zonedata) {
 
     $printerhash{$host}=$rec;
     $host2=remove_origin($host,$origin);
-    $prlist=db_build_list_str($rec->{PRINTER});
     $info="$rec->{INFO}";
     $group=$grouphash{$rec->{GROUP}};
     $group=-1 if (! $group);
-    
+
     if ($host =~ /^\@\S+$/) {
       $ptype=3;
       print "printer class: $host2\n";
@@ -416,7 +407,7 @@ foreach $host (keys %zonedata) {
 		   "VALUES($ptype,$lastid,'$rtmp');");
       die("cannot insert printer_entry '$rtmp' for printer $host2!") 
 	if ($res < 0);
-    }    
+    }
 
     delete $zonedata{$host};
   }
@@ -448,27 +439,27 @@ foreach $host (keys %zonedata) {
       next;
     }
 
-    $ether = "'$rec->{ETHER}'";
-    $ether = 'NULL' if ($ether eq "''");
-    $dhcplist = db_build_list_str($rec->{DHCP});
-    if ($dhcplist eq '') { 
-      $dhcplist='NULL'; 
-    } else {
-      $dhcplist="'{$dhcplist}'";
-      foreach $rtmp (@{$rec->{DHCP}}) {
-	next if ($rtmp =~ /^\s*$/);
-	$res=db_exec("INSERT INTO dhcp_entries (type,ref,dhcp) " .
-		     "VALUES(3,$lastid,'$rtmp');");
-	die("cannot insert dhcp_entry '$rtmp' for $hostname ($id)!") 
-	  if ($res < 0);
-      }    
+    $ether = ($rec->{ETHER} eq '' ? "NULL" : "'$rec->{ETHER}'");
+    $ether_alias = -1;
+    if ($rec->{ETHER2} ne '') {
+      $ether_alias=$hostidhash{$rec->{ETHER2}};
+      unless ($ether_alias > 0) {
+	warn("cannot find ETHER address for '$host' ETHER2 entry");
+	$ether_alias=-1;
+      }
     }
-    $prlist=db_build_list_str($rec->{PRINTER});
-    if ($prlist eq '') {
-      $prlist='NULL';
+
+    foreach $rtmp (@{$rec->{DHCP}}) {
+      next if ($rtmp =~ /^\s*$/);
+      $res=db_exec("INSERT INTO dhcp_entries (type,ref,dhcp) " .
+		   "VALUES(3,$lastid,'$rtmp');");
+      die("cannot insert dhcp_entry '$rtmp' for $hostname ($id)!") 
+	if ($res < 0);
+    }
+
+    if (@{$rec->{PRINTER}} < 1) {
       $prn='false';
     } else {
-      $prlist="'{$prlist}'";
       $prn='true';
       foreach $rtmp (@{$rec->{PRINTER}}) {
 	next if ($rtmp =~ /^\s*$/);
@@ -476,7 +467,7 @@ foreach $host (keys %zonedata) {
 		     "VALUES(2,$lastid,'$rtmp');");
 	die("cannot insert printer_entry '$rtmp' for $hostname ($id)!") 
 	  if ($res < 0);
-      }    
+      }
     }
     $group=$grouphash{$rec->{GROUP}};
     $group=-1 if (! $group);
@@ -493,6 +484,7 @@ foreach $host (keys %zonedata) {
 
     $sqlstr = "UPDATE hosts SET ether=$ether, model=$model, serial=$serial, " .
               "misc=$muuta, info=$info, grp=$group, prn=$prn " .
+	      "ether_alias=$ether_alias " .
 		"WHERE id=$lastid;";
 #              "WHERE zone=$zoneid AND domain='$hostname';";
     #print "$sqlstr\n";
@@ -504,7 +496,7 @@ foreach $host (keys %zonedata) {
       $j=0;
       print STDERR "."; # . db_status() . "\n";
     }
-    
+
     delete $zonedata{$host};
   }
 }

@@ -88,6 +88,10 @@ sub db_lastoid() {
   return $db_last_result->oidStatus();
 }
 
+sub db_errormsg() {
+  return $db_connection_handle->errorMessage();
+}
+
 sub db_debug($) {
   my($flag) = @_;
 
