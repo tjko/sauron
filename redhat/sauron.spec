@@ -46,7 +46,7 @@ rm -rf $RPM_BUILD_ROOT
 /etc/sauron/config-browser.in
 %config /etc/sauron/config
 %config /etc/sauron/config-browser
-%doc README COPYRIGHT COPYING ChangeLog
+%doc README COPYRIGHT ChangeLog
 
 %changelog
 * Tue Nov 26 2002 Timo Kokkonen <tjko@cc.jyu.fi>
