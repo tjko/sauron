@@ -78,7 +78,7 @@ sub form_check_field($$$) {
     return 'boolean value required!' unless ($value =~ /^(t|f)$/);
   } elsif ($type eq 'mac') {
     return 'Ethernet address required!'
-      unless ($value =~ /^([0-9A-Z]{12})$/);
+      unless ($value =~ /^([0-9A-F]{12})$/);
   } elsif ($type eq 'printer_class') {
     return 'Valid printer class name required!'
       unless ($value =~ /^\@[a-zA-Z]+$/);
