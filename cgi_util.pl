@@ -684,7 +684,8 @@ sub display_form($$) {
 	unless ($val > 0) {
 	  $val = '<FONT color="blue">NO expiration date set</FONT>';
 	} else {
-	  $val = localtime($val);
+	  $val = (time() > $ val ?  localtime($val) .
+		  ' <FONT color="red"> (EXPIRED!) </FONT>' : localtime($val));
 	}
       }
 
