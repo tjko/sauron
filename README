@@ -1,5 +1,5 @@
-Sauron - DNS/DHCP Management System
-======
+Sauron v.0.5.0 - DNS/DHCP Management System
+==============
 
 
 REQUIREMENTS
@@ -61,12 +61,12 @@ INSTALLATION
 	You need to make sauron.cgi and browser.cgi available through
 	your www server. One way to do this is to make symbolic links
 	for sauron.cgi and browser.cgi in your cgi-bin directory.
-
+	Copy images under icons/ directory to sauron/icons/ directory
+	under your web server root directory (or just make a symbolic link)
 
   9) now you can use the web interface to create a server and zones, or
      you can import existing named/dhcpd configurations using
-     import/iport-dhcp utilities.
-
+     import/iport-dhcp utilities
 
 
 
