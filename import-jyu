@@ -22,6 +22,7 @@
 #	  
 require 5;
 use Net::Netmask;
+use Getopt::Std;
 
 ($PG_DIR,$PG_NAME) = ($0 =~ /^(.*\/)(.*)$/);
 $0 = $PG_NAME;
@@ -33,11 +34,13 @@ do "$PG_DIR/db.pl";
 
 ##############################
 
+getopts("hs");
 
-if (@ARGV != 3) {
-    print "syntax: $0 <servername> <zone> <.hosts file>\n";
+if (@ARGV != 3 || $opt_h) {
+    print "syntax: $0 [-h] <servername> <zone> <.hosts file>\n";
     exit(1);
 }
+
 
 $servername = $ARGV[0];
 $zonename = $ARGV[1];
@@ -87,6 +90,29 @@ process_zonefile("fh0000",$hostsfile,$zonename,\%zonedata,1);
 
 $count = keys %zonedata;
 print "\nFound $count hosts...\n";
+
+if ($opt_s) {
+  foreach $h (keys %zonedata) {
+    $rec=$zonedata{$h};
+    $a=$rec->{A};
+    $al=$rec->{ALIAS};
+    $ar=$rec->{AREC};
+    next unless ($rec->{CNAME} || (@{$ar} > 0) || (@{$al} > 0)
+		 || (@{$a} > 0));
+
+    $c_count++ if ($rec->{CNAME});
+    $c_count+=@{$al};
+    $a_count+=@{$ar};
+    $a_count+=@{$a};
+  }
+
+  $all=$a_count+$c_count;
+  print "Hosts: $a_count\n";
+  print "Aliases: $c_count\n";
+  print "total: $all\n";
+  exit;
+}
+
 
 db_begin();
 

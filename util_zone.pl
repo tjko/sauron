@@ -117,7 +117,9 @@ sub process_zonefile($$$$) {
 	      ROUTER_DHCP => [],
 	      PRINTER => [],
 	      INFO => '',
-
+	      ALIAS => [],
+	      AREC=> [],
+	      
 	      ID => -1
 	    };
 
@@ -198,6 +200,8 @@ sub process_zonefile($$$$) {
     elsif ($type eq 'ALIAS' || $type eq 'AREC' || 
 	   $type eq 'PCTCP' || $type eq 'BOOTP') {
       # ignored...
+      push(@{$rec->{ALIAS}}, $_) if ($type eq 'ALIAS');
+      push(@{$rec->{AREC}}, $_) if ($type eq 'AREC');
     } 
     elsif ($type =~ /MUUTA[0-9]/) {
       s/(^\s*"|"\s*$)//g;
