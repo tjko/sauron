@@ -1,6 +1,8 @@
 $Id$
 
 0.7.2beta
+	- sauron: initial tinydns (DJBDNS) support by Thomas Mangin
+	- CGI interface: host group added as search criteria
 	- CGI interface: added support for moving host to another zone
 	- ACL & address match list support added . New menu 'ACLs' in web
 	  interface (new configuration variable ALEVEL_ACLS).
