@@ -826,14 +826,79 @@ Adding zone: 255.in-addr.arpa...OK (id=4)
       <section>
       <title>Using Existing DNS/DHCP Configuration</>
       <para>
+        For importing existing BIND configuration files and existing
+        DHCP configuration file there is <filename>import</> and
+        <filename>import-dhcp</> utilities. These utilities can be used
+        to import new server into existing Sauron database.
+      </para>
+      <para>
+        First step is to import your existing BIND configuration into
+        sauron.  This can be done as follows:
+        <screen>
+        ./import ns1 /etc/named.conf
+        </screen>
+        Where import will read your BIND configuration from 
+        <filename>named.conf</>. Import will read also master zonefiles 
+        from directories specified in <filename>named.conf</>. Use
+        <option>--dir=&lt;directory&gt;</> to specify alternate location
+        for zonefile if they're not located in the directories specified
+        in <filename>named.conf</>.
+      </para>
+      <para>
+        Since BIND configuration does not contain information about your
+        network topology nor the hardware (Ethernet) addresses of hosts,
+        you should also import your existing DHCP configuration file
+        <filename>dhcpd.conf</> using <filename>import-dhcp</>.
+        This can be done as follows:
+        <screen>
+        ./import-dhcp --global ns1 /etc/dhcpd.conf
+        </screen>
+        This will update hosts in the server <quote>ns1</> with
+        information from dhcpd configuration file. Option <option>--global</>
+        causes global dhcp settings to be imported into the server record.
       </para>
       </section>
 
       <section id="demo-db-sec">
       <title>Using Demonstration Database</title>
       <para>
-        FIXME
+        There is small demonstration database inlcuded with Sauron 
+        distribution. This database is a dump of Sauron database that
+        contains sample server which demonstrates some features of Sauron.
       </para>
+      <para>
+        To use this database dump you need to create a new database in 
+        PostgreSQL and restore this dump into it using <filename>psql</>
+        utility. This can be done as follows (from the sauron top-level
+        directory):
+        <screen>
+        cd test
+        createdb sauron-demo
+        psql sauron-demo -f sauron-demo.dump
+        </screen>
+        After creating the database you need to set DB_CONNECT variable
+        in <filename>config</> file to connecto to this database.
+      </para>
+      <para>
+      This demonstration database has three user accounts already setup:
+      <table>
+      <title>Demo Database Accounts</>
+      <tgroup cols=3 align=left colsep=1 rowsep=1>
+      <thead> 
+      <row><entry>account</><entry>password</><entry>description</></row>
+      </thead>
+      <tbody>
+      <row><entry>admin</><entry>admin</><entry>sample administrator account</>
+      </row>
+      <row><entry>user1</><entry>user1</><entry>user with minimal rights</>
+      </row>
+      <row><entry>user2</><entry>user2</><entry>user with more rights</>
+      </row>
+      </tbody>
+      </tgroup>
+      </table>
+      </para>
+      
       </section>
     </section>
 
