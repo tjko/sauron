@@ -93,13 +93,12 @@ sub make_mail_notify_list() {
   for $i (0..$#q) {
     $mode=($q[$i][3] > $q[$i][4] ? 1 : 0);
     $date=($mode ? $q[$i][3] : $q[$i][4]);
-    $user=($mode ? $q[$i][5] : $q[$i][6]);
+    ($user=($mode ? $q[$i][5] : $q[$i][6])) =~ s/^\s+|\s+$//g;
     $line = sprintf "%-30s %6s  %-20s  %s",
               $q[$i][1],($mode?'Create':'Modify'),"".localtime($date),$user;
     $mailnotify{$user}=[] unless ($mailnotify{$user});
     $lst=$mailnotify{$user};
     push @{$lst}, $line;
-    #print "$line\n";
   }
 }
 
@@ -107,11 +106,15 @@ sub mail_notifications() {
   my ($u,%user,$i,$lst);
 
   foreach $u (sort keys %mailnotify) {
-    next if (get_user($user,\%user) < 0);
+    if (get_user($u,\%user) < 0) {
+      error("cannot get user record for: $u ".db_errormsg());
+      next;
+    }
     next unless ($user{email_notify} && $user{email});
     $lst=$mailnotify{$u};
-    print "Sending email notification to: $u ($user{email})...\n" 
+    print "Sending email notification to: $u ($user{email})...\n"
 	if ($verbose);
+
     open(PIPE,"| $SAURON_MAILER $SAURON_MAILER_ARGS") || error("pipe failed");
     print PIPE "From: Sauron <$SAURON_MAIL_FROM>\n",
                "Subject: [sauron] update notification ($servername)\n",
@@ -1553,6 +1556,8 @@ chdir($targetdir) || fatal("Cannot change to directory '$targetdir'!");
 $mailnotify_mode = ($opt_mail ? 1 : 0);
 $mailnotify_mode = 0 unless ($SAURON_MAILER && -x $SAURON_MAILER);
 $mailnotify_mode = 0 unless ($SAURON_MAIL_FROM);
+error("mailer settings missing from config")
+  if ($opt_mail && $mailnotify_mode == 0);
 print "Email notification sending: " .
       ($mailnotify_mode ? 'enabled':'disabled') . "\n" if ($verbose);
 
