@@ -2,7 +2,7 @@
 #
 # import - imports BIND configuration/databases
 #
-# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000.
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000,2001.
 # $Id$
 #
 require 5;
@@ -480,7 +480,7 @@ for ($i=0; $i <= $#zones; $i+=1) {
     $c=$wkshash{$wks};
     #print "wks: '$wks' $c\n";
     $wks_i_count++;
-    $sqlstr="INSERT INTO wks_templates (server,comment) " .
+    $sqlstr="INSERT INTO wks_templates (server,name) " .
             "VALUES($serverid," .
             "'$servername:$wks_i_count');";
     $res=db_exec($sqlstr);
@@ -509,7 +509,7 @@ for ($i=0; $i <= $#zones; $i+=1) {
     $c=$mxhash{$mx};
     #print "mx: '$mx' $c\n";
     $mx_i_count++;
-    $sqlstr="INSERT INTO mx_templates (zone,comment) VALUES($zoneid," .
+    $sqlstr="INSERT INTO mx_templates (zone,name) VALUES($zoneid," .
             "'$zone:$mx_i_count');";
     $res=db_exec($sqlstr);
     die("cannot insert record in mx_templates") if ($res < 0);
