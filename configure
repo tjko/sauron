@@ -843,7 +843,8 @@ if test -n "$ac_init_help"; then
 Optional Packages:
   --with-PACKAGE[=ARG]    use PACKAGE [ARG=yes]
   --without-PACKAGE       do not use PACKAGE (same as --with-PACKAGE=no)
-  --with-DBI              use DBI module instead of Pg
+  --with-DBI              use DBI module (default)
+  --with-Pg               use Pg module instead of default DBI (DBD::Pg)
 
 Some influential environment variables:
   CC          C compiler command
@@ -2335,7 +2336,7 @@ echo "${ECHO_T}no, using $LN_S" >&6
 fi
 
 
-PERL_DB_BACKEND="DB-Pg.pm"
+PERL_DB_BACKEND="DB-DBI.pm"
 
 
 # Check whether --with-DBI or --without-DBI was given.
@@ -2343,6 +2344,17 @@ if test "${with_DBI+set}" = set; then
   withval="$with_DBI"
    if test $withval = yes; then
             PERL_DB_BACKEND="DB-DBI.pm"
+          fi
+          echo "foo: $withval"
+
+fi;
+
+
+# Check whether --with-Pg or --without-Pg was given.
+if test "${with_Pg+set}" = set; then
+  withval="$with_Pg"
+   if test $withval = yes; then
+            PERL_DB_BACKEND="DB-Pg.pm"
           fi
           echo "foo: $withval"
 

@@ -1,5 +1,9 @@
 $Id$
 
+0.7.0beta
+	- changed DBI (DBD::Pg) as default database access method
+	  (use --with-pg option when running configure to use Pg)
+	
 0.6.2
 	- fixed dates displayed (month was off by one) by last command
 	  and lastlog display in web-interface
