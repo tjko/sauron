@@ -52,8 +52,17 @@ fatal("cannot find VMPS Domain '$vmpsname'") unless ($vmpsid > 0);
 
 fatal("cannot get VMPS record!") if (get_vmps($vmpsid,\%vmps) < 0);
 
-db_query("SELECT name FROM vlans WHERE id=$vmps{fallback}",\@q);
-$fallback = ($q[0][0] ? $q[0][0] : 'default');
+if ($vmps{fallback} > 0) {
+  db_query("SELECT name FROM vlans WHERE id=$vmps{fallback}",\@q);
+  fatal("cannot get vlan name (id=$vmps{fallback})") unless ($q[0][0]);
+  $fallback = $q[0][0];
+} elsif ($vmps{fallback} == -1) {
+  $fallback = 'none';
+} elsif ($vmps{fallback} == -2) {
+  $fallback = 'default';
+} else {
+  fatal("invalid value in fallback field ($vmps{fallback})");
+}
 
 fatal("target file is a directory") if (-d $filename);
 $tmpfilename=$filename.$tmp_extension;
@@ -72,9 +81,9 @@ print FILE "!VMPS File Format, version 1.1\n!\n",
 print FILE "! VMPS domain\n",
       "vmps domain $vmpsname\n!\n",
       "vmps mode ".($vmps{mode}==0?'open':'secure')."\n!\n",
+      "vmps no-domain-req ".($vmps{nodomainreq}==0?'allow':'deny')."\n!\n",
       "! VLAN to use if MAC not known\n",
-      "vmps fallback $fallback\n!\n",
-      "vmps no-domain-req ".($vmps{nodomainreq}==0?'allow':'deny')."\n!\n!\n",
+      ($vmps{fallback}==-1 ? '! ':'')."vmps fallback $fallback\n!\n!\n",
       "! MAC Addresses\n!\n",
       "! address <addr> vlan-name <vlan-name>\n!\n";
 

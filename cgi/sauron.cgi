@@ -23,8 +23,8 @@ my ($PG_DIR,$PG_NAME) = ($0 =~ /^(.*\/)(.*)$/);
 $0 = $PG_NAME;
 
 $SAURON_CGI_VER = ' $Revision$ $Date$ ';
+$debug_mode = $SAURON_DEBUG_MODE;
 #$|=1;
-$debug_mode = 0;
 
 load_config();
 
@@ -2612,6 +2612,8 @@ sub nets_menu() {
 	  return;
       }
       get_vlan_list($serverid,\%vlan_list_hash,\@vlan_list_lst);
+      $vlan_list_hash{-2}='--Default--';
+      unshift @vlan_list_lst, -2;
 
       if ($sub eq 'Edit') {
 	  return if (check_perms('superuser',''));
