@@ -1,0 +1,53 @@
+<table frame=all id="search-hosts-dialog">
+<title>Search Hosts Dialog</>
+<tgroup cols=3>
+<thead>
+<row><entry>Field</><entry>Description</><entry>Example</></>
+</thead>
+<tbody>
+<row><entry>Record type</>
+     <entry>Limits search to specific record type; 
+            &lt;Any Type&gt;, Host, Host reservation, Delegation,
+            Plain MX, Alias, AREC Alias, Glue record, DHCP only</>
+     <entry>Host</>
+</row>
+<row><entry>Subnet</>
+     <entry>Search only hosts within specified network</>
+     <entry></>
+</row>
+<row><entry>CIDR (block) or IP</>
+     <entry>Lmit search to given CIDR block or IP address
+            (NOTE! this field supersedes the subnet field)</>
+     <entry>192.168.1.128/25</>
+</row>
+<row><entry>Domain pattern (regexp)</>
+     <entry>Limit search scope to hosts that have domainname
+            that matches regular expression given in this field.</>
+     <entry>\.sales$</>
+</row>
+
+<row><entry>Sort order</>
+     <entry>Sort search result by IP or hostname</>
+     <entry>by IP</>
+</row>
+<row><entry>Entries per page</>
+     <entry>Number of hosts to display per page</>
+     <entry>256</>
+</row>
+
+<row><entry>Search field</>
+     <entry>Defines the field that is searched for pattern 
+            defined in next field (Pattern).</>
+     <entry>Ether</>
+</row>
+<row><entry>Pattern (regexp)</>
+     <entry>Search hosts records for this regular expression in the
+            field defined in <quote>Search field</> field.</>
+     <entry></>
+</row>
+
+</tbody>
+</tgroup>
+</table> 
+
+
