@@ -1,0 +1,205 @@
+#!/usr/bin/perl
+#
+# modhosts - utility to modify (move,delete) host records
+#
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2001.
+# $Id$
+#
+require 5;
+use Getopt::Long;
+use Term::ReadKey;
+use Net::Netmask;
+
+my ($PG_DIR,$PG_NAME) = ($0 =~ /^(.*\/)(.*)$/);
+$0 = $PG_NAME;
+
+if (-r "/etc/sauron/config") {
+  $config_file="/etc/sauron/config";
+} elsif (-r "/usr/local/etc/sauron/config") {
+  $config_file="/usr/local/etc/sauron/config"; 
+} else {
+  die("cannot find config file in /etc/sauron or /usr/local/etc/sauron");
+}
+
+do "$config_file" || die("cannot load config: $config_file");
+do "$PG_DIR/util.pl";
+do "$PG_DIR/db.pl";
+do "$PG_DIR/back_end.pl";
+
+$mdate = time;
+$user = (getpwuid($<))[0];
+
+sub fatal($) {
+  my ($msg) = @_;
+  print STDERR "$0: $msg\n";
+  exit(1);
+}
+
+##############################################
+
+$result = GetOptions("help|h","cidr=s","name=s","move=s","delete",
+		     "info=s","rename=s","test");
+
+if ($opt_help || @ARGV < 2) {
+  print "syntax: $0 <server> <zone> [options]\n\n",
+        "options:\n",
+	"\t--cidr=<cidr>\t\tselect hosts within CIDR block\n",
+	"\t--name=<regexp>\t\tselect hostnames matching the regexp\n",
+	"\t--info=<regexp>\t\tselect host with matching info\n\n",
+	"\t--delete\t\tdelete matching hosts\n",
+	"\t--move=<CIDR>,<IP>\tmove hosts to given net starting from IP\n",
+	"\t--rename=<regexp>\trename hosts with given substitution 'regexp'\n",
+	"\n",
+	"\t--test\t\tdisplay only what would happen (no changes are made)\n",
+	"\n";
+  exit(0);
+}
+
+db_connect();
+
+$server=$ARGV[0];
+$zone=$ARGV[1];
+
+$serverid=get_server_id($server);
+fatal("cannot find server '$server'") unless ($serverid > 0);
+
+$zoneid=get_zone_id($zone,$serverid);
+fatal("cannot find zone '$zone'") unless ($zoneid > 0);
+
+fatal("no host selection criteria(s) specified")
+	  unless ($opt_cidr || $opt_name || $opt_info);
+
+
+if ($opt_cidr || $opt_move) {
+  $cidr_t=", a_entries a ";
+  $cidr_f=", a.ip,a.id ";
+  $cidr_r=" AND a.host=h.id ";
+}
+
+if ($opt_cidr) {
+  fatal("invalid CIDR: $cidr") unless (is_cidr($opt_cidr));
+  if ($opt_cidr =~ /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(\/32)?$/) {
+    $cidr .= " AND a.ip = '$opt_cidr' ";
+  } else {
+    $cidr.= " AND a.ip << '$opt_cidr' ";
+  }
+  print "CIDR criteria: $opt_cidr\n";
+}
+
+
+
+if ($opt_name) {
+  $name=" AND h.domain ~* '$opt_name' ";
+  print "Hostname regexp: $opt_name\n";
+}
+
+if ($opt_info) {
+  $info=" AND (h.info ~* '$opt_info' OR h.huser ~* '$opt_info' " .
+        " OR h.dept ~* '$opt_info' OR h.location ~* '$opt_info') ";
+  print "Host info regexp: $opt_info\n";
+}
+
+if ($opt_move) {
+  fatal("invalid parameters to option --move")
+    unless ($opt_move =~ /^(\S+),(\S+)$/);
+  $move_net=$1;
+  $move_ip=$2;
+  fatal("invalid CIDR parameter to option move: $move_net")
+    unless (is_cidr($move_net));
+  fatal("invalid IP parameter to option move: $move_ip")
+    unless ($move_ip =~ /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/);
+  print "Move matching hosts to net $move_net starting from $move_ip\n";
+  $net=new Net::Netmask($move_net);
+  fatal("invalid parameters to option move")  unless ($net->match($move_ip));
+}
+
+if ($opt_rename) {
+  fatal("invalid substituion regexp for parameter rename: $opt_rename")
+    unless ($opt_rename =~ /^s\/(.*)\/(.*)\/$/);
+  $rename1=$1; $rename2=$2;
+  print "Rename rule: s/$rename1/$rename2/\n";
+}
+
+
+$sql="SELECT h.id,h.domain,h.type $cidr_f FROM hosts h $cidr_t " .
+     "WHERE h.zone=$zoneid $cidr_r $cidr $name $info " .
+     "ORDER BY h.domain;";
+
+#print "$sql\n";
+
+db_query($sql,\@q);
+print db_errormsg() . "\n" if (db_errormsg());
+$count=@q;
+
+print "Found $count hosts(s) matching the criteria.\n";
+exit unless ($count > 0);
+
+if ($opt_delete || $opt_rename || $opt_move) {
+  unless ($opt_test) {
+    print "Are you sure you want to make changes to database? [y/N]? ";
+    $answer = ReadLine 0;
+    chomp $answer;
+    exit unless ($answer eq 'y' || $answer eq 'Y');
+  }
+}
+
+db_begin();
+db_ignore_begin_and_commit(1);
+
+for $i (0..$#q) {
+  printf "%-6d %-40s %2d %s %d\n", $q[$i][0],$q[$i][1],$q[$i][2],
+                                $q[$i][3],$q[$i][4];
+  $id=$q[$i][0];
+  $domain=$q[$i][1];
+  if ($opt_rename) {
+    $domain =~ s/$rename1/$rename2/;
+    print "\trename: $q[$i][1] --> $domain\n";
+  }
+  if ($opt_move) {
+    $new_ip=int2ip(ip2int($move_ip)+$ipcounter++);
+    while (ip_in_use($serverid,$new_ip) && $net->match($new_ip)) {
+      #print "\tSKIP ip: $new_ip\n";
+      $new_ip=int2ip(ip2int($move_ip)+$ipcounter++);
+    }
+    fatal("cannot find new ip!") if (ip_in_use($serverid,$new_ip));
+    print "\tnew ip: $new_ip\n";
+  }
+
+  undef %host;
+  fatal("cannot get host record (id=$id)") if (get_host($id,\%host));
+
+  if ($opt_delete) {
+    print "\tDelete; $q[$i][1]\n";
+    fatal("cannot delete host: $q[$i][1]") if (delete_host($id));
+  }
+  elsif ($opt_rename || $opt_move) {
+    $host{domain}=$domain;
+    if ($opt_move) {
+      for $j (1..$#{$host{ip}}) {
+	#print "IP: $host{ip}[$j][0] $host{ip}[$j][1]\n";
+	if ($host{ip}[$j][0] eq $q[$i][4]) {
+	  print "\tIP MATCH: $host{ip}[$j][0] $host{ip}[$j][1]\n";
+	  $host{ip}[$j][1]=$new_ip;
+	  $host{ip}[$j][4]=1;
+	}
+      }
+    }
+
+    fatal("cannot update host: $q[$i][1]") if (update_host(\%host));
+  }
+
+}
+
+db_ignore_begin_and_commit(0);
+
+unless ($opt_test) {
+  fatal("cannot commit changes to database") if (db_commit() < 0);
+} else {
+  print "NO CHANGES MADE!\n";
+}
+
+exit;
+
+
+# eof :-)
+

@@ -30,6 +30,7 @@ $db_connection_handle = 0;
 $db_last_result = 0;
 $db_debug_flag = 0;
 $db_last_error_msg = '';
+$db_ignore_begin_and_commit_flag = 0;
 
 sub db_connect {
   $db_connection_handle = Pg::connectdb($DB_CONNECT);
@@ -44,7 +45,6 @@ sub db_connect2 {
     warn($0 . ": ". $db_connection_handle->errorMessage);
     return 0;
   }
-  
   return 1;
 }
 
@@ -117,16 +117,25 @@ sub db_vacuum() {
 }
 
 sub db_begin() {
+  return if ($db_ignore_begin_and_commit_flag == 1);
   return db_exec("BEGIN;");
 }
 
 sub db_commit() {
+  return if ($db_ignore_begin_and_commit_flag == 1);
   return db_exec("COMMIT;");
 }
 
 sub db_rollback() {
+  return if ($db_ignore_begin_and_commit_flag == 1);
   return db_exec("ROLLBACK;");
 }
+
+sub db_ignore_begin_and_commit($) {
+  my($i) = @_;
+  $db_ignore_begin_and_commit_flag = ($i == 1  ? 1 : 0);
+}
+
 
 
 sub db_encode_str($) {
