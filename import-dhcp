@@ -1,5 +1,4 @@
-#!/usr/bin/perl
-# -I/usr/local/sauron
+#!/usr/bin/perl -I/usr/local/sauron
 #
 # import-dhcp - imports ISC DHCPD configuration
 #
@@ -14,7 +13,7 @@ use Sauron::Util;
 use Sauron::UtilDhcp;
 use Sauron::BackEnd;
 
-($PG_DIR,$PG_NAME) = ($0 =~ /^(.*\/)(.*)$/);
+my ($PG_DIR,$PG_NAME) = ($0 =~ /^(.*\/)(.*)$/);
 $0 = $PG_NAME;
 
 if (-r "/etc/sauron/config") {
@@ -136,7 +135,13 @@ foreach $key (sort keys %{$data{subnet}}) {
     }
     next unless ($line =~ /;\s*$/);
     $line =~ s/;\s*$//;
-    push @q, [0,$line];
+    if ($line =~ /^\s*option\s+routers\s+(\S+)\s*$/) {
+      $routerip=$1;
+      print "router interface: $routerip\n" if ($verbose);
+      $routers{$routerip}=-1;
+    } else {
+      push @q, [0,$line];
+    }
   }
 
   print "net: $cidr ($name) (vlan id=$id)\n" if ($verbose);
@@ -223,6 +228,7 @@ print "found ",int(@list)," hosts\n";
 if (@list > 0) {
   for $i (0..$#list) {
     next if ($skiplist{$list[$i][2]});
+    $routers{$list[$i][2]}=$i if ($routers{$list[$i][2]}< 0);
     next unless ($hosts{$list[$i][2]});
     if ($list[$i][2] eq $list[$i-1][2] || $list[$i][2] eq $list[$i+1][2]) {
       $skiplist{$list[$i][2]}=1;
@@ -247,6 +253,18 @@ foreach $ip (keys %hostrefs) {
         "$hosts{$ip}[0],$hosts{$ip}[1],$hosts{$ip}[2]\n" if ($verbose);
   $res = update_host({id=>$id,ether=>$hosts{$ip}[0],grp=>$hosts{$ip}[1]});
   fatal("cannot update host: $domain ($res)\n".db_errormsg()) if ($res < 0);
+}
+
+
+print "Updating routers...\n";
+foreach $ip (keys %routers) {
+  next if ($routers{$ip} < 0);
+  $i=$routers{$ip};
+  $id=$list[$i][0];
+  $domain=$list[$i][1];
+  print "router interface: $ip $domain (id=$id)\n" if ($verbose);
+  fatal("cannot update router info for: $domain ($ip)")
+    if (update_host({id=>$id,router=>1}) < 0);
 }
 
 
