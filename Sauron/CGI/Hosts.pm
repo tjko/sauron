@@ -912,7 +912,7 @@ sub menu_handler {
       $sql="$sql1 UNION $sql2 UNION $sql3 ORDER BY $sorder,3";
     }
     else { $sql="$sql1 ORDER BY $sorder,1"; }
-    $sql.=" LIMIT $limit OFFSET $offset;";
+    $sql.=" LIMIT $limit OFFSET $offset;" unless (param('csv'));
     #print "<br>$sql";
     db_query($sql,\@q);
     my $count=scalar @q;
