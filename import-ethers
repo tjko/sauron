@@ -44,7 +44,7 @@ for $i (0..$#q) { $oldethers{$q[$i][0]}=$q[$i][1]; }
 
 open(FILE,"$file") || fatal("cannot open input file '$file'");
 while (<FILE>) {
-  next unless /^\s*([0-9A-F]{6})\s+(\S.*)$/ or
+  next unless /^([0-9A-F]{6})\s+(\S.*)$/ or
               /^([0-9A-F]{2}-[0-9A-F]{2}-[0-9A-F]{2})\s+\(hex\)\s+(\S.*)$/;
   $code=$1;
   $info=$2;
