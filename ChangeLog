@@ -1,6 +1,8 @@
 $Id$
 
 0.7.0beta
+	- added new utility import-nets for importing/updating
+	  nets (and VLANs) from a CSV file
 	- added support for custom DHCP classes
 	- removed hosts	show up as "pending" changes to zone
 	  (before only new hosts or modified hosts showed up)

@@ -1,21 +1,24 @@
-Sauron v.0.6.2 - DNS/DHCP Management System
+Sauron v.0.7.0 - DNS/DHCP Management System
 ==============
 
-NOTE! This release add preliminary support for DBI (DBD::Pg). Pg is still
-the default database access method, but DBI can be enabled by specifying
---with-DBI option to configure script.
+NOTE! This is a development branch release (current stable branch is v0.6.x).
+DBI (DBD::Pg) is now the default database access method, but Pg can still
+be used by specifying --with-Pg option to configure script.
 
+
+UPGRADE
+	See README.upgrade if upgradig from a previous version.
 
 REQUIREMENTS
 	- BIND v8 or later [9.2.x or newer recommended]
 	- ISC dhcpd v2 or later [3.x or newer recommended] (optional)
 	- Perl 5 or better [at least 5.6 recommended]
 		- CGI module
-		- Pg module (or DBI and DBD::Pg module)
+		- DBD::Pg (and DBI) module (or Pg module)
 		- Net::DNS module
 		- Net::Netmask module
 		- Digest::MD5 module
-	- PostgresSQL [7.2 or newer recommended] 
+	- PostgresSQL [7.3 or newer recommended] 
 	  (or add support to your favorite db yourself :)
 	- www-server (Apache or any other www-server with CGI support)
 
