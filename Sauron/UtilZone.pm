@@ -9,68 +9,91 @@ require Exporter;
 @ISA = qw(Exporter); # Inherit from Exporter
 @EXPORT = qw(process_zonefile);
 
+use IO::File;
 use Sauron::Util;
-#use strict;
+use strict;
 
 my $debug = 0;
 
-# parse zone file, build hash of all domain names in zone
+# parse zone file, build hash of all domain names in zone containing
+# all the RRs
 #
 # resoure record format:
 # {<domain>|@|<blank>} [<ttl>] [<class>] <type> <rdata> [<comment>]
 #
-sub process_zonefile($$$$$$) {
-  my ($handle,$filename,$origin,$zonedata,$ext_flag,$PROG_DIR)=@_;
+sub process_zonefile($$$$) {
+  my ($filename,$origin,$zonedata,$ext_flag)=@_;
 
-  my ($ZONEFILE);
-  my ($domain,$i,$c,@line,$ttl,$class,$fline,$type);
+  my ($domain,$i,$c,$prev,@line,$ttl,$class,$fline,$type);
   my ($rec,$zone_ttl);
-  my (@line,@tmpline,$tmporigin,$tmp);
+  my (@line,@tmpline,$tmporigin,$tmp,$paren,$quote);
+  my $fh = IO::File->new();
 
   $class='IN';
-  $handle++;
   $zone_ttl=-1;
-  $ext_flag=0 if (! $ext_flag);
+  $ext_flag=0 unless ($ext_flag);
   $origin.="." unless ($origin =~ /\.$/);
 
-  print "process_zonefile($handle,$filename,$origin,ZONEDATA,",
-        "$ext_flag,$PROG_DIR)\n" if ($debug);
+  print "process_zonefile($filename,$origin,ZONEDATA,$ext_flag)\n" if ($debug);
 
-  die("Cannot excecute $PROG_DIR/parse-hosts-rows!")
-    unless (-x "$PROG_DIR/parse-hosts-rows");
+  die("cannot read zonefile: $filename") unless (-r $filename);
+  open($fh,$filename) || die("cannot open zonefile: $filename");
 
-  open($handle,"$PROG_DIR/parse-hosts-rows $filename |") 
-    || die("Cannot open zonefile: $filename");
-
-  while (<$handle>) {
+  while (<$fh>) {
     chomp;
     $fline=$_;
-    #s/;.*$//o;
-    next if /^\s*$/;
-    next if /^#/;
-    #print "line: $_\n";
+    next if (/^\s*$/);
+    next if (/^\s*;/);
+
+    #print "line: '$_'\n";
+    $tmp=''; $quote=0; $paren=0;
+    do {
+      s/\s+/\ /g; s/\s+$//;
+
+      for $i (0..length($_)-1) {
+	$prev=($i > 0 ? substr($_,$i-1,1) : ' ');
+	$c=substr($_,$i,1);
+        $quote=($quote ? 0 : 1)	if (($c eq '"') && ($prev ne '\\'));
+	unless ($quote) {
+	  if ($c eq '(') { $paren++; $c=' '; }
+	  elsif ($c eq ')') {
+	    $paren--; $c=' ';
+	    die("$filename($.): misordered parenthesis!\n") if ($paren < 0);
+	  }
+	  elsif ($c eq ';') { last; }
+	}
+	$tmp .= $c;
+      }
+      chomp ($_=<$fh>) if ($paren);
+    } while($paren and not eof($fh));
+
+    die("$filename($.): unterminated quoted string!\n") if ($quote);
+    $_=$tmp;
+    s/\s+/\ /g;
+    s/\s+$//;
+    #print "LINE '$_'\n";
 
     if (/^\$ORIGIN\s+(\S+)(\s|$)/) {
-      #print "\$ORIGIN: '$1'\n";
+      print "\$ORIGIN: '$1'\n" if ($debug);
       $origin=add_origin($1,$origin);
       next;
     }
     if (/^\$INCLUDE\s+(\S+)(\s+(\S+))?(\s|$)/) {
-      #print "\$INCLUDE: '$1' '$3'\n";
+      print "\$INCLUDE: '$1' '$3'\n" if ($debug);
       $tmporigin=$3;
       $tmporigin=$origin if ($3 eq '');
-      process_zonefile($handle,$1,$tmporigin,$zonedata,$ext_flag);
+      process_zonefile($1,$tmporigin,$zonedata,$ext_flag);
       next;
     }
     if (/^\$TTL\s+(\S+)(\s|$)/) {
-      print "\$TTL: $1\n";
+      print "\$TTL: $1\n" if ($debug);
       $tmp=$1;
       $zone_ttl = $tmp if ($tmp =~ /(\d+)/);
       next;
     }
 
     unless (/^(\S+)?\s+((\d+)\s+)?(([iI][nN]|[cC][sS]|[cC][hH]|[hH][sS])\s+)?(\S+)\s+(.*)\s*$/) {
-      print STDERR "Invalid line ($filename): $fline\n" if ($ext_flag < 0);
+      print STDERR "$filename($.): invalid line: $fline\n" if ($ext_flag < 1);
       next;
     }
 
@@ -83,23 +106,23 @@ sub process_zonefile($$$$$$) {
 
     # domain
     $domain=add_origin($domain,$origin);
-    warn("invalid domainname $domain\n$fline") 
+    warn("$filename($.): invalid domainname $domain\n")
       if (! valid_domainname($domain) && $ext_flag < 0);
 
     # class
 	
-    die("Invalid or missing RR class") unless ($class =~ /^(IN|CS|CH|HS)$/);
+    die("$filename($.):Invalid or missing RR class\n")
+	unless ($class =~ /^(IN|CS|CH|HS)$/);
 
     # type
     unless ($type =~ /^(SOA|A|PTR|CNAME|MX|NS|TXT|HINFO|WKS|MB|MG|MD|MF|MINFO|MR|AFSDB|ISDN|RP|RT|X25|PX|SRV)$/) {
       if ($ext_flag > 0) {
 	unless ($type =~ /^(DHCP|ALIAS|AREC|ROUTER|PRINTER|BOOTP|INFO|ETHER2?|GROUP|BOOTP|MUUTA[0-9]|TYPE|SERIAL|PCTCP)$/) {
-	  print STDERR "unsupported RR type '$type' in $filename\n$fline\n";
+	  print STDERR "$filename($.): unsupported RR type '$type'\n";
 	  next;
 	}
       } else {
-	print STDERR 
-	  "invalid/unsupported RR type '$type' in $filename:\n$fline\n";
+	print STDERR "$filename($.): invalid/unsupported RR type '$type'\n";
 	next;
       }
     }
@@ -146,22 +169,24 @@ sub process_zonefile($$$$$$) {
 
     # check & parse records
     if ($type eq 'A') {
-      die("invalid A record: $fline")
+      die("$filename($.): invalid A record: $fline")
 	unless (/^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/);
       push @{$rec->{A}}, $1;
     }
     elsif ($type eq 'SOA') {
-      die("dublicate SOA record: $fline")  if (length($rec->{SOA}) > 0);
+      die("$filename($.): dublicate SOA record: $fline")
+	if (length($rec->{SOA}) > 0);
       #print join(",",@line)."\n";
-      die("invalid source-dname in SOA record: $fline") 
+      die("$filename($.): invalid source-dname in SOA record: $fline")
 	unless ($line[0] =~ /^\S+\.$/);
-      die("invalid mailbox in SOA record: $fline")
+      die("$filename($.): invalid mailbox in SOA record: $fline")
 	unless ($line[1] =~ /^\S+\.$/);
       for($i=2;$i <= $#line; $i+=1) {
-	die("invalid values '$line[$i]' in SOA record: $fline")
+	die("$filename($.): invalid values '$line[$i]' in SOA record: $fline")
 	  unless ($line[$i] =~ /^\d+$/);
       }
-      die("invalid SOA record, too many fields: $fline") if ($#line > 6);
+      die("$filename($.): invalid SOA record, too many fields: $fline")
+	if ($#line > 6);
       $rec->{SOA} = join(" ",@line);
     }
     elsif ($type eq 'PTR') {
@@ -171,9 +196,9 @@ sub process_zonefile($$$$$$) {
       $rec->{CNAME} = add_origin($line[0],$origin);
     }
     elsif ($type eq 'MX') {
-      die ("invalid MX preference '$line[0]': $fline")
+      die ("$filename($.): invalid MX preference '$line[0]': $fline")
 	unless ($line[0] =~ /^\d+$/);
-      die ("invalid MX exchange-dname '$line[1]': $fline")
+      die ("$filename($.): invalid MX exchange-dname '$line[1]': $fline")
 	unless ($line[1] =~ /^\S+$/);
 
       $line[1]="\L$line[1]";
@@ -192,26 +217,27 @@ sub process_zonefile($$$$$$) {
       $rec->{HINFO}[1]=$line[1];
     }
     elsif ($type eq 'WKS') {
-      shift @line; # get rid of IP 
-      die ("invalid protocol in WKS '$line[0]': $fline")
+      shift @line; # get rid of IP
+      die ("$filename($.): invalid protocol in WKS '$line[0]': $fline")
 	unless ("\U$line[0]" =~ /^(TCP|UDP)$/);
       push @{$rec->{WKS}}, join(" ",@line);
     }
     elsif ($type eq 'SRV') {
-      die("invalid SRV record: $fline") 
+      die("$filename($.): invalid SRV record: $fline")
 	unless ($line[0]=~/^\d+$/ && $line[1]=~/^\d+$/ && $line[2]=~/^\d$+/
 		&& $line[3] ne '');
       push @{$rec->{SRV}}, "$line[0] $line[1] $line[2] $line[3]";
     }
     elsif ($type eq 'TXT') {
       s/(^\s*"|"\s*$)//g;
+      s/\\\"/\"/g;
       push @{$rec->{TXT}}, $_;
     }
     #
-    # Otto's (jyu.fi's) extensions for automagic generation of DHCP/BOOTP/etc 
+    # Otto's (jyu.fi's) extensions for automagic generation of DHCP/BOOTP/etc
     # configs
     #
-    elsif ($type eq 'ALIAS' || $type eq 'AREC' || 
+    elsif ($type eq 'ALIAS' || $type eq 'AREC' ||
 	   $type eq 'PCTCP' || $type eq 'BOOTP') {
       # ignored...
       push(@{$rec->{ALIAS}}, $_) if ($type eq 'ALIAS');
@@ -234,7 +260,7 @@ sub process_zonefile($$$$$$) {
       $rec->{SERIAL} = $_;
     }
     elsif ($type eq 'ETHER') {
-      die("Invalid ethernet address for $domain\n$fline")
+      die("$filename($.): invalid ethernet address for $domain\n")
 	unless (/^([0-9a-f]{12})$/i);
       $rec->{ETHER} = "\U$1";
     }
@@ -265,14 +291,12 @@ sub process_zonefile($$$$$$) {
     }
     else {
       #unrecognized record
-      warn("unsupported record (ignored) '$domain':\n$fline");
+      warn("$filename($.): unsupported record (ignored) '$domain':\n$fline");
     }
 
   }
 
-
-  close($handle);
-  #print "exit: $handle, $filename\n";
+  close($fh);
 }
 
 

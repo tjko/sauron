@@ -10,6 +10,7 @@ use Getopt::Long;
 use Sauron::DB;
 use Sauron::Util;
 use Sauron::UtilZone;
+use Sauron::BackEnd;
 
 my ($PG_DIR,$PG_NAME) = ($0 =~ /^(.*\/)(.*)$/);
 $0 = $PG_NAME;
@@ -44,14 +45,12 @@ if ($servername eq 'default') {
   print "Creating default root servers\n";
   $serverid=-1;
 } else {
-  undef @q;
-  db_query("SELECT id FROM servers WHERE name='$servername';",\@q);
-  die("Cannot find server '$servername'") unless ($q[0][0] > 0);
-  $serverid=$q[0][0];
-  print "Creating root servers for server: $servername\n";
+  $serverid=get_server_id($servername);
+  fatal("cannot find server '$servername'") if ($serverid < 0);
+  print "Creating root servers for server: $servername (id=$serverid)\n";
 }
 
-process_zonefile("fh0000",$file,".",\%zonedata,0,$PROG_DIR);
+process_zonefile($file,".",\%zonedata,0);
 $count = keys %zonedata;
 
 print "Found $count records...\n";
@@ -63,7 +62,7 @@ $ncount=0;
 
 unless ($opt_update) {
   $res=db_exec("DELETE FROM root_servers WHERE server=$serverid;");
-  die("cannot delete old root server records") if ($res < 0);
+  fatal("cannot delete old root server records") if ($res < 0);
 }
 
 foreach $host (keys %zonedata) {

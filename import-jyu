@@ -26,6 +26,7 @@ use Getopt::Std;
 use Sauron::DB;
 use Sauron::Util;
 use Sauron::UtilZone;
+use Sauron::BackEnd;
 
 ($PG_DIR,$PG_NAME) = ($0 =~ /^(.*\/)(.*)$/);
 $0 = $PG_NAME;
@@ -59,73 +60,45 @@ $cdate = time;
 
 
 db_connect($DB_CONNECT);
-db_debug(1);
+#db_debug(1);
 
-die("cannot open .hosts file ($hostsfile)") if (! -f $hostsfile);
+fatal("cannot open .hosts file ($hostsfile)") if (! -f $hostsfile);
 
-if ($hostsfile =~ /(^.*\/)/) { 
-    $dir=$1; 
-} else { 
-    $dir="./"; 
+if ($hostsfile =~ /(^.*\/)/) {
+    $dir=$1;
+} else {
+    $dir="./";
 }
 
 print "server name: $servername\n";
 print "zone name: $zonename\norigin: $origin\n";
 print "directory: $dir\n";
 
-chdir($dir) || die("Cannot change to directory '$dir'!");
+chdir($dir) || fatal("Cannot change to directory '$dir'!");
 
 ###########################################################
 
 #get server record id
-$sqlstr = "SELECT id FROM servers WHERE name='$servername';";
-$res = db_exec($sqlstr);
-die("Cannot find server record '$servername'!") if ($res < 1);
-$serverid = db_getvalue(0,0);
+$serverid = get_server_id($servername);
+fatal("Cannot find server record '$servername'!") if ($serverid < 1);
+
 
 #get zone record id
-$sqlstr = "SELECT id,type,reverse " .
-          "FROM zones WHERE server=$serverid AND name='$zonename';";
-$res = db_exec($sqlstr);
-die("Cannot find zone record '$zonename'!") if ($res < 1);
-$zoneid = db_getvalue(0,0);
-$zonetype = db_getvalue(0,1);
-$zonerev = db_getvalue(0,2);
-
-die("Zone has to be normal master zone!") 
-  if ($zonetype ne 'M' || $zonerev ne 'f');
+$zoneid = get_zone_id($zonename,$serverid);
+fatal("Cannot find zone record '$zonename'!") if ($zoneid < 1);
+fatal("cannot get zone record") if (get_zone($zoneid,\%zonehash) < 0);
+fatal("Zone has to be normal master zone!")
+  if ($zonehash{type} ne 'M' || $zonehash{reverse} ne 'f');
 
 
 undef %zonedata;
-process_zonefile("fh0000",$hostsfile,$zonename,\%zonedata,1,$PROG_DIR);
+process_zonefile($hostsfile,$zonename,\%zonedata,1);
 
 $count = keys %zonedata;
 print "\nFound $count hosts...\n";
 
-if ($opt_s) {
-  foreach $h (keys %zonedata) {
-    $rec=$zonedata{$h};
-    $a=$rec->{A};
-    $al=$rec->{ALIAS};
-    $ar=$rec->{AREC};
-    next unless ($rec->{CNAME} || (@{$ar} > 0) || (@{$al} > 0)
-		 || (@{$a} > 0));
-
-    $c_count++ if ($rec->{CNAME});
-    $c_count+=@{$al};
-    $a_count+=@{$ar};
-    $a_count+=@{$a};
-  }
-
-  $all=$a_count+$c_count;
-  print "Hosts: $a_count\n";
-  print "Aliases: $c_count\n";
-  print "total: $all\n";
-  exit;
-}
-
-
 db_begin();
+db_ignore_begin_and_commit(1);
 
 $rec = $zonedata{$origin};
 warn("No SOA record found in hosts file!") unless ($rec);
@@ -152,27 +125,14 @@ foreach $host (keys %zonedata) {
   next unless (@{$rec->{A}} > 0);
 
   # skip ones that already are in database
-  undef @q; 
-  db_query("SELECT id FROM hosts WHERE zone=$zoneid AND domain='$host';",\@q);
-  next if ($q[0][0] > 0);
+  next if (get_host_id($zoneid,$host) > 0);
 
   print "out-of-zone: $host\n";
 
-
-  die("cannot insert record $host!")
-    if (db_exec("INSERT INTO hosts (cdate,cuser,zone,type,domain) " .
-		"VALUES($cdate,'$user',$zoneid,1,'$host'); ") < 0);
-  $oid=db_lastoid();
   undef @q;
-  db_query("SELECT id FROM hosts WHERE OID=$oid;",\@q);
-  die("cannot get for inserted record!") if (@q < 1);
-  $id=$q[0][0];
-  for $i (0..$#{$rec->{A}}) {
-    $ip=$rec->{A}[$i];
-    die("cannot insert A record for host!")
-      if (db_exec("INSERT INTO a_entries (host,ip,reverse,forward) " .
-		  "VALUES($id,'$ip',true,true);") < 0);
-  }
+  for $i (0..$#{$rec->{A}}) { push @q,[$rec->{A}[$i],true,true]; }
+  fatal("cannot insert host $host!")
+    if (add_host({zone=>$zoneid,type=>1,domain=>$host,ip=>\@q}) < 0);
 
   #delete $zonedata{$host};
 }
@@ -184,30 +144,22 @@ foreach $host (keys %zonedata) {
   $rec=$zonedata{$host};
   next unless (@{$rec->{AREC}} > 0);
   print "ARECs for $host :\n";
-  undef @q;
+
   $arec_h=remove_origin($host,$origin);
-  db_query("SELECT id FROM hosts WHERE zone=$zoneid AND domain='$arec_h';",
-	   \@q);
-  $a_id=$q[0][0];
-  die("cannot get id for host $host!") unless ($a_id > 0);
+  $a_id = get_host_id($zoneid,$arec_h);
+  fatal("cannot get id for host $host!") unless ($a_id > 0);
 
   for $i (0..$#{$rec->{AREC}}) {
     $arec=$rec->{AREC}[$i];
     print "\t$i $arec id=";
-    undef @q;
-    db_query(
-       "SELECT id,type FROM hosts WHERE zone=$zoneid AND domain='$arec';",\@q);
-    $id=$q[0][0];
+    $id=get_host_id($zoneid,$arec);
     print "$id ";
-    unless ($id > 0) {
-      print "FAILED!\n";
-      next;
-    }
-    die("cannot delete A records for host id=$id!") 
+    unless ($id > 0) { print "FAILED!\n"; next;  }
+    fatal("cannot delete A records for host id=$id!") 
       if (db_exec("DELETE FROM a_entries WHERE host=$id;") < 0);
-    die("cannot update host record id=$id!")
+    fatal("cannot update host record id=$id!")
       if (db_exec("UPDATE hosts SET type=7 WHERE id=$id;") < 0);
-    die("cannot add AREC entry")
+    fatal("cannot add AREC entry")
       if (db_exec("INSERT INTO arec_entries (host,arec) VALUES($id,$a_id);")
 	  < 0);
     print "OK\n";
@@ -226,15 +178,16 @@ foreach $host (keys %zonedata) {
       $sqlstr = "UPDATE hosts SET router='1' WHERE zone=$zoneid " .
 	"AND domain='" . remove_origin($host,$origin) . "';";
       $res = db_exec($sqlstr);
-      die("Cannot update host record for router interface $host") if ($res<0);
-      print "FAILED: $sqlstr\n" if (db_status() ne 'UPDATE 1');
+      fatal("Cannot update host record for router interface $host") 
+	if ($res<0);
+      print "no host found for router $host\n" if (db_status() ne 'UPDATE 1');
 
       $rhash{$router[0]}={ MASK=>$router[1], NAME=>$host, VLAN=>$router[2]};
       $rcount++;
     } else {
       $rec2=$rhash{$router[0]};
-      print "Duplicate router $rec2->{NAME} $router[0] vs. $host $rec->{ROUTER} " .
-	    "(ignoring latter)\n";
+      print "Duplicate router $rec2->{NAME} $router[0] vs. " .
+	    "$host $rec->{ROUTER} (ignoring latter)\n";
       #die("fix it...");
     }
   }
@@ -242,7 +195,7 @@ foreach $host (keys %zonedata) {
 
 $rc=keys %rhash;
 print "found $rcount virtual-routers/subnets...$rc\n";
-
+print "Adding nets...";
 
 foreach $net (keys %rhash) {
   $rec=$rhash{$net};
@@ -252,34 +205,20 @@ foreach $net (keys %rhash) {
   $n = $nm->desc();
   $range1 = $nm->nth(1);
   $range2 = $nm->nth(-2);
-  $vlan=($rec->{VLAN} ? "'$rec->{VLAN}'" : 'NULL');
 
-  #print "$n $rec->{NAME} $rec->{ETHER}\n" if ($rec->{ETHER} ne '');
-  #print "$n $rec->{NAME} : $net : $rec->{MASK} : $rec->{VLAN} : $rec2->{INFO}\n" if ($rec->{VLAN});
-
-  $sqlstr = "INSERT INTO nets (cdate,cuser,server,net,comment," .
-            "subnet,no_dhcp,range_start,range_end,vlan) " .
-    "VALUES($cdate,'$user',$serverid,'$n','$rec2->{INFO}'," .
-    "true,false,'$range1','$range2',$vlan);";
-
-  if (db_exec($sqlstr) < 0) {
-    die("net record for '$n' already exists!") 
-  } else {
-    $res=db_exec("SELECT id FROM nets WHERE server=$serverid AND net='$n';");
-    die("Cannot get net record id!") if ($res < 0);
-    $lastid=db_getvalue(0,0);
-
-    foreach $rtmp (@{$rec2->{DHCP}}) {
-      next if ($rtmp =~ /^\s*$/);
-      $res=db_exec("INSERT INTO dhcp_entries (type,ref,dhcp) " .
-		   "VALUES(4,$lastid,'$rtmp');");
-      die("cannot insert dhcp_entry '$rtmp' for net $net!") if ($res < 0);
-    }
+  undef @q;
+  foreach $rtmp (@{$rec2->{DHCP}}) {
+    next if ($rtmp =~ /^\s*$/);
+    push @q, [0,$rtmp];
   }
-
+  $res=add_net({server=>$serverid,net=>$n,comment=>$rec->{INFO},
+		subnet=>'true',no_dhcp=>'false',
+		range_start=>$range1,range_end=>$range2,dhcp_l=>\@q});
+  fatal("cannot add net record for '$n'") if ($res < 0);
+  print ".";
   delete $zonedata{$rec->{NAME}};
 }
-
+print "\n";
 
 
 # delegated zones
@@ -326,45 +265,30 @@ foreach $group (keys %grouphash) {
     $comment=$rec->{INFO};
   }
 
-  $sqlstr="INSERT INTO groups " .
-          "(cdate,cuser,server,name,comment) " .
-          "VALUES($cdate,'$user',$serverid,'$group','$comment');";
-  if (db_exec($sqlstr) < 0) {
-    die("group '$group' allready exists") 
-  } else {
-    $res=db_exec("SELECT id FROM groups WHERE " .
-		 " server=$serverid AND name='$group';");
-    die("Cannot get group record id!") if ($res < 0);
-    $lastid=db_getvalue(0,0);
-
-    foreach $rtmp (@{$rec->{DHCP}}) {
-      next if ($rtmp =~ /^\s*$/);
-      $res=db_exec("INSERT INTO dhcp_entries (type,ref,dhcp) " .
-		   "VALUES(5,$lastid,'$rtmp');");
-      die("cannot insert dhcp_entry '$rtmp' for group $group!") if ($res < 0);
-    }
-    foreach $rtmp (@{$rec->{PRINTER}}) {
-      next if ($rtmp =~ /^\s*$/);
-      $res=db_exec("INSERT INTO printer_entries (type,ref,printer) " .
-		   "VALUES(1,$lastid,'$rtmp');");
-      die("cannot insert printer_entry '$rtmp' for group $group!") 
-	if ($res < 0);
-    }
+  undef @q1;
+  foreach $rtmp (@{$rec->{DHCP}}) {
+    next if ($rtmp =~ /^\s*$/);
+    push @q1, [0,$rtmp];
   }
+  undef @q2;
+  foreach $rtmp (@{$rec->{PRINTER}}) {
+    next if ($rtmp =~ /^\s*$/);
+    push @q2, [0,$rtmp];
+  }
+
+  $res=add_group({server=>$serverid,name=>$group,type=>1,comment=>$comment,
+		  dhcp_l=>\@q1,printer_l=>\@q2});
+  fatal("cannot add group '$group' ($res)") if ($res < 0);
+  $groupidhash{$group}=$res;
 
   delete $zonedata{$host};
 }
+
 # get group id's
-$sqlstr="SELECT id,name FROM groups WHERE server=$serverid;";
-$res = db_exec($sqlstr);
 undef %grouphash;
-die("Cannot get group ID's!") if ($res < 0);
-for ($j=0;$j<$res;$j++) {
-  $gid=db_getvalue($j,0);
-  $gname=db_getvalue($j,1);
-  $grouphash{$gname}=$gid;
-}
+%grouphash=%groupidhash;
 #for $g (keys %grouphash) { print "$g $grouphash{$g}\n"; }
+
 
 
 # printer definitions
@@ -433,15 +357,12 @@ foreach $host (keys %zonedata) {
 }
 
 
+# build domainname<-->id hash
+undef @q;
+db_query("SELECT id,domain FROM hosts WHERE zone=$zoneid",\@q);
+fatal("cannot get host list!") unless (@q > 0);
+for $j (0..$#q) { $hostidhash{$q[$j][1]}=$q[$j][0]; }
 
-# build domainname<-->id hash 
-$res=db_exec("SELECT id,domain FROM hosts WHERE zone=$zoneid;");
-die("Cannot get host list!") if ($res < 1);
-for $j (0..$res-1) {
-  $lastid=db_getvalue($j,0);
-  $hostname=db_getvalue($j,1);
-  $hostidhash{$hostname}=$lastid;
-}
 
 # hosts
 
@@ -553,10 +474,10 @@ foreach $host (keys %zonedata) {
 
 
 print "Commiting changes...\n";
-die("error commiting the changes!") 
-  if (db_commit() < 0);
+db_ignore_begin_and_commit(0);
+die("error commiting the changes!") if (db_commit() < 0);
 
-print "Vacuuming dbase...\n";
+#print "Vacuuming dbase...\n";
 #db_vacuum();
 exit;
 

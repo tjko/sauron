@@ -1906,10 +1906,31 @@ sub update_group($) {
 
 sub add_group($) {
   my($rec) = @_;
+  my($res,$id,$i);
 
+  db_begin();
   $rec->{cuser}=$muser;
   $rec->{cdate}=time;
-  return add_record('groups',$rec);
+  $res = add_record('groups',$rec);
+  if ($res < 0) { db_rollback(); return -1; }
+  $id=$res;
+
+  # dhcp_entries
+  for $i (0..$#{$rec->{dhcp_l}}) {
+    $res=db_exec("INSERT INTO dhcp_entries (type,ref,dhcp) " .
+		 "VALUES(5,$id,'$rec->{dhcp_l}[$i][1]')");
+    if ($res < 0) { db_rollback(); return -3; }
+  }
+  # printer_entries
+  for $i (0..$#{$rec->{printer_l}}) {
+    $res=db_exec("INSERT INTO printer_entries (type,ref,printer) " .
+		 "VALUES(1,$id,'$rec->{printer_l}[$i][1]')");
+    if ($res < 0) { db_rollback(); return -4; }
+  }
+
+  return -10 if (db_commit() < 0);
+  return $id;
+
 }
 
 
@@ -2106,10 +2127,24 @@ sub update_net($) {
 
 sub add_net($) {
   my($rec) = @_;
+  my($res,$id,$i);
 
+  db_begin();
   $rec->{cdate}=time;
   $rec->{cuser}=$muser;
-  return add_record('nets',$rec);
+  $res = add_record('nets',$rec);
+  if ($res < 0) { db_rollback(); return -1; }
+  $id=$res;
+
+  # dhcp_entries
+  for $i (0..$#{$rec->{dhcp_l}}) {
+    $res=db_exec("INSERT INTO dhcp_entries (type,ref,dhcp) " .
+		 "VALUES(4,$id,'$rec->{dhcp_l}[$i][1]')");
+    if ($res < 0) { db_rollback(); return -3; }
+  }
+
+  return -10 if (db_commit() < 0);
+  return $id;
 }
 
 

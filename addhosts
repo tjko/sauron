@@ -94,7 +94,7 @@ if ($opt_force) {
 $origin=$zone;
 $origin.="." unless ($zone =~ /\.$/);
 
-process_zonefile("fh0000",$filename,$origin,\%zonedata,1,$PROG_DIR);
+process_zonefile($filename,$origin,\%zonedata,1);
 
 $domains=keys(%zonedata);
 print "Found $domains domain(s) in zonefile: $filename\n";

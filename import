@@ -33,8 +33,7 @@ do "$config_file" || die("cannot load config: $config_file");
 
 ##############################
 
-$result = GetOptions("help|h","orphans=s","notransaction","verbose|v",
-		     "dir=s");
+$result = GetOptions("help|h","orphans=s","notransaction","verbose|v","dir=s");
 
 if ($opt_help || @ARGV < 2) {
     print "syntax: $0 [options] <servername> <named.conf file>\n";
@@ -358,7 +357,7 @@ for ($i=0; $i <= $#zones; $i+=1) {
     next;
   }
 
-  print "\n";
+
   $zonenamemask.='|' if ($zonenamemask);
   $zonenamemask.=$zone if ($rev eq 'false');
 
@@ -368,7 +367,7 @@ for ($i=0; $i <= $#zones; $i+=1) {
     fatal("cannot find: '$files{$zones[$i]}' zone file");
   }
 
-  process_zonefile("fh0000",$files{$zones[$i]},$zone,\%zonedata,0,$PROG_DIR);
+  process_zonefile($files{$zones[$i]},$zone,\%zonedata,0);
   print " found " . keys(%zonedata) . " domainames in zone\n";
   $rec = $zonedata{$origin};
   fatal("No SOA record found in zone $zone! ($origin)")
@@ -502,7 +501,7 @@ for ($i=0; $i <= $#zones; $i+=1) {
   # insert records in hosts table....
   $c = keys %zonedata;
   print STDERR "Inserting $c host records...";
-  $j=0; $str='';
+  undef @ilist;
 
   foreach $host (keys %zonedata) {
     $rec = $zonedata{$host};
@@ -515,10 +514,9 @@ for ($i=0; $i <= $#zones; $i+=1) {
     $wkslist = db_build_list_str($rec->{WKS});
     $hinfo1=$rec->{HINFO}[0];
     $hinfo2=$rec->{HINFO}[1];
-    $mx=$mxhash{$mxlist};
-    $mx=-1 unless ($mx);
-    $wks=$wkshash{$wkslist};
-    $wks=-1 unless ($wks);
+    $mx=($mxhash{$mxlist} ? $mxhash{$mxlist} : -1);
+    $wks=($wkshash{$wkslist} ? $wkshash{$wkslist} : -1);
+    $host_ttl=(($rec->{TTL} > 0 && $rec->{TTL} ne $ttl) ? $rec->{TTL}:'');
     $host2=remove_origin($host,$origin);
     if (@{$rec->{TXT}} > 0) {
       $tmplist=[];
@@ -567,26 +565,13 @@ for ($i=0; $i <= $#zones; $i+=1) {
     fatal("empty hostname after stripping origin '$host'") if ($host2 eq '');
     #print STDERR "$host: many IPs\n" if (@{$rec->{A}} > 1);
 
-    $sqlstr = "INSERT INTO hosts (cdate,cuser,zone,type,domain,class," .
-              "mx,wks,hinfo_hw,hinfo_sw,info) " .
- 	      "VALUES($cdate,'$user',$zoneid,$hosttype,'$host2','$class'," .
-	      "$mx,$wks,'$hinfo1','$hinfo2','$extrainfo');";
-    #print RRFILE "$sqlstr\n";
-    $j++;
-    $str.=$sqlstr."\n";
-    if ($j>50) {
-      $res = db_exec($str);
-      fatal("Cannot insert host record patch (around '$host')") if ($res < 0);
-      $str='';
-      $j=0;
-      print STDERR ".";
-    }
+    push @ilist,[$zoneid,$hosttype,$host2,$class,$mx,$wks,$hinfo1,$hinfo2,
+		 $extrainfo,$host_ttl];
   }
-  unless ($str eq '') {
-    print STDERR "|";
-    $res = db_exec($str);
-    fatal("Cannot insert host record '$host'") if ($res < 0);
-  }
+  fatal("cannot insert host records")
+    if (db_insert('hosts',
+		  'zone,type,domain,class,mx,wks,hinfo_hw,hinfo_sw,info,ttl',
+		  \@ilist) < 0);
 
 
   # fetch id's of records inserted earlier
