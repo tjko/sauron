@@ -2873,18 +2873,19 @@ sub delete_key($) {
   return db_commit();
 }
 
-sub get_key_list($$$) {
-  my($serverid,$rec,$lst) = @_;
-  my(@q,$i);
+sub get_key_list($$$$) {
+  my($serverid,$rec,$lst,$algo) = @_;
+  my(@q,$i,$algorule);
 
   undef @{$lst};
   push @{$lst},  -1;
   undef %{$rec};
   $$rec{-1}='--None--';
   return if ($serverid < 1);
+  $algorule=" AND algorithm=$algo " if ($algo > 0);
 
   db_query("SELECT id,name FROM keys " .
-	   "WHERE type=1 AND ref=$serverid ORDER BY name;",\@q);
+	   "WHERE type=1 AND ref=$serverid $algorule ORDER BY name;",\@q);
   for $i (0..$#q) {
     push @{$lst}, $q[$i][0];
     $$rec{$q[$i][0]}=$q[$i][1];
