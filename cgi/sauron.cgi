@@ -1083,12 +1083,13 @@ $selfurl = $s_url . $pathinfo;
 $menu=param('menu');
 #$menu='login' unless ($menu);
 $remote_addr = $ENV{'REMOTE_ADDR'};
-$remote_addr = '0.0.0.0' if ($SAURON_NO_REMOTE_ADDR_AUTH);
 $remote_host = remote_host();
 
-logmsg("notice","Warning: www server does not set standard CGI " .
-                "environment variable: REMOTE_ADDR!!!")
-  if ($ENV{'REMOTE_ADDR'} =~ /^\s*$/);
+unless (is_cidr($remote_addr)) {
+  logmsg("notice","Warning: www server does not set standard CGI " .
+	          "environment variable: REMOTE_ADDR!!! ($remote_addr)");
+  $remote_addr = '0.0.0.0';
+}
 
 ($scookie = cookie(-name=>"sauron-$SERVER_ID")) =~ s/[^A-Fa-f0-9]//g;
 if ($scookie) {
@@ -1131,11 +1132,13 @@ if ((time() - $state{'last'}) > $SAURON_USER_TIMEOUT) {
   login_form("Your session timed out. Login again",$scookie);
 }
 
-if ($remote_addr ne $state{'addr'}) {
-  logmsg("notice",
-	 "cookie for '$state{user}' reseived from wrong host: " .
-	 $remote_addr . " (expecting it from: $state{addr})");
-  html_error("Unauthorized Access denied!");
+unless ($SAURON_NO_REMOTE_ADDR_AUTH) {
+  if ($remote_addr ne $state{'addr'}) {
+    logmsg("notice",
+	   "cookie for '$state{user}' reseived from wrong host: " .
+	   $remote_addr . " (expecting it from: $state{addr})");
+    html_error("Unauthorized Access denied!");
+  }
 }
 
 
