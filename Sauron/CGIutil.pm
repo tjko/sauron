@@ -27,6 +27,7 @@ require Exporter;
 	    );
 
 use CGI;
+use Time::Local;
 use Sauron::DB;
 use Sauron::Util;
 use Sauron::BackEnd;
