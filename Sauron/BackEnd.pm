@@ -213,7 +213,7 @@ sub hostname_in_use($$) {
 
   return -1 unless ($zoneid > 0);
   return -2 unless ($hostname =~ /^([A-Za-z0-9\-]+)(\.|$)/);
-  $domain=$1;		 
+  $domain=$1;
   db_query("SELECT h.id FROM hosts h ".
 	   "WHERE h.zone=$zoneid AND domain ~* '^$domain(\\\\.|\$)';",\@q);
   return $q[0][0] if ($q[0][0] > 0);
@@ -271,7 +271,7 @@ sub get_record($$$$$) {
   undef %{$rec};
   @list = split(",",$fields);
   $fields =~ s/\@//g;
-  $res=db_exec("SELECT $fields FROM $table WHERE $keyname='$key';");
+  $res=db_exec("SELECT $fields FROM $table WHERE $keyname='$key'");
   return -1 if ($res < 1);
 
   $$rec{$keyname}=$key;

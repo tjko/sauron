@@ -86,6 +86,12 @@ foreach $key (sort keys %{$data{'shared-network'}}) {
   $name = (valid_texthandle($net) ? $net : "vlan-$vlancounter");
   print "shared-network($vlancounter):  $net ($name)\n" if ($verbose);
 
+  if ($net eq $chaosnet) {
+    $vlans{$key}=-1;
+    print "Treating shared-network $net as default VLAN\n";
+    next;
+  }
+
   undef @q;
   foreach $line (@{$rec}) {
     next unless ($line =~ /;\s*$/);
@@ -117,16 +123,15 @@ foreach $key (sort keys %{$data{subnet}}) {
   $cidr=$nh->desc();
   $netcounter++;
   $name="net-$netcounter";
-  print "net: $cidr ($name)\n" if ($verbose);
 
   undef @q;
   $id=-1;
   foreach $line (@{$rec}) {
     if ($line =~ /^VLAN\s+(\".*\"|\S+)\s*$/) {
       $vlanname=$1;
+      fatal("cannot find id for VLAN: $vlanname (bug!)")
+	unless (defined $vlans{$vlanname});
       $id =$vlans{$vlanname};
-      fatal("cannot find id for VLAN: $vlanname (bug!)") unless ($id > 0);
-      $id=-1 if ($vlanname eq $chaosnet);
       next;
     }
     next unless ($line =~ /;\s*$/);
@@ -134,6 +139,7 @@ foreach $key (sort keys %{$data{subnet}}) {
     push @q, [0,$line];
   }
 
+  print "net: $cidr ($name) (vlan id=$id)\n" if ($verbose);
   $res = add_net({server=>$serverid,netname=>$name,name=>$name,
 		  net=>$cidr,subnet=>'true',vlan=>$id, dhcp_l=>\@q});
   fatal("cannot add NET ($key)") if ($res < 0);
@@ -244,18 +250,13 @@ foreach $ip (keys %hostrefs) {
 }
 
 
-
 unless ($opt_notransaction) {
   db_ignore_begin_and_commit(0);
   fatal("Cannot commit import to database!") if (db_commit() < 0);
 }
 
 
-#print STDERR "Vacuuming...";
-#db_vacuum();
-print STDERR "\n";
-
-
+print "All done.\n";
 exit(0);
 
 # eof
