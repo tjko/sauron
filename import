@@ -54,8 +54,8 @@ $user = (getpwuid($<))[0];
 $cdate = time;
 %zonedata = {};
 
-LOOPBACK_NET='127.0.0.0/24' unless ($LOOPBACK_NET);
-LOOPBACK_ZONE='localhost.' unless ($LOOPBACK_ZONE);
+$LOOPBACK_NET='127.0.0.0/24' unless ($LOOPBACK_NET);
+$LOOPBACK_ZONE='localhost.' unless ($LOOPBACK_ZONE);
 fatal("DB_CONNECT not defined in configuration!") unless ($DB_CONNECT);
 
 db_connect($DB_CONNECT);
@@ -374,6 +374,7 @@ for ($i=0; $i <= $#zones; $i+=1) {
 
   undef %tmphash;
   $tmphash{id}=$zoneid;
+  $tmphash{type}=$type;
   $tmphash{ns}=[[0]];
   foreach $rtmp (@{$rec->{NS}}) { push @{$tmphash{ns}}, [0,$rtmp,'',2];  }
   if ($rev eq 'true') {
