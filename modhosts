@@ -29,6 +29,7 @@ do "$PG_DIR/back_end.pl";
 $mdate = time;
 $user = (getpwuid($<))[0];
 
+
 sub fatal($) {
   my ($msg) = @_;
   print STDERR "$0: $msg\n";
@@ -38,8 +39,8 @@ sub fatal($) {
 ##############################################
 
 $result = GetOptions("help|h","cidr=s","name=s","move=s","delete",
-		     "info=s","rename=s","test","excludeip=s",
-		    "excludename=s");
+		     "info=s","rename=s","commit","excludeip=s",
+		     "excludename=s");
 
 if ($opt_help || @ARGV < 2) {
   print "syntax: $0 <server> <zone> [options]\n\n",
@@ -51,13 +52,15 @@ if ($opt_help || @ARGV < 2) {
 	"\t--move=<CIDR>,<IP>\tmove hosts to given net starting from IP\n",
 	"\t--rename=<regexp>\trename hosts with given substitution 'regexp'\n",
 	"\n",
-	"\t--test\t\tdisplay only what would happen (no changes are made)\n",
+	"\t--commit\t\tcommit changes (w/o this NO changes are made)\n",
 	"\n";
   exit(0);
 }
 
 
 db_connect();
+
+set_muser($user);
 
 $server=$ARGV[0];
 $zone=$ARGV[1];
@@ -132,7 +135,6 @@ if ($opt_excludeip) {
 }
 
 
-
 $sql="SELECT h.id,h.domain,h.type $cidr_f FROM hosts h $cidr_t " .
      "WHERE h.zone=$zoneid $cidr_r $cidr $name $info " .
      "ORDER BY h.domain;";
@@ -147,7 +149,7 @@ print "Found $count hosts(s) matching the criteria.\n";
 exit unless ($count > 0);
 
 if ($opt_delete || $opt_rename || $opt_move) {
-  unless ($opt_test) {
+  if ($opt_commit) {
     print "Are you sure you want to make changes to database? [y/N]? ";
     $answer = ReadLine 0;
     chomp $answer;
@@ -215,7 +217,7 @@ for $i (0..$#q) {
 
 db_ignore_begin_and_commit(0);
 
-unless ($opt_test) {
+if ($opt_commit) {
   fatal("cannot commit changes to database") if (db_commit() < 0);
 } else {
   print "NO CHANGES MADE!\n";
