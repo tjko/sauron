@@ -1,0 +1,819 @@
+
+<section id="addgroup-cmd">
+<title>addgroup</>
+<para>
+  This command is used to add a new user group. User groups can be used
+  to simplify user privilege management by assigning privileges to a group
+  and then assigning users to that group.
+</para>
+<cmdsynopsis>
+  <command>addgroup</>
+  <arg>--help</>
+  <arg>--group=<replaceable>name</></>
+  <arg>--name=<replaceable>longname</></>
+</cmdsynopsis>
+<para>
+  This command can be used interactively when run without any arguments, or
+  in patch mode by specifying both <option>--group</> and <option>--name</>
+  arguments on command-line.
+</para>
+</section>
+
+
+<section id="addhosts-cmd">
+<title>addhosts</>
+<para>
+  This command can be used to add host entries into existing zone in
+  Sauron from a text file that is standard zone-file format.
+</para>
+<cmdsynopsis>
+  <command>addhosts</>
+  <arg>--help</>
+  <arg choice=req><replaceable>server</></>
+  <arg choice=req><replaceable>zone</></>
+  <arg choice=req><replaceable>file</></>
+  <arg><replaceable>OPTIONS</></>
+</cmdsynopsis>
+<informaltable frame=all>
+  <tgroup cols=2>
+  <thead><row><entry>option</><entry>description</></row></thead>
+  <tbody>
+  <row><entry><option>--name=&lt;regexp&gt;</></>
+       <entry>Host name filter. Only add hosts if domainname matches
+              to given regular expression.</>
+  </row>
+  <row><entry><option>--newonly</></>
+       <entry>Add only hosts that do not allready exist in Sauron database.</>
+  </row>
+  <row><entry><option>--noreverse</></>
+       <entry>Do not add reverse records.</>
+  </row>
+  <row><entry><option>--outofzone</></>
+       <entry>Allow out of zone records.</>
+  </row>
+  <row><entry><option>--verbose</></>
+       <entry>Produce more verbose output.</>
+  </row>
+  <row><entry><option>--group=&lt;name&gt;</></>
+       <entry>Assign new hosts into given group.</>
+  </row>
+  <row><entry><option>--info=&lt;user&gt;:&lt;dept&gt;:&lt;location&gt;:&lt;info&gt;</></>
+       <entry>Set info fields for all imported host to these values.</>
+  </row>
+  <row><entry><option>--force=&lt;type&gt;</></>
+       <entry>Force host record in Sauron to be this type: dhcp-only</>
+  </row>
+  <row><entry><option>--commit</></>
+       <entry>Commit changes (without this no changes are made into 
+              database).</>
+  </row>
+  </tbody>
+  </tgroup>
+</informaltable>
+<para>
+  By default this program will not make any changes to Sauron database, it will
+  only display what would be made. Use <option>--commit</> to make changes
+  into Sauron database.
+</para>
+</section>
+
+
+<section id="adduser-cmd">
+<title>adduser</>
+<para>
+   This command is used to add a new user for Sauron web user interface.
+</para>
+<cmdsynopsis>
+  <command>adduser</>
+  <arg>--help</>
+  <arg>--user=<replaceable>username</></>
+  <arg>--passwd=<replaceable>password</></>
+  <arg>--group=<replaceable>name</></>
+  <sbr>
+  <arg>--name=<replaceable>users-full-name</></>
+  <arg>--email=<replaceable>email-address</></>
+  <arg>--comment=<replaceable>comments</></>
+  <sbr>
+  <arg>--superuser</>
+  <arg>--expiration=<replaceable>dd-mm-yyyy</></>
+</cmdsynopsis>
+<para>
+  This command can be used interactively when run without any arguments, or
+  in patch mode by specifying at least <option>--user</> and 
+  <option>--passwd</> options on command-line.
+</para>
+</section>
+
+
+<section id="check-pending-cmd">
+<title>check-pending</>
+<para>
+  Program to be run from <application>cron</> that check for pending
+  changes in Sauron database and sends notification of pending changes
+  to address given on command-line.
+</para>
+<cmdsynopsis>
+  <command>check-pending</>
+  <arg>--help</>
+  <arg choice=req><replaceable>servername</></>
+  <arg choice=req><replaceable>emailaddress</></>
+</cmdsynopsis>
+<para>
+  To use this program <varname>SAURON_MAILER</> (and related settings)
+  have to be configured in Sauron configuration file.
+</para>
+</section>
+
+
+<section id="delgroup-cmd">
+<title>delgroup</>
+<para>
+  This command removes user group permanently. 
+</para>
+<cmdsynopsis>
+  <command>delgroup</>
+  <arg>--help</>
+  <arg>--group=<replaceable>groupname</></>
+  <arg>--newgroup=<replaceable>groupname</></>
+</cmdsynopsis>
+<para>
+  When run without any arguments this program runs in interactive mode
+  prompting for group to be deleted. Groups can also be removed 
+  non-interactively by specifying <option>--group</> option on command-line.
+  Normally users that were in the deleted group are left without a group.
+  If <option>--newgroup</> is specified then any users that were in the deleted
+  group are assigned to this group. 
+</para>
+</section>
+
+
+<section id="deluser-cmd">
+<title>deluser</>
+<para>
+  This command removes user account permanently. Account can also be 
+  locked using <command>moduser</> program (see <xref linkend="moduser-cmd">).
+</para>
+<cmdsynopsis>
+  <command>deluser</>
+  <arg>--help</>
+  <arg>--user=<replaceable>username</></>
+</cmdsynopsis>
+<para>
+  When run without any arguments this program runs in interactive mode
+  prompting for user to be deleted. Users can also be removed 
+  non-interactively by specifying <option>--user</> option on command-line.
+</para>
+</section>
+
+
+<section id="expire-hosts-cmd">
+<title>expire-hosts</>
+<para>
+  This is a utility for expiring unused (hosts that haven't been issued
+  a DHCP lease within given time-frame) host entries.
+</para>
+<cmdsynopsis>
+  <command>expire-hosts</>
+  <arg>--help</>
+  <arg choice=req><replaceable>server</></>
+  <arg><replaceable>OPTIONS</></>
+</cmdsynopsis>
+<informaltable frame=all>
+  <tgroup cols=2>
+  <thead><row><entry>option</><entry>description</></row></thead>
+  <tbody>
+  <row><entry><option>--cidr=&lt;CIDR&gt;</></>
+       <entry>Select only hosts within this CIDR block.</>
+  </row>
+  <row><entry><option>--name=&lt;regexp&gt;</></>
+       <entry>Select only hostnames matching the regular expression.</>
+  </row>
+  <row><entry><option>--netname=&lt;regexp&gt;</></>
+       <entry>Select only hosts in the networks matching the regular 
+              expression (selects only hosts within auto assign ranges in
+              these networks).</>
+  </row>
+  <row><entry><option>--treshold=&lt;days&gt;</></>
+       <entry>Expire hosts with no DHCP activity in last &lt;days&gt; days
+              (default: 90 days).</>
+  </row>
+  <row><entry><option>--norecord</></>
+       <entry>Expire only hosts wit no recorded DHCP activity.</>
+  </row>
+  <row><entry><option>--edate=&lt;dd-mm-yyyy&gt;</></>
+       <entry>Set hosts to expire on this date (default: now).</>
+  </row>
+  <row><entry><option>--verbose</></>
+       <entry>Make program to display more verbose output.</>
+  </row>
+  <row><entry><option>--commit</></>
+       <entry>Commit changes (without this no changes are made into 
+              database).</>
+  </row>
+  </tbody>
+  </tgroup>
+</informaltable>
+<para>
+  By default this program will not make any changes to Sauron database, it will
+  only display what would be made. Use <option>--commit</> to make changes
+  into Sauron database.
+</para>
+</section>
+
+
+<section id="export-networks-cmd">
+<title>export-networks</>
+<para>
+  This utility generates *nix <filename>/etc/networks</> format file of
+  networks defined for given server.
+</para>
+<cmdsynopsis>
+  <command>export-networks</>
+  <arg>--help</>
+  <arg>--verbose</>
+  <arg>--comments</>
+  <arg>--all</>
+  <arg choice=req><replaceable>servername</></>
+</cmdsynopsis>
+<para>
+  This program sends generated file into standard output. Normally
+  only networks that have <varname>DHCP</> setting set to true are
+  included in the listing. To force listing of all networks defined
+  for this server use <option>--all</> option. Network names from Sauron
+  are not included as comments into output unless <option>--comments</> option
+  is used.
+</para>
+</section>
+
+
+<section id="generatehosts-cmd">
+<title>generatehosts</>
+<para>
+  This is a utility for generating number of similar host entries into 
+  Sauron database with one command.
+</para>
+<cmdsynopsis>
+  <command>generatehosts</>
+  <arg>--help</>
+  <arg choice=req><replaceable>server</></>
+  <arg choice=req><replaceable>zone</></>
+  <arg choice=req><replaceable>hostname</></>
+  <arg choice=req><replaceable>starting-IP</></>
+  <arg choice=req><replaceable>count</></>
+  <arg><replaceable>OPTIONS</></>
+</cmdsynopsis>
+<informaltable frame=all>
+  <tgroup cols=2>
+  <thead><row><entry>option</><entry>description</></row></thead>
+  <tbody>
+  <row><entry><option>--noreverse</></>
+       <entry>Do not add reverse records.</>
+  </row>
+  <row><entry><option>--outofzone</></>
+       <entry>Allow out of zone records.</>
+  </row>
+  <row><entry><option>--verbose</></>
+       <entry>Produce more verbose output.</>
+  </row>
+  <row><entry><option>--seqstart=&lt;n&gt;</></>
+       <entry>Start sequence numbering from n.</>
+  </row>
+  <row><entry><option>--group=&lt;name&gt;</></>
+       <entry>Assign new hosts to this group.</>
+  </row>
+  <row><entry><option>--info=&lt;user&gt;:&lt;dept&gt;:&lt;location&gt;:&lt;info&gt;</></>
+       <entry>Set info fields for all hosts to these values.</>
+  </row>
+  <row><entry><option>--commit</></>
+       <entry>Commit changes (without this no changes are made into 
+              database).</>
+  </row>
+  </tbody>
+  </tgroup>
+</informaltable>
+<para>
+  By default this program will not make any changes to Sauron database, it will
+  only display what would be made. Use <option>--commit</> to make changes
+  into Sauron database.
+</para>
+<para>
+ Hostname argument serves as a template for hostname
+ of generated hosts. Following tags can be used in <option>hostname</>:
+ <informaltable>
+  <tgroup cols=2>
+  <tbody>
+  <row><entry>:N:</><entry>current sequence number</></row>
+  <row><entry>:IP1:</><entry>first octet of current IP-number</></row>
+  <row><entry>:IP2:</><entry>second octet of current IP-number</></row>
+  <row><entry>:IP3:</><entry>third octet of current IP-number</></row>
+  <row><entry>:IP4:</><entry>fourth octet of current IP-number</></row>
+  </tbody>
+  </tgroup>
+ </informaltable>
+</para>
+</section>
+
+
+<section id="import-cmd">
+<title>import</>
+<para>
+  Utility for importing complete BIND configuration file set into Sauron.
+  This program parses BIND configuration files and generates new server
+  and related zones into Sauron. See also <xref linkend="import-dns">.
+</para>
+<cmdsynopsis>
+  <command>import</>
+  <arg>--help</>
+  <arg><replaceable>OPTIONS</></>
+  <arg choice=req><replaceable>servername</></>
+  <arg choice=req><replaceable>named.conf file</></>
+</cmdsynopsis>
+<informaltable frame=all>
+  <tgroup cols=2>
+  <thead><row><entry>option</><entry>description</></row></thead>
+  <tbody>
+  <row><entry><option>--orphans=&lt;zonename&gt;</></>
+       <entry>Zone for 'orphan' PTR record hosts.</>
+  </row>
+  <row><entry><option>--notransaction</></>
+       <entry>Do not use transactions when udpating database (potentially
+              dangerous, but speeds up things).</>
+  </row>
+  <row><entry><option>--dir=&lt;directory&gt;</></>
+       <entry>Directory where configuration files are located (if not in 
+              the directory specified in named.conf).</>
+  </row>
+  <row><entry><option>--verbose</></>
+       <entry>Make program to display more verbose output.</>
+  </row>
+  </tbody>
+  </tgroup>
+</informaltable>
+<para>
+  By default <command>import</> expects to find zone-files in the locations
+  specified in the <filename>named.conf</>, but <option>--dir</> option
+  can be used to explicitly specify location for zone-files.
+  After importing server from existing BIND configuration, related DHCP
+  configuration should be imported using <command>import-dhcp</> command.
+</para>
+</section>
+
+
+<section id="import-dhcp-cmd">
+<title>import-dhcp</>
+<para>
+  This utility can be used after importing existing DNS configuration
+  using <command>import</> utility to add information (Ethernet addresses
+  and network map) from DHCP configuration into a server.
+</para>
+<cmdsynopsis>
+  <command>import-dhcp</>
+  <arg>--help</>
+  <arg><replaceable>OPTIONS</></>
+  <arg choice=req><replaceable>servername</></>
+  <arg choice=req><replaceable>dhcpd.conf file</></>
+</cmdsynopsis>
+<informaltable frame=all>
+  <tgroup cols=2>
+  <thead><row><entry>option</><entry>description</></row></thead>
+  <tbody>
+  <row><entry><option>--dir=&lt;directory&gt;</></>
+       <entry>Directory where included files are located (if not in 
+              the directory specified in dhcpd.conf).</>
+  </row>
+  <row><entry><option>--chaosnet=&lt;name&gt;</></>
+       <entry>Treat this shared-network as default VLAN 
+              (default is <quote>CHAOS</>).</>
+  </row>
+  <row><entry><option>--global</></>
+       <entry>Import "global" entries into server DHCP settings.</>
+  </row>
+  <row><entry><option>--verbose</></>
+       <entry>Make program to display more verbose output.</>
+  </row>
+  </tbody>
+  </tgroup>
+</informaltable>
+<para>
+  When using this program after importing existing DNS configuration using
+  <command>import</>, <option>--global</> should be used to import global
+  DHCP settings into the server DHCP settings.  
+</para>
+</section>
+
+
+<section id="import-ethers-cmd">
+<title>import-ethers</>
+<para>
+  Utility for assing OUI (Ethernet card manufacturer) information into
+  global table <filename>ether_info</>. This table enables Sauron to 
+  recognize and display Network card (NIC) manufacturer information.
+</para>
+<cmdsynopsis>
+  <command>import-ethers</>
+  <arg>--help</>
+  <arg>--force</>
+  <arg choice=req><replaceable>file</></>
+</cmdsynopsis>
+<para>
+  This program currently understands OUI information in old 
+  <filename>Ethernet.txt</> format and in the IEEE's OUI list format
+  (<filename>oui.txt</>). Normally this utility only adds new OUI's
+  into database, but using <option>--force</> option allows updating
+  all OUIs.
+</para>
+</section>
+
+
+<section id="import-roots-cmd">
+<title>import-roots</>
+<para>
+  Utility for importing root server hints into Sauron. Sauron has global
+  table for root servers. But it is also possible to import server specific
+  root servers which override global root servers table.
+</para>
+<cmdsynopsis>
+  <command>import-roots</>
+  <arg>--help</>
+  <arg>--update</>
+  <group>
+    <arg choice=req><replaceable>servername</></>
+    <arg choice=req>default</>
+  </group>
+  <arg choice=req><replaceable>file</></>
+</cmdsynopsis>
+<para>
+  This program imports standard root server (hint) zone-file. To import
+  global root servers use <quote>default</> as the server name.
+</para>
+</section>
+
+
+<section id="last-cmd">
+<title>last</>
+<para>
+   Utility for listing <quote>lastlog</> information about Sauron WWW-interface
+   users. This command is similar to *nix <command>last</> command.
+</para>
+<cmdsynopsis>
+  <command>last</>
+  <arg>-h</>
+  <arg>-<replaceable>num</></>
+  <arg><replaceable>username</></>
+</cmdsynopsis>
+<para>
+  Option <option>-&lt;num&gt;</> can be used to limit how many entries to
+  display. To list only lastlog entries of a specific user enter that user
+  name as the last argument.
+</para>
+</section>
+
+
+<section id="modgroup-cmd">
+<title>modgroup</>
+<para>
+   This is utility for modifying user groups. This utlity can also be
+   used to list all user groups. User groups can be assigned all the
+   same priviliges as a user, but assigning priviliges to groups and
+   then users make privilige management more manageable with large
+   number of users.  See also <xref linkend="priviliges-sec">.
+</para>
+<cmdsynopsis>
+  <command>modgroup</>
+  <arg>--help</>
+  <arg choice=req><replaceable>groupname</></>
+  <arg><replaceable>OPTIONS</></>
+</cmdsynopsis>
+<informaltable frame=all>
+  <tgroup cols=2>
+  <thead><row><entry>option</><entry>description</></row></thead>
+  <tbody>
+  <row><entry><option>--list</></>
+       <entry>List all groups and exit.</>
+  </row>
+  <row><entry><option>--add</></>
+       <entry>Add interactively priviliges to given group.</>
+  </row>
+  <row><entry><option>--add=server,<replaceable>servername,mode</></></>
+       <entry>Add server privilige (mode=R|RW|RWX).</>
+  </row>
+  <row><entry><option>--add=zone,<replaceable>servername:zonename,mode</></></>
+       <entry>Add zone privilige (mode=R|RW|RWX).</>
+  </row>
+  <row><entry><option>--add=net,<replaceable>servername:net</></></>
+       <entry>Add net (IP-range) restriction.</>
+  </row>
+  <row><entry><option>--add=host,<replaceable>regexp</></></>
+       <entry>Add hostname mask (restriction).</>
+  </row>
+  <row><entry><option>--add=ipmask,<replaceable>ipmask</></></>
+       <entry>Add IP-mask restriction.</>
+  </row>
+  <row><entry><option>--add=level,<replaceable>level</></></>
+       <entry>Add privilige level.</>
+  </row>
+  <row><entry><option>--add=elimit,<replaceable>days</></></>
+       <entry>Add host expiration limit.</>
+  </row>
+  <row><entry><option>--add=def_dept,<replaceable>string</></></>
+       <entry>Add default department for adding hosts.</>
+  </row>
+
+  <row><entry><option>--del=<replaceable>id</></></>
+       <entry>Delete privilige by it's ID number.</>
+  </row>
+  <row><entry><option>--delall</></>
+       <entry>Delete all priviliges.</>
+  </row>
+  </tbody>
+  </tgroup>
+</informaltable>
+<para>
+  This program can be used to list all available groups by specifying
+  only <option>--list</>. Priviliges can be added either interactively
+  by specifying short form of <option>--add</> or non-interactively 
+  by using long form.
+</para>
+</section>
+
+
+<section id="modhosts-cmd">
+<title>modhosts</>
+<para>
+  Simple utility for modifying or deleting several hosts at a time.
+</para>
+<cmdsynopsis>
+  <command>modhosts</>
+  <arg>--help</>
+  <arg choice=req><replaceable>server</></>
+  <arg choice=req><replaceable>zone</></>
+  <arg><replaceable>OPTIONS</></>
+</cmdsynopsis>
+<informaltable frame=all>
+  <tgroup cols=2>
+  <thead><row><entry>option</><entry>description</></row></thead>
+  <tbody>
+  <row><entry><option>--cidr=<replaceable>CIDR</></></>
+       <entry>Select only hosts within this CIDR block.</>
+  </row>
+  <row><entry><option>--name=<replaceable>regexp</></></>
+       <entry>Select only hostnames matching the regular expression.</>
+  </row>
+  <row><entry><option>--info=<replaceable>regexp</></></>
+       <entry>Select only hosts with matching info (this looks
+              for pattern in User, Dept, Location, and Info fields).</>
+  </row>
+  <row><entry><option>--type=<replaceable>type</></></>
+       <entry>Select only hosts of this type 
+              (available types: host, cname, arc, srv).</>
+  </row>
+  <row><entry><option>--ether=<replaceable>regexp</></></>
+       <entry>Select only hosts with matchin Ethernet (MAC) address.</>
+  </row>
+  <row><entry><option>--etherempty</></>
+       <entry>Select only hosts without Ethernet (MAC) address.</>
+  </row>
+
+  <row><entry><option>--delete</></>
+       <entry>Delete matching hosts.</>
+  </row>
+  <row><entry><option>--move=<replaceable>CIDR</>,<replaceable>IP</></></>
+       <entry>Move host into given network (starting from IP within
+              that network).</>
+  </row>
+  <row><entry><option>--rename=<replaceable>regexp</></></>
+       <entry>Rename hosts using given <quote>substitution</> regular
+              expression.</>
+  </row>
+  <row><entry><option>--setedate=<replaceable>days</></></>
+       <entry>Set host expiration dates to: today+<replaceable>days</>.</>
+  </row>
+  <row><entry><option>--setgroup=<replaceable>groupname</></></>
+       <entry>Assign hosts to this group.</>
+  </row>
+
+  <row><entry><option>--commit</></>
+       <entry>Commit changes (without this no changes are made to 
+              database).</>
+  </row>
+  </tbody>
+  </tgroup>
+</informaltable>
+<para>
+  By default this program will not make any changes to Sauron database, it will
+  only display what would be made. Use <option>--commit</> to make changes
+  into Sauron database.
+</para>
+</section>
+
+
+<section id="moduser-cmd">
+<title>moduser</>
+<para>
+   This is utility for modifying user accounts. This utlity can also be
+   used to list all users. This utility can also be used to modify
+   user account priviliges, but it's recommended to use user groups rather
+   than assignign priviliges directly to user accounts. For more 
+   information about user priviliges see <xref linkend="priviliges-sec">.
+</para>
+<cmdsynopsis>
+  <command>moduser</>
+  <arg>--help</>
+  <arg choice=req><replaceable>username</></>
+  <arg><replaceable>OPTIONS</></>
+</cmdsynopsis>
+<informaltable frame=all>
+  <tgroup cols=2>
+  <thead><row><entry>option</><entry>description</></row></thead>
+  <tbody>
+  <row><entry><option>--name="<replaceable>user's name</>"</></>
+       <entry>Set user's full name.</>
+  </row>
+  <row><entry><option>--email=<replaceable>address</></></>
+       <entry>Set user's email address.</>
+  </row>
+  <row><entry><option>--comment=<replaceable>text</></></>
+       <entry>Set user comments.</>
+  </row>
+  <row><entry><option>--expiration=<replaceable>dd-mm-yyyy</> | NONE</></>
+       <entry>Set account epxiration date.</>
+  </row>
+  <row><entry><option>--superuser=yes | no</></>
+       <entry>Toggle superuser flag for user.</>
+  </row>
+  <row><entry><option>--passwd</></>
+       <entry>Set user password interactively.</>
+  </row>
+  <row><entry><option>--passwd=<replaceable>password</></></>
+       <entry>Set user password.</>
+  </row>
+  <row><entry><option>--group=<replaceable>groupname</> | NONE</></>
+       <entry>Set user's group.</>
+  </row>
+  <row><entry><option>--list</></>
+       <entry>List all users and exit.</>
+  </row>
+  <row><entry><option>--lock</></>
+       <entry>Lock user account.</>
+  </row>
+  <row><entry><option>--unlock</></>
+       <entry>Unlock user account.</>
+  </row>
+
+
+  <row><entry><option>--add</></>
+       <entry>Add interactively priviliges to given group.</>
+  </row>
+  <row><entry><option>--add=server,<replaceable>servername,mode</></></>
+       <entry>Add server privilige (mode=R|RW|RWX).</>
+  </row>
+  <row><entry><option>--add=zone,<replaceable>servername:zonename,mode</></></>
+       <entry>Add zone privilige (mode=R|RW|RWX).</>
+  </row>
+  <row><entry><option>--add=net,<replaceable>servername:net</></></>
+       <entry>Add net (IP-range) restriction.</>
+  </row>
+  <row><entry><option>--add=host,<replaceable>regexp</></></>
+       <entry>Add hostname mask (restriction).</>
+  </row>
+  <row><entry><option>--add=ipmask,<replaceable>ipmask</></></>
+       <entry>Add IP-mask restriction.</>
+  </row>
+  <row><entry><option>--add=level,<replaceable>level</></></>
+       <entry>Add privilige level.</>
+  </row>
+  <row><entry><option>--add=elimit,<replaceable>days</></></>
+       <entry>Add host expiration limit.</>
+  </row>
+  <row><entry><option>--add=def_dept,<replaceable>string</></></>
+       <entry>Add default department for adding hosts.</>
+  </row>
+
+  <row><entry><option>--del=<replaceable>id</></></>
+       <entry>Delete privilige by it's ID number.</>
+  </row>
+  <row><entry><option>--delall</></>
+       <entry>Delete all priviliges.</>
+  </row>
+  </tbody>
+  </tgroup>
+</informaltable>
+<para>
+  This program can be used to list all users by specifying
+  only <option>--list</>. Priviliges can be added either interactively
+  by specifying short form of <option>--add</> or non-interactively 
+  by using the long form.
+</para>
+</section>
+
+
+<section id="runsql-cmd">
+<title>runsql</>
+<para>
+  Utility for sunning SQL code from a file into Sauron database. This
+  utility is used by <command>createtables</> to initialize Sauron
+  database.
+</para>
+<cmdsynopsis>
+  <command>runsql</>
+  <arg>--help</>
+  <arg>--separate</>
+  <arg rep=repeat choice=plain><replaceable>filename</></>
+</cmdsynopsis>
+<para>
+  Normally all files given as arguments are processed inside on
+  transaction. To process each file as a separate transaction use
+  <option>--separate</> option.
+</para>
+</section>
+
+
+<section id="sauron-cmd">
+<title>sauron</>
+<para>
+  This is the program for generating DNS and DHCP configuration files from
+  Sauron database for given server. 
+</para>
+<cmdsynopsis>
+  <command>sauron</>
+  <arg>--help</>
+  <arg><replaceable>OPTIONS</></>
+  <arg choice=req><replaceable>servername</></>
+  <arg><replaceable>target directory</></>
+</cmdsynopsis>
+<informaltable frame=all>
+  <tgroup cols=2>
+  <thead><row><entry>option</><entry>description</></row></thead>
+  <tbody>
+  <row><entry><option>--all</></>
+       <entry>Generate all (DNS & DHCP) configuration files.</>
+  </row>
+  <row><entry><option>--bind</></>
+       <entry>Generate BIND (named) configuration files.</>
+  </row>
+  <row><entry><option>--dhcp</></>
+       <entry>Generate DHCP (dhcpd) configuration files.</>
+  </row>
+  <row><entry><option>--printer</></>
+       <entry>Generate PRINTER (lpd) configuration files 
+              (not yet implemented).</>
+  </row>
+  <row><entry><option>--clean</></>
+       <entry>Celanup expired host records from the server.
+              By default host records that have been expired over 30 days
+              are removed, but this can be controlled using configuration
+              file option <varname>SAURON_REMOVE_EXPIRED_DELAY</>.</>
+  </row>
+
+  <row><entry><option>--updateserial</></>
+       <entry>force SOA serial number update on master zones.</>
+  </row>
+  <row><entry><option>--check</></>
+       <entry>Check validity of generated DNS & DHCP configuration files.
+              (see <xref linkend="sauron-sec">).</>
+  </row>
+  <row><entry><option>--dhcp2</></>
+       <entry>Enable DHCP v2 compatibility mode.</>
+  </row>
+
+  <row><entry><option>--mail</></>
+       <entry>Enable email notification sending.</>
+  </row>
+  </tbody>
+  </tgroup>
+</informaltable>
+<para>
+  Option <option>--updateserial</> forces the update of zone SOA serial numbers
+  for master zones. Normally Sauron tries to detect if zone serial number 
+  update is necessary and update it only when needed, but this detection 
+  routine may sometimes fail, so for now it's recommended to use 
+  <option>--updateserial</> option.
+</para>
+</section>
+
+
+<section id="status-cmd">
+<title>status</>
+<para>
+  FIXME
+</para>
+<cmdsynopsis>
+  <command>status</>
+  <arg>--help</>
+  <arg><replaceable>OPTIONA</></>
+</cmdsynopsis>
+<para>
+  Normally all files given as arguments are processed inside on
+  transaction. To process each file as a separate transaction use
+  <option>--separate</> option.
+</para>
+</section>
+
+
+<section id="update-dhcp-info-cmd">
+<title>update-dhcp-info</>
+<para>
+  FIXME
+</para>
+</section>
+
