@@ -3,7 +3,7 @@
 # createtables -- utlity to create all the necessary
 #                 tables for Sauron
 #
-# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2002-2003.
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2002-2005.
 # $Id$
 #
 require 5;
@@ -35,6 +35,8 @@ load_config();
 
                 sql/DEFAULTS.sql sql/misc.sql sql/copy_tables.sql
 		sql/hinfo_hw.sql sql/hinfo_sw.sql
+
+                sql/keys.sql    
 
                @;
 

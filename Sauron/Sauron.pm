@@ -1,11 +1,12 @@
 # Sauron::Sauron.pm -- configuration file parsing and default settings
 #
-# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2003.
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2003-2005.
 # $Id$
 #
 package Sauron::Sauron;
 require Exporter;
 use Sauron::Util;
+use MIME::Base64 qw(decode_base64); 
 use strict;
 use vars qw($VERSION $CONF_FILE_PATH @ISA @EXPORT);
 
@@ -26,7 +27,7 @@ $CONF_FILE_PATH = '__CONF_FILE_PATH__';
 
 
 sub sauron_version() {
-  return "0.7.1"; # current Sauron version
+  return "0.7.2beta"; # current Sauron version
 }
 
 
@@ -75,6 +76,9 @@ sub set_defaults() {
   $main::SAURON_NO_REMOTE_ADDR_AUTH = 0;
   $main::SAURON_HINFO_MODE = 1;
   $main::SAURON_PLUGINS = '';
+  $main::SAURON_KEY = '';
+  $main::SAURON_DNSSEC_KEYGEN_PROG = '';
+  $main::SAURON_DNSSEC_KEYGEN_ARGS = '';
 
   $main::SAURON_RHF{huser}    = 0; # User
   $main::SAURON_RHF{dept}     = 0; # Dept.
@@ -106,7 +110,9 @@ sub print_config() {
   print "DB_PASSWORD=",$main::DB_PASSWORD,"\n";
   print "SERVER_ID=",$main::SERVER_ID,"\n";
 
-
+  print "SAURON_KEY=".($main::SAURON_KEY ? 
+		       "<".(length($main::SAURON_KEY)*8)." bit key defined>" :
+		       "<undefined>")."\n";
   print "SAURON_DEBUG_MODE=",$main::SAURON_DEBUG_MODE,"\n";
   print "SAURON_PRIVILEGE_MODE=",$main::SAURON_PRIVILEGE_MODE,"\n";
   print "SAURON_CHARSET=",$main::SAURON_CHARSET,"\n";
@@ -139,6 +145,8 @@ sub print_config() {
   print "SAURON_NAMED_CHK_ARGS=",$main::SAURON_NAMED_CHK_ARGS,"\n";
   print "SAURON_ZONE_CHK_PROG=",$main::SAURON_ZONE_CHK_PROG,"\n";
   print "SAURON_ZONE_CHK_ARGS=",$main::SAURON_ZONE_CHK_ARGS,"\n";
+  print "SAURON_DNSSEC_KEYGEN_PROG=",$main::SAURON_DNSSEC_KEYGEN_PROG,"\n";
+  print "SAURON_DNSSEC_KEYGEN_ARGS=",$main::SAURON_DNSSEC_KEYGEN_ARGS,"\n";
   print "SAURON_NO_REMOTE_ADDR_AUTH=",$main::SAURON_NO_REMOTE_ADDR_AUTH,"\n";
   print "SAURON_HINFO_MODE=",$main::SAURON_HINFO_MODE,"\n";
   print "SAURON_PLUGINS='",$main::SAURON_PLUGINS,"'\n";
@@ -154,30 +162,38 @@ sub print_config() {
 }
 
 
-sub load_config_file($) {
-  my($cfile)=@_;
+sub load_config_file($$) {
+  my($cfile,$modemask)=@_;
   my($file,$ret);
 
-  fatal("internal error in load_config_file()") unless ($cfile);
+  fatal("internal error in load_config_file(): file not specified") 
+      unless ($cfile);
+  $modemask=0 unless ($modemask);
 
-  if ( ($CONF_FILE_PATH !~ /^__CONF_FILE_PATH/) &&
+  if ( ($cfile =~ /^\//) && -f $cfile ) {
+      $file=$cfile;
+  }
+  elsif ( ($CONF_FILE_PATH !~ /^__CONF_FILE_PATH/) &&
        -f "$CONF_FILE_PATH/$cfile" ) {
-    $file="$CONF_FILE_PATH/$cfile";
+      $file="$CONF_FILE_PATH/$cfile";
   }
   elsif (-f "/etc/sauron/$cfile") {
-    $file="/etc/sauron/$cfile";
+      $file="/etc/sauron/$cfile";
   }
   elsif (-f "/usr/local/etc/sauron/$cfile") {
-    $file="/usr/local/etc/sauron/$cfile";
+      $file="/usr/local/etc/sauron/$cfile";
   }
   elsif (-f "/opt/sauron/etc/$cfile") {
-    $file="/opt/sauron/etc/$cfile";
+      $file="/opt/sauron/etc/$cfile";
   }
   else {
-    fatal("cannot find configuration file: $cfile");
+      fatal("cannot find configuration file: $cfile");
   }
 
   fatal("cannot read configuration file: $file") unless (-r $file);
+  
+  my $filemode = (stat($file))[2];
+  fatal("unsafe file permissions for: $file") if ($filemode & $modemask);
 
   # evaluate configuration file in 'main' name space...
   {
@@ -193,15 +209,30 @@ sub load_config_file($) {
 
 # load sauron config file
 sub load_config() {
-  my($file,$ret);
+  my($file,$ret,$keyfile);
 
   set_defaults();
-  load_config_file("config");
+  load_config_file("config",0022);
 
   fatal("DB_DSN not set in configuration file") unless ($main::DB_DSN);
   fatal("SERVER_ID not set in configuration file") unless ($main::SERVER_ID);
   fatal("PROG_DIR not set in configuration file") unless ($main::PROG_DIR);
   fatal("LOG_DIR not set in configuration file") unless ($main::LOG_DIR);
+
+  $keyfile=$main::CONFIG_FILE . ".key";
+  if ( -f $keyfile ) {
+      my $filemode = (stat($keyfile))[2];
+      fatal("unsafe file permissions for :$keyfile") if ($filemode & 0027);
+      if (-r $keyfile) {
+	  open(KEYFILE,"$keyfile") || fatal("failed to open: $keyfile");
+	  while(<KEYFILE>) {
+	      if (/^Key:\s*(\S+)\s*$/) {
+		  $main::SAURON_KEY=decode_base64($1);
+	      }
+	  }
+	  close(KEYFILE);
+      }
+  }
 
   return 0;
 }
@@ -225,7 +256,7 @@ sub load_browser_config() {
   $main::BROWSER_HIDE_PRIVATE = 1;
   $main::BROWSER_HIDE_FIELDS = 'huser,location';
 
-  load_config_file("config-browser");
+  load_config_file("config-browser",0022);
 
   fatal("DB_DSN not set in configuration file") unless ($main::DB_DSN);
   fatal("PROG_DIR not set in configuration file") unless ($main::PROG_DIR);

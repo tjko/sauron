@@ -78,12 +78,14 @@ SQL_TABLES =	sql/common.sql \
 		sql/utmp.sql sql/hinfo_templates.sql \
 		sql/arec_entries.sql sql/root_servers.sql \
 		sql/history.sql sql/lastlog.sql sql/news.sql \
-		sql/vlans.sql sql/vmps.sql sql/group_entries.sql
+		sql/vlans.sql sql/vmps.sql sql/group_entries.sql \
+		sql/keys.sql
 
 
 SQL_MISC =      sql/DEFAULTS.sql sql/misc.sql sql/copy_tables.sql \
 		sql/drop_tables.sql sql/hinfo_hw.sql sql/hinfo_sw.sql \
-		sql/dbconvert_1.0to1.1 sql/dbconvert_1.1to1.2
+		sql/dbconvert_1.0to1.1 sql/dbconvert_1.1to1.2 \
+		sql/dbconvert_1.2to1.3
 
 
 PROGS = sauron addgroup adduser deluser delgroup modhosts \
@@ -92,7 +94,7 @@ PROGS = sauron addgroup adduser deluser delgroup modhosts \
 	export-networks generatehosts addhosts check-pending \
 	expire-hosts createtables import-zone remove-hosts \
 	update-hosts export-vmps import-nets import-dhcp \
-	export-ip-list export-hosts
+	export-ip-list export-hosts keygen
 
 MODULES = Sauron/Util.pm Sauron/BackEnd.pm Sauron/CGIutil.pm \
 	  Sauron/UtilZone.pm Sauron/Sauron.pm Sauron/UtilDhcp.pm \

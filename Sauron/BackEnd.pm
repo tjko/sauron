@@ -115,6 +115,13 @@ $VERSION = '$Id$ ';
 	     delete_vmps
 	     get_vmps_list
 
+	     get_key
+	     update_key
+	     add_key
+	     delete_key
+	     get_key_list
+	     get_key_by_name
+
 	     add_news
 	     get_news_list
 
@@ -2802,6 +2809,98 @@ sub get_vmps_list($$$) {
     push @{$lst}, $q[$i][0];
     $$rec{$q[$i][0]}=$q[$i][1];
   }
+}
+
+############################################################################
+# KEY functions
+
+sub get_key($$) {
+  my ($id,$rec) = @_;
+
+  return -100 if (get_record("keys",
+                      "type,ref,name,keytype,nametype,protocol,algorithm,".
+                      "mode,keysize,strength,publickey,secretkey,comments,".
+		      "cdate,cuser,mdate,muser", $id,$rec,"id"));
+
+  add_std_fields($rec);
+  return 0;
+}
+
+
+sub update_key($) {
+  my($rec) = @_;
+  my($r,$id);
+
+  del_std_fields($rec);
+
+  db_begin();
+  $r=update_record('keys',$rec);
+  if ($r < 0) { db_rollback(); return $r; }
+
+  return db_commit();
+}
+
+sub add_key($) {
+  my($rec) = @_;
+  my($res,$id,$i);
+
+  db_begin();
+  $rec->{cdate}=time;
+  $rec->{cuser}=$muser;
+  $res = add_record('keys',$rec);
+  if ($res < 0) { db_rollback(); return -1; }
+  $id=$res;
+
+  return -10 if (db_commit() < 0);
+  return $id;
+}
+
+sub delete_key($) {
+  my($id) = @_;
+  my($res);
+
+  return -100 unless ($id > 0);
+
+  db_begin();
+
+  $res=db_exec("DELETE FROM keys WHERE id=$id");
+  if ($res < 0) { db_rollback(); return -1; }
+
+
+  #$res=db_exec("UPDATE acls SET vlan=-1 WHERE vlan=$id");
+  #if ($res < 0) { db_rollback(); return -10; }
+
+  return db_commit();
+}
+
+sub get_key_list($$$) {
+  my($serverid,$rec,$lst) = @_;
+  my(@q,$i);
+
+  undef @{$lst};
+  push @{$lst},  -1;
+  undef %{$rec};
+  $$rec{-1}='--None--';
+  return if ($serverid < 1);
+
+  db_query("SELECT id,name FROM keys " .
+	   "WHERE type=1 AND ref=$serverid ORDER BY name;",\@q);
+  for $i (0..$#q) {
+    push @{$lst}, $q[$i][0];
+    $$rec{$q[$i][0]}=$q[$i][1];
+  }
+}
+
+sub get_key_by_name($$) {
+  my($serverid,$name) = @_;
+  my(@q);
+
+  return -100 unless ($serverid > 0);
+  return -101 unless ($name);
+  $name=db_encode_str($name);
+  db_query("SELECT id FROM keys " .
+	   "WHERE type=1 AND ref=$serverid AND name=$name",\@q);
+  return ($q[0][0] > 0 ? $q[0][0] : -1);
 }
 
 

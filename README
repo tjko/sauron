@@ -18,6 +18,9 @@ REQUIREMENTS
 		- Net::DNS module
 		- Net::Netmask module
 		- Digest::MD5 module
+		- Digest::HMAC module
+		- Digest::SHA1 module
+		- MIME::Base64
 	- PostgresSQL [7.3 or newer (may work fine with earlier 7.x versions)] 
 	  (or add support to your favorite db yourself :)
 	- www-server (Apache or any other www-server with CGI support)
