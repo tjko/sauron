@@ -617,6 +617,7 @@ for ($i=0; $i <= $#zones; $i+=1) {
       if ($host =~ /in-addr\.arpa/) {
 	print STDERR "\nIGNORING reverse delegation $host in zone $zone \n",
                      " (reverse mapping stuff should be in in-arpa zone)\n";
+	delete $zonedata{$host};
 	next;
       }
 
@@ -631,6 +632,7 @@ for ($i=0; $i <= $#zones; $i+=1) {
 
     if ($hosttype == 0) {
       print STDERR "\nIGNORING uknown host entry '$host' in zone $zone\n";
+      delete $zonedata{$host};
       next;
     }
 
@@ -680,6 +682,7 @@ for ($i=0; $i <= $#zones; $i+=1) {
     }
   }
   
+
   
   # insert alias (CNAME) records
   $j=0; $str='';
@@ -741,6 +744,10 @@ for ($i=0; $i <= $#zones; $i+=1) {
     }
     $hostid=$rec->{ID};
     $reverse='true';
+    if ($hostid < 1 || !$hostid) {
+      warn("no id found in hash for host $host (adding A records)!") ;
+      next;
+    }
     
     for($k=0; $k < $c; $k+=1) {
       $ip=$rec->{A}[$k];
@@ -780,6 +787,8 @@ for ($i=0; $i <= $#zones; $i+=1) {
     $tmpid=$rec->{ID};
 
     if ($mx > 0  || $wks > 1) {
+      die("no id found in hash for host $host (MX/WKS ptr update)!") 
+	if ($tmpid < 1 || !$tmpid);
       if ($j>100) {
 	print STDERR "ö";
 	$j=0;
@@ -803,6 +812,10 @@ for ($i=0; $i <= $#zones; $i+=1) {
     $mx=-1 if (! $mx);
     $wks=-1 if (! $wks);
     $tmpid=$rec->{ID};
+    if ($tmpid < 1 || !$tmpid) {
+      warn("no id found in hash for host $host (NS/TXT)!") ;
+      next;
+    }
 
     if (@{$rec->{NS}} > 0) {
       $sqlstr='';
@@ -810,7 +823,7 @@ for ($i=0; $i <= $#zones; $i+=1) {
 	$sqlstr .= "INSERT INTO ns_entries (type,ref,ns) " . 
                    " VALUES(2,$tmpid,'$rtmp');\n";
       }
-      $res=db_exec($sqlstr);
+      #print STDERR "$host NS: $sqlstr\n";
       die("cannot insert entries for host in ns_entries!") 
 	if (db_exec($sqlstr)<0);
       $j++;
@@ -822,7 +835,6 @@ for ($i=0; $i <= $#zones; $i+=1) {
 	$sqlstr .= "INSERT INTO txt_entries (type,ref,txt) " . 
                    " VALUES(2,$tmpid,'$rtmp');\n";
       }
-      $res=db_exec($sqlstr);
       die("cannot insert entries for host in txt_entries!") 
 	if (db_exec($sqlstr)<0);
       $j++;

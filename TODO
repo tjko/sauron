@@ -4,3 +4,12 @@
 import:
 
 	- fix transaction stuff
+
+
+
+
+sauron:
+
+	- better support for small reverse subnet delegations
+	- check MX generation for "MX only" records not using MX templates
+

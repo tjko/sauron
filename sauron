@@ -129,14 +129,15 @@ sub make_bind() {
   print BINDFILE "options {\n";
   print BINDFILE "\tdirectory \"$server{'directory'}\";\n"
     if ($server{'directory'} ne '');
-  if (@{$server{'allow_transfer'}} > 0) {
+
+  undef @q;
+  db_query("SELECT ip FROM cidr_entries WHERE type=1 AND ref=$serverid;",\@q);
+  if (@q > 0) {
     print BINDFILE "\tallow-transfer {\n";
-    for($i=0; $i < @{$server{'allow_transfer'}}; $i++) {
-      $ip=${$server{'allow_transfer'}}[$i];
-      print BINDFILE "\t\t$ip;\n";
-    }
+    for $j (0..(@q-1)) { print BINDFILE "\t\t$q[$j][0];\n"; }
     print BINDFILE "\t};\n";
   }
+
   print BINDFILE "};\n";
 
 
@@ -146,11 +147,11 @@ sub make_bind() {
   print BINDFILE "\tfile \"$server{'named_ca'}\";\n";
   print BINDFILE "};\n\n\n";
 
-  for($i=0; $i < $zones; $i++) {
-    $zonename=$$zonelist[$i][0];
+  for($loopcounter=0; $loopcounter < $zones; $loopcounter++) {
+    $zonename=$$zonelist[$loopcounter][0];
     $zonename =~ s/\.$//g;
     $origin = $zonename . '.';
-    $zoneid=$$zonelist[$i][1];
+    $zoneid=$$zonelist[$loopcounter][1];
     #print "zone: $zonename id=$zoneid\n";
     fatal("Cannot get zone record: $zonename (id=$zoneid)!") 
       if (get_zone($zoneid,\%zone));
@@ -167,12 +168,45 @@ sub make_bind() {
 
     print BINDFILE "zone \"$zonename\" $zone{'class'} {\n";
     print BINDFILE "\ttype $type;\n";
+    print BINDFILE "\tcheck-names warn;\n" if ($zone{'chknames'} eq 'W');
+    print BINDFILE "\tcheck-names ignore;\n" if ($zone{'chknames'} eq 'I');
+    print BINDFILE "\tcheck-names fail;\n" if ($zone{'chknames'} eq 'F');
     print BINDFILE "\tfile \"$zfile\";\n"
       if ($type eq 'master' || $type eq 'slave');
+
+    # allow_update
+    undef @q;
+    db_query("SELECT ip FROM cidr_entries WHERE type=2 AND ref=$zoneid;",\@q);
+    if (@q > 0) {
+      print BINDFILE "\tallow-update {\n";
+      for $j (0..(@q-1)) { print BINDFILE "\t\t$q[$j][0];\n"; }
+      print BINDFILE "\t};\n";
+    }
+
+    # masters
+    if ($type eq 'slave') {
+      undef @q;
+      db_query("SELECT ip FROM cidr_entries WHERE type=3 AND ref=$zoneid;",
+	       \@q);
+      if (@q > 0) {
+	print BINDFILE "\tmasters { ";
+	for $j (0..(@q-1)) { 
+	  $ip=$q[$j][0];
+	  $ip =~ s/\/32$//g;
+	  print BINDFILE "$ip; "; 
+	}
+	print BINDFILE " };\n";
+      }
+    }
+    
     print BINDFILE "};\n\n\n";
 
 
     next unless ($type eq 'master');
+    if ($zone{'dummy'} eq 't') {
+      print "Skipping zone creation for dummy zone: $zonename\n";
+      next;
+    }
    
     ######################
     # .zone files
@@ -200,23 +234,30 @@ sub make_bind() {
     fatal("server hostname not defined!") if ($hostname eq '');
 
     print ZONEFILE "@\t$ttl\t$class\tSOA\t$hostname $hostmaster (\n";
-    print ZONEFILE "\t\t\t\t\t$serial\t; searial number\n" .
-                   "\t\t\t\t\t$zone{'refresh'}\t; refresh\n" .
-		   "\t\t\t\t\t$zone{'retry'}\t; retry\n" .
-                   "\t\t\t\t\t$zone{'expire'}\t; expire\n" .
-		   "\t\t\t\t\t$zone{'minimum'}\t; minimum\n\t\t\t\t\t)\n";
+    print ZONEFILE "\t\t\t\t\t$serial\t; serial number\n" .
+                   "\t\t\t\t\t$zone{'refresh'}\t\t; refresh\n" .
+		   "\t\t\t\t\t$zone{'retry'}\t\t; retry\n" .
+                   "\t\t\t\t\t$zone{'expire'}\t\t; expire\n" .
+		   "\t\t\t\t\t$zone{'minimum'}\t\t; minimum\n\t\t\t\t\t)\n";
     print ZONEFILE ";\n; zone nameservers\n;\n";
-    foreach $ns (@{$zone{'ns'}}) {
-      print ZONEFILE "\t\t$class\tNS\t$ns\n";
+    undef @q;
+    db_query("SELECT ns FROM ns_entries WHERE type=1 AND ref=$zoneid;",\@q);
+    foreach $ns (@q) {
+      print ZONEFILE "\t\t$class\tNS\t$$ns[0]\n";
     }
     if ($rev eq 'f') {
       print ZONEFILE ";\n; zone mail exchanges\n;\n";
-      foreach $mx (@{$zone{'mx'}}) {
-	print ZONEFILE "\t\t$class\tMX\t$mx\n";
+      undef @q;
+      db_query("SELECT mx FROM mx_entries WHERE type=1 AND ref=$zoneid;",\@q);
+      foreach $mx (@q) {
+	print ZONEFILE "\t\t$class\tMX\t$$mx[0]\n";
       }
       print ZONEFILE ";\n; contact info\n;\n";
-      foreach $txt (@{$zone{'txt'}}) {
-	print ZONEFILE "\t\t$class\tTXT\t\"$txt\"\n";
+      undef @q;
+      db_query("SELECT txt FROM txt_entries WHERE type=1 AND ref=$zoneid;",
+	       \@q);
+      foreach $txt (@q) {
+	print ZONEFILE "\t\t$class\tTXT\t\"$$txt[0]\"\n";
       }
 
       # zone A records
@@ -237,21 +278,23 @@ sub make_bind() {
 
     # delegated zones
     undef @q;
-    db_query("SELECT hosts.domain,hosts.ns FROM hosts,zones " .
-	     "WHERE hosts.zone=zones.id " .
-	     "AND zones.id=$zoneid AND hosts.type=2 " .
-	     "ORDER BY hosts.domain;",\@q);
+    db_query("SELECT a.domain,c.ns FROM hosts a,zones b,ns_entries c " .
+	     "WHERE c.ref=a.id AND a.zone=b.id AND c.type=2 AND a.type=2 " .
+	     "AND b.id=$zoneid " .
+	     "ORDER BY a.domain;",\@q);
     if (@q > 0) {
       print ZONEFILE ";\n;\n; delegated zones\n;\n";
+      $domain='';
       for $i (0 .. $#q) {
+	print ZONEFILE ";\n" if (($domain ne '') && ($domain ne $q[$i][0]));
+	print ZONEFILE "$q[$i][0]" if ($domain ne $q[$i][0]);
 	$domain=$q[$i][0];
-	$ns=db_decode_list_str($q[$i][1]);
-	for $k (0 .. $#{$ns}) {
-	  print ZONEFILE "$domain\t\t$class\tNS\t" . $$ns[$k] . "\n";
-	}
-	print ZONEFILE ";\n";
+	$ns=$q[$i][1];
+	print ZONEFILE "\t\t$class\tNS\t" . $ns . "\n";
       }
+	print ZONEFILE ";\n";
     }
+
 
     
     if ($rev eq 't') {
@@ -259,7 +302,18 @@ sub make_bind() {
 
       #print "reversenet " . $zone{'reversenet'} . "\n";
       $rorigin = cidr2arpa($zone{'reversenet'}) . ".";
-      foreach $rzoneid (@{$zone{'reverses'}}) {
+
+      # build list of zones to use for building reverse map
+      undef @q; 
+      undef @r_ids;
+      db_query("SELECT id FROM zones WHERE server=$serverid AND dummy='f' " .
+	       "AND type='M' AND reverse='f' " .  #   "AND noreverse='f' " .
+	       "ORDER BY id;",\@q);
+      for $i (0 .. $#q) {
+	push @r_ids, $q[$i][0];
+      }
+
+      foreach $rzoneid (@r_ids) {
 	undef @q;
 	db_query("SELECT name FROM zones WHERE id=$rzoneid;",\@q);
 	if (@q < 1) {
@@ -267,7 +321,6 @@ sub make_bind() {
 	  next;
 	}
 	$rzone_name=$q[0][0];
-	print ZONEFILE ";\n; reverse map from zone: $rzone_name\n;\n";
 
 	undef @q;
 	db_query("SELECT ip,domain FROM hosts,zones,rr_a " .
@@ -276,6 +329,7 @@ sub make_bind() {
 		 "AND ip << '$zone{'reversenet'}' " .
 		 "ORDER BY ip;",\@q);
 	if (@q > 0) {
+	  print ZONEFILE ";\n; reverse map from zone: $rzone_name\n;\n";
 	  for $i (0 .. $#q) {
 	    $rip=remove_origin(cidr2arpa($q[$i][0]).".",$rorigin);
 	    $rdomain=$q[$i][1];
@@ -310,23 +364,43 @@ sub make_bind() {
 
 
       # plain MX domains
-      undef @q;
-      db_query("SELECT hosts.domain,rr_mx.mx FROM hosts,zones,rr_mx " .
-	       "WHERE hosts.zone=zones.id AND hosts.mx=rr_mx.id " .
-	       "AND zones.id=$zoneid AND hosts.type=3 " .
-	       "ORDER BY hosts.domain;",\@q);
+
+      undef @q; # entries with mx-templates
+      db_query("SELECT h.domain,m.pri,m.mx " .
+	       "FROM hosts h,zones z,mx_entries m,rr_mx r " .
+	       "WHERE h.zone=z.id AND h.mx=r.id AND m.ref=r.id AND m.type=3 " .
+	       " AND h.type=3 AND h.mx > 0 AND z.id=$zoneid " .
+	       "ORDER BY h.domain,m.pri;",\@q);
       if (@q > 0) {
-	print ZONEFILE ";\n;\n; MX only domains\n;\n";
+	print ZONEFILE ";\n;\n; MX only domains (using MX-templates)\n;\n";
+	$domain='';
 	for $i (0 .. $#q) {
+	  print ZONEFILE ";\n" if ($domain ne '' && $domain ne $q[$i][0]);
+	  print ZONEFILE "$q[$i][0]" if ($domain ne $q[$i][0]);
 	  $domain=$q[$i][0];
-	  $mx=db_decode_list_str($q[$i][1]);
-	  for $k (0 .. $#{$mx}) {
-	    print ZONEFILE "$domain" if ($k < 1);
-	    print ZONEFILE "\t\t$class\tMX\t" . $$mx[$k] . "\n";
-	  }
-	  print ZONEFILE ";\n";
+	  print ZONEFILE "\t\t$class\tMX\t$q[$i][1] $q[$i][2]\n";
 	}
+	print ZONEFILE ";\n";
       }
+      undef @q; # entries without mx-templates
+      db_query("SELECT h.domain,m.pri,m.mx " .
+	       "FROM hosts h,zones z,mx_entries m,rr_mx r " .
+	       "WHERE h.zone=z.id AND h.mx=r.id AND m.ref=r.id AND m.type=3 " .
+	       " AND h.type=3 AND h.mx > 0 AND z.id=$zoneid " .
+	       "ORDER BY h.domain,m.pri;",\@q);
+      if (@q > 0) {
+	print ZONEFILE ";\n;\n; MX only domains (using MX-templates)\n;\n";
+	$domain='';
+	for $i (0 .. $#q) {
+	  print ZONEFILE ";\n" if ($domain ne '' && $domain ne $q[$i][0]);
+	  print ZONEFILE "$q[$i][0]" if ($domain ne $q[$i][0]);
+	  $domain=$q[$i][0];
+	  print ZONEFILE "\t\t$class\tMX\t$q[$i][1] $q[$i][2]\n";
+	}
+	print ZONEFILE ";\n";
+      }
+
+
 
 
       ## wks hash

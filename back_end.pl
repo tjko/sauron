@@ -182,8 +182,9 @@ sub get_zone($$) {
   my ($id,$rec) = @_;
   
   return get_record("zones",
-	       "server,active,type,reverse,class,name," .
+	       "server,active,dummy,type,reverse,class,name," .
 	       "hostmaster,serial,refresh,retry,expire,minimum,ttl," .
+	       "chknames," .
 	       "\@ns,\@mx,\@txt,\@dhcp,comment,\@reverses,reversenet," .
 	       "\@masters",
 	       $id,$rec,"id");
