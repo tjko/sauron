@@ -9,6 +9,7 @@ use CGI qw/:standard *table -no_xhtml/;
 use Digest::MD5;
 use Sauron::CGIutil;
 use Sauron::BackEnd;
+use Sauron::Util;
 use Sauron::Sauron;
 use strict;
 use vars qw($VERSION @ISA @EXPORT);
