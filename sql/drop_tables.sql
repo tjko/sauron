@@ -48,6 +48,6 @@ DROP SEQUENCE wks_entries_id_seq;
 DROP SEQUENCE host_info_id_seq;
 DROP SEQUENCE users_id_seq;
 DROP SEQUENCE user_rights_id_seq;
-
+DROP SEQUENCE hinfo_templates_id_seq;
 
 /* eof */

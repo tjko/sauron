@@ -189,7 +189,8 @@ sub update_record($$) {
     next if (ref($$rec{$key}) eq 'ARRAY');
 
     $sqlstr.="," if ($flag);
-    $sqlstr.="$key=" . db_encode_str($$rec{$key});
+    if ($$rec{$key} eq '0') { $sqlstr.="$key='0'"; }  # HACK value :)
+    else { $sqlstr.="$key=" . db_encode_str($$rec{$key}); }
 
     $flag=1 if (! $flag);
   }
@@ -216,7 +217,8 @@ sub add_record_sql($$) {
   $sqlstr="INSERT INTO $table (" . join(',',@l) . ") VALUES(";
   foreach $key (@l) {
     $sqlstr .= ',' if ($flag);
-    $sqlstr .= db_encode_str($$rec{$key});
+    if ($$rec{$key} eq '0') { $sqlstr.="'0'"; }
+    else { $sqlstr .= db_encode_str($$rec{$key}); }
     $flag=1 unless ($flag);
   }
   $sqlstr.=");";
@@ -854,7 +856,7 @@ sub copy_zone($$$$) {
 sub get_host($$) {
   my ($id,$rec) = @_;
   my ($res,$t,$wrec,$mrec,%h);
- 
+
   $res = get_record("hosts",
 	       "zone,type,domain,ttl,class,grp,alias,cname,cname_txt," .
 	       "hinfo_hw,hinfo_sw,wks,mx,rp_mbox,rp_txt,router," .
@@ -906,6 +908,14 @@ sub get_host($$) {
     #print p,$rec->{mx}," rec=",$mrec->{comment};
   }
 
+  if ($rec->{grp} > 0) {
+    $mrec={};
+    print "<p>Error getting GROUP!\n"
+      if (get_group($rec->{grp},$mrec));
+    $rec->{grp_rec}=$mrec;
+    #print p,$rec->{mx}," rec=",$mrec->{comment};
+  }
+
 
   if ($rec->{type} == 4) {
     get_host($rec->{alias},\%h);
@@ -923,6 +933,7 @@ sub update_host($) {
   delete $rec->{card_info};
   delete $rec->{wks_rec};
   delete $rec->{mx_rec};
+  delete $rec->{grp_rec};
   delete $rec->{alias_l};
   delete $rec->{alias_d};
 
@@ -972,7 +983,7 @@ sub delete_host($) {
   # mx_entries
   $res=db_exec("DELETE FROM mx_entries WHERE type=2 AND ref=$id;");
   if ($res < 0) { db_rollback(); return -2; }
-  
+
   # wks_entries
   $res=db_exec("DELETE FROM wks_entries WHERE type=1 AND ref=$id;");
   if ($res < 0) { db_rollback(); return -3; }
@@ -993,12 +1004,22 @@ sub delete_host($) {
   $res=db_exec("DELETE FROM rr_a WHERE host=$id;");
   if ($res < 0) { db_rollback(); return -7; }
 
+  # aliases
+  $res=db_exec("DELETE FROM hosts WHERE type=4 AND alias=$id;");
+  if ($res < 0) { db_rollback(); return -8; }
 
   $res=db_exec("DELETE FROM hosts WHERE id=$id;");
   if ($res < 0) { db_rollback(); return -50; }
 
   return db_commit();
   #return db_rollback();
+}
+
+sub add_host($) {
+  my($rec) = @_;
+
+  return -100 unless ($rec->{zone} > 0);
+  return add_record('hosts',$rec);
 }
 
 
@@ -1205,6 +1226,48 @@ sub delete_printer_class($) {
 }
 
 ############################################################################
+# HINFO template functions
+
+sub get_hinfo_template($$) {
+  my ($id,$rec) = @_;
+
+  return -100 if (get_record("hinfo_templates","hinfo,type,pri",
+			     $id,$rec,"id"));
+  return 0;
+}
+
+sub update_hinfo_template($) {
+  my($rec) = @_;
+  my($r,$id);
+
+  db_begin();
+  $r=update_record('hinfo_templates',$rec);
+  if ($r < 0) { db_rollback(); return $r; }
+  return db_commit();
+}
+
+sub add_hinfo_template($) {
+  my($rec) = @_;
+
+  return add_record('hinfo_templates',$rec);
+}
+
+
+sub delete_hinfo_template($) {
+  my($id) = @_;
+  my($res);
+
+  return -100 unless ($id > 0);
+
+  db_begin();
+
+  $res=db_exec("DELETE FROM hinfo_templates WHERE id=$id;");
+  if ($res < 0) { db_rollback(); return -2; }
+
+  return db_commit();
+}
+
+############################################################################
 # group functions
 
 sub get_group($$) {
@@ -1291,7 +1354,7 @@ sub get_group_list($$$) {
 
 sub get_user($$) {
   my ($uname,$rec) = @_;
-  
+
   return get_record("users",
 	       "username,password,name,superuser,server,zone,comment,id",
 	       $uname,$rec,"username");

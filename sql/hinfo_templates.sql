@@ -6,7 +6,8 @@
  */
 
 CREATE TABLE hinfo_templates (
-	hinfo	TEXT NOT NULL CHECK(hinfo <> '') PRIMARY KEY,
+	id	SERIAL PRIMARY KEY,
+	hinfo	TEXT NOT NULL CHECK(hinfo <> '') UNIQUE,
 	type    INT4 DEFAULT 0,  /* 0=hardware, 1=software */
 	pri     INT4 DEFAULT 100
 );

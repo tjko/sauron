@@ -1,9 +1,10 @@
 # configuration
 $VER = "0.1a";
 
+$LOG_DIR = "/tmp/";
 $PROG_DIR = "/home/tjko/work/sauron/";
 $ICON_PATH = "/sauron/icons";
-$CGI_STATE_PATH = "/home/tjko/work/sauron/cgi/state";
+
 
 $DB_CONNECT = "host=ns1.jyu.fi port=5432 dbname=sauron user=tjko password=farside";
 

@@ -17,14 +17,14 @@ $CGI::POST_MAX = 100000; # max 100k posts
 #$|=1;
 $debug_mode = 0;
 
-if (-f "/etc/sauron/config") { 
-  $conf_dir='/etc/sauron'; 
+if (-f "/etc/sauron/config") {
+  $conf_dir='/etc/sauron';
 } 
-elsif (-f "/opt/etc/sauron/config") { 
-  $conf_dir='/opt/etc/sauron'; 
+elsif (-f "/opt/etc/sauron/config") {
+  $conf_dir='/opt/etc/sauron';
 } 
-elsif (-f "/usr/local/etc/sauron/config") { 
-  $conf_dir='/usr/local/etc/sauron'; 
+elsif (-f "/usr/local/etc/sauron/config") {
+  $conf_dir='/usr/local/etc/sauron';
 }
 else {
   error("cannot find configuration file!");
@@ -37,9 +37,9 @@ do "$PROG_DIR/db.pl";
 do "$PROG_DIR/back_end.pl";
 
 
-%server_form = ( 
+%server_form = (
  data=>[
-  {ftype=>0, name=>'Server' },  
+  {ftype=>0, name=>'Server' },
   {ftype=>1, tag=>'name', name=>'Server name', type=>'text', len=>20},
   {ftype=>4, tag=>'id', name=>'Server ID'},
   {ftype=>1, tag=>'comment', name=>'Comments',  type=>'text', len=>60,
@@ -61,12 +61,12 @@ do "$PROG_DIR/back_end.pl";
   {ftype=>0, name=>'DHCP'},
   {ftype=>2, tag=>'dhcp', name=>'Global DHCP', type=>['text','text'], 
    fields=>2, len=>[35,20], empty=>[0,1],elabels=>['dhcptab line','comment']} 
- ],
- bgcolor=>'#eeeebf',
- border=>'0',		
- width=>'100%',
- nwidth=>'30%',
- heading_bg=>'#aaaaff'
+ ]
+# bgcolor=>'#eeeebf',
+# border=>'0',		
+# width=>'100%',
+# nwidth=>'30%',
+# heading_bg=>'#aaaaff'
 );
 
 %new_zone_form=(
@@ -77,12 +77,7 @@ do "$PROG_DIR/back_end.pl";
    enum=>{M=>'Master', S=>'Slave', H=>'Hint', F=>'Forward'}},
   {ftype=>3, tag=>'reverse', name=>'Reverse', type=>'enum',  conv=>'L',
    enum=>{f=>'No',t=>'Yes'}}
- ],
- bgcolor=>'#eeeebf',
- border=>'0',		
- width=>'100%',
- nwidth=>'30%',
- heading_bg=>'#aaaaff'
+ ]
 );
 
 %zone_form = (
@@ -133,12 +128,7 @@ do "$PROG_DIR/back_end.pl";
   {ftype=>2, tag=>'dhcp', name=>'Zone specific DHCP entries', 
    type=>['text','text'], fields=>2,
    len=>[40,20], empty=>[0,1], elabels=>['DHCP','comment'], iff=>['type','M']}
- ],
- bgcolor=>'#eeeebf',
- border=>'0',		
- width=>'100%',
- nwidth=>'30%',
- heading_bg=>'#aaaaff'
+ ]
 );
 
 
@@ -156,7 +146,7 @@ do "$PROG_DIR/back_end.pl";
    iff=>['type','4']},
   {ftype=>4, tag=>'id', name=>'Host ID'},
   {ftype=>4, tag=>'type', name=>'Type', type=>'enum', enum=>\%host_types},
-  {ftype=>4, tag=>'cname', name=>'Alias type', type=>'enum', conv=>'L',
+  {ftype=>3, tag=>'cname', name=>'Alias type', type=>'enum', conv=>'L',
    enum=>{t=>'CNAME',f=>'AREC'}, iff=>['type','4']},
   {ftype=>4, tag=>'class', name=>'Class'},
   {ftype=>1, tag=>'ttl', name=>'TTL', type=>'int', len=>10},
@@ -174,7 +164,7 @@ do "$PROG_DIR/back_end.pl";
   {ftype=>1, tag=>'hinfo_sw', name=>'HINFO sowftware', type=>'hinfo', len=>20,
    iff=>['type','1']},
   {ftype=>1, tag=>'ether', name=>'Ethernet address', type=>'mac', len=>12,
-   iff=>['type','1']},
+   iff=>['type','1'], empty=>1},
   {ftype=>4, tag=>'card_info', name=>'Card manufacturer', iff=>['type','1']},
   {ftype=>1, tag=>'model', name=>'Model', type=>'text', len=>30, empty=>1, 
    iff=>['type','1']},
@@ -182,7 +172,8 @@ do "$PROG_DIR/back_end.pl";
    empty=>1, iff=>['type','1']},
   {ftype=>1, tag=>'misc', name=>'Misc.', type=>'text', len=>40, empty=>1, 
    iff=>['type','1']},
-  {ftype=>0, name=>'Group selections', iff=>['type','1']},
+  {ftype=>0, name=>'Group/Template selections', iff=>['type','[15]']},
+  {ftype=>10, tag=>'grp', name=>'Group', iff=>['type','[15]']},
   {ftype=>6, tag=>'mx', name=>'MX template', iff=>['type','1']},
   {ftype=>7, tag=>'wks', name=>'WKS template', iff=>['type','1']},
   {ftype=>0, name=>'Host specific',iff=>['type','[12]']},
@@ -205,12 +196,7 @@ do "$PROG_DIR/back_end.pl";
   {ftype=>0, name=>'Aliases', no_edit=>1, iff=>['type','1']},
   {ftype=>8, tag=>'alias_l', name=>'Aliases', fields=>2, 
    elabels=>['Alias','Info'], iff=>['type','1']}
- ],
- bgcolor=>'#eeeebf',
- border=>'0',		
- width=>'100%',
- nwidth=>'30%',
- heading_bg=>'#aaaaff'
+ ]
 );
 
 %new_host_nets = (dummy=>'dummy');
@@ -246,14 +232,21 @@ do "$PROG_DIR/back_end.pl";
    empty=>1, iff=>['type','1']},
   {ftype=>1, tag=>'misc', name=>'Misc.', type=>'text', len=>40, empty=>1, 
    iff=>['type','1']}
- ],
- bgcolor=>'#eeeebf',
- border=>'0',		
- width=>'100%',
- nwidth=>'30%',
- heading_bg=>'#aaaaff'
+ ]
 );
 
+
+%new_alias_form = (
+ data=>[
+  {ftype=>0, name=>'New ALIAS' },
+  {ftype=>1, tag=>'domain', name=>'Hostname', type=>'domain', len=>40},
+  {ftype=>3, tag=>'cname', name=>'Type', type=>'enum', 
+   enum=>{t=>'CNAME',f=>'AREC'}},
+  {ftype=>0, name=>'Alias for'},
+  {ftype=>4, tag=>'aliasname', name=>'Host'},
+  {ftype=>4, tag=>'alias', name=>'ID'}
+]
+);
 
 %browse_page_size=(0=>'25',1=>'50',2=>'100',3=>'256',4=>'512',5=>'1000');
 %browse_search_fields=(0=>'Ether',1=>'Info',2=>'User',3=>'Location',
@@ -281,12 +274,7 @@ do "$PROG_DIR/back_end.pl";
   {ftype=>3, tag=>'stype', name=>'Search field', type=>'enum',
    enum=>\%browse_search_fields},
   {ftype=>1, tag=>'pattern',name=>'Pattern (substring)',type=>'text',len=>40,empty=>1}
- ],
- bgcolor=>'#eeeebf',
- border=>'0',		
- width=>'100%',
- nwidth=>'30%',
- heading_bg=>'#aaaaff'
+ ]
 );
 
 %user_info_form=(
@@ -298,12 +286,7 @@ do "$PROG_DIR/back_end.pl";
   {ftype=>0, name=>'Current selections'},
   {ftype=>4, tag=>'server', name=>'Server'},
   {ftype=>4, tag=>'zone', name=>'Zone'}
- ],
- bgcolor=>'#eeeebf',
- border=>'0',		
- width=>'100%',
- nwidth=>'30%',
- heading_bg=>'#aaaaff'
+ ]
 );
 
 
@@ -313,12 +296,7 @@ do "$PROG_DIR/back_end.pl";
    len=>20, empty=>0},
   {ftype=>1, tag=>'comment', name=>'Comment', type=>'text',
    len=>60, empty=>1}
- ],
- bgcolor=>'#eeeebf',
- border=>'0',		
- width=>'100%',
- nwidth=>'30%',
- heading_bg=>'#aaaaff'
+ ]
 );
 
 %new_net_form=(
@@ -330,12 +308,7 @@ do "$PROG_DIR/back_end.pl";
   {ftype=>1, tag=>'net', name=>'Net (CIDR)', type=>'cidr'},
   {ftype=>1, tag=>'comment', name=>'Comment', type=>'text',
    len=>60, empty=>1}
- ],
- bgcolor=>'#eeeebf',
- border=>'0',		
- width=>'100%',
- nwidth=>'30%',
- heading_bg=>'#aaaaff'
+ ]
 );
 
 
@@ -362,12 +335,7 @@ do "$PROG_DIR/back_end.pl";
   {ftype=>2, tag=>'dhcp_l', name=>'Net specific DHCP entries', 
    type=>['text','text'], fields=>2,
    len=>[40,20], empty=>[0,1], elabels=>['DHCP','comment']}
- ],
- bgcolor=>'#eeeebf',
- border=>'0',		
- width=>'100%',
- nwidth=>'30%',
- heading_bg=>'#aaaaff'
+ ]
 );
 
 %group_form=(
@@ -382,12 +350,7 @@ do "$PROG_DIR/back_end.pl";
   {ftype=>2, tag=>'printer', name=>'PRINTER entries', 
    type=>['text','text'], fields=>2,
    len=>[40,20], empty=>[0,1], elabels=>['PRINTER','comment']}
- ],
- bgcolor=>'#eeeebf',
- border=>'0',		
- width=>'100%',
- nwidth=>'30%',
- heading_bg=>'#aaaaff'
+ ]
 );
 
 %copy_zone_form=(
@@ -397,12 +360,7 @@ do "$PROG_DIR/back_end.pl";
   {ftype=>0, name=>'Target zone'},
   {ftype=>1, tag=>'name', name=>'Name', type=>'domain', len=>40, empty=>0},
   {ftype=>1, tag=>'comment', name=>'Comment', type=>'text', len=>60, empty=>1}
- ],
- bgcolor=>'#eeeebf',
- border=>'0',		
- width=>'100%',
- nwidth=>'30%',
- heading_bg=>'#aaaaff'
+ ]
 );
 
 %new_template_form=(
@@ -412,12 +370,7 @@ do "$PROG_DIR/back_end.pl";
    len=>40, empty=>0},
   {ftype=>1, tag=>'comment', name=>'Comment', type=>'text',
    len=>60, empty=>1}
- ],
- bgcolor=>'#eeeebf',
- border=>'0',		
- width=>'100%',
- nwidth=>'30%',
- heading_bg=>'#aaaaff'
+ ]
 );
 
 %new_group_form = %new_template_form;
@@ -431,12 +384,7 @@ do "$PROG_DIR/back_end.pl";
   {ftype=>2, tag=>'mx_l', name=>'Mail exchanges (MX)', 
    type=>['priority','mx','text'], fields=>3, len=>[5,30,20], 
    empty=>[0,0,1],elabels=>['Priority','MX','comment']}
- ],
- bgcolor=>'#eeeebf',
- border=>'0',		
- width=>'100%',
- nwidth=>'30%',
- heading_bg=>'#aaaaff'
+ ]
 );
 
 %wks_template_form=(
@@ -448,12 +396,7 @@ do "$PROG_DIR/back_end.pl";
   {ftype=>2, tag=>'wks_l', name=>'WKS', 
    type=>['text','text','text'], fields=>3, len=>[10,30,10], empty=>[0,0,1], 
    elabels=>['Protocol','Services','comment']}
- ],
- bgcolor=>'#eeeebf',
- border=>'0',		
- width=>'100%',
- nwidth=>'30%',
- heading_bg=>'#aaaaff'
+ ]
 );
 
 %printer_class_form=(
@@ -466,12 +409,7 @@ do "$PROG_DIR/back_end.pl";
   {ftype=>2, tag=>'printer_l', name=>'PRINTER', 
    type=>['text','text'], fields=>2, len=>[60,10], empty=>[0,1],
    elabels=>['Printer','comment']}
- ],
- bgcolor=>'#eeeebf',
- border=>'0',		
- width=>'100%',
- nwidth=>'30%',
- heading_bg=>'#aaaaff'
+ ]
 );
 
 %new_printer_class_form=(
@@ -480,15 +418,19 @@ do "$PROG_DIR/back_end.pl";
   {ftype=>1, tag=>'name', name=>'Name', type=>'printer_class',len=>20,
    empty=>0},
   {ftype=>1, tag=>'comment', name=>'Comment', type=>'text',len=>60, empty=>1}
- ],
- bgcolor=>'#eeeebf',
- border=>'0',		
- width=>'100%',
- nwidth=>'30%',
- heading_bg=>'#aaaaff'
+ ]
 );
 
-
+%hinfo_template_form=(
+ data=>[
+  {ftype=>0, name=>'HINFO template'},
+  {ftype=>1, tag=>'hinfo', name=>'HINFO', type=>'hinfo',len=>20, empty=>0},
+  {ftype=>4, tag=>'id', name=>'ID', iff=>['id','\d+']},
+  {ftype=>3, tag=>'type', name=>'Type', type=>'enum',
+   enum=>{0=>'Hardware',1=>'Software'}},
+  {ftype=>1, tag=>'pri', name=>'Priority', type=>'priority',len=>4, empty=>0},
+ ]
+);
 
 
 %change_passwd_form=(
@@ -497,12 +439,7 @@ do "$PROG_DIR/back_end.pl";
   {ftype=>0, name=>'Type new password twice'},
   {ftype=>1, tag=>'new1', name=>'New password', type=>'passwd', len=>20 },
   {ftype=>1, tag=>'new2', name=>'New password', type=>'passwd', len=>20 }
- ],
- bgcolor=>'#eeeebf',
- border=>'0',		
- width=>'100%',
- nwidth=>'30%',
- heading_bg=>'#aaaaff'
+ ]
 );
 
 
@@ -523,6 +460,7 @@ sub logmsg($$) {
 
 db_connect2() || error("Cannot estabilish connection with database");
 if (($res=cgi_disabled())) { error("CGI interface disabled: $res"); }
+error("Invalid log path") unless (-d $LOG_DIR);
 
 $frame_mode=0;
 $pathinfo = path_info();
@@ -571,7 +509,7 @@ if ((time() - $state{'last'}) > $USER_TIMEOUT) {
   login_form("Your session timed out. Login again",$scookie);
 }
 
-error("Unauthorized Access denied! $remote_addr") 
+error("Unauthorized Access denied!")
   if ($remote_addr ne $state{'addr'}) ;
 
 $server=$state{'server'};
@@ -925,6 +863,33 @@ sub hosts_menu() {
     goto show_host_record if ($res == 2);
     return;
   }
+  elsif ($sub eq 'Alias') {
+    $id=param('h_id');
+    if ($id > 0) {
+      $data{alias}=$id;
+      if (get_host($id,\%host)) {
+	print h2("Cannot get host record (id=$id)!");
+	return;
+      }
+      $data{aliasname}=$host{domain};
+      $data{cname}='t';
+    }
+    $data{type}=4;
+    $data{zone}=$zoneid;
+    $data{alias}=param('aliasadd_alias') if (param('aliasadd_alias'));
+    $res=add_magic('aliasadd','ALIAS','hosts',\%new_alias_form,
+		   \&add_host,\%data);
+    if ($res > 0) {
+      param('h_id',$res);
+      goto show_host_record;
+    }
+    elsif ($res < 0) {
+      param('h_id',param('aliasadd_alias'));
+      goto show_host_record;
+    }
+    print "res=$res";
+    return;
+  }
   elsif ($sub eq 'Move') {
     $id=param('h_id');
     if (get_host($id,\%host)) {
@@ -1198,6 +1163,7 @@ sub hosts_menu() {
           submit(-name=>'sub',-value=>'Edit'), " ",
           submit(-name=>'sub',-value=>'Delete'), " ";
     print submit(-name=>'sub',-value=>'Move'), " " if ($host{type} == 1);
+    print submit(-name=>'sub',-value=>'Alias'), " " if ($host{type} == 1);
     print "&nbsp;&nbsp;",submit(-name=>'sub',-value=>'Refresh'), " ",end_form;
     return;
   }
@@ -1487,6 +1453,7 @@ sub templates_menu() {
   $mx_id=param('mx_id');
   $wks_id=param('wks_id');
   $pc_id=param('pc_id');
+  $hinfo_id=param('hinfo_id');
 
   if ($sub eq 'mx') {
     db_query("SELECT id,name,comment FROM mx_templates " .
@@ -1560,6 +1527,29 @@ sub templates_menu() {
     print "</TABLE>";
     return;
   }
+  elsif ($sub eq 'hinfo') {
+    db_query("SELECT id,type,hinfo,pri FROM hinfo_templates " .
+	     "ORDER BY type,pri,hinfo;",\@q);
+    if (@q < 1) {
+      print h2("No HINFO templates found!");
+      return;
+    }
+
+    print h3("HINFO templates (global)"),
+          "<TABLE width=\"100%\"><TR bgcolor=\"#aaaaff\">",
+          th("Type"),th("HINFO"),th("Priority"),"</TR>";
+
+    for $i (0..$#q) {
+      $name=$q[$i][2];
+      $name='&nbsp;' if ($name eq '');
+      print "<TR bgcolor=\"" . ($q[$i][1]==0?"#eeeebf":"#eebfee") . "\">",
+	td(($q[$i][1]==0 ? "Hardware" : "Software")),
+	td("<a href=\"$selfurl?menu=templates&hinfo_id=$q[$i][0]\">$name</a>"),
+	td($q[$i][3]),"</TR>";
+    }
+    print "</TABLE>";
+    return;
+  }
   elsif ($sub eq 'Edit') {
     if ($mx_id > 0) {
       $res=edit_magic('mx','MX template','templates',\%mx_template_form,
@@ -1573,6 +1563,11 @@ sub templates_menu() {
       $res=edit_magic('pc','PRINTER class','templates',\%printer_class_form,
 		      \&get_printer_class,\&update_printer_class,$pc_id);
       goto show_pc_record if ($res > 0);
+    } elsif ($hinfo_id > 0) {
+      $res=edit_magic('hinfo','HINFO template','templates',
+		      \%hinfo_template_form,
+		      \&get_hinfo_template,\&update_hinfo_template,$hinfo_id);
+      goto show_hinfo_record if ($res > 0);
     } else { print p,"Unknown template type!"; }
     return;
   }
@@ -1673,8 +1668,13 @@ sub templates_menu() {
     elsif ($pc_id > 0) {
       $res=delete_magic('pc','PRINTER class','templates',\%printer_class_form,
 			\&get_printer_class,\&delete_printer_class,$pc_id);
-
       goto show_pc_record if ($res==2);
+    }
+    elsif ($hinfo_id > 0) {
+      $res=delete_magic('hinfo','HINFO template','templates',
+			\%hinfo_template_form,\&get_hinfo_template,
+			\&delete_hinfo_template,$hinfo_id);
+      goto show_hinfo_record if ($res==2);
     }
     else { print p,"Unknown template type!"; }
     return;
@@ -1706,6 +1706,17 @@ sub templates_menu() {
     if ($res > 0) {
       $pc_id=$res;
       goto show_pc_record;
+    }
+    return;
+  }
+  elsif ($sub eq 'addhinfo') {
+    $data{type}=0; 
+    $data{pri}=100;
+    $res=add_magic('addhinfo','HINFO template','templates',
+		   \%hinfo_template_form,\&add_hinfo_template,\%data);
+    if ($res > 0) {
+      $hinfo_id=$res;
+      goto show_hinfo_record;
     }
     return;
   }
@@ -1751,6 +1762,20 @@ sub templates_menu() {
           hidden('pc_id',$pc_id),end_form;
     return;
   }
+  elsif ($hinfo_id > 0) {
+  show_hinfo_record:
+    if (get_hinfo_template($hinfo_id,\%hinfohash)) {
+      print h2("Cannot get HINFO template (id=$hinfo_id)!");
+      return;
+    }
+    display_form(\%hinfohash,\%hinfo_template_form);
+    print p,startform(-method=>'GET',-action=>$selfurl),
+          hidden('menu','templates'),
+          submit(-name=>'sub',-value=>'Edit'), "  ",
+          submit(-name=>'sub',-value=>'Delete'),
+          hidden('hinfo_id',$hinfo_id),end_form;
+    return;
+  }
 
   print "<p><br><ul>",
     "<li><a href=\"$selfurl?menu=templates&sub=mx\">" .
@@ -1759,6 +1784,8 @@ sub templates_menu() {
       "Show WKS templates</a></li>",
     "<li><a href=\"$selfurl?menu=templates&sub=pc\">" .
       "Show PRINTER classes</a></li>",
+    "<li><a href=\"$selfurl?menu=templates&sub=hinfo\">" .
+      "Show HINFO templates</a></li>",
     "</ul>";
 }
 
@@ -1939,6 +1966,11 @@ sub add_magic($$$$$$) {
   my($prefix,$name,$menu,$form,$add_func,$data) = @_;
   my(%h);
 
+  if (param($prefix . '_cancel')) {
+    print h2("$name record not created!");
+    return -1;
+  }
+
   if (param($prefix . '_submit') ne '') {
     unless (($res=form_check_form($prefix,$data,$form))) {
       $res=&$add_func($data);
@@ -1958,7 +1990,8 @@ sub add_magic($$$$$$) {
           startform(-method=>'POST',-action=>$selfurl),
           hidden('menu',$menu),hidden('sub',$prefix);
   form_magic($prefix,\%data,$form);
-  print submit(-name=>$prefix . '_submit',-value=>"Create $name"),end_form;
+  print submit(-name=>$prefix . '_submit',-value=>"Create $name")," ",
+        submit(-name=>$prefix . '_cancel',-value=>"Cancel"),end_form;
   return 0;
 }
 
@@ -2180,9 +2213,11 @@ sub left_menu($) {
     print p,li("<a href=\"$url&sub=mx\">Show MX</a>"),
           li("<a href=\"$url&sub=wks\">Show WKS</a><br>"),
           li("<a href=\"$url&sub=pc\">Show Prn Class</a><br>"),
+          li("<a href=\"$url&sub=hinfo\">Show HINFO</a><br>"),
           p,li("<a href=\"$url&sub=addmx\">Add MX</a>"),
           li("<a href=\"$url&sub=addwks\">Add WKS</a>"),
-          li("<a href=\"$url&sub=addpc\">Add Prn Class</a>");
+          li("<a href=\"$url&sub=addpc\">Add Prn Class</a>"),
+          li("<a href=\"$url&sub=addhinfo\">Add HINFO</a>");
   } elsif ($menu eq 'groups') {
     $url.='?menu=groups';
     print p,li("<a href=\"$url\">Groups</a>"),
@@ -2466,7 +2501,7 @@ sub form_check_field($$$) {
       unless ($value =~ /^\@[a-zA-Z]+$/);
   } elsif ($type eq 'hinfo') {
     return 'Valid HINFO required!'
-      unless ($value =~ /^[A-Z]+([A-Z0-9-]+[A-Z0-9])?$/);
+      unless ($value =~ /^[A-Z]+([A-Z0-9-\+]+)?$/);
   } else {
     return "unknown typecheck for form_check_field: $type !";
   }
@@ -2498,7 +2533,7 @@ sub form_get_defaults($) {
 #
 sub form_check_form($$$) {
   my($prefix,$data,$form) = @_;
-  my($formdata,$i,$j,$k,$type,$p,$p2,$tag,$list,$id,$ind,$f,$new,$tmp);
+  my($formdata,$i,$j,$k,$type,$p,$p2,$tag,$list,$id,$ind,$f,$new,$tmp,$val,$e);
 
   $formdata=$form->{data};
   for $i (0..$#{$formdata}) {
@@ -2506,6 +2541,17 @@ sub form_check_form($$$) {
     $type=$rec->{ftype};
     $tag=$rec->{tag};
     $p=$prefix."_".$tag;
+
+    if ($rec->{iff}) {
+      $val=param($prefix."_".${$rec->{iff}}[0]);
+      $e=${$rec->{iff}}[1];
+      next unless ($val =~ /^($e)$/);
+    }
+    if ($rec->{iff2}) {
+      $val=param($prefix."_".${$rec->{iff2}}[0]);
+      $e=${$rec->{iff2}}[1];
+      next unless ($val =~ /^($e)$/);
+    }
 
     if ($type == 1) {
       #print "<br>check $p ",param($p);
@@ -2573,7 +2619,7 @@ sub form_check_form($$$) {
       return 3 unless (${$rec->{enum}}{param($p)});
       $data->{$tag}=param($p);
     }
-    elsif ($type == 6 || $type == 7) {
+    elsif ($type == 6 || $type == 7 || $type == 10) {
       return 6 unless (param($p) =~ /^-?\d+$/);
       $data->{$tag}=param($p);
     }
@@ -2646,7 +2692,7 @@ sub form_magic($$$) {
 	}
 	param($p1."_count",$#{$a});
       }
-      elsif ($rec->{ftype} == 6 || $rec->{ftype} == 7) {
+      elsif ($rec->{ftype} == 6 || $rec->{ftype} == 7 || $rec->{ftype} == 10) {
 	param($p1,$val);
       }
       else {
@@ -2823,6 +2869,13 @@ sub form_magic($$$) {
     }
     elsif ($rec->{ftype} == 9) {
       # do nothing...
+    } elsif ($rec->{ftype} == 10) {
+      get_group_list($serverid,\%lsth,\@lst);
+      get_group(param($p1),\%tmpl_rec);
+      print "<TR>",td($rec->{name}),"<TD>",
+	    popup_menu(-name=>$p1,-values=>\@lst,
+	                  -default=>param($p1),-labels=>\%lsth),
+            "</TD></TR>";
     }
     elsif ($rec->{ftype} == 101) {
       undef @q; undef @lst; undef %lsth;
@@ -2940,12 +2993,14 @@ sub display_form($$) {
 	print Tr,td($ip),td($ipinfo),td($com);
       }
       print "</TABLE></TD>\n";
-    } elsif (($rec->{ftype} == 6) || ($rec->{ftype} ==7)) {
+    } elsif (($rec->{ftype} == 6) || ($rec->{ftype} ==7) ||
+	     ($rec->{ftype} == 10)) {
       print "<TR>",td($rec->{name});
       if ($val > 0) { 
 	print "<TD>";
 	print_mx_template($data->{mx_rec}) if ($rec->{ftype}==6);
 	print_wks_template($data->{wks_rec}) if ($rec->{ftype}==7);
+	print $data->{grp_rec}->{name} if ($rec->{ftype}==10);
 	print "</TD>";
       } else { print td("Not selected"); }
       print "</TR>";
@@ -2977,7 +3032,7 @@ sub print_mx_template($) {
   my($i,$l);
 
   return unless ($rec);
-  print "<TABLE WIDTH=\"95%\" BGCOLOR=\"#aaff00\"><TR><TD colspan=\"2\">",
+  print "<TABLE WIDTH=\"95%\" BGCOLOR=\"#aaeae0\"><TR><TD colspan=\"2\">",
         $rec->{name},"</TH></TR>";
   $l=$rec->{mx_l};
   for $i (1..$#{$l}) {
@@ -2991,7 +3046,7 @@ sub print_wks_template($) {
   my($i,$l);
 
   return unless ($rec);
-  print "<TABLE WIDTH=\"95%\" BGCOLOR=\"#aaff00\"><TR><TD colspan=\"2\">",
+  print "<TABLE WIDTH=\"95%\" BGCOLOR=\"#aaeae0\"><TR><TD colspan=\"2\">",
         $rec->{name},"</TD></TR>";
   $l=$rec->{wks_l};
   for $i (1..$#{$l}) {
@@ -3000,7 +3055,9 @@ sub print_wks_template($) {
   print "</TABLE>";
 }
 
+
 #####################################################################
+
 sub error($) {
   my($msg)=@_;
 
