@@ -26,7 +26,7 @@ require Exporter;
 	     html_error2
 	    );
 
-use CGI;
+use CGI qw/:standard/;
 use Time::Local;
 use Sauron::DB;
 use Sauron::Util;
