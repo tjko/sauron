@@ -631,7 +631,7 @@ sub get_server($$) {
 		    "multiple_cnames,rfc2308_type1,authnxdomain," .
 		    "df_port,df_max_delay,df_max_uupdates,df_mclt,df_split,".
 		    "df_loadbalmax,hostaddr,".
-		    "cdate,cuser,mdate,muser",
+		    "cdate,cuser,mdate,muser,lastrun",
 		    $id,$rec,"id");
   return -1 if ($res < 0);
   fix_bools($rec,"no_roots,zones_only");

@@ -121,14 +121,22 @@ if (defined $opt_pending) {
     # check all servers...
 
     unless ($opt_quiet) {
-      print "Pending host record modifications:\n\n",
-	    "Server                                             Hosts\n",
-	    "------------------------------------------------   -----\n";
+      print "Pending changes modifications:\n\n",
+	    "Server                                             Hosts Zones\n",
+	    "------------------------------------------------   ----- -----\n";
     }
     for $i (0..$#servers) {
       $serverid=$servers[$i];
       next if ($serverid < 0);
       $server=$servers_h{$serverid};
+      get_server($serverid,\%server);
+      $lastrun=($server{lastrun} > 0 ? $server{lastrun} : 0);
+
+      $modifiedserver=( ($server{cdate} > $server{lastrun}) ||
+			($server{mdate} > $server{lastrun}) ? 1 : 0);
+      db_query("SELECT COUNT(id) FROM zones WHERE server=$serverid AND " .
+	       "(cdate > $lastrun OR mdate > $lastrun)",\@q);
+      $modifiedzones=$q[0][0];
 
       db_query("SELECT COUNT(id) FROM zones " .
 	       "WHERE server=$serverid AND rdate > serial_date",\@q);
@@ -137,8 +145,10 @@ if (defined $opt_pending) {
 	       "WHERE z.server=$serverid AND h.zone=z.id " .
 	       " AND (h.mdate > z.serial_date OR h.cdate > z.serial_date);",
 	       \@q);
-      next if ($opt_quiet && $q[0][0] < 1 && $removedhosts==0);
-      printf "%-50s %d\n",substr($server,0,50),$q[0][0]+$removedhosts;
+      next if ($opt_quiet && $q[0][0] < 1 && $removedhosts==0 &&
+	       $modifiedzones==0 && $modifiedserver==0);
+      printf "%-50s %5d %5d %s\n",substr($server,0,50),$q[0][0]+$removedhosts,
+	      $modifiedzones,($modifiedserver ? 'server' : '');
     }
     exit;
   }
@@ -149,15 +159,24 @@ if (defined $opt_pending) {
   $totalcount=0;
   $serverid=get_server_id($opt_pending);
   fatal("cannot find server '$opt_pending'") unless ($serverid > 0);
-  print "Pending host modifications for server: $opt_pending (id=$serverid)\n"
+  get_server($serverid,\%server);
+  $lastrun=$server{lastrun};
+  $modifiedserver=( ($server{cdate} > $server{lastrun}) ||
+		    ($server{mdate} > $server{lastrun}) ? 1 : 0);
+  print "Pending modifications for server: $opt_pending (id=$serverid)\n"
     unless ($opt_quiet);
+  print "Server record modified.\n" if ($modifiedserver && not $opt_quiet);
+  $totalcount+=1 if ($modifiedserver);
 
   $zones=get_zone_list($serverid,'M','');
   for $i (0..$#{$zones}) {
     $zoneid=$$zones[$i][1];
 
-    db_query("SELECT serial_date,rdate FROM zones WHERE id=$zoneid",\@q);
+    db_query("SELECT serial_date,rdate,cdate,mdate " .
+	     "FROM zones WHERE id=$zoneid",\@q);
     $removedhosts=($q[0][1] > 0 && ($q[0][1] > $q[0][0]) ? $q[0][1] : 0);
+    $zonemodified=($q[0][2] > 0 && ($q[0][2] > $lastrun) ? $q[0][2] : 0);
+    $zonemodified=$q[0][3] if ($q[0][3] > 0 && ($q[0][3] > $lastrun));
 
     db_query("SELECT h.domain,h.cdate,h.mdate,h.cuser,h.muser " .
 	     "FROM hosts h, zones z " .
@@ -165,12 +184,16 @@ if (defined $opt_pending) {
 	     " AND (h.mdate > z.serial_date OR h.cdate > z.serial_date) " .
 	     "ORDER BY h.domain;",\@q);
     $count=@q;
-    next unless ($count > 0 || $removedhosts > 0);
+    next unless ($count > 0 || $removedhosts > 0 || $zonemodified > 0);
     $totalcount+=$count;
     $totalcount+=1 if ($removedhosts > 0);
+    $totalcount+=1 if ($zonemodified > 0);
     next if ($opt_quiet);
     print "Zone: $$zones[$i][0] ($count)\n";
 
+    printf "%-30s %6s  %-20s  %s\n",
+           '<zone changes>','Edit',localtime($zonemodified).'',''
+	     if ($zonemodified > 0);
     printf "%-30s %6s  %-20s  %s\n",
            '<removed host(s)>','Delete',localtime($removedhosts).'',''
 	     if ($removedhosts > 0);

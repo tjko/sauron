@@ -13,6 +13,8 @@
 CREATE TABLE servers ( 
 	id		SERIAL PRIMARY KEY, /* unique ID */
 	name		TEXT NOT NULL CHECK(name <> ''), /* server name */
+	lastrun		INT DEFAULT -1,       /* last time server (DNS)
+						 configuration was generated */
 
 	zones_only	BOOL DEFAULT false, /* if true, generate named.zones 
 					       file otherwise generate 

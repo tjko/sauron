@@ -50,7 +50,6 @@ sub expand_zonefile_path($$) {
 
   if (($tag) = ($path =~ /(\%N+)/)) {
     $tmp = substr($val,0,length($tag)-1);
-    print "tag='$tag' '$tmp'\n";
     $path =~ s/$tag/$tmp/g;
   }
 
@@ -1084,6 +1083,11 @@ sub make_bind() {
 
   # mail notification to users...
   mail_notifications() if ($mailnotify_mode);
+
+  # update lastrun record in server record
+  fatal("Failed to update server record (lastrun)!")
+    if (update_record('servers',{id=>$serverid,lastrun=>time()}) < 0);
+
 }
 
 
@@ -1361,12 +1365,12 @@ sub make_dhcp() {
       $netname = 'CHAOS' if ($vlan < 1 || $netname eq '');
       print DHCPFILE "shared-network \"$netname\" {\n";
       undef @vlan_dhcp;
-      db_query("SELECT d.dhcp FROM dhcp_entries d " .                          
+      db_query("SELECT d.dhcp FROM dhcp_entries d " .
 	       "WHERE d.type=6 AND d.ref=$vlan ORDER BY d.id",\@vlan_dhcp);
-      for $i (0..$#vlan_dhcp) {                                                
-	$vlan_dhcp[$i][0].=';' unless ($vlan_dhcp[$i][0] =~ /[;\{\}]\s*$/);   
-	print DHCPFILE "\t$vlan_dhcp[$i][0]\n";                               
-      }                      
+      for $i (0..$#vlan_dhcp) {
+	$vlan_dhcp[$i][0].=';' unless ($vlan_dhcp[$i][0] =~ /[;\{\}]\s*$/);
+	print DHCPFILE "\t$vlan_dhcp[$i][0]\n";
+      }
       undef @q;
       for $i (0..$#subnets) {
 	push ( @q, $subnets[$i])  if ($subnets[$i][3] eq $vlan);

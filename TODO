@@ -7,10 +7,14 @@ general:
         - add database format version check in db_connect{,2}
 	- change database routines to be less PostgreSQL dependant
 	- add DNSSEC (tsig) support
+	- add ACL (BIND) support
 	- allow '*' in hostnames
 	- add support alternative way of specifying database connection
           (DB_{DSN,USER,PASS})
 	- method for cleaning up ever-growing history/lastlog tables
+	- status command should detect server/zone modifications in
+	  addition to host changes
+	  
 
 import:
 	- real parser for both imports
@@ -30,6 +34,12 @@ sauron.cgi:
 	- advertise "Save settings" feature if user doesn't have any
           default settings	
 	- module support for easily extending user interface
+	- search by asset tag.... (other fields too?)
+	- allow user to list her previous sessions (similar to
+          "last" command-line command)
+        - more detailed logging (especially  host add/edit/delete)
+	- "toggle" button to toggle between host<-->hostreservation
+          
 
 browser.cgi:
 	- optional user authentication support
@@ -39,7 +49,7 @@ browser.cgi:
 
 next database format (1.2):
 	- hosts: change ether_key to server wide (instead of just zone)
-
+	- IPv6 stuff
 
 
 

@@ -11,6 +11,9 @@ ALTER TABLE nets ADD COLUMN dummy BOOL;
 ALTER TABLE nets ALTER COLUMN dummy SET DEFAULT false;
 UPDATE nets SET dummy=false;
 
+/* servers */
+ALTER TABLE servers ADD COLUMN lastrun INT;
+ALTER TABLE servers ALTER COLUMN lastrun SET DEFAULT -1;
 
 
 UPDATE settings SET value='1.2' where setting='dbversion';
