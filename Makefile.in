@@ -96,7 +96,8 @@ MODULES = Sauron/Util.pm Sauron/DB.pm Sauron/BackEnd.pm Sauron/CGIutil.pm \
 CONTRIB_FILES = contrib/additional-ether-codes.txt \
 		contrib/Ethernet.txt \
 		contrib/named.root \
-		contrib/htmldoc-sql
+		contrib/htmldoc-sql \
+		contrib/kerberos-auth
 
 CGIFILES = cgi/sauron.cgi cgi/browser.cgi
 LOGOFILES = icons/logo.png icons/logo_large.png
