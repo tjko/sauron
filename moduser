@@ -8,7 +8,7 @@
 require 5;
 use Getopt::Long;
 use Term::ReadKey;
-use strict;
+
 
 my ($PG_DIR,$PG_NAME) = ($0 =~ /^(.*\/)(.*)$/);
 $0 = $PG_NAME;
@@ -23,14 +23,6 @@ sub fatal($) {
   exit(1);
 }
 
-my(
-   $opt_user,$opt_help,$opt_listusers,$opt_name,$opt_passwd,$opt_lock,
-   $opt_unlock,$opt_list,$opt_superuser,$opt_del,$opt_delall,$opt_add,
-   $opt_edit,
-   $id,$pwd,$res,$superuser,$salt,$status,$type,$mode,$ref,
-   $user,$mdate,$result,%addmodes,
-   $tmp,$i,@d,@q
-  );
 
 $user = (getpwuid($<))[0];
 $mdate = db_timestamp_str();
@@ -39,11 +31,12 @@ $mdate = db_timestamp_str();
 
 ##############################################
 
-$result = GetOptions("help|h","list","add:s","delall","del=s","passwd:s",
-		     "name=s","superuser=s","lock","unlock","edit",
-		     "listusers");
+$result = GetOptions("help|h","list!","add:s","delall!","del=s","passwd:s",
+		     "name=s","superuser=s","lock!","unlock!","edit!",
+		     "listusers!");
 
 $opt_user=$ARGV[0];
+
 
 if ($opt_help || ($opt_user eq '' &&  $opt_listusers eq '')) {
   print "syntax: $0 <username> [--list|add|del|delall|edit]\n" ,

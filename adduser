@@ -8,7 +8,6 @@
 require 5;
 use Getopt::Long;
 use Term::ReadKey;
-use strict;
 
 my ($PG_DIR,$PG_NAME) = ($0 =~ /^(.*\/)(.*)$/);
 $0 = $PG_NAME;
@@ -27,7 +26,6 @@ sub fatal($) {
 ##############################################
 
 my(
-   $opt_help,$opt_user,$opt_name,$opt_passwd,$opt_superuser,
    $result,$superuser,$user,$salt,$pwd,
    $i,$t,$r,$res
   );
