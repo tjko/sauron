@@ -14,6 +14,7 @@ use Sauron::DB;
 use Sauron::Util;
 use Sauron::BackEnd;
 use Sauron::CGIutil;
+use Sauron::Sauron;
 
 $CGI::DISABLE_UPLOADS = 1; # no uploads
 $CGI::POST_MAX = 100000; # max 100k posts
@@ -22,27 +23,10 @@ my ($PG_DIR,$PG_NAME) = ($0 =~ /^(.*\/)(.*)$/);
 $0 = $PG_NAME;
 
 $SAURON_CGI_VER = ' $Revision$ $Date$ ';
-$SAURON_CHARSET='iso-8859-1' unless ($SAURON_CHARSET);
-$SAURON_PWD_MODE = 0 unless (defined($SAURON_PWD_MODE));
-$ALEVEL_VLANS = 5 unless (defined($ALEVEL_VLANS));
-$ALEVEL_RESERVATIONS = 1 unless (defined($ALEVEL_RESERVATIONS));
-$ALEVEL_PING = 1 unless (defined($ALEVEL_PING));
-$ALEVEL_TRACEROUTE = 1 unless (defined($ALEVEL_TRACEROUTE));
-$ALEVEL_HISTORY = 1 unless (defined($ALEVEL_HISTORY));
 #$|=1;
 $debug_mode = 0;
 
-if (-f "/etc/sauron/config") {
-  $conf_dir='/etc/sauron';
-}
-elsif (-f "/usr/local/etc/sauron/config") {
-  $conf_dir='/usr/local/etc/sauron';
-}
-else {
-  die("cannot find configuration file!");
-}
-
-do "$conf_dir/config" || die("cannot load configuration!");
+load_config();
 
 %check_names_enum = (D=>'Default',W=>'Warn',F=>'Fail',I=>'Ignore');
 %yes_no_enum = (D=>'Default',Y=>'Yes', N=>'No');
@@ -1133,7 +1117,7 @@ if ($state{'auth'} ne 'yes' || $pathinfo eq '/login') {
   login_form("Welcome (again)",$scookie);
 }
 
-if ((time() - $state{'last'}) > $USER_TIMEOUT) {
+if ((time() - $state{'last'}) > $SAURON_USER_TIMEOUT) {
   logmsg("notice","connection timed out for $remote_addr " .
 	 $state{'user'});
   update_lastlog($state{uid},$state{sid},3,$remote_addr,$remote_host);
@@ -3172,9 +3156,9 @@ sub login_menu() {
     }
   }
   elsif ($sub eq 'who') {
-    $timeout=$USER_TIMEOUT;
+    $timeout=$SAURON_USER_TIMEOUT;
     unless ($timeout > 0) {
-      print h2("error: $USER_TIMEOUT not defined in configuration!");
+      print h2("error: $SAURON_USER_TIMEOUT not defined in configuration!");
       return;
     }
     undef @wholist;
@@ -3348,15 +3332,16 @@ sub about_menu() {
 
     print "<P><BR><CENTER>",
         "<a href=\"http://sauron.jyu.fi/\" target=\"sauron\">",
-        "<IMG src=\"$ICON_PATH/logo_large.png\" border=\"0\" alt=\"Sauron\">",
-          "</a><BR>Version $VER<BR>(CGI $SAURON_CGI_VER)<P>",
-          "a free DNS & DHCP management system<p>",
-          "<hr noshade width=\"40%\"><b>Author:</b>",
-          "<br>Timo Kokkonen <i>&lt;tjko\@iki.fi&gt;</i>",
-          "<hr width=\"30%\"><b>Logo Design:</b>",
-          "<br>Teemu Lähteenmäki <i>&lt;tola\@iki.fi&gt;</i>",
-          "<hr noshade width=\"40%\"><p>",
-	  "</CENTER><BR><BR>";
+        "<IMG src=\"$SAURON_ICON_PATH/logo_large.png\" border=\"0\" ",
+	"  alt=\"Sauron\">",
+        "</a><BR>Version $VER<BR>(CGI $SAURON_CGI_VER)<P>",
+        "a free DNS & DHCP management system<p>",
+        "<hr noshade width=\"40%\"><b>Author:</b>",
+        "<br>Timo Kokkonen <i>&lt;tjko\@iki.fi&gt;</i>",
+        "<hr width=\"30%\"><b>Logo Design:</b>",
+        "<br>Teemu Lähteenmäki <i>&lt;tola\@iki.fi&gt;</i>",
+        "<hr noshade width=\"40%\"><p>",
+	"</CENTER><BR><BR>";
   }
 }
 
@@ -3603,8 +3588,8 @@ sub login_auth() {
 	print "<TABLE border=0 cellspacing=0 bgcolor=\"#efefff\" " .
 	      " width=\"70%\">",
 	      "<TR bgcolor=\"#002d5f\">",
-	      "<td width=\"80\"><IMG src=\"$ICON_PATH/logo.png\" alt=\"\" " .
-		" width=\"80\" height=\"70\" border=0></td>",
+	      "<td width=\"80\"><IMG src=\"$SAURON_ICON_PATH/logo.png\" " .
+		" alt=\"\" width=\"80\" height=\"70\" border=0></td>",
 	      "<td valign=\"bottom\" align=\"left\">",
 	      "<font color=\"white\"> &nbsp; Sauron v".sauron_version().
 	      "</font></td>",
@@ -3663,7 +3648,7 @@ sub login_auth() {
   print "</TABLE>\n" unless ($frame_mode);
   print end_html();
   save_state($scookie);
-  fix_utmp($USER_TIMEOUT*2);
+  fix_utmp($SAURON_USER_TIMEOUT*2);
   exit;
 }
 
@@ -3677,14 +3662,14 @@ sub top_menu($) {
     print '<TABLE border="0" cellspacing="0" width="100%">',
           '<TR bgcolor="#002d5f"><TD rowspan=2>',
           '<a href="http://sauron.jyu.fi/" target="sauron">',
-          '<IMG src="' .$ICON_PATH .
+          '<IMG src="' .$SAURON_ICON_PATH .
 	  '/logo.png" width="80" height="70" border="0" alt=""></a></TD>',
           '<TD colspan=2><FONT size=+2 color="white">Sauron</WHITE></TD></TR>',
 	  '<TR bgcolor="#002d5f" align="left" valign="center">',
           '<TD><FONT color="white">';
   } else {
     print '<a href="http://sauron.jyu.fi/" target="sauron">',
-          '<IMG src="' .$ICON_PATH .
+          '<IMG src="' .$SAURON_ICON_PATH .
           '/logo.png" width="80" height="70" border="0" alt=""></a>';
 
     print '<TABLE border="0" cellspacing="0" width="100%">';
