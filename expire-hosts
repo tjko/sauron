@@ -32,6 +32,7 @@ if ($opt_help || @ARGV < 1) {
     "\t\t\t\tlast <days> days (default: 90)\n",
     "\t--norecord\t\tonly expire hosts with no recorded dhcp activity\n",
     "\t--edate=<dd-mm-yyy>\tset hosts to expire on this date (default: now)\n",
+    "\t--verbose\t\tdisplay more verbose output\n",
     "\n",
     "\t--commit\t\tcommit changes (w/o this NO changes are made)\n";
   print "\n" if ($opt_help); # to get rid of warnings :)
