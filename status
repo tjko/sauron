@@ -58,6 +58,7 @@ $VER=sauron_version();
 if ($argcount < 1 && (! $opt_quiet)) {
   print "Sauron v$VER status\n\n";
   printf "Database connection:   %s\n", ($db_ok?"OK":"ERROR");
+  printf "Database version:      %s\n", sauron_db_version();
 }
 
 exit unless ($db_ok);
@@ -157,23 +158,28 @@ unless ($opt_quiet) {
     ($q[0][0] ne '' ? "Disabled ($q[0][0])":"Enabled");
 
   print "\n";
-  printf("%-8s %-22s %-15s %-6s %s\n",'USER','NAME','FROM','IDLE','LOGIN');
 }
 
 
 $timeout=$USER_TIMEOUT;
 $timeout=3600 unless ($timeout > 0);
 $t=time;
-
-
 get_who_list(\@who,$timeout);
-for $i(0..$#who) {
-  printf("%-8s %-22s %-15s %-6s %s\n",
-	 $who[$i][0],$who[$i][1],$who[$i][2],$who[$i][3],$who[$i][4]);
+
+if (@who > 0) {
+  printf("%-8s %-22s %-15s %-6s %s\n",'USER','NAME','FROM','IDLE','LOGIN')
+    unless ($opt_quiet);
+
+  for $i(0..$#who) {
+    printf("%-8s %-22s %-15s %-6s %s\n",
+	   $who[$i][0],$who[$i][1],$who[$i][2],$who[$i][3],$who[$i][4]);
+  }
+} else {
+  print "No users currently logged in.\n";
 }
 
-
-exit;
+print "\n";
+exit(0);
 
 # eof
 

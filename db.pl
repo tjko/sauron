@@ -7,8 +7,8 @@ use Pg;
 
 sub sql_print_result($) {
   my($res)=@_;
-  
-  my %t = ( 0, 'PGRES_EMPTY_QUERY', 
+
+  my %t = ( 0, 'PGRES_EMPTY_QUERY',
 	 1, 'PGRES_COMMAND_OK',
 	 2, 'PGRES_TUPLES_OK',
 	 3, 'PGRES_COPY_OUT',
@@ -160,13 +160,13 @@ sub db_build_list_str($) {
     $f =~ s/\"/\\\\\"/g;
     $tmp.="\"$f\"";
   }
-  
+
   return $tmp;
 }
 
 sub db_encode_list_str($) {
   my($list) = @_;
-  
+
   return "NULL" unless ($list);
   return "NULL" if (@{$list}<1);
   return "'{" . db_build_list_str($list) . "}'";
@@ -253,7 +253,7 @@ sub db_insert($$$) {
     $res=db_exec($str);
     return -2 if ($res < 0);
   }
-  
+
   return 0;
 }
 

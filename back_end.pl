@@ -14,6 +14,12 @@ sub sauron_version() {
   return "0.5.0";
 }
 
+sub sauron_db_version() {
+  my(@q);
+  db_query("SELECT value FROM settings WHERE key='dbversion';",\@q);
+  return ($q[0][0] =~ /^\d/ ? $q[0][0] : 'ERROR');
+}
+
 sub set_muser($) {
   my($usr)=@_;
   $muser=$usr;
@@ -1825,10 +1831,51 @@ sub update_user($) {
   delete $rec->{cuser};
   $rec->{mdate}=time;
   $rec->{muser}=$muser;
- 
+
   return update_record('users',$rec);
 }
 
+sub add_user($) {
+  my($rec) = @_;
+
+  $rec->{cuser}=$muser;
+  $rec->{cdate}=time;
+
+  $rec->{flags}=0;
+  $rec->{flags}|=0x01 if ($rec->{email_notify});
+  delete $rec->{email_notify};
+
+  return add_record('users',$rec);
+}
+
+sub delete_user($) {
+  my($id) = @_;
+  my($res);
+
+  return -100 unless ($id > 0);
+
+  db_begin();
+
+  # user_rights
+  $res=db_exec("DELETE FROM user_rights WHERE type=2 AND ref=$id;");
+  if ($res < 0) { db_rollback(); return -1; }
+  # utmp
+  $res=db_exec("DELETE FROM utmp WHERE uid=$id;");
+  if ($res < 0) { db_rollback(); return -2; }
+
+  $res=db_exec("DELETE FROM users WHERE id=$id;");
+  if ($res < 0) { db_rollback(); return -3; }
+
+  return db_commit();
+}
+
+sub get_user_group_id($) {
+  my($group)=@_;
+  my(@q);
+
+  db_query("SELECT id FROM user_groups WHERE name='$group'",\@q);
+  return ($q[0][0] > 0 ? $q[0][0] : -1);
+}
 
 ############################################################################
 # nets functions

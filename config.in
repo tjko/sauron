@@ -8,7 +8,7 @@ $VER = "0.5";
 # general configuration options
 
 $LOG_DIR = "/var/log/";
-$PROG_DIR = "/opt/sauron/";
+$PROG_DIR = "/usr/local/sauron/";
 
 #########################################################################
 # WWW interface (sauron.cgi) configuration options 
@@ -34,8 +34,9 @@ $ALEVEL_VLANS = 5;  # authorization level needed to see vlan info
 
 # $SAURON_DTDHACK = 1;
 
-# by default use secure cookies (set 0, if you need to use plain http)
-$SAURON_SECURE_COOKIES = 1;
+# Set this 1 to enable secure cookies. Note, this may cause problems
+# with some broken browsers so it's not enabled by default.
+$SAURON_SECURE_COOKIES = 0;
 
 #########################################################################
 # misc

@@ -7,7 +7,6 @@
 #
 require 5;
 use Getopt::Long;
-use Term::ReadKey;
 
 my ($PG_DIR,$PG_NAME) = ($0 =~ /^(.*\/)(.*)$/);
 $0 = $PG_NAME;
@@ -21,8 +20,9 @@ if (-r "/etc/sauron/config") {
 }
 
 do "$config_file" || die("cannot load config: $config_file");
-do "$PG_DIR/util.pl";
-do "$PG_DIR/db.pl";
+do "$PROG_DIR/util.pl";
+do "$PROG_DIR/db.pl";
+do "$PROG_DIR/back_end.pl";
 
 sub fatal($) {
   my ($msg) = @_;
@@ -41,7 +41,7 @@ my(
 $result = GetOptions("user=s","help|h");
 
 if ($opt_help) {
-  print "syntax: $0 [--user=<username>] [--help]\n";
+  print "syntax: $0 [--help] [--user=<username>]\n";
   exit(0);
 }
 
@@ -50,43 +50,36 @@ db_connect();
 
 unless ($opt_user) {
   print "Enter user to be deleted: ";
-  $opt_user = ReadLine 0;
-  chomp $opt_user;
+  chomp($opt_user = <STDIN>);
   $i=1;
 }
 fatal("Invalid username '$opt_user'!") unless ($opt_user =~ /^\S+$/);
 
 
-undef @q;
-db_query("SELECT name,superuser,comment,id FROM users " .
-	 "WHERE username='$opt_user';",\@q);
 
-fatal("Cannot find user '$opt_user' from users table!") if (@q < 1);
-$id=$q[0][3];
+fatal("Cannot find user '$opt_user' from users table!")
+	  if (get_user($opt_user,\%user) < 0);
+$id=$user{id};
 
 if ($i) { # ask confirmation only in interactive session...
   print "\t Username: $opt_user (id=$id)\n",
-        "\t Longname: $q[0][0]\n",
-        "\tsuperuser: $q[0][1]\n";
-  print "    comment: $q[0][2]\n" if ($q[0][2] ne '');
+        "\t Longname: $user{name}\n",
+        "\tsuperuser: " . ($user{superuser} eq 't' ? 'Yes' : 'No') ."\n",
+	"\t    email; $user{email}\n",
+        "\t  comment: $user{comment}\n";
 
   print "Delete this user [y/n]?";
-  $t=ReadLine 0;
-  chomp $t;
+  chomp ($t=<STDIN>);
   unless ($t eq 'y' || $t eq 'Y') {
     print "User not deleted!\n";
     exit(1);
   }
 }
 
+fatal("Cannot delete user from users table!") if (delete_user($id) < 0);
 
-db_begin();
-$res=db_exec("DELETE FROM user_rights WHERE ref=$id;");
-fatal("Cannot delete user rights from user_rights table!") if ($res < 0);
-$res=db_exec("DELETE FROM users WHERE id=$id;");
-fatal("Cannot delete user from users table!") if ($res < 0);
-fatal("commit failed!") if (db_commit() < 0);
 
 print "User $opt_user deleted succesfully.\n";
-exit;
+exit(0);
 
+# eof

@@ -21,12 +21,9 @@ if (-r "/etc/sauron/config") {
 }
 
 do "$config_file" || die("cannot load config: $config_file");
-do "$PG_DIR/util.pl";
-do "$PG_DIR/db.pl";
-
-
-$cdate = time;
-$user = (getpwuid($<))[0];
+do "$PROG_DIR/util.pl";
+do "$PROG_DIR/db.pl";
+do "$PROG_DIR/back_end.pl";
 
 sub fatal($) {
   my ($msg) = @_;
@@ -37,9 +34,14 @@ sub fatal($) {
 ##############################################
 
 my(
-   $result,$superuser,$user,$salt,$pwd,
-   $i,$t,$r,$res
+   $result,$superuser,$user,$salt,$pwd,$cdate,
+   $i,$t,$r,$res,%user
   );
+
+
+$cdate = time;
+$user = (getpwuid($<))[0];
+set_muser($user);
 
 $result = GetOptions("user=s","superuser","help|h","passwd=s","name=s",
 		     "group=s","comment=s","email=s");
@@ -57,24 +59,20 @@ db_connect();
 
 unless ($opt_user) {
   print "Enter username: ";
-  $opt_user = ReadLine 0;
-  chomp $opt_user;
+  chomp ($opt_user = ReadLine 0);
   $i=1;
 }
 fatal("Invalid username '$opt_user'!") unless ($opt_user =~ /^\S+$/);
 
 unless ($opt_group) {
   print "Enter group name (empty for none): ";
-  $opt_group = ReadLine 0;
-  chomp $opt_group;
+  chomp($opt_group = ReadLine 0);
   $i=1;
 }
 
 if ($opt_group) {
-  undef @q;
-  db_query("SELECT id FROM user_groups WHERE name='$opt_group';",\@q);
-  fatal("Cannot find group '$opt_group'") unless (@q > 0);
-  $gid=$q[0][0];
+  $gid=get_user_group_id($opt_group);
+  fatal("Cannot find group '$opt_group'") unless ($gid > 0);
 } else {
   $gid=-1;
 }
@@ -82,22 +80,19 @@ if ($opt_group) {
 
 unless ($opt_name) {
   print "Enter user description (full name): ";
-  $opt_name = ReadLine 0;
-  chomp $opt_name;
+  chomp($opt_name = ReadLine 0);
   $i=1;
 }
 
 unless ($opt_email) {
   print "Enter user email address: ";
-  $opt_email = ReadLine 0;
-  chomp $opt_email;
+  chomp($opt_email = ReadLine 0);
   $i=1;
 }
 
 unless ($opt_comment) {
   print "Enter optional user info: ";
-  $opt_comment = ReadLine 0;
-  chomp $opt_comment;
+  chomp($opt_comment = ReadLine 0);
   $i=1;
 }
 
@@ -124,25 +119,30 @@ if ($i) { # ask confirmation only in interactive session...
   "\tsuperuser: $superuser\n",
   "Add this user [y/n]?";
 
-  $t=ReadLine 0;
-  chomp $t;
+  chomp($t=ReadLine 0);
   unless ($t eq 'y' || $t eq 'Y') {
     print "User not added!\n";
     exit(1);
   }
 }
 
-$res=db_exec("INSERT INTO users " .
-     "(username,password,name,superuser,muser,cuser,cdate,gid,comment," .
-     " email) " .
-     "VALUES('$opt_user','$pwd','$opt_name',$superuser," .
-     " '$user','$user',$cdate,$gid,'$opt_comment','$opt_email');");
+$user{username}=$opt_user;
+$user{password}=$pwd;
+$user{name}=$opt_name;
+$user{superuser}=$superuser;
+$user{email}=$opt_email;
+$user{comment}=$opt_comment;
+$user{gid}=$gid;
 
-fatal("Cannot add user to users table! (user already exists?)\n" . 
-      db_errormsg()) if ($res < 0);
+fatal("Cannot add user to users table! (user already exists?)\n" .
+      db_errormsg()) if (add_user(\%user) < 0);
 
 print "User $opt_user added succesfully.\n";
 print "Remember to give user some rights with moduser command.\n"
-	  if ($superuser ne 'true');
-exit;
+	  if (($superuser ne 'true') and ($gid < 1));
+
+exit(0);
+
+# eof
+
 
