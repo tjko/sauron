@@ -18,7 +18,7 @@ $0 = $PG_NAME;
 if (-r "/etc/sauron/config") {
   $config_file="/etc/sauron/config";
 } elsif (-r "/usr/local/etc/sauron/config") {
-  $config_file="/usr/local/etc/sauron/config"; 
+  $config_file="/usr/local/etc/sauron/config";
 } else {
   die("cannot find config file in /etc/sauron or /usr/local/etc/sauron");
 }
@@ -32,6 +32,7 @@ $printer_conf=0;
 $SAURON_DHCP2_MODE = 0 unless (defined($SAURON_DHCP2_MODE));
 $SAURON_MAILER_ARGS = '' unless (defined($SAURON_MAILER_ARGS));
 $dhcp2_mode = ($SAURON_DHCP2_MODE ? 1 : 0);
+$REMOVE_EXPIRED_DELAY = 30 unless ($REMOVE_EXPIRED_DELAY > 0);
 
 %yes_no_enum = (D=>'',Y=>'yes',N=>'no');
 %check_names_enum = (D=>'',W=>'warn',F=>'fail',I=>'ignore');
@@ -56,9 +57,11 @@ $failover_peer_name = 'foobar';
 sub clean_up() {
   my(@q,$i,$count,$t);
 
-  print "Cleaning up database...\n";
+  print "Cleaning up database...\n",
+        "(removing hosts that have been expired more than ",
+	"$REMOVE_EXPIRED_DELAY days)\n";
 
-  $t=$time_now_ticks - (86400 * 30);
+  $t=$time_now_ticks - (86400 * $REMOVE_EXPIRED_DELAY);
 
   db_query("SELECT h.id,h.expiration,h.domain,h.type " .
 	   "FROM hosts h, zones z " .

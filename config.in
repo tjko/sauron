@@ -24,6 +24,9 @@ $USER_TIMEOUT = 3600;
 $ALEVEL_VLANS = 5;  # authorization level needed to see vlan info 
                     # in web interface
 
+$REMOVE_EXPIRED_DELAY = 30;  # sauron --clean will remove all hosts that
+		             # have been expired longer than days defined here
+
 # $SAURON_MAILER = '/usr/sbin/sendmail';
 # $SAURON_MAILER_ARGS = '-t'; 
 # $SAURON_MAIL_FROM = 'postmaster@somedomain'; 
