@@ -10,7 +10,12 @@ $Id$
 000102  3Com (PCI cards)
 0001E6  Hewlett-Packard
 0001E7  Hewlett-Packard
+000393  Apple
 000476  3Com (3c905C-TX-M)
+00049A  Cisco
+0004C1  Cisco
+0004EA  Hewlett-Packard
+0006D7  Cisco
 0010B5  Accton (EN1207 10/100 PCI)
 0020DA  Xylan / IBM
 0030C1	Hewlett-Packard (switches, printers, ...)
