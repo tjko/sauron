@@ -45,9 +45,10 @@ $menu='login' unless ($menu);
 
 if ($pathinfo ne '') {
   frame_set() if ($pathinfo eq '/frames');
+  frame_set2() if ($pathinfo eq '/frames2');
   frame_1() if ($pathinfo eq '/frame1');
-  frame_2() if ($pathinfo eq '/frame2');
-  $frame_mode=1 if ($pathinfo eq '/frame3');
+  frame_2() if ($pathinfo =~ /^\/frame2/);
+  $frame_mode=1 if ($pathinfo =~ /^\/frame3/);
 }
 
 
@@ -63,12 +64,12 @@ unless($scookie) {
 print start_html(-title=>"Sauron $VER",-BGCOLOR=>'white');
 
 unless ($frame_mode) {
-  top_menu();
+  top_menu(0);
   print "<TABLE bgcolor=\"green\" border=\"0\" cellspacing=\"5\" " .
           "width=\"100%\">\n" .
         "<TR><TD align=\"left\" valign=\"top\" bgcolor=\"white\" " .
           "width=\"15%\">\n";
-  left_menu();
+  left_menu(0);
   print "<TD align=\"left\" valign=\"top\" bgcolor=\"white\">\n";
 }
 
@@ -121,9 +122,9 @@ sub login_auth() {
   $u=param('login_name');
   $p=param('login_pwd');
   if ($u eq '' || $p eq '') {
-    print "invalid<br>";
+    print p,h1("login failure");
   } else {
-    print "ok<br>";
+    print p,h1("login ok");
     $state{'auth'}='yes';
     $state{'user'}=$u;
   }
@@ -134,35 +135,44 @@ sub login_auth() {
   exit;
 }
 
-sub top_menu() {
+sub top_menu($) {
+  my($mode)=@_;
   
   print '<TABLE bgcolor="white" border="0" cellspacing="0" width="100%">' .
         '<TR align="left" valign="bottom"><TD rowspan="2">' . 
 	'<IMG src="' .$ICON_PATH . '/logo.png" alt="">';
 
-  print "<TD>foo<TD>foo<TD>foo<TD>";
+  print "<TD>mode=$mode<TD>foo<TD>foo<TD>";
   print '<TR align="left" valign="bottom">';
   print "<TD><A HREF=\"$s_url?menu=servers\">servers</A>" .
         "<TD><A HREF=\"$s_url?menu=zones\">zones</A><TD>foo2";
   print "</TABLE>";
 }
 
-sub left_menu() {
+sub left_menu($) {
+  my($mode)=@_;
+  my($url);
+    
+  $url=$s_url;
   print h3("Menu:<br>$menu");
-  print "<p>" . param('menu');
+  print "<p>mode=$mode";
+
+  if ($menu eq 'servers') {
+    $url.='?menu=servers';
+    print "<p><a href=\"$url&sub=select\">select</a><br>";
+  } elsif ($menu eq 'zones') {
+    print "<p>foo<br>";
+  } else {
+    print "<p><p>empty menu\n";
+  }
 }
 
 sub frame_set() {
   print header;
-  #$menu="?menu=" . param('menu') if (param('menu'));
-  $menu='';
   
-  print "<HTML><FRAMESET border=0 rows=\"130,*\">\n" .
-        "  <FRAME src=\"frame1$menu\" name=\"topmenu\" noresize>\n" .
-        "  <FRAMESET cols=\"15%,85%\">\n" .
-	"    <FRAME src=\"frame2$menu\" name=\"menu\" noresize>\n" .
-        "    <FRAME src=\"frame3$menu\" name=\"main\" noresize>\n" .
-        "  </FRAMESET>\n" .
+  print "<HTML><FRAMESET border=\"0\" rows=\"130,*\">\n" .
+        "  <FRAME src=\"$script_name/frame1\" noresize>\n" .
+        "  <FRAME src=\"$script_name/frames2\" name=\"bottom\">\n" .
         "  <NOFRAMES>\n" .
         "    Frame free version available \n" .
 	"      <A HREF=\"$script_name\">here</A> \n" .
@@ -171,13 +181,30 @@ sub frame_set() {
   exit 0;
 }
 
+sub frame_set2() {
+  print header;
+  $menu="?menu=" . param('menu') if (param('menu'));
+  
+  print "<HTML>" .
+        "<FRAMESET border=\"0\" cols=\"15%,85%\">\n" .
+	"  <FRAME src=\"$script_name/frame2$menu\" name=\"menu\" noresize>\n" .
+        "  <FRAME src=\"$script_name/frame3$menu\" name=\"main\">\n" .
+        "  <NOFRAMES>\n" .
+        "    Frame free version available \n" .
+	"      <A HREF=\"$script_name\">here</A> \n" .
+        "  </NOFRAMES>\n" .
+        "</FRAMESET></HTML>\n";
+  exit 0;
+}
+
+
 sub frame_1() {
   print header,
         start_html(-title=>"sauron: top menu",-BGCOLOR=>'white',
-		   -target=>'menu');
+		   -target=>'bottom');
 
-  $s_url .= '/frame2';
-  top_menu();
+  $s_url .= '/frames2';
+  top_menu(1);
 
   print end_html();
   exit 0;
@@ -185,10 +212,11 @@ sub frame_1() {
 
 sub frame_2() {
   print header,
-        start_html(-title=>"sauron: left menu",-BGCOLOR=>'white');
+        start_html(-title=>"sauron: left menu",-BGCOLOR=>'white',
+		   -target=>'main');
 
   $s_url .= '/frame3';
-  left_menu();
+  left_menu(1);
 
   print end_html();
   exit 0;
@@ -203,7 +231,7 @@ sub make_cookie() {
   $state{'auth'}='no';
   save_state($val);
   $ncookie=$val;
-  return cookie(-name=>'sauron',-expires=>'+1m',-value=>$val);
+  return cookie(-name=>'sauron',-expires=>'+1h',-value=>$val);
 }
 
 sub save_state($id) {
@@ -224,7 +252,8 @@ sub save_state($id) {
 sub load_state($) {
   my($id)=@_;
   undef %state;
-  open(STATEFILE,"$CGI_STATE_PATH/$id") || error("cannot read state");
+  $state{'auth'}='no';
+  open(STATEFILE,"$CGI_STATE_PATH/$id") || return;
   while (<STATEFILE>) {
     next if /^\#/;
     next unless /^\s*(\S+)\s*\=\s*(\S+)\s*$/;
