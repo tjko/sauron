@@ -1131,7 +1131,7 @@ sub make_dhcp() {
 		   "\tmax-unacked-updates $fo_muu;\n",
 		   "\tmclt $fo_mclt;\n",
 		   "\tsplit $fo_split;\n",
-		   "\tload balance max seconds $fo_lbm;\n};\n\n";
+		   "\tload balance max seconds $fo_lbm;\n}\n\n";
   }
 
   # ether hash

@@ -53,6 +53,7 @@ if ($opt_help || not $result) {
 
 $db_ok = db_connect2();
 
+$VER=sauron_version();
 
 if ($argcount < 1 && (! $opt_quiet)) {
   print "Sauron v$VER status\n\n";
@@ -172,6 +173,8 @@ for $i(0..$#who) {
 }
 
 
-
 exit;
+
+# eof
+
 

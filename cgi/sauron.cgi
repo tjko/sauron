@@ -602,7 +602,8 @@ do "$PROG_DIR/cgi_util.pl";
 
 %browse_page_size=(0=>'25',1=>'50',2=>'100',3=>'256',4=>'512',5=>'1000');
 %browse_search_fields=(0=>'Ether',1=>'Info',2=>'User',3=>'Location',
-		       4=>'Department',5=>'Model',6=>'Serial',7=>'Misc');
+		       4=>'Department',5=>'Model',6=>'Serial',7=>'Misc',
+		       -1=>'<ANY>');
 @browse_search_f=('ether','info','huser','location','dept','model',
 		  'serial','misc');
 
@@ -625,7 +626,7 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>0, name=>'Search' },
   {ftype=>3, tag=>'stype', name=>'Search field', type=>'enum',
    enum=>\%browse_search_fields},
-  {ftype=>1, tag=>'pattern',name=>'Pattern (substring)',type=>'text',len=>40,
+  {ftype=>1, tag=>'pattern',name=>'Pattern (regexp)',type=>'text',len=>40,
    empty=>1}
  ]
 );
@@ -1721,17 +1722,25 @@ sub hosts_menu() {
 
     undef %extrarule;
     if (param('bh_pattern')) {
-      $tmp=$browse_search_f[param('bh_stype')];
+      if (param('bh_stype') >= 0) { $tmp=$browse_search_f[param('bh_stype')]; }
+      else { $tmp=''; }
       $tmp2=param('bh_pattern');
       if ($tmp eq 'ether') {
 	$tmp2 = "\U$tmp2";
 	$tmp2 =~ s/[^0-9A-F]//g;
+	print "Searching for Ethernet address pattern '$tmp2'<br><br>"
+	  if (param('bh_pattern') =~ /[^A-Fa-f0-9:\-\ ]/);
 	#print "<br>ether=$tmp2";
       }
+      $tmp2=db_encode_str($tmp2);
       if ($tmp) {
-	$extrarule=" AND a.$tmp LIKE " .
-	           db_encode_str('%' . $tmp2 . '%') . " ";
+	$extrarule=" AND a.$tmp ~* $tmp2 ";
 	#print p,$extrarule;
+      } else {
+	$extrarule= " AND (a.location ~* $tmp2 OR a.huser ~* $tmp2 " .
+	  "OR a.dept ~* $tmp2 OR a.info ~* $tmp2 OR a.serial ~* $tmp2 " .
+	  "OR a.model ~* $tmp2 OR a.misc ~* $tmp2) ";
+	#print p,"foobar";
       }
     }
 
@@ -3063,6 +3072,7 @@ sub about_menu() {
   }
   else {
     $SAURON_CGI_VER =~ s/(\$|\d{1,2}:\d{1,2}:\d{1,2})//g;
+    $VER=sauron_version();
 
     print "<P><BR><CENTER>",
         "<a href=\"http://sauron.jyu.fi/\" target=\"sauron\">",

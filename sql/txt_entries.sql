@@ -3,7 +3,7 @@
  * $Id$
  */
 
-/** This table contains TXT record entries. **/
+/** This table contains TXT record entries and miscellaneous text entries. **/
 
 CREATE TABLE txt_entries (
 	id	    SERIAL PRIMARY KEY, /* unique ID */

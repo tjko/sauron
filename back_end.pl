@@ -10,6 +10,10 @@ use strict;
 
 my($muser);
 
+sub sauron_version() {
+  return "0.5.0";
+}
+
 sub set_muser($) {
   my($usr)=@_;
   $muser=$usr;
@@ -699,13 +703,13 @@ sub get_zone($$) {
 		  "type=1 AND ref=$id ORDER BY id",$rec,'txt');
   get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comments",
 		  "type=2 AND ref=$id ORDER BY dhcp",$rec,'dhcp');
-  get_array_field("cidr_entries",3,"id,ip,comment","IP,Comments",
+  get_array_field("cidr_entries",3,"id,ip,comment","CIDR,Comments",
 		  "type=2 AND ref=$id ORDER BY ip",$rec,'allow_update');
   get_array_field("cidr_entries",3,"id,ip,comment","IP,Comments",
 		  "type=3 AND ref=$id ORDER BY ip",$rec,'masters');
-  get_array_field("cidr_entries",3,"id,ip,comment","IP,Comments",
+  get_array_field("cidr_entries",3,"id,ip,comment","CIDR,Comments",
 		  "type=4 AND ref=$id ORDER BY ip",$rec,'allow_query');
-  get_array_field("cidr_entries",3,"id,ip,comment","IP,Comments",
+  get_array_field("cidr_entries",3,"id,ip,comment","CIDR,Comments",
 		  "type=5 AND ref=$id ORDER BY ip",$rec,'allow_transfer');
   get_array_field("cidr_entries",3,"id,ip,comment","IP,Comments",
 		  "type=6 AND ref=$id ORDER BY ip",$rec,'also_notify');

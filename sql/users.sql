@@ -17,7 +17,7 @@ CREATE TABLE users (
 	server		INT4 DEFAULT -1, /* default server id */
 	zone		INT4 DEFAULT -1, /* default zone id */
 	last		INT4 DEFAULT 0,	/* last login time */
-	last_pwd	INT4 DEFAULT 0, /* las password change time */
+	last_pwd	INT4 DEFAULT 0, /* last password change time */
 	last_from	TEXT, /* last login host */
 	search_opts	TEXT, /* default search options */
 	flags		INT4 DEFAULT 0, /* reserved */

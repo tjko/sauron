@@ -25,7 +25,8 @@ $USER_TIMEOUT = 3600;
 $ALEVEL_VLANS = 5;  # authorization level needed to see vlan info 
                     # in web interface
 
-$SAURON_CHARSET = 'iso-8859-15';
+# specify charset for CGI interface (default is iso-8859-1)
+# $SAURON_CHARSET = 'iso-8859-15';
 
 # $SAURON_DTDHACK = 1;
 
