@@ -1156,7 +1156,8 @@ sub make_dhcp() {
   db_query("SELECT d.dhcp FROM dhcp_entries d " .
 	   "WHERE d.type=1 AND d.ref=$serverid ORDER BY d.id",\@q);
   for $i (0..$#q) {
-    print DHCPFILE "$q[$i][0];\n";
+      $q[$i][0].=';' unless ($q[$i][0] =~ /[;\{\}]\s*$/);
+    print DHCPFILE "$q[$i][0]\n";
   }
   print DHCPFILE "\n\n";
 
@@ -1175,7 +1176,10 @@ sub make_dhcp() {
 	undef @q;
 	db_query("SELECT dhcp FROM dhcp_entries " .
 		 "WHERE type=5 and ref=$dclasses[$i][0] ORDER BY id",\@q);
-	for $j (0..$#q) {	print DHCPFILE "\t$q[$j][0];\n"; }
+	for $j (0..$#q) {
+	    $q[$j][0].=';' unless ($q[$j][0] =~ /[;\{\}]\s*$/);
+	    print DHCPFILE "\t$q[$j][0]\n"; 
+	}
 	print DHCPFILE "}\n";
 
 	# subclasses
@@ -1247,7 +1251,10 @@ sub make_dhcp() {
       db_query("SELECT d.dhcp FROM dhcp_entries d " .
 	       "WHERE d.type=4 AND d.ref=$nets[$i][2] ORDER BY d.id",
 	       \@net_dhcp);
-      for $j (0..$#net_dhcp) { print DHCPFILE "\t$net_dhcp[$i][0];\n"; }
+      for $j (0..$#net_dhcp) { 
+	  $net_dhcp[$i][0].=';' unless ($net_dhcp[$i][0] =~ /[;\{\}]\s*$/);
+	  print DHCPFILE "\t$net_dhcp[$i][0]\n";
+      }
       print DHCPFILE "\n";
     }
 
@@ -1322,7 +1329,8 @@ sub make_dhcp() {
 		 "WHERE d.type=5 AND d.ref=$gid ORDER BY d.id",\@qqq);
 	for $k (0..$#qqq) {
 	  $qqq[$k][0] =~ s/\\"/"/g;
-	  print DHCPFILE "\t$qqq[$k][0];\n";
+	  $qqq[$k][0].=';' unless ($qqq[$k][0] =~ /[;\{\}]\s*$/);
+	  print DHCPFILE "\t$qqq[$k][0]\n";
 	}
 	print DHCPFILE "\t\n";
 
@@ -1367,7 +1375,8 @@ sub make_dhcp() {
 
 	      $dhcplst=$dhcphosth{$dhcpid};
 	      for $l (0..$#{$dhcplst}) {
-		print DHCPFILE "\t\t$$dhcplst[$l];\n";
+		  $$dhcplst[$l].=';' unless ($$dhcplst[$l] =~ /[;\{\}]\s*$/);
+		  print DHCPFILE "\t\t$$dhcplst[$l]\n";
 	      }
 	      print DHCPFILE "\t}\n";
 	    }
@@ -1431,7 +1440,8 @@ sub make_dhcp() {
 
 	  $dhcplst=$dhcphosth{$dhcpid};
 	  for $l (0..$#{$dhcplst}) {
-	    print DHCPFILE "\t$$dhcplst[$l];\n";
+	      $$dhcplst[$l].=';' unless ($$dhcplst[$l] =~ /[;\{\}]\s*$/);
+	      print DHCPFILE "\t$$dhcplst[$l]\n";
 	  }
 	  print DHCPFILE "}\n";
 	}
@@ -1514,7 +1524,8 @@ sub print_subnets() {
     db_query("SELECT d.dhcp FROM dhcp_entries d " .
 	     "WHERE d.type=4 AND d.ref=$dhcpid ORDER BY d.id",\@qqq);
     for $k (0..$#qqq) {
-      print DHCPFILE "\t\t$qqq[$k][0];\n";
+	$qqq[$k][0].=';' unless ($qqq[$k][0] =~ /[;\{\}]\s*$/);
+	print DHCPFILE "\t\t$qqq[$k][0]\n";
     }
 
     print DHCPFILE "\t}\n";
