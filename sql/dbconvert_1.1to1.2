@@ -1,0 +1,19 @@
+/* convert Sauron database format from 1.1 to 1.2 */
+/* (this requires PostgreSQL v7.3 or later) */
+
+
+/* settings */
+ALTER TABLE settings RENAME COLUMN key TO setting;
+
+/* nets */
+
+ALTER TABLE nets ADD COLUMN dummy BOOL;
+ALTER TABLE nets ALTER COLUMN dummy SET DEFAULT false;
+UPDATE nets SET dummy=false;
+
+
+
+UPDATE settings SET value='1.2' where setting='dbversion';
+
+/* eof */
+

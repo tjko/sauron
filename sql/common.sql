@@ -18,7 +18,7 @@ CREATE TABLE common_fields (
 /** global settings table **/
 
 CREATE TABLE settings (
-	key	TEXT NOT NULL CHECK(key <> ''), /* name os setting tuple */
+	setting	TEXT NOT NULL CHECK(key <> ''), /* name of setting tuple */
 	value	TEXT, /* string value of setting */
 	ivalue  INT4, /* interger value of setting */
 	

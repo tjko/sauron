@@ -15,7 +15,9 @@ CREATE TABLE nets (
        netname     TEXT, /* (sub)net name */				
        name	   TEXT, /* descriptive name of the (sub)net */
        net	   CIDR NOT NULL, /* net CIDR */
-       subnet      BOOL DEFAULT true, /* subnet flag */
+       subnet      BOOL DEFAULT true,  /* subnet flag */
+       dummy	   BOOL DEFAULT false, /* true for "dummy" subnets that are
+					  group hosts inside real subnet */ 
        vlan	   INT4 DEFAULT -1, /* ptr to vlans table record
                                   -->vlans.id */
        alevel	   INT4 DEFAULT 0, /* required authorization level */
