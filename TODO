@@ -10,10 +10,12 @@ general:
 	- support for custom DHCP classes (groups)	
 	- add VMPS support
 	- add DNSSEC (tsig) support
-	
+	- finer configuration of user rights (CNAME,MX,Delegation)
 
 import:
 	- real parser for both imports
+	- utility for importing Networks (& VLANs) from a CSV file
+	- support for parsing letter notation dates in zone files
 
 sauron:
 	- more sanity checks
@@ -29,6 +31,7 @@ sauron.cgi:
 	- advertise "Save settings" feature if user doesn't have any
           default settings	
 	- module support for easily extending user interface
+	
 
 browser.cgi:
 	- optional user authentication support
