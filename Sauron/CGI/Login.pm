@@ -281,14 +281,7 @@ sub menu_handler {
     $state->{expiration}=($user{expiration} > 0 ? 
 			localtime($user{expiration}) : 'None');
     $state->{email_notify}=$user{email_notify};
-    db_query("SELECT g.name FROM user_groups g, user_rights r " .
-	     "WHERE g.id=r.rref AND r.rtype=0 AND r.type=2 " .
-	     " AND r.ref=$state->{uid} ORDER BY g.id",\@q);
-    $state->{groupname}='';
-    for $i (0..$#q) {
-      $state->{groupname}.=", " if ($state->{groupname});
-      $state->{groupname}.=$q[$i][0];
-    }
+    $state->{groupname}=$perms->{groups};
     display_form($state,\%user_info_form);
 
     # server permissions

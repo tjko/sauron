@@ -2854,6 +2854,7 @@ sub get_permissions($$) {
   $rec->{rhf}={};
   $rec->{flags}={};
   $rec->{alevel}=0;
+  $rec->{groups}='';
 
   undef @q;
   $sql = "SELECT a.rtype,a.rref,a.rule,n.range_start,n.range_end " .
@@ -2889,6 +2890,14 @@ sub get_permissions($$) {
     elsif ($type == 11) { push @{$rec->{delmask}}, $mode; }
     elsif ($type == 12) { $rec->{rhf}->{$mode}=$ref; }
     elsif ($type == 13) { $rec->{flags}->{$mode}=1; }
+  }
+
+  db_query("SELECT g.name FROM user_groups g, user_rights r " .
+	   "WHERE g.id=r.rref AND r.rtype=0 AND r.type=2 " .
+	   " AND r.ref=$uid ORDER BY g.id",\@q);
+  for $i (0..$#q) {
+    $rec->{groups}.="," if ($rec->{groups});
+    $rec->{groups}.=$q[$i][0];
   }
 
   return 0;
