@@ -30,7 +30,7 @@ die("temp dir not a directory: $TMPDIR") unless (-d $TMPDIR);
 $ENV{KRB5CCNAME}="FILE:$TMPDIR/kerberos-auth_$$";
 
 # read input from STDIN
-chomp($input=<>);
+chomp($input=<STDIN>);
 die("Invalid input") unless ($input =~ /^(\S+)\s(.*)$/);
 $login=$1;
 $passwd=$2;
