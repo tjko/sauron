@@ -33,6 +33,7 @@ sauron.cgi:
 	- allow user to list her previous sessions (similar to
           "last" command-line command)
         - more detailed logging (especially  host add/edit/delete)
+	- allow MX template selection fro AREC aliases
           
 
 browser.cgi:
