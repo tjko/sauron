@@ -126,7 +126,7 @@ $VERSION = '$Id$ ';
 my($muser);
 
 sub sauron_version() {
-  return "0.6.0"; # current back end version
+  return "0.6.1"; # current back end version
 }
 
 sub sauron_db_version() {
@@ -149,7 +149,7 @@ sub new_serial($) {
   my ($sec,$min,$hour,$day,$mon,$year,$s);
 
   if (! $serial) {
-    warn("no serial number passed to new_serial() !");
+    error("no serial number passed to new_serial() !");
     return "0";
   }
 
@@ -158,8 +158,7 @@ sub new_serial($) {
   $s=sprintf("%04d%02d%02d%02d",1900+$year,1+$mon,$day,$hour);
   $s=$serial + 1 if ($s <= $serial);
 
-  die("new_serial($serial) failed! return value='$s'")
-    if ($s <= $serial);
+  fatal("new_serial($serial) failed! return value='$s'") if ($s <= $serial);
 
   return $s;
 }
