@@ -10,6 +10,7 @@ require Exporter;
 @EXPORT = qw(process_dhcpdconf);
 
 use IO::File;
+use Sauron::Util;
 use strict;
 
 my $debug = 0;
@@ -24,8 +25,8 @@ sub process_dhcpdconf($$) {
 
   print "process_dhcpdconf($filename,DATA)\n" if ($debug);
 
-  die("cannot read conf file: $filename") unless (-r $filename);
-  open($fh,$filename) || die("cannot open conf file: $filename");
+  fatal("cannot read conf file: $filename") unless (-r $filename);
+  open($fh,$filename) || fatal("cannot open conf file: $filename");
 
   $tmp='';
   while (<$fh>) {
@@ -52,7 +53,7 @@ sub process_dhcpdconf($$) {
       }
     }
 
-    die("$filename($.): unterminated quoted string!\n") if ($quote);
+    fatal("$filename($.): unterminated quoted string!\n") if ($quote);
   }
   process_line($tmp,$data,\%state);
 

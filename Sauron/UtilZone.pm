@@ -38,8 +38,8 @@ sub process_zonefile($$$$) {
 
   print "process_zonefile($filename,$origin,ZONEDATA,$ext_flag)\n" if ($debug);
 
-  die("cannot read zonefile: $filename") unless (-r $filename);
-  open($fh,$filename) || die("cannot open zonefile: $filename");
+  fatal("cannot read zonefile: $filename") unless (-r $filename);
+  open($fh,$filename) || fatal("cannot open zonefile: $filename");
 
   while (<$fh>) {
     chomp;
@@ -60,7 +60,7 @@ sub process_zonefile($$$$) {
 	  if ($c eq '(') { $paren++; $c=' '; }
 	  elsif ($c eq ')') {
 	    $paren--; $c=' ';
-	    die("$filename($.): misordered parenthesis!\n") if ($paren < 0);
+	    fatal("$filename($.): misordered parenthesis!\n") if ($paren < 0);
 	  }
 	  elsif ($c eq ';') { last; }
 	}
@@ -69,7 +69,7 @@ sub process_zonefile($$$$) {
       chomp ($_=<$fh>) if ($paren);
     } while($paren and not eof($fh));
 
-    die("$filename($.): unterminated quoted string!\n") if ($quote);
+    fatal("$filename($.): unterminated quoted string!\n") if ($quote);
     $_=$tmp;
     s/\s+/\ /g;
     s/\s+$//;
@@ -113,7 +113,7 @@ sub process_zonefile($$$$) {
 
     # class
 	
-    die("$filename($.):Invalid or missing RR class\n")
+    fatal("$filename($.):Invalid or missing RR class\n")
 	unless ($class =~ /^(IN|CS|CH|HS)$/);
 
     # type
@@ -171,23 +171,23 @@ sub process_zonefile($$$$) {
 
     # check & parse records
     if ($type eq 'A') {
-      die("$filename($.): invalid A record: $fline")
+      fatal("$filename($.): invalid A record: $fline")
 	unless (/^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/);
       push @{$rec->{A}}, $1;
     }
     elsif ($type eq 'SOA') {
-      die("$filename($.): dublicate SOA record: $fline")
+      fatal("$filename($.): dublicate SOA record: $fline")
 	if (length($rec->{SOA}) > 0);
       #print join(",",@line)."\n";
-      die("$filename($.): invalid source-dname in SOA record: $fline")
+      fatal("$filename($.): invalid source-dname in SOA record: $fline")
 	unless ($line[0] =~ /^\S+\.$/);
-      die("$filename($.): invalid mailbox in SOA record: $fline")
+      fatal("$filename($.): invalid mailbox in SOA record: $fline")
 	unless ($line[1] =~ /^\S+\.$/);
       for($i=2;$i <= $#line; $i+=1) {
-	die("$filename($.): invalid values '$line[$i]' in SOA record: $fline")
+	fatal("$filename($.): invalid values '$line[$i]' in SOA record: $fline")
 	  unless ($line[$i] =~ /^\d+$/);
       }
-      die("$filename($.): invalid SOA record, too many fields: $fline")
+      fatal("$filename($.): invalid SOA record, too many fields: $fline")
 	if ($#line > 6);
       $rec->{SOA} = join(" ",@line);
     }
@@ -198,9 +198,9 @@ sub process_zonefile($$$$) {
       $rec->{CNAME} = add_origin($line[0],$origin);
     }
     elsif ($type eq 'MX') {
-      die ("$filename($.): invalid MX preference '$line[0]': $fline")
+      fatal ("$filename($.): invalid MX preference '$line[0]': $fline")
 	unless ($line[0] =~ /^\d+$/);
-      die ("$filename($.): invalid MX exchange-dname '$line[1]': $fline")
+      fatal ("$filename($.): invalid MX exchange-dname '$line[1]': $fline")
 	unless ($line[1] =~ /^\S+$/);
 
       $line[1]="\L$line[1]";
@@ -220,12 +220,12 @@ sub process_zonefile($$$$) {
     }
     elsif ($type eq 'WKS') {
       shift @line; # get rid of IP
-      die ("$filename($.): invalid protocol in WKS '$line[0]': $fline")
+      fatal ("$filename($.): invalid protocol in WKS '$line[0]': $fline")
 	unless ("\U$line[0]" =~ /^(TCP|UDP)$/);
       push @{$rec->{WKS}}, join(" ",@line);
     }
     elsif ($type eq 'SRV') {
-      die("$filename($.): invalid SRV record: $fline")
+      fatal("$filename($.): invalid SRV record: $fline")
 	unless ($line[0]=~/^\d+$/ && $line[1]=~/^\d+$/ && $line[2]=~/^\d$+/
 		&& $line[3] ne '');
       push @{$rec->{SRV}}, "$line[0] $line[1] $line[2] $line[3]";
@@ -262,7 +262,7 @@ sub process_zonefile($$$$) {
       $rec->{SERIAL} = $_;
     }
     elsif ($type eq 'ETHER') {
-      die("$filename($.): invalid ethernet address for $domain\n")
+      fatal("$filename($.): invalid ethernet address for $domain\n")
 	unless (/^([0-9a-f]{12})$/i);
       $rec->{ETHER} = "\U$1";
     }
