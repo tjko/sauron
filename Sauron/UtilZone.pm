@@ -228,7 +228,9 @@ sub process_zonefile($$$$) {
     elsif ($type eq 'WKS') {
       shift @line; # get rid of IP
       fatal ("$filename($.): invalid protocol in WKS '$line[0]': $fline")
-	unless ("\U$line[0]" =~ /^(TCP|UDP)$/);
+	unless ("\U$line[0]" =~ /^(TCP|UDP|6|17)$/);
+      $line[0]='tcp' if ($line[0] = 6);
+      $line[0]='udp' if ($line[0] = 17);
       push @{$rec->{WKS}}, join(" ",@line);
     }
     elsif ($type eq 'SRV') {
