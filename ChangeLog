@@ -1,6 +1,8 @@
 $Id$
 	
 0.50
+	- fixed nondeterministic behaviour with multiple IPs in 
+	  'fixed-address' lines in dhcpd.conf
 	- search results sorting a'la browser.cgi
 	- hide "VLAN" info from normal users (now, configuration variable
           PLEVEL_VLANS defines required priv.level to see "VLAN" info)

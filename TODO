@@ -17,7 +17,6 @@ import:
 
 sauron:
 	- more sanity checks
-	- fix random ordering of IPs in 'fixed-address' lines in dhcpd.conf
 
 sauron.cgi:
 	- fix timeout problem with huge zone/server deletes...(faster server :)

@@ -1762,7 +1762,7 @@ sub hosts_menu() {
       make_net_list($serverid,0,\%new_host_nets,\@new_host_netsl,1);
       $new_host_nets{MANUAL}='<Manual IP>';
       $data{net}='MANUAL';
-      if (check_perms('superuser','')) {
+      if (check_perms('superuser','',1)) {
 	push @new_host_netsl, 'MANUAL';
 	$data{net}=$new_host_netsl[0] if ($new_host_netsl[0]);
       } else {
