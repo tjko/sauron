@@ -959,7 +959,12 @@ sub make_bind() {
       fatal("cannot run SAURON_ZONE_CHK_PROG: $SAURON_ZONE_CHK_PROG")
 	unless (-x $SAURON_ZONE_CHK_PROG);
 
-      $res = system($SAURON_ZONE_CHK_PROG,$SAURON_ZONE_CHK_ARGS,$zfile);
+      @args = split(/\s+/,$SAURON_ZONE_CHK_ARGS);
+      push @args, "$zonename.";
+      push @args, $zfile;
+      print "run: $SAURON_ZONE_CHK_PROG " .join(' ',@args)."\n" 
+	  if ($opt_verbose);
+      $res = system($SAURON_ZONE_CHK_PROG,@args);
       fatal("$zfile validity check failed ($res)") if ($res);
     }
   }
@@ -974,7 +979,11 @@ sub make_bind() {
     fatal("cannot run SAURON_NAMED_CHK_PROG: $SAURON_NAMED_CHK_PROG")
       unless (-x $SAURON_NAMED_CHK_PROG);
 
-    $res = system($SAURON_NAMED_CHK_PROG,$SAURON_NAMED_CHK_ARGS,"named.conf");
+    @args = split(/\s+/,$SAURON_NAMED_CHK_ARGS);
+    push @args, "named.conf";
+    print "run: $SAURON_NAMED_CHK_PROG " .join(' ',@args)."\n" 
+	if ($opt_verbose);
+    $res = system($SAURON_NAMED_CHK_PROG,@args);
     fatal("named.conf validity check failed ($res)") if ($res);
   }
 
@@ -1401,7 +1410,11 @@ sub make_dhcp() {
     fatal("cannot run SAURON_DHCP_CHK_PROG: $SAURON_DHCP_CHK_PROG")
       unless (-x $SAURON_DHCP_CHK_PROG);
 
-    $res = system($SAURON_DHCP_CHK_PROG,$SAURON_DHCP_CHK_ARGS,"dhcpd.conf");
+    @args = split(/\s+/,$SAURON_DHCP_CHK_ARGS);
+    push @args, "dhcpd.conf";
+    print "run: $SAURON_DHCP_CHK_PROG " .join(' ',@args)."\n" 
+	if ($opt_verbose);
+    $res = system($SAURON_DHCP_CHK_PROG,@args);
     fatal("dhcpd.conf validity check failed ($res)") if ($res);
   }
 }
