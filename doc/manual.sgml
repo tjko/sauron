@@ -1762,9 +1762,20 @@ ID     Type     Ref.                      Mode
       <para>
         <guimenuitem>Add delegation</> command is used to add 
         a zone delegation (NS records).
-
         This command is available for administrator and users with
         <quote>RWX</> access to the zone.
+      </para>
+      <para>
+	When making delegations, remember to only use the subdomain's
+        name as the name of delegation (do not enter FQDN of the delegated
+        zone, but leave out the current zone's name from the end).
+      </para>
+      <para>
+        It is possible to add smaller than <quote>class-C</> delegations
+        for reverse zones. For example to delegate reverses for IP
+        numbers 10.10.41.0-63, you could add following delegation:
+        <quote>0-63.41</> in zone 10.10.in-addr.arpa. Note,
+        currently all reverse delegations has to map into a CIDR blocks.
       </para>
       </section>
 
