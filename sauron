@@ -562,7 +562,7 @@ sub make_bind() {
 	      printf ZONEFILE $ZFORMAT, $rip,'',$class,'CNAME',
 		              "$j.$domain.$zonename.";
 	    } else {
-	      printf ZONEFILE "; $rip ($rdomain)\n";
+	      printf ZONEFILE "; $rip ($riphash{$rip})\n";
 	    }
 	  }
 	  print ZONEFILE ";\n";
