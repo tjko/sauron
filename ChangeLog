@@ -1,6 +1,9 @@
 $Id$
 
 0.7.2beta
+	- new utility: export-ip-list for generating lists of active
+	  IPs in given (sub)nets (for automatically updating access/accounting
+	  lists in firewalls)
 	- CGI interface: new command "New Search" in Hosts menu	
 	- import: fixed IP number parsing (named.conf)
 	- CGI interface: fixed "-> This Subnet" button in host display
