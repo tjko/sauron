@@ -15,6 +15,8 @@ use Net::Netmask;
 $CGI::DISABLE_UPLOADS = 1; # no uploads
 $CGI::POST_MAX = 100000; # max 100k posts
 
+$SAURON_CGI_VER = ' $Revision$ ';
+
 #$|=1;
 $debug_mode = 0;
 
@@ -2668,7 +2670,7 @@ sub about_menu() {
     print "<P><BR><CENTER>",
         "<a href=\"http://sauron.jyu.fi/\" target=\"sauron\">",
         "<IMG src=\"$ICON_PATH/logo_large.png\" border=\"0\" alt=\"Sauron\">",
-          "</a><BR>Version $VER<P>",
+          "</a><BR>Version $VER<BR>(CGI $SAURON_CGI_VER)<P>",
           "a free DNS & DHCP management system<p>",
           "<hr noshade width=\"40%\"><b>Author:</b>",
           "<br>Timo Kokkonen <i>&lt;tjko\@iki.fi&gt;</i>",
