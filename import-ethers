@@ -49,12 +49,16 @@ db_connect();
 
 open(FILE,"$file") || fatal("cannot open input file '$file'");
 while (<FILE>) {
-  next unless /^\s*([0-9A-F]{6})\s+(\S.*)$/;
+  next unless /^\s*([0-9A-F]{6})\s+(\S.*)$/ or
+              /^([0-9A-F]{2}-[0-9A-F]{2}-[0-9A-F]{2})\s+\(hex\)\s+(\S.*)$/;
   $code=$1; 
   $info=$2;
+  next if ($info =~ /^\(base/);
   $info =~ s/(\s+|\t+)/ /g;
   $info =~ s/\'/\\\'/g;
+  $code =~ s/-//g;
   $ethers{$code}=$info;
+  #print "$code:$info:\n";
 }
 close(FILE);
 

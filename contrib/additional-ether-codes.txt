@@ -1,4 +1,7 @@
 List of additional NIC vendor codes (those not yet in "Ethernet.txt").
+NOTE: IEEE has very extensive code list available at: 
+      http://standards.ieee.org/regauth/oui/
+
 
 $Revision$
 $Date$
@@ -10,12 +13,18 @@ $Id$
 000102  3Com (PCI cards)
 0001E6  Hewlett-Packard
 0001E7  Hewlett-Packard
+00021E  3Com (3C905C-TX)
+0002B3  Intel (Ethernet Pro 100)
 000393  Apple
 000476  3Com (3c905C-TX-M)
 00049A  Cisco
 0004C1  Cisco
 0004EA  Hewlett-Packard
+00062A  Cisco
 0006D7  Cisco
+0007EB  Cisco
+0008A3	Cisco
+0008E3  Cisco
 0010B5  Accton (EN1207 10/100 PCI)
 0020DA  Xylan / IBM
 0030C1	Hewlett-Packard (switches, printers, ...)
@@ -23,6 +32,7 @@ $Id$
 005056	VMware Inc. (virtual adapters)
 0050DA  3Com (3c905C-TX PCI cards)
 00601D  Lucent WaveLAN (IEEE 802.11)
+009096  RealTek (RTL8139/810X Family)
 00C0DA  3Com (switches)
 00D095  Alcatel
 00D0B7  Intel (EtherExpress 10/100)
