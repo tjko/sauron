@@ -842,7 +842,7 @@ sub get_zone_list($$$) {
 
 sub get_zone($$) {
   my ($id,$rec) = @_;
-  my ($res,@q);
+  my ($res,@q,$hid);
 
   $res = get_record("zones",
 	       "server,active,dummy,type,reverse,class,name,nnotify," .
@@ -852,12 +852,21 @@ sub get_zone($$) {
 	       $id,$rec,"id");
   return -1 if ($res < 0);
 
-  get_array_field("ns_entries",3,"id,ns,comment","NS,Comments",
-		  "type=1 AND ref=$id ORDER BY ns",$rec,'ns');
-  get_array_field("mx_entries",4,"id,pri,mx,comment","Priority,MX,Comments",
-		  "type=1 AND ref=$id ORDER BY pri,mx",$rec,'mx');
-  get_array_field("txt_entries",3,"id,txt,comment","TXT,Comments",
-		  "type=1 AND ref=$id ORDER BY id",$rec,'txt');
+  if ($rec->{type} eq 'M') {
+    $hid=get_host_id($id,'@');
+    if ($hid > 0) {
+      get_array_field("ns_entries",3,"id,ns,comment","NS,Comments",
+		      "type=2 AND ref=$hid ORDER BY ns",$rec,'ns');
+      get_array_field("mx_entries",4,"id,pri,mx,comment",
+		      "Priority,MX,Comments",
+		      "type=2 AND ref=$hid ORDER BY pri,mx",$rec,'mx');
+      get_array_field("txt_entries",3,"id,txt,comment","TXT,Comments",
+		      "type=2 AND ref=$hid ORDER BY id",$rec,'txt');
+      get_array_field("a_entries",4,"id,ip,reverse,forward",
+		      "IP,reverse,forward","host=$hid ORDER BY ip",$rec,'ip');
+    }
+  }
+
   get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comments",
 		  "type=2 AND ref=$id ORDER BY dhcp",$rec,'dhcp');
   get_array_field("cidr_entries",3,"id,ip,comment","CIDR,Comments",
@@ -887,7 +896,7 @@ sub get_zone($$) {
 
 sub update_zone($) {
   my($rec) = @_;
-  my($r,$id,$new_net);
+  my($r,$id,$new_net,$hid);
 
   del_std_fields($rec);
   delete $rec->{pending_info};
@@ -905,33 +914,51 @@ sub update_zone($) {
   if ($r < 0) { db_rollback(); return $r; }
   $id=$rec->{id};
 
-  $r=update_array_field("ns_entries",3,"ns,comment,type,ref",
-			'ns',$rec,"1,$id");
-  if ($r < 0) { db_rollback(); return -12; }
-  $r=update_array_field("mx_entries",4,"pri,mx,comment,type,ref",
-			'mx',$rec,"1,$id");
-  if ($r < 0) { db_rollback(); return -13; }
-  $r=update_array_field("txt_entries",3,"txt,comment,type,ref",
-			'txt',$rec,"1,$id");
-  if ($r < 0) { db_rollback(); return -14; }
+  if ($rec->{type} eq 'M') {
+    $hid=get_host_id($id,'@');
+    return -200 unless ($hid > 0);
+
+    $r=update_array_field("a_entries",4,"ip,reverse,forward,host",
+			  'ip',$rec,"$hid");
+    if ($r < 0) { db_rollback(); return -10; }
+
+    $r=update_array_field("ns_entries",3,"ns,comment,type,ref",
+			  'ns',$rec,"2,$hid");
+    if ($r < 0) { db_rollback(); return -12; }
+    $r=update_array_field("mx_entries",4,"pri,mx,comment,type,ref",
+			  'mx',$rec,"2,$hid");
+    if ($r < 0) { db_rollback(); return -13; }
+    $r=update_array_field("txt_entries",3,"txt,comment,type,ref",
+			  'txt',$rec,"2,$hid");
+    if ($r < 0) { db_rollback(); return -14; }
+  }
+
+  # dhcp
   $r=update_array_field("dhcp_entries",3,"dhcp,comment,type,ref",
 			'dhcp',$rec,"2,$id");
   if ($r < 0) { db_rollback(); return -15; }
+
+  # allow_update
   $r=update_array_field("cidr_entries",3,"ip,comment,type,ref",
 			'allow_update',$rec,"2,$id");
   if ($r < 0) { db_rollback(); return -16; }
+  # masters
   $r=update_array_field("cidr_entries",3,"ip,comment,type,ref",
 			'masters',$rec,"3,$id");
   if ($r < 0) { db_rollback(); return -17; }
+  # allow_query
   $r=update_array_field("cidr_entries",3,"ip,comment,type,ref",
 			'allow_query',$rec,"4,$id");
   if ($r < 0) { db_rollback(); return -18; }
+  # allow_transfer
   $r=update_array_field("cidr_entries",3,"ip,comment,type,ref",
 			'allow_transfer',$rec,"5,$id");
   if ($r < 0) { db_rollback(); return -19; }
+  # also_notify
   $r=update_array_field("cidr_entries",3,"ip,comment,type,ref",
 			'also_notify',$rec,"6,$id");
   if ($r < 0) { db_rollback(); return -20; }
+  # forwarders
   $r=update_array_field("cidr_entries",3,"ip,comment,type,ref",
 			'forwarders',$rec,"12,$id");
   if ($r < 0) { db_rollback(); return -20; }
@@ -951,45 +978,45 @@ sub delete_zone($) {
   print "<BR>Deleting CIDR entries...\n";
   $res=db_exec("DELETE FROM cidr_entries WHERE " .
 	       "(type=2 OR type=3 OR type=4 OR type=5 OR type=6 OR type=12) " .
-	       " AND ref=$id;");
+	       " AND ref=$id");
   if ($res < 0) { db_rollback(); return -1; }
 
   # dhcp_entries
   print "<BR>Deleting DHCP entries...\n";
-  $res=db_exec("DELETE FROM dhcp_entries WHERE type=2 AND ref=$id;");
+  $res=db_exec("DELETE FROM dhcp_entries WHERE type=2 AND ref=$id");
   if ($res < 0) { db_rollback(); return -2; }
   $res=db_exec("DELETE FROM dhcp_entries WHERE id IN ( " .
 	        "SELECT a.id FROM dhcp_entries a, hosts h " .
-	        "WHERE h.zone=$id AND a.type=3 AND a.ref=h.id);");
+	        "WHERE h.zone=$id AND a.type=3 AND a.ref=h.id)");
   if ($res < 0) { db_rollback(); return -3; }
 
   # mx_entries
   print "<BR>Deleting MX entries...\n";
-  $res=db_exec("DELETE FROM mx_entries WHERE type=1 AND ref=$id;");
-  if ($res < 0) { db_rollback(); return -4; }
+  #$res=db_exec("DELETE FROM mx_entries WHERE type=1 AND ref=$id");
+  #if ($res < 0) { db_rollback(); return -4; }
   $res=db_exec("DELETE FROM mx_entries WHERE id IN ( " .
 	       "SELECT a.id FROM mx_entries a, hosts h " .
-	       "WHERE h.zone=$id AND a.type=2 AND a.ref=h.id);");
+	       "WHERE h.zone=$id AND a.type=2 AND a.ref=h.id)");
   if ($res < 0) { db_rollback(); return -5; }
   $res=db_exec("DELETE FROM mx_entries WHERE id IN ( " .
 	       "SELECT a.id FROM mx_entries a, mx_templates m " .
-	       "WHERE m.zone=$id AND a.type=3 AND a.ref=m.id);");
+	       "WHERE m.zone=$id AND a.type=3 AND a.ref=m.id)");
   if ($res < 0) { db_rollback(); return -6; }
 
   # wks_entries
   print "<BR>Deleting WKS entries...\n";
   $res=db_exec("DELETE FROM wks_entries WHERE id IN ( " .
 	       "SELECT a.id FROM wks_entries a, hosts h " .
-	       "WHERE h.zone=$id AND a.type=1 AND a.ref=h.id);");
+	       "WHERE h.zone=$id AND a.type=1 AND a.ref=h.id)");
   if ($res < 0) { db_rollback(); return -7; }
 
   # ns_entries
   print "<BR>Deleting NS entries...\n";
-  $res=db_exec("DELETE FROM ns_entries WHERE type=1 AND ref=$id;");
-  if ($res < 0) { db_rollback(); return -8; }
+  #$res=db_exec("DELETE FROM ns_entries WHERE type=1 AND ref=$id");
+  #if ($res < 0) { db_rollback(); return -8; }
   $res=db_exec("DELETE FROM ns_entries WHERE id IN ( " .
 	       "SELECT a.id FROM ns_entries a, hosts h " .
-	       "WHERE h.zone=$id AND a.type=2 AND a.ref=h.id);");
+	       "WHERE h.zone=$id AND a.type=2 AND a.ref=h.id)");
   if ($res < 0) { db_rollback(); return -9; }
 
 
@@ -997,45 +1024,52 @@ sub delete_zone($) {
   print "<BR>Deleting PRINTER entries...\n";
   $res=db_exec("DELETE FROM printer_entries WHERE id IN ( " .
 	       "SELECT a.id FROM printer_entries a, hosts h " .
-	       "WHERE h.zone=$id AND a.type=2 AND a.ref=h.id);");
+	       "WHERE h.zone=$id AND a.type=2 AND a.ref=h.id)");
   if ($res < 0) { db_rollback(); return -10; }
 
   # txt_entries
   print "<BR>Deleting TXT entries...\n";
-  $res=db_exec("DELETE FROM txt_entries WHERE type=1 AND ref=$id;");
-  if ($res < 0) { db_rollback(); return -11; }
+  #$res=db_exec("DELETE FROM txt_entries WHERE type=1 AND ref=$id");
+  #if ($res < 0) { db_rollback(); return -11; }
   $res=db_exec("DELETE FROM txt_entries WHERE id IN ( " .
 	       "SELECT a.id FROM txt_entries a, hosts h " .
-	       "WHERE h.zone=$id AND a.type=2 AND a.ref=h.id);");
+	       "WHERE h.zone=$id AND a.type=2 AND a.ref=h.id)");
   if ($res < 0) { db_rollback(); return -12; }
 
   # a_entries
   print "<BR>Deleting A entries...\n";
   $res=db_exec("DELETE FROM a_entries WHERE id IN ( " .
 	       "SELECT a.id FROM a_entries a, hosts h " .
-	       "WHERE h.zone=$id AND a.host=h.id);");
+	       "WHERE h.zone=$id AND a.host=h.id)");
   if ($res < 0) { db_rollback(); return -13; }
 
   # arec_entries
   print "<BR>Deleting AREC entries...\n";
   $res=db_exec("DELETE FROM arec_entries WHERE id IN ( " .
 	       "SELECT a.id FROM arec_entries a, hosts h " .
-	       "WHERE h.zone=$id AND a.host=h.id);");
+	       "WHERE h.zone=$id AND a.host=h.id)");
   if ($res < 0) { db_rollback(); return -14; }
 
   # mx_templates
   print "<BR>Deleting MX templates...\n";
-  $res=db_exec("DELETE FROM mx_templates WHERE zone=$id;");
+  $res=db_exec("DELETE FROM mx_templates WHERE zone=$id");
+  if ($res < 0) { db_rollback(); return -15; }
+
+  # srv_entries
+  print "<BR>Deleting SRV entries...\n";
+  $res=db_exec("DELETE FROM srv_entries WHERE id IN ( " .
+	       "SELECT a.id FROM srv_entries a, hosts h " .
+	       "WHERE h.zone=$id AND a.type=1 AND a.ref=h.id)");
   if ($res < 0) { db_rollback(); return -15; }
 
   # hosts
   print "<BR>Deleting Hosts...\n";
-  $res=db_exec("DELETE FROM hosts WHERE zone=$id;");
-  if ($res < 0) { db_rollback(); return -16; }
+  $res=db_exec("DELETE FROM hosts WHERE zone=$id");
+  if ($res < 0) { db_rollback(); return -25; }
 
 
   print "<BR>Deleting Zone record...\n";
-  $res=db_exec("DELETE FROM zones WHERE id=$id;");
+  $res=db_exec("DELETE FROM zones WHERE id=$id");
   if ($res < 0) { db_rollback(); return -50; }
 
 
@@ -1043,12 +1077,11 @@ sub delete_zone($) {
   if ($res < 0) { db_rollback(); return -100; }
 
   return db_commit();
-  #return db_rollback();
 }
 
 sub add_zone($) {
   my($rec) = @_;
-  my($new_net);
+  my($new_net,$res,$id,$hid);
 
   $rec->{cdate}=time;
   $rec->{cuser}=$muser;
@@ -1061,7 +1094,70 @@ sub add_zone($) {
       $rec->{reversenet}=$new_net;
   }
 
-  return add_record('zones',$rec);
+  db_begin();
+  $res = add_record('zones',$rec);
+  if ($res < 0) { db_rollback(); return -1; }
+  $id=$res;
+
+  if ($rec->{type} eq 'M') {
+    # zone's host record (@)
+    $res = add_record('hosts',{zone=>$id,type=>10,domain=>'@',
+			       comment=>'zone record'});
+    if ($res < 0) { db_rollback(); return -101; }
+    $hid=$res;
+
+    # ns
+    $res = add_array_field('ns_entries','ns,comment','ns',$rec,
+			   'type,ref',"2,$hid");
+    if ($res < 0) { db_rollback(); return -102; }
+    # mx
+    $res = add_array_field('mx_entries','pri,mx,comment','mx',$rec,
+			   'type,ref',"2,$hid");
+    if ($res < 0) { db_rollback(); return -103; }
+    # txt
+    $res = add_array_field('txt_entries','txt,comment','txt',$rec,
+			   'type,ref',"2,$hid");
+    if ($res < 0) { db_rollback(); return -104; }
+    # ip
+    $res = add_array_field('a_entries','ip,reverse,forward','ip',$rec,
+			   'host',"$hid");
+    if ($res < 0) { db_rollback(); return -105; }
+  }
+
+
+  # dhcp
+  $res = add_array_field('dhcp_entries','dhcp,comment','dhcp',$rec,
+			 'type,ref',"2,$id");
+  if ($res < 0) { db_rollback(); return -111; }
+
+  # allow_update
+  $res = add_array_field('cidr_entries','ip,comment','allow_update',$rec,
+			 'type,ref',"2,$id");
+  if ($res < 0) { db_rollback(); return -2; }
+  # masters
+  $res = add_array_field('cidr_entries','ip,comment','masters',$rec,
+			 'type,ref',"3,$id");
+  if ($res < 0) { db_rollback(); return -3; }
+  # allow_query
+  $res = add_array_field('cidr_entries','ip,comment','allow_query',$rec,
+			 'type,ref',"4,$id");
+  if ($res < 0) { db_rollback(); return -4; }
+  # allow_transfer
+  $res = add_array_field('cidr_entries','ip,comment','allow_transfer',$rec,
+			 'type,ref',"5,$id");
+  if ($res < 0) { db_rollback(); return -5; }
+  # also_notify
+  $res = add_array_field('cidr_entries','ip,comment','also_notify',$rec,
+			 'type,ref',"6,$id");
+  if ($res < 0) { db_rollback(); return -6; }
+  # forwarders
+  $res = add_array_field('cidr_entries','ip,comment','forwarders',$rec,
+			 'type,ref',"12,$id");
+  if ($res < 0) { db_rollback(); return -7; }
+
+
+  return -100 if (db_commit() < 0);
+  return $id;
 }
 
 sub copy_zone($$$$) {
@@ -1082,7 +1178,8 @@ sub copy_zone($$$$) {
   # cidr_entries
   $res=db_exec("INSERT INTO cidr_entries (type,ref,ip,comment) " .
 	       "SELECT type,$newid,ip,comment FROM cidr_entries " .
-	       "WHERE (type=2 OR type=3) AND ref=$id;");
+	       "WHERE (type=2 OR type=3 OR type=4 OR type=5 OR type=6 " .
+	       " OR type=12) AND ref=$id;");
   if ($res < 0) { db_rollback(); return -3; }
 
   # dhcp_entries
@@ -1250,8 +1347,7 @@ sub get_host($$) {
   return -1 if ($res < 0);
 
   get_array_field("a_entries",4,"id,ip,reverse,forward",
-		  "IP,reverse,forward,Comments","host=$id ORDER BY ip",
-		  $rec,'ip');
+		  "IP,reverse,forward","host=$id ORDER BY ip",$rec,'ip');
 
   get_array_field("ns_entries",3,"id,ns,comment","NS,Comments",
 		  "type=2 AND ref=$id ORDER BY ns",$rec,'ns_l');

@@ -8,7 +8,7 @@
 CREATE TABLE txt_entries (
 	id	    SERIAL PRIMARY KEY, /* unique ID */
 	type        INT4 NOT NULL,  /* type:
-					1=zone,
+					1=zone (not used anymore!),
 					2=host,
 					3=server
 					10=server (BIND logging entry) */

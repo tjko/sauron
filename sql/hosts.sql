@@ -22,7 +22,9 @@ CREATE TABLE hosts (
 					5=printer,
   				      	6=glue record, 
 					7=alias (arec),
-					8=srv entry
+					8=srv entry,
+					9=dhcp only,
+					10=zone
 					*/
        
        domain	   TEXT NOT NULL CHECK(domain <> ''), /* host domain name */

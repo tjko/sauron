@@ -251,6 +251,8 @@ do "$conf_dir/config" || die("cannot load configuration!");
    iff=>['type','M']},
   {ftype=>1, tag=>'ttl', name=>'Default TTL', type=>'int', len=>10, 
    empty=>1, definfo=>['','Default (from server)'], iff=>['type','M']},
+  {ftype=>5, tag=>'ip', name=>'IP addresses (A)', iff=>['type','M'], 
+   iff2=>['reverse','f']},
   {ftype=>2, tag=>'ns', name=>'Name servers (NS)', type=>['text','text'], 
    fields=>2,
    len=>[30,20], empty=>[0,1], elabels=>['NS','comment'], iff=>['type','M']},
@@ -299,7 +301,7 @@ do "$conf_dir/config" || die("cannot load configuration!");
 
 %host_types=(0=>'Any type',1=>'Host',2=>'Delegation',3=>'Plain MX',
 	     4=>'Alias',5=>'Printer',6=>'Glue record',7=>'AREC Alias',
-	     8=>'SRV record',9=>'DHCP only');
+	     8=>'SRV record',9=>'DHCP only',10=>'zone');
 
 %host_form = (
  data=>[
@@ -3915,21 +3917,23 @@ sub add_default_zones($$) {
   my($id,%zone,%host);
 
 
-  %zone=(name=>'localhost',type=>'M',reverse=>'f',server=>$serverid);
+  %zone=(name=>'localhost',type=>'M',reverse=>'f',server=>$serverid,
+	 ns=>[[0,'localhost.','']],ip=>[[0,'127.0.0.1','t','t','']],
+	 allow_update=>[[0,'127.0.0.1','']]);
   print "Adding zone: $zone{name}...";
   if (($id=add_zone(\%zone)) < 0) { 
     print "failed (zone already exists? $id)\n";
     #print db_errormsg() , "\n";
   } else {
     print "OK (id=$id)\n";
-    $zone{id}=$id;
-    $zone{ns}=[[],[0,'localhost.','',2]];
-    print "update failed\n" if (update_zone(\%zone) < 0);
-
-    %host=(domain=>'@',zone=>$id,type=>1,ip=>[[0,'127.0.0.1','t','t','']]);
-    print "host add failed\n" if (add_host(\%host) < 0);
+#    $zone{id}=$id;
+#    $zone{ns}=[[],[0,'localhost.','',2]];
+#    print "update failed\n" if (update_zone(\%zone) < 0);
+#
+#    %host=(domain=>'@',zone=>$id,type=>1,ip=>[[0,'127.0.0.1','t','t','']]);
+#    print "host add failed\n" if (add_host(\%host) < 0);
   }
-
+  return;
 
   %zone=(name=>'127.in-addr.arpa',type=>'M',reverse=>'t',server=>$serverid);
   print "Adding zone: $zone{name}...";
