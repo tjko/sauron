@@ -11,6 +11,7 @@ use Sauron::BackEnd;
 use Sauron::Util;
 use Sauron::Sauron;
 
+$|=1;
 load_config();
 
 sub parse_csv($) {  # code based on the Perl cookbook example...
@@ -33,7 +34,7 @@ sub fix_ether($) {
 
   ($mac = uc($mac)) =~ s/\s+//g;
 
-  if (@m = ($mac =~ /^([0-9A-F]{1,2})[:\-]([0-9A-F]{1,2})[:\-]([0-9A-F]{1,2})[:\-]([0-9A-F]{1,2})[:\-]([0-9A-F]{1,2})[:\-]([0-9A-F]{1,2})$/)) {
+  if (@m = ($mac =~ /^([0-9A-F]{1,2})[:\-\.]([0-9A-F]{1,2})[:\-\.]([0-9A-F]{1,2})[:\-\.]([0-9A-F]{1,2})[:\-\.]([0-9A-F]{1,2})[:\-\.]([0-9A-F]{1,2})$/)) {
     for $i (0..$#m) { $m[$i] = "0".$m[$i] if (length($m[$i]) < 2); }
     $mac=join('',@m);
   }
@@ -60,13 +61,13 @@ sub get_host_id_by_ip($$$) {
          "WHERE $rule AND a.host=h.id AND a.ip='$ip'";
   db_query($sql,\@q);
 
-  return $q[0][0] if ($q[0][0] > 0);
-  return 0;
+  return ($q[0][0] > 0 ? $q[0][0] : 0);
 }
 
 
-GetOptions("help|h","ether=s","ip=s","domain=s","hinfo=s",
-	   "dept=s","room=s","user=s","commit","origin=s");
+GetOptions("help|h","ether=s","ip=s","domain=s","hinfo=s","info=s",
+	   "dept=s","room=s","user=s","commit","origin=s","verbose",
+	   "commit","filter=s","setdept=s","setgrp=s","setmx=s");
 
 if ($opt_help || @ARGV < 2) {
   print "syntax: $0 [OPTIONS] <servername> <zonename> <inputfile>\n\n",
@@ -78,8 +79,15 @@ if ($opt_help || @ARGV < 2) {
 	"\t--dept=<n>\t\tcolumn # for Department info\n",
 	"\t--room=<n>\t\tcolumn # for Location info\n",
 	"\t--user=<n>\t\tcolumn # for User info\n",
+	"\t--info=<n>\t\tcolumn # for Extra info\n",
 	"\n",
 	"\t--origin=<origin>\torigin for domain names in input\n",
+        "\t--filter=<n>,<regexp>\tselect only lines where column n matches\n",
+	"\t--setdept=<dept>\tdefault for department\n",
+	"\t--setgrp=<group>\tdefault group for hosts\n",
+	"\t--setmx=<mxtemplate>\tdefault MX-template for hosts\n",
+
+        "\t\t\t\tto the regular expression\n",
 	"\n";
   exit(($opt_help ? 0 : 1));
 }
@@ -103,6 +111,30 @@ fatal("cannot find server: $server") unless ($serverid > 0);
 
 $zoneid=get_zone_id($zone,$serverid);
 fatal("cannot find zone: $zone") unless ($zoneid > 0);
+
+if ($opt_filter) {
+  unless (($filter_col,$filter) = ($opt_filter =~ /^(\d+),(.*)$/)) {
+    fatal("invalid arguments to option --filter");
+  }
+}
+
+if ($opt_setdept) {
+  $opt_setdept =~ s/(^\s*|\s*$)//g;
+  print "Default department: '$opt_setdept'\n";
+}
+
+if ($opt_setgrp) {
+  $gid=get_group_by_name($serverid,$opt_setgrp);
+  fatal("cannot find group: $opt_setgrp") unless ($gid > 0);
+}
+
+if ($opt_setmx) {
+  undef @q;
+  db_query("SELECT id FROM mx_templates " .
+	   "WHERE zone=$zoneid AND name=".db_encode_str($opt_setmx),\@q);
+  fatal("cannot find mx template: $opt_setmx") unless ($q[0][0] > 0);
+  $mxid=$q[0][0];
+}
 
 if ($opt_ip) {
   fatal("invalid parameter for --ip") unless ($opt_ip =~ /^\d+$/);
@@ -151,6 +183,13 @@ if ($opt_user) {
   $fields{$opt_user}="user";
 }
 
+if ($opt_info) {
+  fatal("invalid parameter for --info") unless ($opt_info =~ /^\d+$/);
+  fatal("cannot use same column twice: $fields{$opt_info}")
+    if ($fields{$opt_info});
+  $fields{$opt_info}="info";
+}
+
 fatal("either --ip or --domain option has to be specified")
   unless ($opt_ip || $opt_domain);
 
@@ -162,13 +201,16 @@ while(<FILE>) {
   next if /^\s*$/;
   @l = parse_csv($_);
 
-#  print "line:",join(',',@l),"\n";
+  if ($opt_filter) {
+    next unless ($l[$filter_col-1] =~ /$filter/);
+  }
 
   $domain='';
   if ($opt_domain) {
     $domain=$l[$opt_domain-1];
+    $domain =~ s/\s+//g;
     unless (valid_domainname($domain)) {
-      error("$file($.): invalid domain: $domain");
+      error("$filename($.): invalid domain: '$domain'");
       next;
     }
   }
@@ -180,7 +222,7 @@ while(<FILE>) {
   if ($opt_ip) {
     $ip=$l[$opt_ip-1];
     unless (is_cidr($ip)) {
-      error("file($.): invalid ip: $ip");
+      error("$filename($.): invalid ip: $ip");
       next;
     }
   }
@@ -189,8 +231,17 @@ while(<FILE>) {
   if ($opt_ether) {
     $ether=fix_ether($l[$opt_ether-1]);
     unless ($ether =~ /^[0-9A-F]{12}$/) {
-      error("$file($.): invalid ether: $ether") if ($ether);
+      error("$filename($.): invalid ether: $ether")
+	if ($opt_verbose && $ether);
       $ether='';
+    } else {
+      if ($etherhash{$ether}) {
+	error("$filename($.): duplicate MAC address: $ether " .
+	      "(see line $etherhash{$ether})");
+	$ether='';
+      } else {
+	$etherhash{$ether}=$.;
+      }
     }
   }
 
@@ -200,33 +251,30 @@ while(<FILE>) {
     $tmp =~ s/\ \+\ /\//;
     $tmp =~ s/\"//g;
     (@hinfo = split('\s+',$tmp));
-    if (@hinfo > 0 && @hinfo != 2) {
-      error("$file($.): invalid hinfo field: $tmp");
-      undef @hinfo;
+    $hinfo[1].="-".$hinfo[2] if ($hinfo[2]);
+    if (@hinfo > 0 && @hinfo > 3) {
+      error("$filename($.): invalid hinfo field: $tmp") if ($opt_verbose);
+      #undef @hinfo;
     }
     $hinfo[0] =~ s/[^A-Z0-9\/\-]//g;
     $hinfo[1] =~ s/[^A-Z0-9\/\-]//g;
   }
 
   $dept='';
-  if ($opt_dept) {
-    $dept=$l[$opt_dept-1];
-  }
+  if ($opt_dept) { $dept=$l[$opt_dept-1]; }
 
   $room='';
-  if ($opt_room) {
-    $room=$l[$opt_room-1];
-  }
+  if ($opt_room) { $room=$l[$opt_room-1]; }
 
   $user='';
-  if ($opt_user) {
-    $user=$l[$opt_user-1];
-  }
+  if ($opt_user) { $user=$l[$opt_user-1]; }
 
-  print "domain=$domain,ip=$ip $ether,$hinfo[0],$hinfo[1],$user,$dept,$room\n"
-    if ($opt_verbose);
+  $info='';
+  if ($opt_info) { $info=$l[$opt_info-1]; }
 
-  push @data,[$domain,$ip,$ether,$hinfo[0],$hinfo[1],$user,$dept,$room];
+  print "$filename($.): domain=$domain,ip=$ip $ether,$hinfo[0],$hinfo[1],$user,$dept,$room,$info\n"; #    if ($opt_verbose);
+
+  push @data,[$domain,$ip,$ether,$hinfo[0],$hinfo[1],$user,$dept,$room,$info];
 }
 
 close(FILE);
@@ -234,20 +282,22 @@ close(FILE);
 
 print @data . " records found in CSV file.\n";
 
+db_begin();
+db_ignore_begin_and_commit(1);
 
 for $i (0..$#data) {
-  $id=-1; $id2=-1;
-  $id=get_host_id($zoneid,$data[$i][0]) if ($opt_domain);
+  $id=-1;
+  $id1=get_host_id($zoneid,$data[$i][0]) if ($opt_domain);
   $id2=get_host_id_by_ip($serverid,$zoneid,$data[$i][1]) if ($opt_ip);
 
-  if ($id > 0 && $id2 > 0 && $id != $id2) {
+  if ($id1 > 0 && $id2 > 0 && $id1 != $id2) {
     error("skipping $data[$i][0] ($data[$i][1]) ip and domain point to " .
-	  "different entries in database ($id,$id2)");
+	  "different entries in database ($id1,$id2)");
     next;
   }
 
+  $id=$id1;
   $id=$id2 if ($id < 0 && $id2 > 0);
-
 
   unless ($id > 0) {
     error("cannot find host with domain or ip: $data[$i][0] ($data[$i][1])");
@@ -256,31 +306,33 @@ for $i (0..$#data) {
 
   undef %h;
   $h{id}=$id;
+
+  $h{grp}=$gid if ($gid > 0);
+  $h{mx}=$mxid if ($mxid > 0);
+  $h{dept}=$opt_setdept if ($opt_setdept);
+
+  $h{domain}=$data[$i][0] unless ($id1 > 0);
   $h{ether}=$data[$i][2] if ($data[$i][2]);
   $h{hinfo_hw}=$data[$i][3] if ($data[$i][3]);
   $h{hinfo_sw}=$data[$i][4] if ($data[$i][4]);
   $h{huser}=$data[$i][5] if ($data[$i][5]);
   $h{dept}=$data[$i][6] if ($data[$i][6]);
   $h{location}=$data[$i][7] if ($data[$i][7]);
+  $h{info}=$data[$i][8] if ($data[$i][8]);
 
-  print "Updating record id=$id ($data[$i][0]/$data[$i][1])...\n";
+  print "Updating record " .($id1<1?'UPDATENAME':' '). " id=$id ($data[$i][0]/$data[$i][1],$data[$i][2])...\n";
   $r = update_host(\%h);
-  error("failed to update host: $r ".db_lasterrormsg()) if ($r < 0);
+  fatal("failed to update host: id=$id ($r): ".db_lasterrormsg()) if ($r < 0);
 }
 
 
-exit;
 unless ($opt_commit) {
-  print "Found ". (keys %delhash) . " hosts to delete. (no changes made)\n";
+  print "No changes made.\n";
   exit;
 }
 
-print "Deleting " . (keys %delhash) . " hosts:\n";
-
-foreach $id (sort keys %delhash) {
-  print "Deleting host (id=$id)...\n";
-  fatal("failed to delete host (id=$id)") if (delete_host($id) < 0);
-}
+db_ignore_begin_and_commit(0);
+fatal("failed to commit changes to database") if (db_commit() < 0);
 
 
 # eof
