@@ -279,7 +279,7 @@ sub make_bind() {
       $subtype=$type;
       # process zones from master server
       if ($processed_zones{$zonename}) {
-	warn("Zone from master server skipped: $zonename");
+	error("Zone from master server skipped: $zonename");
 	next;
       }
       #print "slavezone: $zonename $type\n";
@@ -304,6 +304,9 @@ sub make_bind() {
       if ($type eq 'master' || $type eq 'slave');
     print BINDFILE "\tforward $forward_enum{$zone{forward}};\n"
       if ($forward_enum{$zone{forward}} && $type eq 'forward');
+    ($transfer_source = $zone{transfer_src}) =~ s/\/32$//;
+    print BINDFILE "\ttransfer-source $transfer_source;\n"
+      if (is_cidr($zone{transfer_src}) && $loopcounter < $normalzones);
 
     # allow_update
     print_cidr_list('allow-update',2,$zoneid,"\t");
@@ -334,6 +337,8 @@ sub make_bind() {
 	  print BINDFILE " $ip; ";
 	}
 	print BINDFILE " };\n";
+      } else {
+	fatal("no masters defined for slave zone: $zonename");
       }
     }
 
