@@ -1833,7 +1833,7 @@ if ($server{masterserver} > 0) {
 	if ($opt_verbose);
       next;
     }
-    next unless ($$zone[2] =~ /^[MS]$/);
+    next unless ($$zone[2] =~ /^[MSF]$/);
     push @{$zonelist}, $zone;
   }
 
