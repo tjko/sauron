@@ -37,6 +37,7 @@ if ($opt_help || @ARGV < 2) {
 $server=shift;
 $filename=shift;
 $opt_commit=($opt_commit ? 1 : 0);
+$opt_verbose=($opt_verbose ? 1 : 0);
 
 $user = (getpwuid($<))[0];
 set_muser($user);
@@ -98,7 +99,7 @@ fatal("at least following options must be used: --cidr, --name, --descr")
 fatal("--vlan must be used if using --vlanno")
   if ($opt_vlanno && not $opt_vlan);
 fatal("--vlan must be used if using --vlandesc")
-  if ($opt_vlandec && not $opt_vlan);
+  if ($opt_vlandesc && not $opt_vlan);
 
 open(FILE,$filename) || fatal("cannot open file: $filename");
 
