@@ -43,6 +43,20 @@ $tmp_extension = ".tmp.$<.$$"; # generate extension for temp files
 
 ###########################################################################
 
+sub expand_zonefile_path($$) {
+  my($path,$val) = @_;
+
+  my($tag,$tmp);
+
+  if (($tag) = ($path =~ /(\%N+)/)) {
+    $tmp = substr($val,0,length($tag)-1);
+    print "tag='$tag' '$tmp'\n";
+    $path =~ s/$tag/$tmp/g;
+  }
+
+  return $path;
+}
+
 sub clean_up() {
   my(@q,$i,$count,$t);
 
@@ -237,7 +251,7 @@ sub make_bind() {
 
   # named.root/named.ca
   unless ($server{no_roots} eq 't') {
-    $zfile="$server{pzone_path}$server{named_ca}";
+    $zfile="$server{named_ca}";
     print BINDFILE "\n\nzone \".\" in {\n";
     print BINDFILE "\ttype hint;\n";
     print BINDFILE "\tfile \"$zfile\";\n";
@@ -296,8 +310,14 @@ sub make_bind() {
     }
     $processed_zones{$zonename}++;
 
-    if ($type eq 'master') { $zfile=$server{'pzone_path'}; }
-    elsif ($type eq 'slave') { $zfile=$server{'szone_path'}; }
+    if ($type eq 'master') {
+      $zfile=$server{'pzone_path'};
+      $zfile=expand_zonefile_path($zfile,$zonename);
+    }
+    elsif ($type eq 'slave') {
+      $zfile=$server{'szone_path'};
+      $zfile=expand_zonefile_path($zfile,$zonename);
+    }
     else { $zfile=''; }
     $zfile.=$zonename . ".zone";
 
@@ -1768,6 +1788,8 @@ $serverid = get_server_id($servername);
 fatal("Cannot find server '$servername' from database.") if ($serverid < 0);
 fatal("Cannot get server record!") if (get_server($serverid,\%server));
 
+error("Primary zone-file path is not relative pathname " .
+      "($server{pzone_path})!") if ($server{pzone_path} =~ /^\//);
 
 $dhcp_auto_domainnames = $server{dhcp_flags_ad};
 $failover_mode = ($server{dhcp_flags_fo} ? 1 : 0);
