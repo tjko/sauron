@@ -42,6 +42,7 @@ error("invalid directory configuration")
  data=>[
   {ftype=>0, name=>'Server' },  
   {ftype=>1, tag=>'name', name=>'Server name', type=>'text', len=>20},
+  {ftype=>4, tag=>'id', name=>'Server ID'},
   {ftype=>1, tag=>'comment', name=>'Comments',  type=>'text', len=>60,
    empty=>1},
   {ftype=>0, name=>'DNS'},
@@ -73,6 +74,7 @@ error("invalid directory configuration")
  data=>[
   {ftype=>0, name=>'Zone' },
   {ftype=>1, tag=>'name', name=>'Zone name', type=>'domain', len=>30},
+  {ftype=>4, tag=>'id', name=>'Zone ID'},
   {ftype=>1, tag=>'comment', name=>'Comments', type=>'text', len=>60,
    empty=>1},
   {ftype=>4, tag=>'type', name=>'Type', type=>'enum', conv=>'U',
@@ -114,7 +116,7 @@ error("invalid directory configuration")
    type=>['text','text'], fields=>2,
    len=>[40,20], empty=>[0,1], elabels=>['DHCP','comment'], iff=>['type','M']}
  ],	      
- bgcolor=>'#00ffff',
+ bgcolor=>'#bfee00',
  border=>'0',		
  width=>'100%',
  nwidth=>'30%',
@@ -318,6 +320,9 @@ sub servers() {
   }
 }
 
+
+# ZONES
+#
 sub zones() {
   $sub=param('sub');
   $server=$state{'server'};
@@ -339,6 +344,23 @@ sub zones() {
     if ($zoneid eq '') {
       print p,"Zone not selected";
       goto select_zone;
+    }
+
+    if (param('zn_submit') ne '') {
+      get_zone($zoneid,\%zone);
+      unless (form_check_form('zn',\%zone,\%zone_form)) {
+	$res=update_zone(\%zone);
+	if ($res < 0) {
+	  print "<FONT color=\"red\">",h1("Zone record update failed!"),
+	        "</FONT>";
+	} else {
+	  print h2("Zone record succefully updated:");
+	}
+	get_zone($zoneid,\%zone);
+	display_form(\%zone,\%zone_form);
+	return;
+      }
+      print "<FONT color=\"red\">",h2("Invalid data in form!"),"</FONT>";
     }
 
     unless (param('zn_re_edit') eq '1') {
@@ -438,14 +460,21 @@ sub logout() {
 
 sub login_form($$) {
   my($msg,$c)=@_;
-  print start_form,h2($msg),p,
-        "Login: ",textfield(-name=>'login_name',-maxlength=>'8'),p,
-        "Password: ",password_field(-name=>'login_pwd',-maxlength=>'30'),p,
+  my($host);
+
+  $host='localhost???';
+  $host=$1 if (self_url =~ /https?\:\/\/([^\/]+)\//);
+
+  print start_form,"<CENTER>",h1("Sauron at $host"),hr,h2($msg),p,"<TABLE>",
+        Tr,td("Login:"),td(textfield(-name=>'login_name',-maxlength=>'8')),
+        Tr,td("Password:"),
+                   td(password_field(-name=>'login_pwd',-maxlength=>'30')),
+              "</TABLE>",
         hidden(-name=>'login',-default=>'yes'),
-        submit,end_form;
+        submit,end_form,p,"</CENTER>";
 
   #print "</TABLE>\n" unless($frame_mode);
-  print end_html();
+  print p,hr,"You should have cookies enabled for this site...",end_html();
   $state{'mode'}='auth';
   $state{'auth'}='no';
   save_state($c);
@@ -726,7 +755,8 @@ sub form_check_form($$$) {
       return 1 if (form_check_field($rec,param($p),0) ne '');
       #print p,"$p changed!" if ($data->{$tag} ne param($p));
       $data->{$tag}=param($p);
-    } elsif  ($type == 2) {
+    } 
+    elsif  ($type == 2) {
       $f=$rec->{fields};
       $a=param($p."_count");
       $a=0 if (!$a || $a < 0);
@@ -774,7 +804,10 @@ sub form_check_form($$$) {
 	  }
 	}
       }
-
+    }
+    elsif ($type == 3) {
+      return 1 unless (${$rec->{enum}}{param($p)});
+      $data->{$tag}=param($p);
     }
   }
 

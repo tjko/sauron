@@ -293,7 +293,33 @@ sub get_zone($$) {
 
 sub update_zone($) {
   my($rec) = @_;
-  return update_record('zones',$rec);
+  my($r,$id);
+
+  db_begin();
+  $r=update_record('zones',$rec);
+  if ($r < 0) { db_rollback(); return $r; }
+  $id=$rec->{id};
+
+  $r=update_array_field("ns_entries",3,"ns,comment,type,ref",
+			'ns',$rec,"1,$id");
+  if ($r < 0) { db_rollback(); return -12; }
+  $r=update_array_field("mx_entries",4,"pri,mx,comment,type,ref",
+			'mx',$rec,"1,$id");
+  if ($r < 0) { db_rollback(); return -13; }
+  $r=update_array_field("txt_entries",3,"txt,comment,type,ref",
+			'txt',$rec,"1,$id");
+  if ($r < 0) { db_rollback(); return -14; }
+  $r=update_array_field("dhcp_entries",3,"dhcp,comment,type,ref",
+			'dhcp',$rec,"2,$id");
+  if ($r < 0) { db_rollback(); return -15; }
+  $r=update_array_field("cidr_entries",3,"ip,comment,type,ref",
+			'allow_update',$rec,"2,$id");
+  if ($r < 0) { db_rollback(); return -16; }
+  $r=update_array_field("cidr_entries",3,"ip,comment,type,ref",
+			'masters',$rec,"3,$id");
+  if ($r < 0) { db_rollback(); return -17; }
+
+  return db_commit();
 }
 
 
