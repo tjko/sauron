@@ -3,7 +3,7 @@ Storage
 	{ Format 1.31 }
 	{ GeneratedFrom TGD-version-2.01 }
 	{ WrittenBy tjko }
-	{ WrittenOn "Thu Mar  1 23:51:38 2001" }
+	{ WrittenOn "Thu Mar  1 23:57:04 2001" }
 }
 
 Document 
@@ -723,8 +723,8 @@ TextBox 57
 {
 	{ View 21 }
 	{ Subject 56 }
-	{ Position 60 750 }
-	{ Size 24 20 }
+	{ Position 130 750 }
+	{ Size 219 20 }
 	{ Color "black" }
 	{ LineWidth 1 }
 	{ LineStyle Invisible }
