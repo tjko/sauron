@@ -27,6 +27,7 @@ require Exporter;
 	     show_hash
 	     check_ipmask
 	     dhcpether
+	     run_command
 	    );
 
 
@@ -380,6 +381,32 @@ sub dhcpether($) {
   return "00:00:00:00:00:00";
 }
 
+
+# custom "system" command with timeout option
+sub run_command($$$)
+{
+  my ($cmd,$args,$timeout) = @_;
+  my ($err,$pid);
+  my $stat = 0;
+
+  return -1 unless ($cmd && -x $cmd);
+  return -2 unless ($timeout > 0);
+
+  if ($pid = fork()) {
+    # parent...
+    local $SIG{ALRM} = sub { $stat=1; kill(15,$pid); };
+    alarm($timeout);
+    waitpid($pid,0);
+    $err = $?;
+    alarm(0);
+  } else {
+    # child...
+    exec($cmd,@{$args});
+  }
+
+  $err = 14 if ($stat);
+  return $err;
+}
 
 
 1;

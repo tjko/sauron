@@ -1821,10 +1821,12 @@ sub hosts_menu() {
 	print "Pinging $host{domain} ($ip)...<br><pre>";
 	$SAURON_PING_ARGS = '-c5' unless ($SAURON_PING_ARGS);
 	$SAURON_PING_TIMEOUT = 15 unless ($SAURON_PING_TIMEOUT > 0);
+	$|=1;
 	$r = run_command($SAURON_PING_PROG,[$SAURON_PING_ARGS,$ip],
 			 $SAURON_PING_TIMEOUT);
 	print "</pre><br>";
-	print "<FONT color=\"red\">PING TIMED OUT!</FONT><BR>" if ($r > 0);
+	print "<FONT color=\"red\">PING TIMED OUT!</FONT><BR>"
+	  if (($r & 255) == 14);
       } else {
 	alert2("Missing/invalid IP address");
       }
@@ -1846,11 +1848,12 @@ sub hosts_menu() {
 	push @arguments, $ip;
 	$SAURON_TRACEROUTE_TIMEOUT = 15 
 	  unless ($SAURON_TRACEROUTE_TIMEOUT > 0);
+	$|=1;
 	$r = run_command($SAURON_TRACEROUTE_PROG,\@arguments,
 			 $SAURON_TRACEROUTE_TIMEOUT);
 	print "</pre><br>";
 	print "<FONT color=\"red\">TRACEROUTE TIMED OUT!</FONT><BR>"
-	  if ($r > 0);
+	  if (($r & 255) == 14);
       } else {
 	alert2("Missing/invalid IP address");
       }
@@ -4041,29 +4044,6 @@ sub add_default_zones($$) {
   }
 
 }			
-
-sub run_command($$$)
-{
-  my ($cmd,$args,$timeout) = @_;
-  my $stat = 0;
-
-  return -1 unless ($cmd && -x $cmd);
-  return -2 unless ($timeout > 0);
-
-  #print "RUN $cmd ",join(' ',@{$args})," ($timeout)\n";
-  if ($pid = fork()) {
-    # parent...
-    local $SIG{ALRM} = sub { $stat=1; kill(15,$pid); };
-    alarm($timeout);
-    waitpid($pid,0);
-    alarm(0);
-  } else {
-    # child...
-    exec($cmd,@{$args});
-  }
-  #print "DONE $stat\n";
-  return $stat;
-}
 
 # eof
 
