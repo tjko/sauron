@@ -636,15 +636,14 @@ sub make_bind() {
 
 
 
-      ## mx hash
+      ## mx hash (mx templates)
       undef %mxhash;
       undef @q;
-      db_query("SELECT h.domain,m.pri,m.mx " .
-	       "FROM hosts h,zones z,mx_templates r, mx_entries m " .
-	       "WHERE z.id=$zoneid AND h.zone=z.id AND h.mx=r.id " .
+      db_query("SELECT r.id,m.pri,m.mx " .
+	       "FROM zones z,mx_templates r, mx_entries m " .
+	       "WHERE z.id=$zoneid AND r.zone=z.id " .
 	       "AND m.ref=r.id AND m.type=3 " .
-	       "AND h.type=1 " .
-	       "ORDER BY h.domain,m.pri,m.mx;",\@q);
+	       "ORDER BY r.id,m.pri,m.mx;",\@q);
       error(db_errormsg()) if (db_errormsg());
       if (@q > 0) {
 	$mx_count=@q;
@@ -657,7 +656,7 @@ sub make_bind() {
 	  }
 	  push @{$mxhash{$q[$i][0]}}, "$q[$i][1] $q[$i][2]";
 	}
-	print "mxhash $mx_count : " . (keys %mxhash) . "\n";
+	#print "mxhash $mx_count : " . (keys %mxhash) . "\n";
 	#foreach $foo (keys %mxhash) {  print "mx hash: $foo\n"; }
       }
       undef %mxhash2;
@@ -707,7 +706,7 @@ sub make_bind() {
       undef @q;
       undef %dnames;
       db_query("SELECT h.domain,a.ip,h.hinfo_hw,h.hinfo_sw,h.ttl,h.huser, " .
-	       " h.dept,h.location,h.info " .
+	       " h.dept,h.location,h.info,h.mx " .
 	       "FROM hosts h, a_entries a, zones z " .
 	       "WHERE h.zone=z.id AND a.host=h.id " .
 	       "AND z.id=$zoneid AND h.type=1 " .
@@ -736,7 +735,7 @@ sub make_bind() {
 	  $txt=$txthash{$domain};
 	  $wks=$wkshash{$domain};
 	  $wks=$wkshash2{$domain} if ($wkshash2{$domain});
-	  $mx=$mxhash{$domain};
+	  $mx=$mxhash{$q[$i][9]};
 	  $mx=$mxhash2{$domain} if ($mxhash2{$domain});
 	  $info=$q[$i][5];
 	  if ($q[$i][6]) { $info.=", " if ($info); $info.=$q[$i][6]; }
@@ -759,8 +758,9 @@ sub make_bind() {
 	  }
 	  if ($mx) {
 	    for $k (0 .. $#{$mx}) {
-	      $$mx[$k] =~ s/\$DOMAIN/$domain/g;
-	      printf ZONEFILE $ZFORMAT, '',$ttl,$class,'MX',$$mx[$k];
+	      $val=$$mx[$k];
+              $val =~ s/\$DOMAIN/$domain/g;
+	      printf ZONEFILE $ZFORMAT, '',$ttl,$class,'MX',$val;
 	    }
 	  }
 	  for $k (0 .. $#{$txt}) {
