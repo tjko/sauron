@@ -1,8 +1,8 @@
 Sauron v.0.6.0 - DNS/DHCP Management System
 ==============
 
-NOTE! This is the first "stable" release of Sauron. It contains only
-small fixes and improvements to the v0.5 that has been in production use
+NOTE! This is the first "stable" release of Sauron. It contains mainly
+bug fixes and small improvements to the v0.5 that has been in production use
 for almost two years now.
 
 
@@ -32,6 +32,9 @@ TESTED PLATFORMS
 
 
 INSTALLATION 
+
+  See User Guide for complete installation instruction. This section
+  is only a quick overview of the installation process:
 
   1) Build and install the program (SKIP this if you're installing the RPM):
 	./configure
