@@ -1,6 +1,8 @@
 $Id$
 
-0.6.2beta
+0.6.2
+	- fixed bug when copying reverse zones that left wrong
+	  value in reversenet field
 	- new user privileges:
 	  - templatemask & groupmask for granting userss access to 
 	    greate & modify templates/groups with names matching to a 
@@ -13,7 +15,9 @@ $Id$
 	- custom zone file entries can be specified for each master
 	  zone, these lines will appear "as is" at the end of generated 
 	  zone file
-	- preliminary support for DBI (DBD:Pg)
+	- preliminary support for DBI (DBD:Pg), use --with-DBI option
+	  when running configure to enable or simply change the DB.pm
+	  link to point appropriate module (DB-Pg.pm or DB-DBI.pm)
 	- fixes to zone file parsing code (UtilZone.pm)
 	- configuration file directory is now patched into Sauron.pm
 	  during install
