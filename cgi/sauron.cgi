@@ -23,6 +23,9 @@ $SAURON_CGI_VER = ' $Revision$ $Date$ ';
 
 $ALEVEL_VLANS = 5 unless (defined($ALEVEL_VLANS));
 $ALEVEL_RESERVATIONS = 1 unless (defined($ALEVEL_RESERVATIONS));
+$ALEVEL_PING = 1 unless (defined($ALEVEL_PING));
+$ALEVEL_TRACEROUTE = 1 unless (defined($ALEVEL_TRACEROUTE));
+$ALEVEL_HISTORY = 1 unless (defined($ALEVEL_HISTORY));
 #$|=1;
 $debug_mode = 0;
 
@@ -1456,20 +1459,16 @@ sub zones_menu() {
 	     "WHERE z.id=$zoneid AND h.zone=z.id " .
 	     " AND (h.mdate > z.serial_date OR h.cdate > z.serial_date) " .
 	     "ORDER BY h.domain LIMIT 100;",\@q);
-    print "<TABLE width=\"98%\" bgcolor=\"#ccccff\" cellspacing=1 ".
-          " cellpadding=1 border=0>",
-          "<TR bgcolor=\"#aaaaff\">",th("#"),th("Hostname"),th("Type"),
-	  th("Action"),th("Date"),th("By"),"</TR>";
+
     for $i (0..$#q) {
       $action=($q[$i][2] > $q[$i][3] ? 'Create' : 'Modify');
       $date=localtime(($action eq 'Create' ? $q[$i][2] : $q[$i][3]));
       $user=($action eq 'Create' ? $q[$i][4] : $q[$i][5]);
-      print "<TR bgcolor=\"#eeeebf\">",td($i."."),
-	    td("<a href=\"$selfurl?menu=hosts&h_id=$q[$i][0]\">$q[$i][1]</a>"),
-	    td($host_types{$q[$i][6]}),
-	    td($action),td($date),td($user),"</TR>";
+      $name="<a href=\"$selfurl?menu=hosts&h_id=$q[$i][0]\">$q[$i][1]</a>";
+      push @plist, ["$i.",$name,$host_types{$q[$i][6]},$action,$date,$user];
     }
-    print "</TABLE>";
+    display_list(['#','Hostname','Type','Action','Date','By'],\@plist,0);
+    print "<br>";
     return;
   }
   elsif ($sub eq 'AddDefaults') {
@@ -1721,7 +1720,7 @@ sub hosts_menu() {
 
     if (param('h_submit')) {
       for $i (1..$#{$host{ip}}) { $old_ips[$i]=$host{ip}[$i][1]; }
-
+      %oldhost=%host;
       unless (($res=form_check_form('h',\%host,$hform))) {
 	if (check_perms('host',$host{domain},1)) {
 	  alert2("Invalid hostname: does not conform to your restrictions");
@@ -1775,7 +1774,14 @@ sub hosts_menu() {
 	    } else {
 	      update_history($state{uid},$state{sid},1,
 			    "EDIT: $host_types{$host{type}} ",
-			   "domain: $host{domain}",$host{id});
+			     ($host{domain} eq $oldhost{domain} ?
+			      "domain: $host{domain} " :
+			      "domain: $oldhost{domain} --> $host{domain} ") .
+			     ($host{ether} ne $oldhost{ether} ?
+			      "ether: $oldhost{ether} --> $host{ether} ":"") .
+			     ($host{ip}[1][1] ne $old_ips[1] ?
+			      "ip: $old_ips[1] --> $host{ip}[1][1] ":""),
+			     $host{id});
 	      print h2("Host record succesfully updated.");
 	      goto show_host_record;
 	    }
@@ -1802,13 +1808,13 @@ sub hosts_menu() {
     goto show_host_record;
   }
   elsif ($sub eq 'Ping') {
-    return if check_perms('level',$SAURON_PING_ALEVEL);
+    return if check_perms('level',$ALEVEL_PING);
     goto show_host_record unless ($id > 0 && $host{type} == 1);
     if ($SAURON_PING_PROG && -x $SAURON_PING_PROG) {
       ($ip=$host{ip}[1][1]) =~ s/\/32\s*$//;
       if (is_cidr($ip)) {
 	update_history($state{uid},$state{sid},1,
-		       "PING: $host{domain}","ip: $ip",$host{id});
+		       "PING","domain: $host{domain}, ip: $ip",$host{id});
 	print "Pinging $host{domain} ($ip)...<br><pre>";
 	$SAURON_PING_ARGS = '-c5' unless ($SAURON_PING_ARGS);
 	$SAURON_PING_TIMEOUT = 15 unless ($SAURON_PING_TIMEOUT > 0);
@@ -1824,13 +1830,13 @@ sub hosts_menu() {
     }
   }
   elsif ($sub eq 'Traceroute') {
-    return if check_perms('level',$SAURON_TRACEROUTE_ALEVEL);
+    return if check_perms('level',$ALEVEL_TRACEROUTE);
     goto show_host_record unless ($id > 0 && $host{type} == 1);
     if ($SAURON_TRACEROUTE_PROG && -x $SAURON_TRACEROUTE_PROG) {
       ($ip=$host{ip}[1][1]) =~ s/\/32\s*$//;
       if (is_cidr($ip)) {
 	update_history($state{uid},$state{sid},1,
-		       "TRACEROUTE: $host{domain}","ip: $ip",$host{id});
+		      "TRACEROUTE","domain: $host{domain}, ip: $ip",$host{id});
 	print "Tracing route to $host{domain} ($ip)...<br><pre>";
 	undef @arguments;
 	push @arguments, $SAURON_TRACEROUTE_ARGS if ($SAURON_TRACEROUTE_ARGS);
@@ -1848,6 +1854,13 @@ sub hosts_menu() {
     } else {
       alert2("Traceroute not configured!");
     }
+  }
+  elsif ($sub eq 'History') {
+    return if (check_perms('level',$ALEVEL_HISTORY));
+    goto show_host_record unless ($id > 0);
+    print "History for host record: $id ($host{domain}):<br>";
+    get_history_host($id,\@q);
+    display_list(['Date','Action','Info','By'],\@q,0);
   }
   elsif ($sub eq 'browse') {
     %bdata=(domain=>'',net=>'ANY',nets=>\%nethash,nets_k=>\@netkeys,
@@ -2206,12 +2219,16 @@ sub hosts_menu() {
     print "<table width=\"99%\"><tr><td align=\"left\">",
           submit(-name=>'sub',-value=>'Refresh'),
 	  "</td><td align=\"right\">";
+    print submit(-name=>'sub',-value=>'History'), " "
+      if (!check_perms('level',$ALEVEL_HISTORY,1));
     print submit(-name=>'sub',-value=>'Network Settings'), " "
       if ($host{type} == 1);
     print submit(-name=>'sub',-value=>'Ping'), " "
-      if ($host{type} == 1 && $SAURON_PING_PROG);
+      if ($host{type} == 1 && $SAURON_PING_PROG &&
+	  !check_perms('level',$ALEVEL_PING,1));
     print submit(-name=>'sub',-value=>'Traceroute')
-      if ($host{type} == 1 && $SAURON_PING_PROG);
+      if ($host{type} == 1 && $SAURON_TRACEROUTE_PROG &&
+	  !check_perms('level',$ALEVEL_TRACEROUTE,1));
     print "</td></tr></table>";
 
     display_form(\%host,\%host_form);
@@ -2388,23 +2405,13 @@ sub groups_menu() {
     return;
   }
 
-  print "<TABLE width=\"99%\" cellspacing=\"1\" border=\"0\">",
-        "<TR bgcolor=\"#aaaaff\">",
-        th("Name"),th("Type"),th("Comment"),th("Lvl"),"</TR>";
-
   for $i (0..$#q) {
-    print "<TR bgcolor=\"#eeeebf\">";
-
-    $name=$q[$i][1];
-    $name='&nbsp;' if ($name eq '');
-    $comment=$q[$i][2];
-    $comment='&nbsp;' if ($comment eq '');
-    print "<td><a href=\"$selfurl?menu=groups&grp_id=$q[$i][0]\">$name</a>",
-          "</td>",td($group_type_hash{$q[$i][3]}),
-          td($comment),td($q[$i][4].'&nbsp;'),"</TR>";
+    $name = "<a href=\"$selfurl?menu=groups&grp_id=$q[$i][0]\">$q[$i][1]</a>";
+    push @list, [$name,$group_type_hash{$q[$i][3]},$q[$i][2],$q[$i][4]];
   }
-
-  print "</TABLE>";
+  print h3("Groups for server: $server");
+  display_list(['Name','Type','Comment','Lvl'],\@list,0);
+  print "<br>";
 }
 
 
@@ -3161,32 +3168,19 @@ sub login_menu() {
     undef @wholist;
     get_who_list(\@wholist,$timeout);
     print h2("Current users:");
-    print "<TABLE width=\"99%\" cellspacing=1 bgcolor=\"#ccccff\">",
-          "<TR bgcolor=\"#aaaaff\">",
-          th('User'),th('Name'),th('From'),th('Idle'),th('Login'),"</TR>";
-    for $i (0..$#wholist) {
-      print "<TR bgcolor=\"#eeeebf\">",	
-	td($wholist[$i][0]),td($wholist[$i][1]),td($wholist[$i][2]),
-	  td($wholist[$i][3]),td($wholist[$i][4]),"</TR>";
-    }
-    print "</TABLE>";
+    display_list(['User','Name','From','Idle','Login'],\@wholist,0);
+    print "<br>";
   }
   elsif ($sub eq 'lastlog') {
     return if (check_perms('superuser',''));
     $count=get_lastlog(40,'',\@lastlog);
     print h2("Lastlog:");
-    print "<TABLE bgcolor=\"#ccccff\" width=\"99%\" cellspacing=1>",
-          "<TR bgcolor=\"#aaaaff\">",th("User"),th("SID"),th("Host"),
-	    th("Login"),th("Logout (session length)"),"</TR>";
     for $i (0..($count-1)) {
-      print "<TR bgcolor=#eeeebf>",
-	    td($lastlog[$i][0]),
-	    td("<a href=\"$selfurl?menu=login&sub=session&session_sid=$lastlog[$i][1]\">$lastlog[$i][1]</a>"),
-	    td($lastlog[$i][2]),
-            td($lastlog[$i][3]),
-            td($lastlog[$i][4]),"</TR>";
+      $lastlog[$i][1] = "<a href=\"$selfurl?menu=login&sub=session&session_sid=$lastlog[$i][1]\">$lastlog[$i][1]</a>";
     }
-    print "</TABLE><br>\n";
+    display_list(['User','SID','Host','Login','Logout (session length)'],
+		 \@lastlog,0);
+    print "<br>";
   }
   elsif ($sub eq 'session') {
     return if (check_perms('superuser',''));
@@ -3213,22 +3207,9 @@ sub login_menu() {
       }
 
       undef @q;
-      db_query("SELECT date,type,ref,action,info " .
-	       "FROM history WHERE sid=$session_id;",\@q);
-      if (@q > 0) {
-	print h3("Session history:");
-	print "<TABLE bgcolor=\"#ccccff\" width=\"99%\" cellspacing=1>",
-              "<TR bgcolor=\"#aaaaff\">",th("Date"),th("Type"),th("Ref"),
-	      th("Action"),th("Info"),"</TR>";
-	for $i (0..$#q) {
-	  $date1=localtime($q[$i][0]);
-	  $type=$q[$i][1];
-	  print "<TR bgcolor=\"#eeeebf\">",
-	         td($date1),td($type),
-		 td($q[$i][2]),td($q[$i][3]),td($q[$i][4]),"</TR>";
-	}
-	print "</TABLE>";
-      }
+      get_history_session($session_id,\@q);
+      print h3("Session history:");
+      display_list(['Date','Type','Ref','Action','Info'],\@q,0);
     }
   }
   elsif ($sub eq 'motd') {

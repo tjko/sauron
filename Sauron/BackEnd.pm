@@ -107,6 +107,9 @@ require Exporter;
 	     update_history
 	     fix_utmp
 	     get_lastlog
+
+	     get_history_host
+	     get_history_session
 	    );
 
 use Net::Netmask;
@@ -2635,6 +2638,34 @@ sub get_lastlog($$$) {
   }
 
   return $count;
+}
+
+sub get_history_host($$)
+{
+  my ($id,$list) = @_;
+  my (@q,%users,$i);
+
+  return -1 unless ($id > 0);
+  db_query("SELECT date,action,info,uid FROM history ".
+	   "WHERE type=1 AND ref=$id ORDER BY date ",$list);
+  db_query("SELECT id,username FROM users",\@q);
+  for $i (0..$#q) { $users{$q[$i][0]}=$q[$i][1]; }
+  for $i (0..$#{$list}) {
+    $$list[$i][3] = $users{$$list[$i][3]} if ($users{$$list[$i][3]});
+  }
+  return 0;
+}
+
+sub get_history_session($$)
+{
+  my ($id,$list) = @_;
+  my (@q,%users,$i);
+
+  return -1 unless ($id > 0);
+  db_query("SELECT date,type,ref,action,info FROM history ".
+	   "WHERE sid=$id ORDER BY date ",$list);
+
+  return 0;
 }
 
 1;
