@@ -1474,7 +1474,7 @@ sub get_host($$); # declare it here since get_host uses sometimes recursion
 
 sub get_host($$) {
   my ($id,$rec) = @_;
-  my ($res,$t,$wrec,$mrec,%h,@q);
+  my ($res,$t,$wrec,$mrec,%h,@q,$infostr);
 
   $res = get_record("hosts",
 	       "zone,type,domain,ttl,class,grp,alias,cname_txt," .
@@ -1583,8 +1583,11 @@ sub get_host($$) {
     $rec->{mdate_str}='';
   }
 
+  if ($rec->{dhcp_info}) {
+    $infostr=' (' . $rec->{dhcp_info} . ')';
+  }
   $rec->{dhcp_date_str}=($rec->{dhcp_date} > 0 ?
-			 localtime($rec->{dhcp_date}) : '');
+			 localtime($rec->{dhcp_date}) . $infostr : '');
 
   return 0;
 }
