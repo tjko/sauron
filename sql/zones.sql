@@ -9,7 +9,7 @@
 /** This table contains zone definitions of a server. **/
 
 CREATE TABLE zones (
-       id	   SERIAL, /* unique ID */
+       id	   SERIAL PRIMARY KEY, /* unique ID */
        server	   INT4 NOT NULL, /* ptr to a record in servers table
 					-->servers.id */
 
@@ -59,6 +59,6 @@ CREATE TABLE zones (
        parent	   INT4 DEFAULT -1, /* unused */
        rdate       INT4 DEFAULT 0,  /* last host removal date */
 
-       CONSTRAINT  zones_key PRIMARY KEY (name,server)
+       CONSTRAINT  zones_key UNIQUE (name,server)
 ) INHERITS(common_fields);
 

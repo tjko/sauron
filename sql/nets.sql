@@ -8,7 +8,7 @@
     control/user friendliness in front-ends.  **/
 
 CREATE TABLE nets (
-       id	   SERIAL, /* unique ID */
+       id	   SERIAL PRIMARY KEY, /* unique ID */
        server	   INT4 NOT NULL, /* ptr to a servers table record
 					-->servers.id */
 
@@ -32,7 +32,7 @@ CREATE TABLE nets (
        range_end   INET, /* auto assign address range end */
        comment	   TEXT, /* comment */
 
-       CONSTRAINT  nets_key PRIMARY KEY (net,server)
+       CONSTRAINT  nets_key UNIQUE (net,server)
 ) INHERITS(common_fields);
 
 

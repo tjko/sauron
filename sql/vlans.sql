@@ -8,7 +8,7 @@
     Used mainly for generating of shared-network map for DHCP. **/
 
 CREATE TABLE vlans (
-       id	   SERIAL, /* unique ID */
+       id	   SERIAL PRIMARY KEY, /* unique ID */
        server	   INT4 NOT NULL, /* ptr to a servers table record
 					-->servers.id */
 
@@ -17,7 +17,7 @@ CREATE TABLE vlans (
        description TEXT,  /* long name */
        comment	   TEXT,  /* comments */
 
-       CONSTRAINT  vlans_key PRIMARY KEY (name,server)
+       CONSTRAINT  vlans_key UNIQUE (name,server)
 ) INHERITS(common_fields);
 
 

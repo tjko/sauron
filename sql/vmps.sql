@@ -7,7 +7,7 @@
     Used for generating (Cisco) VMPS configuration files. **/
 
 CREATE TABLE vmps (
-       id	   SERIAL, /* unique ID */
+       id	   SERIAL PRIMARY KEY, /* unique ID */
        server	   INT4 NOT NULL, /* ptr to a servers table record
 					-->servers.id */
 
@@ -21,7 +21,7 @@ CREATE TABLE vmps (
                              	        -->vlans.id */
        comment	   TEXT, /* comments */
 
-       CONSTRAINT  vmps_key PRIMARY KEY (name,server)
+       CONSTRAINT  vmps_key UNIQUE (name,server)
 ) INHERITS(common_fields);
 
 
