@@ -1,6 +1,8 @@
 $Id$
 
 0.6.2
+	- fixed dates displayed (month was off by one) by last command
+	  and lastlog display in web-interface
 	- fixed bug when copying reverse zones that left wrong
 	  value in reversenet field
 	- new user privileges:
