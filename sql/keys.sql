@@ -1,40 +1,17 @@
-/* convert Sauron database format from 1.2 to 1.3 */
-/* (this requires PostgreSQL v7.3 or later) */
+/* keys table creation
+ *
+ * $Id$
+ */
 
-
-/* vmps */
-ALTER TABLE vmps DROP CONSTRAINT vmps_key;
-ALTER TABLE vmps ADD CONSTRAINT vmps_key UNIQUE(name,server);
-ALTER TABLE vmps ADD PRIMARY KEY(id);
-DROP INDEX vmps_id_key;
-
-/* vlans */
-ALTER TABLE vlans DROP CONSTRAINT vlans_key;
-ALTER TABLE vlans ADD CONSTRAINT vlans_key UNIQUE(name,server);
-ALTER TABLE vlans ADD PRIMARY KEY(id);
-DROP INDEX vlans_id_key;
-
-/* nets */
-ALTER TABLE nets DROP CONSTRAINT nets_key;
-ALTER TABLE nets ADD CONSTRAINT nets_key UNIQUE(net,server);
-ALTER TABLE nets ADD PRIMARY KEY(id);
-DROP INDEX nets_id_key;
-
-/* zones */
-ALTER TABLE zones DROP CONSTRAINT zones_key;
-ALTER TABLE zones ADD CONSTRAINT zones_key UNIQUE(name,server);
-ALTER TABLE zones ADD PRIMARY KEY(id);
-DROP INDEX zones_id_key;
-
-
-/* keys table creation */
+/** This table contains TSIG/DNSSEC keys.  **/
 
 CREATE TABLE keys (
 	id	    SERIAL PRIMARY KEY, /* unique ID */
 	type        INT4 NOT NULL, /* type:
 				      1=server */
         ref	    INT4 NOT NULL, /* ptr to table speciefied by type field
-					-->servers.id */
+					-->servers.id
+					-->acls.id  */
 
 	name	    TEXT NOT NULL,  /* key name */
 	keytype	    INT4 DEFAULT 0, /* key type (bitmap):
@@ -75,10 +52,3 @@ CREATE TABLE keys (
 
 	CONSTRAINT  keyname_key UNIQUE(name,ref,type)
 ) INHERITS(common_fields);
-
-
-
-/* UPDATE settings SET value='1.3' where setting='dbversion'; */
-
-/* eof */
-
