@@ -85,6 +85,8 @@ require Exporter;
 	     add_user
 	     delete_user
 	     get_user_group_id
+             get_user_group
+             delete_user_group
 
 	     get_net_list
 	     get_net
@@ -2279,6 +2281,35 @@ sub get_user_group_id($) {
 
   db_query("SELECT id FROM user_groups WHERE name='$group'",\@q);
   return ($q[0][0] > 0 ? $q[0][0] : -1);
+}
+
+sub get_user_group($$) {
+  my ($id,$rec) = @_;
+  my ($res);
+
+  $res = get_record("user_groups","name,comment",
+		    $id,$rec,"id");
+
+  return $res;
+}
+
+sub delete_user_group($$) {
+  my ($id,$newid) = @_;
+  my ($res);
+
+  db_begin();
+
+  $res = db_exec("DELETE FROM user_rights WHERE type=1 AND ref=$id;");
+  if ($res < 0) { db_rollback(); return -1; }
+  $res = db_exec("DELETE FROM user_groups WHERE id=$id;");
+  if ($res < 0) { db_rollback(); return -2; }
+
+  if ($newid > 0) {
+    $res = db_exec("UPDATE users SET gid=$newid WHERE gid=$id;");
+    if ($res < 0) { db_rollback(); return -3; }
+  }
+  
+  return db_commit();
 }
 
 ############################################################################
