@@ -15,7 +15,7 @@ $CGI::DISABLE_UPLOADS =1; # no uploads
 $CGI::POST_MAX = 100000; # max 100k posts
 
 #$|=1;
-$debug_mode = 0;
+$debug_mode = 1;
 
 if (-f "/etc/sauron/config") { 
   $conf_dir='/etc/sauron'; 
@@ -302,9 +302,14 @@ do "$PROG_DIR/back_end.pl";
   {ftype=>1, tag=>'net', name=>'Net (CIDR)', type=>'cidr'},
   {ftype=>1, tag=>'comment', name=>'Comment', type=>'text',
    len=>60, empty=>1},
+  {ftype=>0, name=>'Auto assign address range', iff=>['subnet','t']},
+  {ftype=>1, tag=>'range_start', name=>'Range start', type=>'ip', 
+   empty=>1, iff=>['subnet','t']},
+  {ftype=>1, tag=>'range_end', name=>'Range end', type=>'ip',
+   empty=>1, iff=>['subnet','t']},
+  {ftype=>0, name=>'DHCP'},
   {ftype=>3, tag=>'no_dhcp', name=>'DHCP', type=>'enum', conv=>'L',
    enum=>{f=>'Enabled',t=>'Disabled'}},
-  {ftype=>0, name=>'DHCP'},
   {ftype=>2, tag=>'dhcp_l', name=>'Net specific DHCP entries', 
    type=>['text','text'], fields=>2,
    len=>[40,20], empty=>[0,1], elabels=>['DHCP','comment']}
@@ -837,6 +842,70 @@ sub hosts_menu() {
     goto show_host_record if ($res == 2);
     return;
   }
+  elsif ($sub eq 'Move') {
+    $id=param('h_id');
+    if (get_host($id,\%host)) {
+      print h2("Cannot get host record (id=$id)!");
+      return;
+    }
+    if ($#{$h{ip}} > 1) {
+      print h2("Host has multiple IPs!"),
+            p,"Move of hosts with multiple IPs not supported (yet)";
+      return;
+    }
+    if (param('move_cancel')) {
+      print h2("Host record not moved");
+      goto show_host_record;
+    } elsif (param('move_confirm')) {
+      if (param('move_confirm2')) {
+	if (not is_cidr(param('new_ip'))) {
+	  print '<FONT color="red">',h2('Invalid IP!'),'</FONT>';
+	} elsif (ip_in_use($serverid,param('new_ip'))) {
+	  print '<FONT color="red">',h2('IP already in use!'),'</FONT>';
+	} else {
+	  $host{ip}[1][1]=param('new_ip'); 
+	  $host{ip}[1][4]=1;
+	  unless (update_host(\%host)) {
+	    print h2('Host moved.');
+	    goto show_host_record;
+	  } else {
+	    print '<FONT color="red">',h2('Host update failed!'),'</FONT>';
+	  }
+	}
+      }
+      print h2("Move host to another IP");
+      $newip=auto_address($serverid,param('move_net'));
+      unless(is_cidr($newip)) {
+	print h3($newip);
+	$newip=$host{ip}[1][1];
+      }
+      print p,startform(-method=>'GET',-action=>$selfurl),
+            hidden('menu','hosts'),hidden('h_id',$id),hidden('sub','Move'),
+            hidden('move_confirm'),hidden('move_net'),p,"New IP: ",
+            textfield(-name=>'new_ip',-maxlength=>15,-default=>$newip), " ",
+            submit(-name=>'move_confirm2',-value=>'Update'), " ",
+            submit(-name=>'move_cancel',-value=>'Cancel'), " ",
+            end_form;
+      display_form(\%host,\%host_form);
+      return;
+    }
+    make_net_list($serverid,0,\%nethash,\@netkeys);
+    $ip=$host{ip}[1][1];
+    undef @q;
+    db_query("SELECT net FROM nets WHERE server=$serverid AND subnet=true " .
+	     "AND net >> '$ip';",\@q);
+    print h2("Move host to another subnet: ");
+    print p,startform(-method=>'GET',-action=>$selfurl),
+          hidden('menu','hosts'),hidden('h_id',$id),hidden('sub','Move'),
+          p,"Move host to: ",
+          popup_menu(-name=>'move_net',-values=>\@netkeys,-default=>'ANY',
+		     -default=>$q[0][0],-labels=>\%nethash),
+          submit(-name=>'move_confirm',-value=>'Move'), " ",
+          submit(-name=>'move_cancel',-value=>'Cancel'), " ",
+          end_form;
+    display_form(\%host,\%host_form);
+    return;
+  }
   elsif ($sub eq 'Edit') {
     $res=edit_magic('h','Host','hosts',\%host_form,\&get_host,\&update_host,
 		   param('h_id'));
@@ -882,8 +951,8 @@ sub hosts_menu() {
     $offset=$page*$limit;
 
     $type=param('bh_type');
-    if (param('bh_type') > 0) {
-      $typerule=" AND a.type=".param('bh_type')." ";
+    if ($type > 0) {
+      $typerule=" AND a.type=$type ";
     } else {
       $typerule2=" AND (a.type=1 OR a.type=6) ";
     }
@@ -903,9 +972,9 @@ sub hosts_menu() {
     if (param('bh_order') == 1) { $sorder='5,1';  }
     else { $sorder='1,5'; }
 
-    if (param('bh_cidr') || param('bh_net') ne 'ANY') {
-      $type=1;
-    }
+    #if (param('bh_cidr') || param('bh_net') ne 'ANY') {
+    #  $type=1;
+    #}
 
     undef %extrarule;
     if (param('bh_pattern')) {
@@ -933,15 +1002,15 @@ sub hosts_menu() {
 	  " $domainrule ";
 
     if ($type == 1 || $type == 6) { 
-      $sql="$sql1 ORDER BY $sorder"; 
+      $sql="$sql1 ORDER BY $sorder,1"; 
     } elsif ($type == 4) { 
-      $sql="$sql3 UNION $sql4 ORDER BY $sorder"; 
+      $sql="$sql3 UNION $sql4 ORDER BY $sorder,2"; 
     } elsif ($type == 0) { 
-      $sql="$sql1 UNION $sql2 UNION $sql3 UNION $sql4 ORDER BY $sorder"; 
+      $sql="$sql1 UNION $sql2 UNION $sql3 UNION $sql4 ORDER BY $sorder,3"; 
     } 
     else { $sql="$sql2 ORDER BY $sorder"; }
     $sql.=" LIMIT $limit OFFSET $offset;";
-    #print p,$sql;
+    print p,$sql;
     db_query($sql,\@q);
     $count=scalar @q;
     print "<TABLE width=\"99%\" cellspacing=0 cellpadding=1 border=0 " .
@@ -1004,24 +1073,18 @@ sub hosts_menu() {
     display_form(\%host,\%host_form);
     print p,startform(-method=>'GET',-action=>$selfurl),
           hidden('menu','hosts'),hidden('h_id',$id),
-          submit(-name=>'sub',-value=>'Edit')," ",
-          submit(-name=>'sub',-value=>'Delete'),end_form;
+          submit(-name=>'sub',-value=>'Edit'), " ",
+          submit(-name=>'sub',-value=>'Delete'), " ";
+    print submit(-name=>'sub',-value=>'Move'), " " if ($host{type} == 1);
+    print "&nbsp;&nbsp;",submit(-name=>'sub',-value=>'Refresh'), " ",end_form;
     return;
   }
 
 
  browse_hosts:
   param('sub','browse');
-  #$nethash=get_nets($serverid);
-  $nets=get_net_list($serverid,1);
-  undef %nethash; undef @netkeys;
-  $nethash{'ANY'}='Any net';
-  $netkeys[0]='ANY';
-  for $i (0..$#{$nets}) { 
-    next unless ($$nets[$i][2]);
-    $nethash{$$nets[$i][0]}="$$nets[$i][0] - " . substr($$nets[$i][2],0,25);
-    push @netkeys, $$nets[$i][0];
-  }
+  make_net_list($serverid,1,\%nethash,\@netkeys);
+
   %bdata=(domain=>'',net=>'ANY',nets=>\%nethash,nets_k=>\@netkeys,
 	    type=>1,order=>2,stype=>1,size=>3);
   if ($state{searchopts} =~ /^(\d+),(\d+),(\d+),(\d+),(\S*),(\S*)$/) {
@@ -1041,6 +1104,24 @@ sub hosts_menu() {
   form_magic('bh',\%bdata,\%browse_hosts_form);
   print submit(-name=>'bh_submit',-value=>'Search'),end_form;
 
+}
+
+sub make_net_list($$$$) {
+  my($id,$flag,$h,$l) = @_;
+  my($i,$nets);
+
+  $nets=get_net_list($id,1);
+  undef %{$h}; undef @{$l};
+
+  if ($flag > 0) {
+    $h->{'ANY'}='<Any net>';
+    $$l[0]='ANY';
+  }
+  for $i (0..$#{$nets}) { 
+    next unless ($$nets[$i][2]);
+    $h->{$$nets[$i][0]}="$$nets[$i][0] - " . substr($$nets[$i][2],0,25);
+    push @{$l}, $$nets[$i][0];
+  }
 }
 
 
@@ -2279,6 +2360,7 @@ sub form_magic($$$) {
       $p1=$prefix."_".$rec->{tag};
 
       if ($rec->{ftype} == 1) { 
+	$val =~ s/\/32$// if ($rec->{type} eq 'ip');
 	param($p1,$val);
       }
       elsif ($rec->{ftype} == 2 || $rec->{ftype} == 8) {
@@ -2554,6 +2636,7 @@ sub display_form($$) {
             "BGCOLOR=\"$h_bg\">",
             $rec->{name},"</TH>\n";
     } elsif ($rec->{ftype} == 1) {
+      $val =~ s/\/32$// if ($rec->{type} eq 'ip');
       #print Tr,td([$rec->{name},$data->{$rec->{tag}}]);
       $val='&nbsp;' if ($val eq '');
       print Tr,"<TD WIDTH=\"",$form->{nwidth},"\">",$rec->{name},"</TD><TD>",

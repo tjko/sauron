@@ -173,14 +173,16 @@ foreach $net (keys %rhash) {
   $nm = new Net::Netmask($net,$rec->{MASK});
   $n = $nm->desc();
   $dhcplist = db_build_list_str($rec2->{DHCP});
+  $range1 = $nm->nth(1);
+  $range2 = $nm->nth(-2);
   
   #print "$n $rec->{NAME} $rec->{ETHER}\n" if ($rec->{ETHER} ne '');
   #print "$n $rec->{NAME} : $net : $rec->{MASK} : $rec2->{INFO}\n";
 
   $sqlstr = "INSERT INTO nets (cuser,muser,server,net,comment," .
-            "subnet,no_dhcp) " .
+            "subnet,no_dhcp,range_start,range_end) " .
     "VALUES('$user','$user',$serverid,'$n','$rec2->{INFO}'," .
-    "true,false);";
+    "true,false,'$range1','$range2');";
 
   if (db_exec($sqlstr) < 0) {
     die("net record for '$n' already exists!") 

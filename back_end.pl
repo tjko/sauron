@@ -27,7 +27,51 @@ sub new_serial($) {
   return $s;
 }
 
+sub auto_address($$) {
+  my($serverid,$net) = @_;
+  my(@q,$s,$e,$i,$j,%h);
 
+  return 'Invalid server id'  unless ($serverid > 0);
+  return 'Invalid net'  unless (is_cidr($net));
+
+  db_query("SELECT net,range_start,range_end FROM nets " .
+	   "WHERE server=$serverid AND net = '$net';",\@q);
+  return 'No auto address range defined for this new ' 
+    unless (is_cidr($q[0][1]) && is_cidr($q[0][2]));
+  $s=ip2int($q[0][1]);
+  $e=ip2int($q[0][2]);
+  return 'Invalid auto address range' if ($s >= $e);
+
+  undef @q;
+  db_query("SELECT a.ip FROM hosts h, rr_a a, zones z " .
+	   "WHERE z.server=$serverid AND h.zone=z.id AND a.host=h.id " .
+	   " AND '$net' >> a.ip ORDER BY a.ip;",\@q);
+  for $i (0..$#q) {
+    $j=ip2int($q[$i][0]);
+    next if ($j < 0 || $j < $s || $j > $e);
+    $h{$j}=$q[$i][0];
+    #print "<br>$q[$i][0]";
+  }
+  for $i (0..($e-$s)) {
+    #print "<br>$i " . int2ip($s+$i);
+    return int2ip($s+$i) unless ($h{($s+$i)});
+  }
+
+  return "No free addresses left";
+}
+
+sub ip_in_use($$) {
+  my($serverid,$ip)=@_;
+  my(@q);
+
+  return -1 unless ($serverid > 0);
+  return -2 unless (is_cidr($ip));
+  db_query("SELECT a.id FROM hosts h, rr_a a, zones z " .
+	   "WHERE z.server=$serverid AND h.zone=z.id AND a.host=h.id " .
+	   " AND a.ip = '$ip';",\@q);
+  return 1 if ($q[0][0] > 0);
+  return 0;
+}
 
 #####################################################################
 
@@ -96,7 +140,7 @@ sub update_array_field($$$$$$) {
     $id=$$list[$i][0];
     if ($m == -1) { # delete record
       $str="DELETE FROM $table WHERE id=$id;";
-      print "<P>delete record $id $str";
+      print "<BR>DEBUG: delete record $id $str";
       return -5 if (db_exec($str) < 0);
     } 
     elsif ($m == 1) { # update record
@@ -108,7 +152,7 @@ sub update_array_field($$$$$$) {
 	$flag=1 if (!$flag);
       }
       $str.=" WHERE id=$id;";
-      print "<P>update record $id $str";
+      print "<BR>DEBUG: update record $id $str";
       return -6 if (db_exec($str) < 0);
     } 
     elsif ($m == 2) { # add record
@@ -120,7 +164,7 @@ sub update_array_field($$$$$$) {
 	$flag=1 if (!$flag);
       }
       $str.=",$vals);";
-      print "<P>add record $id $str";
+      print "<BR>DEBUG: add record $id $str";
       return -7 if (db_exec($str) < 0);
     }
   }
@@ -1239,8 +1283,8 @@ sub get_net($$) {
   my ($id,$rec) = @_;
 
   return -100 if (get_record("nets",
-                      "server,name,net,subnet,rp_mbox,rp_txt,no_dhcp,comment",
-		      $id,$rec,"id"));
+                      "server,name,net,subnet,rp_mbox,rp_txt,no_dhcp,comment,".
+		      "range_start,range_end",$id,$rec,"id"));
 
   get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comment",
 		  "type=4 AND ref=$id ORDER BY dhcp",$rec,'dhcp_l');

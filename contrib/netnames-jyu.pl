@@ -31,10 +31,10 @@ do "$PROG_DIR/util.pl";
 do "$PROG_DIR/db.pl";
 
 
-getopts("h");
+getopts("hr");
 
 if (@ARGV < 2 || $opt_h) {
-  print "syntax: $0 [-h] <servername> <.hosts-filename ...>\n";
+  print "syntax: $0 [-h] [-r] <servername> <.hosts-filename ...>\n";
   exit(1);
 }
 
@@ -84,6 +84,34 @@ foreach $net (sort keys %hash) {
 
 
 print "Updated names for $count nets ($fail updates failed)\n";
+
+
+exit(0) unless ($opt_r);
+
+# fix auto assign address ranges in nets... if -r option was used
+
+print "Fixing auto assign address ranges in nets table...\n";
+
+undef @q;
+db_query("SELECT n.id,n.net,a.domain,b.ip FROM hosts a, rr_a b, nets n " .
+	 "WHERE b.host=a.id AND a.router > 0 AND n.server=$serverid " .
+	 " AND n.net >> b.ip ORDER BY n.net;",\@q);
+
+$count=0;
+for $i (0..$#q) {
+  next unless ($q[$i][1] =~ /\/24$/);
+  #print "$q[$i][1] $q[$i][3] ";
+  $count++;
+  $n = new Net::Netmask($q[$i][1]);
+
+  if ($q[$i][3] =~ /\.1\/32$/) {
+    $sql="UPDATE nets SET range_start='".$n->nth(25)."' WHERE id=$q[$i][0];";
+  } else {
+    $sql="UPDATE nets SET range_end='".$n->nth(-16)."' WHERE id=$q[$i][0];";
+  }
+  #print "$sql\n";
+  warn("cannot update range for net $q[$i][1]") if (db_exec($sql) < 0);
+}
 
 
 # eof

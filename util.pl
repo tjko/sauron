@@ -104,6 +104,40 @@ sub cidr2arpa($) {
 }
 
 
+sub ip2int($) {
+  my($ip)=@_;
+  my($a,$b,$c,$d);
+
+  return -1 unless ($ip =~ /(\d+)\.(\d+)\.(\d+)\.(\d+)(\/\d+)?/);
+  $a=($1) & 0xFF;
+  $b=($2) & 0xFF;
+  $c=($3) & 0xFF;
+  $d=($4) & 0xFF;
+  return ($a<<24)+($b<<16)+($c<<8)+$d;
+}
+
+sub int2ip($) {
+  my($i)=@_;
+  my($a,$b,$c,$d);
+
+  return '0.0.0.0' if ($i < 0);
+  $a=($i>>24) & 0xFF;
+  $b=($i>>16) & 0xFF;
+  $c=($i>>8) & 0xFF;
+  $d=($i) & 0xFF;
+  return "$a.$b.$c.$d";
+}
+
+sub adjust_ip($$) {
+  my($ip,$step)=@_;
+  my($i);
+
+  $i = ip2int($ip);
+  return '' if ($i < 0);
+  $i += $step;
+  return int2ip($i);
+}
+
 # remove_origin($domain,$origin) - strip origin from domain
 sub remove_origin($$) {
   my($domain,$origin) = @_;
