@@ -40,6 +40,7 @@ if ($opt_help || not $result) {
     " --cgi-disable='message'      disable CGI interface\n",
     " --cgi-enable                 enable CGI interface\n",
     " --quiet                      no verbose output\n";
+  print "\n" if ($opt_help || $opt_cgi_enable); # to get rid of warnings :)
   exit(0);
 }
 
@@ -49,6 +50,9 @@ $db_ok = db_connect2($DB_CONNECT);
 $VER=sauron_version();
 $DBVER=sauron_db_version();
 $dbversion=get_db_version();
+
+fatal("Missing database version (empty database?)") if ($dbversion =~ /ERROR/);
+
 
 if ($argcount < 1 && (! $opt_quiet)) {
   print "Sauron v$VER status\n\n";
@@ -60,6 +64,8 @@ if ($argcount < 1 && (! $opt_quiet)) {
 
 exit unless ($db_ok);
 
+get_server_list(-1,\%servers_h,\@servers);
+
 if (defined $opt_pending) {
   unless ($opt_pending) {
     unless ($opt_quiet) {
@@ -67,7 +73,6 @@ if (defined $opt_pending) {
 	    "Server                                             Hosts\n",
 	    "------------------------------------------------   -----\n";
     }
-    get_server_list(-1,\%servers_h,\@servers);
     for $i (0..$#servers) {
       $serverid=$servers[$i];
       next if ($serverid < 0);
@@ -158,6 +163,11 @@ unless ($opt_quiet) {
   print "\n";
 }
 
+
+unless (@servers > 1) {
+  print "No servers found in database!\n";
+  exit;
+}
 
 $USER_TIMEOUT=3600 unless ($USER_TIMEOUT > 0);
 $timeout=$USER_TIMEOUT;
