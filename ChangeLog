@@ -1,5 +1,8 @@
 $Id$
 
+0.7.2beta
+	- cleaned up import-ethers (also added --verbose option)
+	
 0.7.1
 	- added "subgroups" for defining additional group(s) for host(s),
 	  currently subgroup memberships are used when generating DHCP class

@@ -1,9 +1,9 @@
 #!/usr/bin/perl -I/usr/local/sauron
 #
 # import-ethers  imports Ethernet card manufacturer codes&descriptions
-#                from text file (Ethernet.txt)
+#                from text file (Ethernet.txt or IEEE's oui.txt)
 #
-# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000-2003.
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000-2004.
 # $Id$
 #
 require 5;
@@ -17,14 +17,15 @@ load_config();
 ###################################################################
 
 my(
-   $file,$c,
-   $code,$info,%ethers,$icount,$ea,$res,$ucount
+   $file,$c,$i,
+   $code,$info,%ethers,$icount,$ea,$res,$ucount,
+   @q,%oldethers
   );
 
-GetOptions("help|h","force|f");
+GetOptions("help|h","force|f","verbose");
 
 if ($opt_help || @ARGV < 1) {
-  print "syntax: $0 [--help] [--force] <Ethernet.txt>\n\n";
+  print "syntax: $0 [--help] [--force] [--verbose] <Ethernet.txt>\n\n";
   print "" if ($opt_help);
   exit(0);
 }
@@ -36,16 +37,19 @@ fatal("cannot read input file '$file'") unless (-r $file);
 
 db_connect();
 
+# read existing definitions from database
+db_query("SELECT ea,info FROM ether_info",\@q);
+for $i (0..$#q) { $oldethers{$q[$i][0]}=$q[$i][1]; }
+
 
 open(FILE,"$file") || fatal("cannot open input file '$file'");
 while (<FILE>) {
   next unless /^\s*([0-9A-F]{6})\s+(\S.*)$/ or
               /^([0-9A-F]{2}-[0-9A-F]{2}-[0-9A-F]{2})\s+\(hex\)\s+(\S.*)$/;
-  $code=$1; 
+  $code=$1;
   $info=$2;
   next if ($info =~ /^\(base/);
   $info =~ s/(\s+|\t+)/ /g;
-  $info =~ s/\'/\\\'/g;
   $code =~ s/-//g;
   $ethers{$code}=$info;
   #print "$code:$info:\n";
@@ -63,12 +67,22 @@ $icount=0;
 
 foreach $ea (keys %ethers) {
   $info=$ethers{$ea};
-  $res=db_exec("INSERT INTO ether_info (ea,info) " .
-	       "VALUES('$ea','$info');");
-  $icount++ unless ($res < 0);
-  if (($res < 0) && $opt_force) {
-    $res=db_exec("UPDATE ether_info SET info='$info' WHERE ea='$ea';");
-    $ucount++ unless ($res < 0);
+  unless (defined $oldethers{$ea}) {
+    print "New    $ea '$info'\n" if ($opt_verbose);
+    $info=db_encode_str($info);
+    $res=db_exec("INSERT INTO ether_info (ea,info) " .
+		 "VALUES('$ea',$info);");
+    fatal("failed to insert record into ether_info table ($ea)") if ($res < 0);
+    $icount++;
+  }
+  else {
+    if ($opt_force && ($info ne $oldethers{$ea})) {
+      print "Update $ea '$oldethers{$ea}' -> '$info'\n" if ($opt_verbose);
+      $info=db_encode_str($info);
+      $res=db_exec("UPDATE ether_info SET info=$info WHERE ea='$ea';");
+      fatal("failed to update record ($ea)") if ($res < 0);
+      $ucount++;
+    }
   }
 }
 
