@@ -7,8 +7,6 @@
 #
 require 5;
 use Getopt::Long;
-use Term::ReadKey;
-
 
 my ($PG_DIR,$PG_NAME) = ($0 =~ /^(.*\/)(.*)$/);
 $0 = $PG_NAME;
