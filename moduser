@@ -213,6 +213,7 @@ if ($modgroup) {
   $gid=$q[0][5];
   $gidname='<none>';
   $longname=$q[0][1];
+  $comment=$q[0][3];
   if ($gid > 0) {
     undef @q;
     db_query("SELECT name FROM user_groups WHERE id=$gid;",\@q);
@@ -221,6 +222,7 @@ if ($modgroup) {
 
   print "\n        Username: $opt_user (id=$id)\n",
         "        longname: $longname\n",
+        "            info: $comment\n",
         "       superuser: " ,($q[0][2] eq 't' ? 'Yes':'No'), "\n",
         "           group: $gidname (gid=$gid)\n",
 	"   passwd status: $status\n",

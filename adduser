@@ -42,7 +42,7 @@ my(
   );
 
 $result = GetOptions("user=s","superuser","help|h","passwd=s","name=s",
-		     "group=s");
+		     "group=s","comment=s");
 
 if ($opt_help) {
   print "syntax: $0 [--user=username] [--group=name] [--superuser] " .
@@ -86,6 +86,13 @@ unless ($opt_name) {
   $i=1;
 }
 
+unless ($opt_comment) {
+  print "Enter user info (email, etc.): ";
+  $opt_comment = ReadLine 0;
+  chomp $opt_comment;
+  $i=1;
+}
+
 unless ($opt_passwd) {
   print "Enter password: ";
   ReadMode 'noecho';
@@ -104,6 +111,7 @@ $pwd=pwd_crypt($opt_passwd,$salt);
 if ($i) { # ask confirmation only in interactive session...
   print "\t Username: $opt_user\n",
   "\t Longname: $opt_name\n",
+  "\t  comment: $opt_comment\n",
   "\tsuperuser: $superuser\n",
   "Add this user [y/n]?";
 
@@ -116,9 +124,9 @@ if ($i) { # ask confirmation only in interactive session...
 }
 
 $res=db_exec("INSERT INTO users " .
-	     "(username,password,name,superuser,muser,cuser,cdate,gid) " .
-	     "VALUES('$opt_user','$pwd','$opt_name',$superuser," .
-	     " '$user','$user',$cdate,$gid);");
+     "(username,password,name,superuser,muser,cuser,cdate,gid,comment) " .
+     "VALUES('$opt_user','$pwd','$opt_name',$superuser," .
+     " '$user','$user',$cdate,$gid,'$opt_comment');");
 
 fatal("Cannot add user to users table! (user already exists?)\n" . 
       db_errormsg()) if ($res < 0);
