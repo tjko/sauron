@@ -2245,11 +2245,12 @@ sub get_net($$) {
   return -100 if (get_record("nets",
                       "server,name,net,subnet,rp_mbox,rp_txt,no_dhcp,comment,".
 		      "range_start,range_end,vlan,cdate,cuser,mdate,muser,".
-                      "netname,alevel", $id,$rec,"id"));
+                      "netname,alevel,type", $id,$rec,"id"));
 
   get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comment",
 		  "type=4 AND ref=$id ORDER BY dhcp",$rec,'dhcp_l');
 
+  $rec->{private_flag} = ($rec->{type} & 0x01 ? 1 : 0);
   add_std_fields($rec);
   return 0;
 }
@@ -2259,6 +2260,9 @@ sub update_net($) {
   my($r,$id);
 
   del_std_fields($rec);
+  $rec->{type}=0;
+  $rec->{type}|=0x01 if ($rec->{private_flag});
+  delete $rec->{private_flag};
 
   db_begin();
   $r=update_record('nets',$rec);

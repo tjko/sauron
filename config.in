@@ -2,7 +2,6 @@
 #
 # $Id$
 #
-$VER = "0.5";
 
 #########################################################################
 # general configuration options
@@ -51,4 +50,5 @@ $LOOPBACK_ZONE = "loopback.";
 $SAURON_BGCOLOR="white";
 $SAURON_FGCOLOR="black";
 
+1;
 # eof

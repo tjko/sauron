@@ -2,7 +2,6 @@
 #
 # $Id$
 #
-$VER = "0.5";
 
 #########################################################################
 # general configuration options
@@ -23,13 +22,23 @@ $BROWSER_CONF = {
 		};
 
 $BROWSER_HELP = { 
-		  foo=>['Help','http://www.zone2.orgg/browserhelp.thml'] 
+		  foo=>['Help','http://www.zone2.orgg/browserhelp.thml'] ,
 		  foo2=>['Info','/browserhelp.thml'] 
-		}
+		};
 
 $BROWSER_MAX = 100;
 
+# specify charset for CGI interface (default is iso-8859-1)
+# $BROWSER_CHARSET = 'iso-8859-15';
 
+# completely hide hosts from networks with private flag
+# $BROWSER_HIDE_PRIVATE = 1;
+
+# fields to hide from hosts in networks with private flag
+# (meaningful only if BROWSER_HIDE_PRIVATE=0)
+$BROWSER_HIDE_FIELDS = 'huser,location';
+
+1;
 # eof
 
 

@@ -19,7 +19,8 @@ CREATE TABLE nets (
        vlan	   INT4 DEFAULT -1, /* ptr to vlans table record
                                   -->vlans.id */
        alevel	   INT4 DEFAULT 0, /* required authorization level */
-       type        INT4 DEFAULT 0, /* reserved */
+       type        INT4 DEFAULT 0, /* network type/option flags:
+				      0x01 = private (hidden from browser) */
        ipv6        TEXT, /* reserved */
 				  
        rp_mbox	   TEXT DEFAULT '.', /* RP mbox */

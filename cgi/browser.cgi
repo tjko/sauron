@@ -37,6 +37,7 @@ else {
 
 do "$conf_dir/config-browser" || die("cannot load configuration!");
 die("invalid configuration file") unless ($DB_CONNECT);
+$BROWSER_CHARSET = 'iso-8859-1' unless ($BROWSER_CHARSET);
 
 %yes_no_enum = (D=>'Default',Y=>'Yes', N=>'No');
 
@@ -60,22 +61,22 @@ die("invalid configuration file") unless ($DB_CONNECT);
 #  {ftype=>4, tag=>'alias', name=>'Alias ID', iff=>['type','4']},
   {ftype=>4, tag=>'type', name=>'Type', type=>'enum', enum=>\%host_types},
 #  {ftype=>4, tag=>'class', name=>'Class'},
-  {ftype=>1, tag=>'ttl', name=>'TTL', type=>'int', len=>10, empty=>1,
-   definfo=>['','Default']},
+#  {ftype=>1, tag=>'ttl', name=>'TTL', type=>'int', len=>10, empty=>1,
+#   definfo=>['','Default']},
   {ftype=>1, tag=>'info', name=>'Info', type=>'text', len=>50, empty=>1,
    iff=>['type','1']},
   {ftype=>1, tag=>'huser', name=>'User', type=>'text', len=>25, empty=>1,
    iff=>['type','1']},
-  {ftype=>1, tag=>'dept', name=>'Dept.', type=>'text', len=>25, empty=>1,
+  {ftype=>1, tag=>'dept', name=>'Department', type=>'text', len=>25, empty=>1,
    iff=>['type','1']},
   {ftype=>1, tag=>'location', name=>'Location', type=>'text', len=>25,
    empty=>1, iff=>['type','1']},
   {ftype=>0, name=>'Equipment info', iff=>['type','1']},
-  {ftype=>1, tag=>'hinfo_hw', name=>'HINFO hardware', type=>'hinfo', len=>20,
+  {ftype=>1, tag=>'hinfo_hw', name=>'Hardware (HINFO)', type=>'hinfo', len=>20,
    empty=>1, iff=>['type','1']},
-  {ftype=>1, tag=>'hinfo_sw', name=>'HINFO software', type=>'hinfo', len=>20,
+  {ftype=>1, tag=>'hinfo_sw', name=>'Software (HINFO)', type=>'hinfo', len=>20,
    empty=>1, iff=>['type','1']},
-  {ftype=>1, tag=>'ether', name=>'Ethernet address', type=>'mac', len=>12,
+  {ftype=>1, tag=>'ether', name=>'Ethernet address (MAC)', type=>'mac',len=>12,
    iff=>['type','1'], empty=>1},
   {ftype=>4, tag=>'card_info', name=>'Card manufacturer', iff=>['type','1']},
   {ftype=>1, tag=>'ether_alias_info', name=>'Ethernet alias', no_empty=>1,
@@ -133,6 +134,7 @@ die("invalid configuration file") unless ($DB_CONNECT);
 db_connect2($DB_CONNECT) ||
   html_error("Cannot estabilish connection with database");
 html_error("CGI interface disabled: $res") if (($res=cgi_disabled()));
+$VER=sauron_version();
 
 $pathinfo = path_info();
 $script_name = script_name();
@@ -144,11 +146,11 @@ $remote_host = remote_host();
 set_muser('browser');
 $bgcolor='white';
 
-print header(-type=>'text/html; charset=iso-8859-1'),
+print header(-type=>"text/html; charset=$BROWSER_CHARSET"),
       start_html(-title=>"Sauron DNS Browser $VER",-BGCOLOR=>$bgcolor,
 		 -meta=>{'keywords'=>'GNU Sauron DNS DHCP tool'}),
-      "\n\n<!-- Sauron DNS Browser $VER -->\n",
-      "<!-- Copyright (c) Timo Kokkonen <tjko\@iki.fi>  2001. -->\n\n";
+      "\n\n<!-- Sauron DNS Browser v$VER -->\n",
+      "<!-- Copyright (c) Timo Kokkonen <tjko\@iki.fi>  2001-2002. -->\n\n";
 
 
 
@@ -255,6 +257,7 @@ sub do_search() {
     return;
   }
 
+  $info_search = 0;
   $order = "3";
   $mask_str = db_encode_str($mask);
 
@@ -265,6 +268,7 @@ sub do_search() {
   elsif ($type =~ /^Info/) {
     $rule = " (h.location ~* $mask_str OR h.huser ~* $mask_str" .
             " OR h.dept ~* $mask_str OR h.info ~* $mask_str)  ";
+    $info_search = 1;
   }
   elsif ($type =~ /^IP/) {
     $mask =~ s/\s//g;
@@ -301,6 +305,7 @@ sub do_search() {
           "FROM hosts h, a_entries a " .
 	  "WHERE h.zone=$zoneid AND a.host=h.id AND h.type=1 AND $rule ";
 
+
   if ($alias) {
     $sql2 = "SELECT h.id,h.type,h.domain,NULL,b.domain,h.ether,h.info, " .
             " h.huser,h.dept,h.location " .
@@ -336,11 +341,6 @@ sub do_search() {
   print "<br> " . db_errormsg()  if (db_errormsg());
   $count = @q;
 
-  unless ($count > 0) {
-    alert2("No matching records found.");
-    return;
-  }
-
   $count=$show_max if ($count > $show_max);
   $url=self_url();
   $url =~ s/&sort=\d//g;
@@ -356,7 +356,23 @@ sub do_search() {
 	th("<a href=\"$url&sort=4\">Info</a>"),
 	"</TR>";
 
+  unless ($count > 0) {
+    print "</TABLE>";
+    alert2("No matching records found.");
+    return;
+  }
+
+  # get list of networks to hide...
+  db_query("SELECT id,net,type FROM nets WHERE type > 0",\@nlist);
+  my $blocktable = {};
+  for $i (0..$#nlist) {
+    next unless ($nlist[$i][2] & 0x01);
+    $tmp = new Net::Netmask($nlist[$i][1]);
+    $tmp->storeNetblock($blocktable);
+  }
+
   for $i (0..($count-1)) {
+    $private = 0;
     $color = (($i % 2) ? "#eeeeee" : "#ffffcc");
     $name="<a href=\"$url&id=$q[$i][0]\">$q[$i][2]</a>";
     $type = $q[$i][1];
@@ -364,13 +380,21 @@ sub do_search() {
       $ip=$q[$i][3];
       $ip =~ s/\/32//;
       $ether=($q[$i][5] ? "<PRE>$q[$i][5]</PRE>" : '&nbsp;');
-      $info=$q[$i][6];
-      $info.=", " if ($info && $q[$i][7]);
-      $info.=$q[$i][7];
-      $info.=", " if ($info && $q[$i][8]);
-      $info.=$q[$i][8];
-      $info.=", " if ($info && $q[$i][9]);
-      $info.=$q[$i][9];
+
+      # check if host ip falls within a net with private flag on
+      if (findNetblock($ip,$blocktable)) {
+	#print "PRIVATE: $ip $name<br>";
+	next if ($BROWSER_HIDE_PRIVATE || $info_search);
+	$info=$q[$i][8];
+      } else {
+	$info=$q[$i][6];
+	$info.=", " if ($info && $q[$i][7]);
+	$info.=$q[$i][7];
+	$info.=", " if ($info && $q[$i][8]);
+	$info.=$q[$i][8];
+	$info.=", " if ($info && $q[$i][9]);
+	$info.=$q[$i][9];
+      }
       $info="&nbsp;" unless ($info);
       $info=substr($info,0,80) if (length($info) > 80);
     } else {
@@ -382,9 +406,15 @@ sub do_search() {
     print "<TR bgcolor=\"$color\">",td(($i+1)."."),
           td($name),td($ip),td($ether),td('<font size=-1>'.$info.'</font>'),
           "</TR>\n";
+    $printcount++;
   }
   #print "<TR bgcolor=\"#aaaaee\"><TD colspan=5>&nbsp;</TD></TR>";
   print "</TABLE>\n";
+
+  unless ($printcount > 0) {
+    alert2("No matching records found.");
+    return;
+  }
 
   print "<p>Only first $show_max records of " . @q .
         " matching records displayed." if (@q > $show_max);
@@ -392,6 +422,7 @@ sub do_search() {
 
 sub display_host($) {
   my($id) = @_;
+  my @q, @r, $i, $j, $url;
 
   if (get_host($id,\%host)) {
     alert2("Cannot get host record (id=$id)");
@@ -399,6 +430,27 @@ sub display_host($) {
   }
   $url=self_url();
   $url =~ s/id=\d+//;
+
+  # check if host has A record within network marked as private
+  for $i (1..$#{$host{ip}}) {
+    #print "foo$i: $host{ip}[$i][1]<br>";
+    db_query("SELECT id,net,type FROM nets " .
+             "WHERE server=$serverid AND type > 0 " .
+	     " AND '$host{ip}[$i][1]' << net;",\@q);
+    for $j (0..$#q) {
+      if ($q[$j][2] & 0x01) {
+	if ($BROWSER_HIDE_PRIVATE) {
+	  print "<h3>Cannot display record: $host{domain}</h3>";
+	  return;
+	}
+	@r = split(/,/,$BROWSER_HIDE_FIELDS);
+	for $k (0..$#r) {
+	  $host{$r[$k]}='********' if (defined $host{$r[$k]});
+	}
+	last;
+      }
+    }
+  }
 
   $host_form{alias_l_url}="$url&id=";
   $host_form{alias_a_url}="$url&id=";
