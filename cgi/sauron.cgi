@@ -7,6 +7,8 @@
 #
 use CGI qw/:standard *table/;
 use CGI::Carp 'fatalsToBrowser'; # debug stuff
+use Digest::MD5;
+
 $CGI::DISABLE_UPLOADS =1; # no uploads
 $CGI::POST_MAX = 100000; # max 100k posts
 
@@ -36,16 +38,49 @@ error("invalid directory configuration")
 
 #####################################################################
 
+db_connect2() || error("Cannot estabilish connection with database");
+
 $frame_mode=0;
 $pathinfo = path_info();
 $script_name = script_name();
 $s_url = script_name();
 $selfurl = $s_url . $pathinfo;
-$scookie = cookie(-name=>'sauron');
 $menu=param('menu');
 $menu='login' unless ($menu);
 
+$scookie = cookie(-name=>'sauron');
+if ($scookie) {
+  unless (load_state($scookie)) { 
+    undef $scookie;
+  }
+}
+
+unless ($scookie) {
+  $new_cookie=make_cookie();
+  print header(-cookie=>$new_cookie,-target=>'_top'),
+        start_html(-title=>"Sauron Login",-BGCOLOR=>'white');
+  login_form("Welcome",$ncookie);
+}
+
+if ($state{'mode'} eq 'auth' && param('login') eq 'yes') {
+  print header(-target=>'_top'),
+        start_html(-title=>"Sauron Login",-BGCOLOR=>'white');
+  login_auth(); 
+}
+
+if ($state{'auth'} ne 'yes' || $pathinfo eq '/login') {
+  print header(-target=>'_top'),
+        start_html(-title=>"Sauron Login",-BGCOLOR=>'white');
+  login_form("Welcome",$scookie);
+}
+
+error("Unauthorized Access denied!") 
+  if ($ENV{'REMOTE_ADDR'} != $state{'addr'}) ;
+
+
+
 if ($pathinfo ne '') {
+  logout() if ($pathinfo eq '/logout');
   frame_set() if ($pathinfo eq '/frames');
   frame_set2() if ($pathinfo eq '/frames2');
   frame_1() if ($pathinfo eq '/frame1');
@@ -54,16 +89,8 @@ if ($pathinfo ne '') {
 }
 
 
-
-
-unless($scookie) {
-  $new_cookie=make_cookie();
-  print header(-cookie=>$new_cookie);
-} else {
-  print header();
-}
-
-print start_html(-title=>"Sauron $VER",-BGCOLOR=>'white');
+print header,
+      start_html(-title=>"Sauron $VER",-BGCOLOR=>'white');
 
 unless ($frame_mode) {
   top_menu(0);
@@ -75,25 +102,17 @@ unless ($frame_mode) {
   print "<TD align=\"left\" valign=\"top\" bgcolor=\"white\">\n";
 }
 
-login_form("Welcome",$ncookie) unless ($scookie);
-load_state($scookie);
-login_auth() if ($state{'mode'} eq 'auth');
-login_form("Your session timed out",$scookie) unless ($state{'auth'} eq 'yes');
 
-db_connect();
 
-if ($menu eq 'servers') {
-  servers();
-}
-elsif ($menu eq 'zones') {
-  zones();
-}
+if ($menu eq 'servers') { servers(); }
+elsif ($menu eq 'zones') { zones(); }
+elsif ($menu eq 'login') { login(); }
 else {
   print p,"unknown menu '$menu'";
 }
 
-print h1("foo");
-print "<p>script name: " . script_name() ." $formmode\n";
+
+print "<hr><FONT size=-1><p>script name: " . script_name() ." $formmode\n";
 print "<p>extra path: " . path_info() ."<br>framemode=$frame_mode\n";
 print "<p>cookie='$scookie'\n";
 print "<p>s_url='$s_url' '$selfurl'<hr>\n";
@@ -142,6 +161,8 @@ sub servers() {
       param('srv_pzone',$serv{'pzone_path'});
       param('srv_szone',$serv{'szone_path'});
       param('srv_namedca',$serv{'named_ca'});
+      param_array('srv_dhcp',$serv{'dhcp'});
+      param_array('srv_allow_transfer',$serv{'allow_transfer'});
     }
     
     print h2("Edit server: $server"),p,
@@ -170,9 +191,12 @@ sub servers() {
             Tr,td(["Root-server file",
 		textfield(-name=>'srv_namedca',-size=>'30',
 			  -value=>param('srv_namedca'))]),
-            
-            "</TABLE>",
-            submit,end_form;
+            Tr,td,"Allow transfer",td;
+    form_array('srv_allow_transfer',20);
+    print   Tr,td,"Global DHCP",td;
+    form_array('srv_dhcp',60);
+    print "</TABLE>",
+          submit,end_form;
     
   }
   else {
@@ -386,38 +410,98 @@ sub zones() {
   }
 }
 
+
+sub login() {
+  $sub=param('sub');
+
+  if ($sub eq 'login') {
+    print h2("Login as another user?"),p,
+          "Click <a href=\"$s_url/login\">here</a> ",
+          "if you want to login as another user.";
+  }
+  elsif ($sub eq 'logout') {
+    print h2("Logout from the system?"),p,
+          "Click <a href=\"$s_url/logout\">here</a> ",
+          "if you want to logout.";
+  }
+  elsif ($sub eq 'passwd') {
+    print h2("Change password"),p,
+          "Click <a href=\"$s_url/logout\">here</a> ",
+          "if you want to logout.";
+  }
+  else {
+    print p,"Unknown menu selection!";
+  }
+}
+
 #####################################################################
+
+sub logout() {
+  my($c);
+  $c=cookie(-name=>'sauron',-value=>'',-expires=>'0s');
+  remove_state($scookie);
+  print header(-target=>'_top',-cookie=>$c),
+        start_html(-title=>"Sauron Logout",-BGCOLOR=>'white'),
+        h1("Sauron"),p,p,"You are now logged out...",
+        end_html();
+  exit;
+}
 
 sub login_form($$) {
   my($msg,$c)=@_;
   print start_form,h2($msg),p,
         "Login: ",textfield(-name=>'login_name',-maxlength=>'8'),p,
         "Password: ",password_field(-name=>'login_pwd',-maxlength=>'30'),p,
+        hidden(-name=>'login',-default=>'yes'),
         submit,end_form;
 
-  print "</TABLE>\n" unless($frame_mode);
+  #print "</TABLE>\n" unless($frame_mode);
   print end_html();
   $state{'mode'}='auth';
+  $state{'auth'}='no';
   save_state($c);
   exit;      
 }
 
 sub login_auth() {
   my($u,$p);  
-
+  my(%user,$ctx,$salt,$pass,$digest);
+  
+  $state{'auth'}='no';
   delete $state{'mode'};
   $u=param('login_name');
   $p=param('login_pwd');
+  $p=~s/\ \t\n//g;
   print "<P><BR><BR><BR><BR><CENTER>";
   if ($u eq '' || $p eq '') {
-    print p,h1("login failure");
+    print p,h1("Username or password empty!");
   } else {
-    print p,h1("login ok");
-    $state{'auth'}='yes';
-    $state{'user'}=$u;
+    unless (get_user($u,\%user)) {
+      ($salt=$user{'password'}) =~ s/\:.*$//g;
+      if ($user{'password'} =~ /^(\S+)\:(\S+)$/) {
+	$salt=$1; 
+	$pass=$2;
+      }
+      #print p,h1("user ok<br>" . $user{'password'});
+      if ($salt ne '') {
+	$ctx=new Digest::MD5;
+	$ctx->add("$salt:$p\n");
+	$digest=$ctx->hexdigest;
+	if ($digest eq $pass) {
+	  $state{'auth'}='yes';
+	  $state{'user'}=$u;
+	  print p,h1("Login ok!"),p,
+	        "Come in... <a href=\"$s_url/frames\">frames version</a> ",
+	        "or <a href=\"$s_url\">table version</a>";
+	}
+      }
+    } 
   }
 
-  print p,p,"Select server to continue...</CENTER>";
+  print p,h1("Login failed."),p,"<a href=\"$selfurl\">try again</a>"
+    unless ($state{'auth'} eq 'yes');
+
+  print p,p,"</CENTER>";
 
   print "</TABLE>\n" unless ($frame_mode);
   print end_html();
@@ -461,6 +545,11 @@ sub left_menu($) {
           p,"<a href=\"$url&sub=add\">Add zone</a><br>",
           "<a href=\"$url&sub=del\">Delete zone</a><br>",
           "<a href=\"$url&sub=edit\">Edit zone</a><br>";
+  } elsif ($menu eq 'login') {
+    $url.='?menu=login';
+    print p,"<a href=\"$url&sub=login\">Login</a><br>",
+          p,"<a href=\"$url&sub=logout\">Logout</a><br>",
+          p,"<a href=\"$url&sub=passwd\">Change password</a><br>";
   } else {
     print "<p><p>empty menu\n";
   }
@@ -524,19 +613,28 @@ sub frame_2() {
 #####################################################################
 sub make_cookie() {
   my($val);
+  my($ctx);
+
+  $val=rand 1000;
+
+  $ctx=new Digest::MD5;
+  $ctx->add($val);
+  $ctx->add(time);
+  $val=$ctx->b64digest;
   
-  $val=rand 100;
   undef %state;
   $state{'auth'}='no';
+  $state{'host'}=remote_host();
+  $state{'addr'}=$ENV{'REMOTE_ADDR'};
   save_state($val);
   $ncookie=$val;
-  return cookie(-name=>'sauron',-expires=>'+1h',-value=>$val);
+  return cookie(-name=>'sauron',-expires=>'+1h',-value=>$val,-path=>$s_url);
 }
 
 sub save_state($id) {
   my($id)=@_;
 
-  open(STATEFILE,">$CGI_STATE_PATH/$id") || error("cannot save state");
+  open(STATEFILE,">$CGI_STATE_PATH/$id") || error2("cannot save state $id");
   if (keys(%state) > 0) {
     foreach $key (keys %state) {
       print STATEFILE "$key=" . $state{$key} ."\n";
@@ -552,14 +650,58 @@ sub load_state($) {
   my($id)=@_;
   undef %state;
   $state{'auth'}='no';
-  open(STATEFILE,"$CGI_STATE_PATH/$id") || return;
+  open(STATEFILE,"$CGI_STATE_PATH/$id") || return 0;
   while (<STATEFILE>) {
     next if /^\#/;
     next unless /^\s*(\S+)\s*\=\s*(\S+)\s*$/;
     $state{$1}=$2;
   }
   close(STATEFILE);
+  return 1;
 }
+
+sub remove_state($) {
+  my($id) = @_;
+
+  unlink("$CGI_STATE_PATH/$id");
+  undef %state;
+}
+
+#####################################################################
+
+sub param_array($$) {
+  my($pref,$a) = @_;
+  my($i);
+
+  param($pref,scalar @{$a});
+  for $i (0..$#{$a}) {
+    param("$pref$i",$$a[$i]);
+  }
+}
+
+sub form_array($$) {
+  my($pref,$size) = @_;
+  my($i,$count,$p,$o);
+
+  $j=0;
+  $count=param("$pref");
+  for ($i=0;$i<$count;$i++) {
+    $p=param("$pref$i");
+    $p2="${pref}${i}del";
+  
+    if (param($p2) ne "delete") {
+      param("$pref$j",$p);
+      print textfield(-name=>"$pref$j",-size=>$size,-value=>"$p"),
+            submit(-name=>"${pref}${j}del",-value=>"delete"),"<br>";
+      $j++;
+    }
+  }
+
+  param("$pref",$j);
+  print hidden(-name=>$pref,-value=>$j);
+  
+}
+
 #####################################################################
 sub error($) {
   my($msg)=@_;
@@ -567,6 +709,15 @@ sub error($) {
   print header,
         start_html("sauron: error"),
         h1("Error: $msg"),
+        end_html();
+  exit;
+}
+
+
+sub error2($) {
+  my($msg)=@_;
+  
+  print h1("Error: $msg"),
         end_html();
   exit;
 }

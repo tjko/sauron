@@ -199,5 +199,14 @@ CREATE TABLE printer_classes (
 
 
 
+CREATE TABLE users (
+	id	    SERIAL PRIMARY KEY,
+	username    TEXT UNIQUE NOT NULL CHECK(username <> ''),
+	password    TEXT,
+	name	    TEXT,
+
+	comment	    TEXT
+) INHERITS(pokemon);
+
 
 // eof

@@ -32,7 +32,21 @@ sub db_connect {
   $db_connection_handle = Pg::connectdb($DB_CONNECT);
   die($0 . ": ". $db_connection_handle->errorMessage) 
          if ($db_connection_handle->status != PGRES_CONNECTION_OK);
+  return 1;
 }
+
+sub db_connect2 {
+  $db_connection_handle = Pg::connectdb($DB_CONNECT);
+  if ($db_connection_handle->status != PGRES_CONNECTION_OK) {
+    warn($0 . ": ". $db_connection_handle->errorMessage);
+    return 0;
+  }
+  
+  return 1;
+}
+
+
+
 
 sub db_exec($) {
   my($sqlstr) = @_;

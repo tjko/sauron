@@ -30,7 +30,7 @@ sub new_serial($) {
 
 #####################################################################
 
-sub get_record($$$$) {
+sub get_record($$$$$) {
   my ($table,$fields,$key,$rec,$keyname) = @_;
   my (@list,$res,$i,$val);
 
@@ -122,7 +122,7 @@ sub get_server($$) {
 		    "name,directory,named_ca,\@allow_transfer,\@dhcp," .
 		    "pzone_path,szone_path,hostname,hostmaster,comment",
 		    $id,
-		    $rec);
+		    $rec,"id");
 }
 
 
@@ -186,12 +186,30 @@ sub get_zone($$) {
 	       "hostmaster,serial,refresh,retry,expire,minimum,ttl," .
 	       "\@ns,\@mx,\@txt,\@dhcp,comment,\@reverses,reversenet," .
 	       "\@masters",
-	       $id,$rec);
+	       $id,$rec,"id");
 }
 
 sub update_zone($) {
   my($rec) = @_;
   return update_record('zones',$rec);
+}
+
+
+
+############################################################################
+# user functions
+
+sub get_user($$) {
+  my ($uname,$rec) = @_;
+  
+  return get_record("users",
+	       "username,password,name,comment,id",
+	       $uname,$rec,"username");
+}
+
+sub update_user($) {
+  my($rec) = @_;
+  return update_record('users',$rec);
 }
 
 
