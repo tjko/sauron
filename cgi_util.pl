@@ -84,7 +84,7 @@ sub form_check_field($$$) {
       unless ($value =~ /^\@[a-zA-Z]+$/);
   } elsif ($type eq 'hinfo') {
     return 'Valid HINFO required!'
-      unless ($value =~ /^[A-Z]+([A-Z0-9-\+]+)?$/);
+      unless ($value =~ /^([A-Z0-9-\+\/]+)$/);
   } elsif ($type eq 'textarea') {
     return '';
   } else {

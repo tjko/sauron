@@ -1660,7 +1660,11 @@ sub hosts_menu() {
 	    goto show_host_record;
 	  } else {
 	    alert1("Cannot add host record!");
-	    alert2(db_lasterrormsg());
+	    if (db_lasterrormsg() =~ /ether_key/) {
+	      alert2("Duplicate Ethernet (MAC) address");
+	    } else {
+	      alert2(db_lasterrormsg());
+	    }
 	  }
 	}
       } else {
