@@ -2,7 +2,7 @@
 #
 # export-networks  generates /etc/networks file (from given server)
 #
-# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2001.
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2001,2003.
 # $Id$
 #
 require 5;
@@ -37,12 +37,14 @@ GetOptions("help|h","verbose|v","all|a","comments");
 
 if ($opt_help || @ARGV < 1) {
   print "syntax: $0 [--help] [--verbose] [--comments] [--all] <servername>\n";
+  print "\n" if ($opt_help);
   exit(0);
 }
 
-$verbose=1 if (defined $opt_verbose);
-$servername=$ARGV[0];
-$no_comments = ($opt_comments ? 0 : 1);
+$opt_verbose = ($opt_verbose ? 1 : 0);
+$opt_comments = ($opt_comments ? 1 : 0);
+$opt_all = ($opt_all ? 1 : 0);
+$servername=shift;
 
 fatal("DB_CONNECT not defined in configuration!") unless ($DB_CONNECT);
 db_connect($DB_CONNECT);
@@ -62,10 +64,11 @@ db_query("SELECT net,netname,comment,name " .
 	 "ORDER BY net",\@q);
 
 $found=@q;
-print STDERR "Found $found network(s)\n" if ($verbose);
+print STDERR "Found $found network(s)\n" if ($opt_verbose);
 
 print "# /etc/networks  -- automagically generated (by Sauron $VER)\n",
-      "#\n# created by $user\@$host at $time_now\n#\n",
+      "#\n# server: $servername\n",
+      "# created by $user\@$host at $time_now\n#\n",
       "# network-name                           network-number\n",
       "# ------------                           --------------\n#\n";
 
@@ -92,7 +95,7 @@ for $i (0..$#q) {
   if ($name) {
     $nname=substr($name,0,35);
     if ($names{$nname}) {
-      print STDERR "network name collision: $name\n" if ($verbose);
+      print STDERR "network name collision: $name\n" if ($opt_verbose);
       $names{$nname}++;
       $nname.="-$names{$nname}";
     } else {
@@ -103,7 +106,7 @@ for $i (0..$#q) {
   }
 
   $comment = $q[$i][3] . ($q[$i][2] ? ", $q[$i][2]":"");
-  printf "# %s\n", $comment unless ($no_comments);
+  printf "# %s\n", $comment if ($opt_comments);
   printf "%-40s %-15s\n", $nname, $net;
 }
 
