@@ -117,6 +117,9 @@ $DB_PASSWORD = "bar";
 # authorization level needed to see vlan info in web interface
 # $ALEVEL_VLANS = 5;
 
+# authorization level needed to see ACLs & Keys info in web interface
+# $ALEVEL_ACLS = 5;
+
 # authorization level needed to see host history
 # $ALEVEL_HISTORY = 1;
 

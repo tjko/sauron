@@ -324,7 +324,8 @@ sub get_record($$$$$) {
   undef %{$rec};
   @list = split(",",$fields);
   $fields =~ s/\@//g;
-  db_query("SELECT $fields FROM $table WHERE $keyname='$key'",\@q);
+  db_query("SELECT $fields FROM $table WHERE $keyname=".db_encode_str($key),
+	   \@q);
   return -1 if (@q < 1);
 
   $$rec{$keyname}=$key;
@@ -789,11 +790,10 @@ sub add_server($) {
   db_begin();
   $res = add_record('servers',$rec);
   if ($res < 0) { db_rollback(); return -1; }
-  $id=$res;
+  $rec->{id}=$id=$res;
 
   # allow_transfer
-  $res = add_array_field('cidr_entries','ip,comment','allow_transfer',$rec,
-			 'type,ref',"1,$id");
+  $res = update_aml_field(1,$id,$rec,'allow_transfer');
   if ($res < 0) { db_rollback(); return -10; }
   # dhcp
   $res = add_array_field('dhcp_entries','dhcp,comment','dhcp',$rec,
@@ -804,16 +804,13 @@ sub add_server($) {
 			 'type,ref',"3,$id");
   if ($res < 0) { db_rollback(); return -12; }
   # allow_query
-  $res = add_array_field('cidr_entries','ip,comment','allow_query',$rec,
-			 'type,ref',"7,$id");
+  $res = update_aml_field(7,$id,$rec,'allow_query');
   if ($res < 0) { db_rollback(); return -13; }
   # allow_recursion
-  $res = add_array_field('cidr_entries','ip,comment','allow_recursion',$rec,
-			 'type,ref',"8,$id");
+  $res = update_aml_field(8,$id,$rec,'allow_recursion');
   if ($res < 0) { db_rollback(); return -14; }
   # blackhole
-  $res = add_array_field('cidr_entries','ip,comment','blackhole',$rec,
-			 'type,ref',"9,$id");
+  $res = update_aml_field(9,$id,$rec,'blackhole');
   if ($res < 0) { db_rollback(); return -15; }
   # listen_on
   $res = add_array_field('cidr_entries','ip,comment','listen_on',$rec,
@@ -1306,7 +1303,7 @@ sub add_zone($) {
   db_begin();
   $res = add_record('zones',$rec);
   if ($res < 0) { db_rollback(); return -1; }
-  $id=$res;
+  $rec->{id}=$id=$res;
 
 
   if ($rec->{type} eq 'M') {
@@ -1340,20 +1337,17 @@ sub add_zone($) {
   if ($res < 0) { db_rollback(); return -111; }
 
   # allow_update
-  $res = add_array_field('cidr_entries','ip,comment','allow_update',$rec,
-			 'type,ref',"2,$id");
+  $res = update_aml_field(2,$id,$rec,'allow_update');
   if ($res < 0) { db_rollback(); return -2; }
   # masters
   $res = add_array_field('cidr_entries','ip,comment','masters',$rec,
 			 'type,ref',"3,$id");
   if ($res < 0) { db_rollback(); return -3; }
   # allow_query
-  $res = add_array_field('cidr_entries','ip,comment','allow_query',$rec,
-			 'type,ref',"4,$id");
+  $res = update_aml_field(4,$id,$rec,'allow_query');
   if ($res < 0) { db_rollback(); return -4; }
   # allow_transfer
-  $res = add_array_field('cidr_entries','ip,comment','allow_transfer',$rec,
-			 'type,ref',"5,$id");
+  $res = update_aml_field(5,$id,$rec,'allow_transfer');
   if ($res < 0) { db_rollback(); return -5; }
   # also_notify
   $res = add_array_field('cidr_entries','ip,comment','also_notify',$rec,
@@ -2341,7 +2335,7 @@ sub get_group_list($$$$) {
   push @{$lst},  -1;
   undef %{$rec};
   $$rec{-1}='--None--';
-  return if ($serverid < 1);
+  return unless ($serverid > 0);
   $alevel=0 unless ($alevel > 0);
 
   db_query("SELECT id,name FROM groups " .
@@ -2911,6 +2905,7 @@ sub get_acl($$) {
 		      "server,name,type,comment,".
 		      "cdate,cuser,mdate,muser", $id,$rec,"id"));
   add_std_fields($rec);
+  get_aml_field($rec->{server},0,$id,$rec,'acl');
   return 0;
 }
 
@@ -2924,8 +2919,10 @@ sub update_acl($) {
   db_begin();
   $r=update_record('acls',$rec);
   if ($r < 0) { db_rollback(); return $r; }
+  $id=$rec->{id};
 
-  # FIXME...
+  $r=update_aml_field(0,$id,$rec,'acl');
+  if ($r < 0) { db_rollback(); return -1000+$r; }
 
   return db_commit();
 }
@@ -2939,19 +2936,21 @@ sub add_acl($) {
   $rec->{cuser}=$muser;
   $res = add_record('acls',$rec);
   if ($res < 0) { db_rollback(); return -1; }
-  $id=$res;
+  $rec->{id}=$id=$res;
 
-  # FIXME...
+  $res=update_aml_field(0,$id,$rec,'acl');
+  if ($res < 0) { db_rollback(); return -2; }
 
   return -10 if (db_commit() < 0);
   return $id;
 }
 
-sub delete_acl($) {
-  my($id) = @_;
+sub delete_acl($$) {
+  my($id,$newref) = @_;
   my($res);
 
   return -100 unless ($id > 0);
+  $newref=-1 unless ($newref > 0 && $newref != $id);
 
   db_begin();
 
@@ -2960,24 +2959,27 @@ sub delete_acl($) {
 
   $res=db_exec("DELETE FROM cidr_entries WHERE type=0 AND ref=$id");
   if ($res < 0) { db_rollback(); return -9; }
-  $res=db_exec("UPDATE cidr_entries SET acl=-1 WHERE acl=$id");
+  $res=db_exec("UPDATE cidr_entries SET acl=$newref ".
+	       "WHERE type>0 AND acl=$id");
   if ($res < 0) { db_rollback(); return -10; }
 
   return db_commit();
 }
 
-sub get_acl_list($$$) {
-  my($serverid,$rec,$lst) = @_;
-  my(@q,$i);
+sub get_acl_list($$$$) {
+  my($serverid,$rec,$lst,$mask) = @_;
+  my(@q,$i,$extrarule);
 
   undef @{$lst};
   push @{$lst},  -1;
   undef %{$rec};
   $$rec{-1}='--None--';
-  return if ($serverid < 1);
+  return unless ($serverid > 0);
+  $extrarule=" AND id < $mask " if($mask > 0);
 
   db_query("SELECT id,name FROM acls " .
-	   "WHERE server=$serverid OR server=-1 ORDER BY name;",\@q);
+	   "WHERE (server=$serverid $extrarule) OR server=-1 " .
+	   "ORDER BY name;",\@q);
   for $i (0..$#q) {
     push @{$lst}, $q[$i][0];
     $$rec{$q[$i][0]}=$q[$i][1];

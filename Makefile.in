@@ -101,7 +101,7 @@ MODULES = Sauron/Util.pm Sauron/BackEnd.pm Sauron/CGIutil.pm \
 	  Sauron/DB-Pg.pm Sauron/DB-DBI.pm
 
 CGIMODULES = Utils.pm Servers.pm Groups.pm Templates.pm Nets.pm \
-	     Login.pm Zones.pm Hosts.pm
+	     Login.pm Zones.pm Hosts.pm ACLs.pm
 
 CONTRIB_FILES = contrib/additional-ether-codes.txt \
 		contrib/Ethernet.txt \

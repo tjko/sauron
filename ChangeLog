@@ -1,7 +1,8 @@
 $Id$
 
 0.7.2beta
-	- address match list support
+	- ACL & address match list support added . New menu 'ACLs' in web
+	  interface (new configuration variable ALEVEL_ACLS).
 	- new utility for managing (TSIG) keys: keygen
 	- database format changes (1.3):
 	    - new tables: acls, keys

@@ -92,6 +92,7 @@ sub set_defaults() {
   $main::SAURON_RHF{email}    = 1; # User Email
 
   $main::ALEVEL_VLANS = 5;
+  $main::ALEVEL_ACLS = 5;
   $main::ALEVEL_RESERVATIONS = 1;
   $main::ALEVEL_PING = 1;
   $main::ALEVEL_TRACEROUTE = 1;
@@ -152,6 +153,7 @@ sub print_config() {
   print "SAURON_PLUGINS='",$main::SAURON_PLUGINS,"'\n";
 
   print "ALEVEL_VLANS=",$main::ALEVEL_VLANS,"\n";
+  print "ALEVEL_ACLS=",$main::ALEVEL_ACLS,"\n";
   print "ALEVEL_RESERVATIONS=",$main::ALEVEL_RESERVATIONS,"\n";
   print "ALEVEL_PING=",$main::ALEVEL_PING,"\n";
   print "ALEVEL_TRACEROUTE=",$main::ALEVEL_TRACEROUTE,"\n";

@@ -40,6 +40,8 @@ $VERSION = '$Id$ ';
 my($CGI_UTIL_zoneid,$CGI_UTIL_zone);
 my($CGI_UTIL_serverid,$CGI_UTIL_server);
 
+my %aml_type_hash = (0=>'CIDR',1=>'ACL',2=>'Key');
+
 sub cgi_util_set_zone($$) {
   my ($id,$name) = @_;
   $CGI_UTIL_zoneid = $id;
@@ -380,9 +382,17 @@ sub form_magic($$$) {
   my($values,$ip,$t,@lst,%lsth,%tmpl_rec,$maxlen,$len,@q,$tmp,$def_info,$id);
   my($invalid_host,$unknown_host,%host,$tmpd,$tmpm,$tmpy);
 
+
   form_get_defaults($form);
   $formdata=$form->{data};
   $h_bg=$form->{heading_bg};
+
+  # CGI_UTIL_ variables will go away eventually...temporary hack until then
+  my $serverid = ($form->{serverid} > 0 ? 
+		  $form->{serverid} : $CGI_UTIL_serverid);
+  my $zoneid = ($form->{zoneid} > 0 ? 
+		$form->{zoneid} : $CGI_UTIL_zoneid);
+
 
   # initialize fields
   unless (param($prefix . "_re_edit") eq '1' || ! $data) {
@@ -414,7 +424,7 @@ sub form_magic($$$) {
 	     $rec->{ftype} == 11 || $rec->{ftype} == 12) {
 	$a=$data->{$rec->{tag}};
 	$rec->{fields}=6 if ($rec->{ftype}==12);
-	param($p1."_serverid",$$a[0][1]) if ($rec->{ftype} == 12);
+	#param($p1."_serverid",$$a[0][1]) if ($rec->{ftype} == 12);
 
 	for $j (1..$#{$a}) {
 	  param($p1."_".$j."_id",$$a[$j][0]);
@@ -769,10 +779,12 @@ sub form_magic($$$) {
     }
     elsif ($rec->{ftype} == 12) {
 	my(@aml_key_l,%aml_key_h,@aml_acl_l,%aml_acl_h);
-	get_acl_list(param($p1."_serverid"),\%aml_acl_h,\@aml_acl_l);
-	get_key_list(param($p1."_serverid"),\%aml_key_h,\@aml_key_l,157);
+	get_acl_list($serverid,\%aml_acl_h,\@aml_acl_l,
+		     ($rec->{acl_mode} == 1 ? param($prefix."_id") : 0));
+	get_key_list($serverid,\%aml_key_h,\@aml_key_l,157);
 	print td($rec->{name}),"<TD><TABLE><TR>",
- 	      th(["<FONT size=-2>Op</FONT>",
+ 	      th(["<FONT size=-2>Type</FONT>",
+		  "<FONT size=-2>Op</FONT>",
 		  "<FONT size=-2>Rule</FONT>",
 		  "<FONT size=-2>Comments</FONT>"]);
 	$a=param($p1."_count");
@@ -800,8 +812,7 @@ sub form_magic($$$) {
 	    param($p1."_count",$a);
 	}
 	$a=0 unless ($a > 0);
-	print hidden(-name=>$p1."_count",-value=>$a),
-	      hidden(-name=>$p1."_serverid",-value=>''),"</TR>";
+	print hidden(-name=>$p1."_count",-value=>$a),"</TR>";
 	for $j (1..$a) {
 	    $p2=$p1."_".$j;
 	    my $aml_id = param($p2."_id");
@@ -813,6 +824,7 @@ sub form_magic($$$) {
 	    my $aml_comment = param($p2."_6");
 	    print "<TR>",hidden(-name=>$p2."_id",$aml_id),
 	          hidden(-name=>$p2."_1",$aml_mode),
+	          td($aml_type_hash{$aml_mode}.'&nbsp;'),
 	          td(popup_menu(-name=>$p2."_5",-default=>$aml_op,
 				-values=>[0,1],-labels=>{0=>' ',1=>'NOT'})),
 	          "<TD>";
@@ -847,7 +859,8 @@ sub form_magic($$$) {
 	# add line...
 	$j=$a+1;
 	$p2=$p1."_".$j;
-	print "<TR><TD rowspan=3 bgcolor=\"#efefef\">",
+	print "<TR><TD rowspan=3>&nbsp;</TD>",
+	      "<TD rowspan=3 bgcolor=\"#efefef\">",
 	      popup_menu(-name=>$p2."_5",-default=>'0',
 			    -values=>[0,1],-labels=>{0=>' ',1=>'NOT'}),"</TD>",
 	      "<TD>",textfield(-name=>$p2."_2",-size=>18,-maxlength=>18,
@@ -917,6 +930,7 @@ sub display_form($$) {
   my($data,$form) = @_;
   my($i,$j,$k,$a,$rec,$formdata,$h_bg,$val,$e);
   my($ip,$ipinfo,$com,$url);
+
 
   form_get_defaults($form);
   $formdata=$form->{data};
@@ -1076,7 +1090,8 @@ sub display_form($$) {
 	print td($rec->{name}),
 	      "<TD><TABLE width=\"100%\" bgcolor=\"#e0e0e0\">",
 	      "<TR bgcolor=\"#efefef\">",
-  	     th(["<FONT size=-2>Op</FONT>",
+  	     th(["<FONT size=-2>Type</FONT>",
+		 "<FONT size=-2>Op</FONT>",
 		 "<FONT size=-2>Rule</FONT>",
 		 "<FONT size=-2>Comments</FONT>"]),"</TR>";
 	$a=$data->{$rec->{tag}};
@@ -1085,7 +1100,9 @@ sub display_form($$) {
 	    elsif ($$a[$j][1] == 1) { $val=$$a[$j][8]; }
 	    else { $val=$$a[$j][9]; }
 	    print "<TR>",
-	          td($$a[$j][5]==1?'!':''),td($val),td($$a[$j][6]),"</TR>";
+	          td($aml_type_hash{$$a[$j][1]}.'&nbsp;'),
+	          td($$a[$j][5]==1?'!':''),
+	          td($val),td($$a[$j][6]),"</TR>";
 	}
 
 	if (@{$a} < 2) { print "<TR><TD>&nbsp;</TD></TR>"; }

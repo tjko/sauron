@@ -198,6 +198,9 @@ sub menu_handler {
   my $serverid = $state->{serverid};
   my $scookie = $state->{cookie};
 
+  $server_form{serverid}=$state->{serverid};
+  $server_form{zoneid}=$state->{zoneid};
+
   my($res,%data,%serv,%srec,@l,$server);
 
   goto select_server if ($serverid && check_perms('server','R'));

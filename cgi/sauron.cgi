@@ -3,7 +3,7 @@
 # sauron.cgi
 # $Id$
 # [едц~]
-# Copyright (c) Timo Kokkonen <tjko@iki.fi>, 2000-2003.
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>, 2000-2005.
 # All Rights Reserved.
 #
 use CGI qw/:standard *table -no_xhtml/;
@@ -36,6 +36,7 @@ $debug_mode = $SAURON_DEBUG_MODE;
 	  ['Nets','menu=nets',0],
 	  ['Templates','menu=templates',0],
 	  ['Groups','menu=groups',0],
+	  ['ACLs','menu=acls',0],
 	  ['Servers','menu=servers',0],
 	  ['Login','menu=login',0],
 	  ['About','menu=about',0],
@@ -44,6 +45,7 @@ $debug_mode = $SAURON_DEBUG_MODE;
 %menus = (
 	  'servers'=>'Sauron::CGI::Servers',
 	  'groups'=>'Sauron::CGI::Groups',
+	  'acls'=>'Sauron::CGI::ACLs',
 	  'zones'=>'Sauron::CGI::Zones',
 	  'login'=>'Sauron::CGI::Login',
 	  'hosts'=>'Sauron::CGI::Hosts',
@@ -105,6 +107,12 @@ $debug_mode = $SAURON_DEBUG_MODE;
 		       ['Groups',''],
 		       [],
 		       ['Add','sub=add']
+		      ],
+	    'acls'=>[
+		       ['ACLs',''],
+		       ['Keys','sub=keys'],
+		       [],
+		       ['Add ACL','sub=addacl']
 		      ],
 	    'hosts'=>[
 		      ['Search',''],
@@ -688,8 +696,9 @@ sub top_menu($) {
   }
 
   for $i (0..$#menulist) {
-    print "<A HREF=\"$s_url?$menulist[$i][1]\"><FONT color=\"#ffffff\">",
-          "$menulist[$i][0]</FONT></A>";
+    print 
+	"<A HREF=\"$s_url?$menulist[$i][1]\"><FONT size=-1 color=\"#ffffff\">",
+	"$menulist[$i][0]</FONT></A>";
     print " | " if ($i < $#menulist);
   }
 

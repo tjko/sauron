@@ -146,6 +146,9 @@ sub menu_handler {
   my $zoneid = $state->{zoneid};
   my $zone = $state->{zone};
 
+  $zone_form{serverid}=$state->{serverid};
+  $zone_form{zoneid}=$state->{zoneid};
+
   my $sub=param('sub');
 
   unless ($serverid > 0) {
