@@ -1,6 +1,6 @@
 # Sauron::CGIutil.pm  --  generic CGI stuff
 #
-# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2001,2002.
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2001-2003,2005.
 # $Id$
 #
 package Sauron::CGIutil;
@@ -289,13 +289,16 @@ sub form_check_form($$$) {
       return 101 if (form_check_field($rec,$tmp,0) ne '');
       $data->{$tag}=$tmp;
     }
-    elsif  ($type == 2 || $type==5 || $type==11
+    elsif  ($type == 2 || $type==5 || $type==11 || $type==12 
 	    || ($type==8 && $rec->{arec})) {
       $f=$rec->{fields};
       $f=1 if ($type==8 || $type==11);
       $f=3 if ($type==5);
+      $f=6 if ($type==12);
       $rec->{type}=['ip','text','text'] if ($type==5);
+      $rec->{type}=['int','cidr','int','int','int','text'] if ($type==12);
       $rec->{empty}=[0,1,1] if ($type==5);
+      $rec->{empty}=[0,1,0,0,0,1] if ($type==12);
       $a=param($p."_count");
       $a=0 unless ($a > 0);
       for $j (1..$a) {
@@ -407,8 +410,12 @@ sub form_magic($$$) {
 	}
 	param($p1,$val);
       }
-      elsif ($rec->{ftype} == 2 || $rec->{ftype} == 8 || $rec->{ftype} == 11) {
+      elsif ($rec->{ftype} == 2 || $rec->{ftype} == 8 || 
+	     $rec->{ftype} == 11 || $rec->{ftype} == 12) {
 	$a=$data->{$rec->{tag}};
+	$rec->{fields}=6 if ($rec->{ftype}==12);
+	param($p1."_serverid",$$a[0][1]) if ($rec->{ftype} == 12);
+
 	for $j (1..$#{$a}) {
 	  param($p1."_".$j."_id",$$a[$j][0]);
 	  for $k (1..$rec->{fields}) {
@@ -556,8 +563,9 @@ sub form_magic($$$) {
 	  print "<FONT size=-1 color=\"red\"><BR>",
                 form_check_field($rec,param($n),$k),"</FONT></TD>";
         }
-        print td(checkbox(-label=>' Delete',
-	             -name=>$p2."_del",-checked=>param($p2."_del") )),
+        print td("<FONT size=-2>",checkbox(-label=>'Delete',
+	             -name=>$p2."_del",-checked=>param($p2."_del")),
+		 "</FONT>"),
 	       "</TR>";
       }
       print "<TR>";
@@ -759,6 +767,103 @@ sub form_magic($$$) {
 	    submit(-name=>$p1."_add",-value=>'Add');
       print "</TD>";
     }
+    elsif ($rec->{ftype} == 12) {
+	my(@aml_key_l,%aml_key_h,@aml_acl_l,%aml_acl_h);
+	get_acl_list(param($p1."_serverid"),\%aml_acl_h,\@aml_acl_l);
+	get_key_list(param($p1."_serverid"),\%aml_key_h,\@aml_key_l,157);
+	print td($rec->{name}),"<TD><TABLE bgcolor=#ddefef spacing=1><TR>",
+ 	      th(["<FONT size=-2>Op</FONT>",
+		  "<FONT size=-2>Rule</FONT>",
+		  "<FONT size=-2>Comments</FONT>"]);
+	$a=param($p1."_count");
+	if (param($p1."_add") ne '') {
+	    my $addmode=param($p1."_add");
+	    my $b=$a+1;
+	    if ($addmode eq 'Add CIDR') { 
+		param($p1."_".$b."_1",0); 
+		param($p1."_".$b."_3",-1);
+		param($p1."_".$b."_4",-1);
+		$a=$a+1 if (param($p1."_".$b."_2") ne '');
+	    }
+	    elsif ($addmode eq 'Add ACL') { 
+		param($p1."_".$b."_1",1); 	
+		param($p1."_".$b."_2",'');
+		param($p1."_".$b."_4",-1);
+		$a=$a+1 if (param($p1."_".$b."_3") > 0);
+	    } 
+	    else { 
+		param($p1."_".$b."_1",2); 
+		param($p1."_".$b."_2",'');
+		param($p1."_".$b."_3",-1);
+		$a=$a+1 if (param($p1."_".$b."_4") > 0);
+	    }
+	    param($p1."_count",$a);
+	}
+	$a=0 unless ($a > 0);
+	print hidden(-name=>$p1."_count",-value=>$a),
+	      hidden(-name=>$p1."_serverid",-value=>''),"</TR>";
+	for $j (1..$a) {
+	    $p2=$p1."_".$j;
+	    my $aml_id = param($p2."_id");
+	    my $aml_mode = param($p2."_1");
+	    my $aml_cidr = param($p2."_2");
+	    my $aml_acl = param($p2."_3");
+	    my $aml_key = param($p2."_4");
+	    my $aml_op = param($p2."_5");
+	    my $aml_comment = param($p2."_6");
+	    print "<TR>",hidden(-name=>$p2."_id",$aml_id),
+	          hidden(-name=>$p2."_1",$aml_mode),
+	          td(popup_menu(-name=>$p2."_5",-default=>$aml_op,
+				-values=>[0,1],-labels=>{0=>' ',1=>'NOT'})),
+	          "<TD>";
+	    if ($aml_mode == 0) {
+		print textfield(-name=>$p2."_2",-size=>18,-maxlength=>18,
+				-value=>$aml_cidr),
+		      hidden(-name=>$p2."_3",$aml_acl),
+  		      hidden(-name=>$p2."_4",$aml_key);
+	    }
+	    elsif ($aml_mode == 1) {
+		print popup_menu(-name=>$p2."_3",-default=>$aml_acl,
+				 -values=>\@aml_acl_l,-labels=>\%aml_acl_h),
+		      "<FONT size=-2> ACL</FONT> ",
+		      hidden(-name=>$p2."_2",$aml_cidr),
+  		      hidden(-name=>$p2."_4",$aml_key);
+	    }
+	    else {
+		print popup_menu(-name=>$p2."_4",-default=>$aml_key,
+				 -values=>\@aml_key_l,-labels=>\%aml_key_h),
+		      "<FONT size=-2> Key</FONT> ",
+		      hidden(-name=>$p2."_2",$aml_cidr),
+  		      hidden(-name=>$p2."_3",$aml_acl);
+	    }
+	    print "</TD>",
+	          td(textfield(-name=>$p2."_6",-size=>25,-maxlength=>80,
+			       -value=>$aml_comment)),
+	          td("<FONT size=-2>",checkbox(-label=>'Delete',
+	             -name=>$p2."_del",-checked=>param($p2."_del") ),
+		     "</FONT>"),
+	          "</TR>";
+	}
+	# add line...
+	$j=$a+1;
+	$p2=$p1."_".$j;
+	print "<TR border=1><TD rowspan=3>",
+	      popup_menu(-name=>$p2."_5",-default=>'0',
+			    -values=>[0,1],-labels=>{0=>' ',1=>'NOT'}),"</TD>",
+	      "<TD>",textfield(-name=>$p2."_2",-size=>18,-maxlength=>18,
+			   -value=>''),"</TD><TD rowspan=3>",
+	      textfield(-name=>$p2."_6",-size=>25,-maxlength=>80,
+			       -value=>''),"</TD>",
+	      td(submit(-name=>$p1."_add",-value=>"Add CIDR")),"</TR><TR>",
+	      td(popup_menu(-name=>$p2."_3",-default=>-1,
+			    -values=>\@aml_acl_l,-labels=>\%aml_acl_h)),
+	      td(submit(-name=>$p1."_add",-value=>'Add ACL')),"</TR><TR>",
+	      td(popup_menu(-name=>$p2."_4",-default=>-1,
+			 -values=>\@aml_key_l,-labels=>\%aml_key_h)),
+	      td(submit(-name=>$p1."_add",-value=>'Add KEY')),"</TR>";
+	
+	print "</TABLE></TD>";
+    }
     elsif ($rec->{ftype} == 101) {
       undef @q; undef @lst; undef %lsth;
       $maxlen=$rec->{len};
@@ -883,7 +988,7 @@ sub display_form($$) {
 
       $val='&nbsp;' if ($val eq '');
       print "<TD WIDTH=\"",$form->{nwidth},"\">",$rec->{name},"</TD><TD>",
-            "$val</TD>\n";
+            "$val</TD>";
     } elsif ($rec->{ftype} == 2) {
       $a=$data->{$rec->{tag}};
       next if ($rec->{no_empty} && @{$a}<2);
@@ -905,14 +1010,14 @@ sub display_form($$) {
 	print "</TR>";
       }
       if (@{$a} < 2) { print "<TR><TD>&nbsp;</TD></TR>"; }
-      print "</TABLE></TD>\n";
+      print "</TABLE></TD>";
     } elsif ($rec->{ftype} == 3) {
       print "<TD WIDTH=\"",$form->{nwidth},"\">",$rec->{name},"</TD><TD>",
-            "$val</TD>\n";
+            "$val</TD>";
     } elsif ($rec->{ftype} == 4) {
       $val='&nbsp;' if ($val eq '');
       print "<TD WIDTH=\"",$form->{nwidth},"\">",$rec->{name},"</TD><TD>",
-            "<FONT color=\"$form->{ro_color}\">$val</FONT></TD>\n";
+            "<FONT color=\"$form->{ro_color}\">$val</FONT></TD>";
     } elsif ($rec->{ftype} == 5) {
       print td($rec->{name}),"<TD><TABLE>";
       $a=$data->{$rec->{tag}};
@@ -925,7 +1030,7 @@ sub display_form($$) {
 	$ipinfo.=' (no A record)' if ($$a[$j][3] ne 't' && $$a[$j][3] != 1);
 	print Tr(td($ip),td($ipinfo));
       }
-      print "</TABLE></TD>\n";
+      print "</TABLE></TD>";
     } elsif (($rec->{ftype} == 6) || ($rec->{ftype} ==7) ||
 	     ($rec->{ftype} == 10)) {
       print td($rec->{name});
@@ -949,7 +1054,7 @@ sub display_form($$) {
 	print "<TR>",td("<a href=\"$url$$a[$j][1]\">".$$a[$j][2]."</a> "),
 	          td($k),"</TR>";
       }
-      print "</TABLE></TD>\n";
+      print "</TABLE></TD>";
     } elsif ($rec->{ftype} == 9) {
       $url=$form->{$rec->{tag}."_url"}.$data->{$rec->{idtag}};
       print td($rec->{name}),td("<a href=\"$url\">$val</a>");
@@ -964,6 +1069,24 @@ sub display_form($$) {
 	print "&lt;None&gt;";
       }
       print "</TD>";
+    } elsif ($rec->{ftype} == 12) {
+	print td($rec->{name}),
+	      "<TD><TABLE width=\"100%\" bgcolor=\"#e0e0e0\">",
+	      "<TR bgcolor=\"#efefef\">",
+  	     th(["<FONT size=-2>Op</FONT>",
+		 "<FONT size=-2>Rule</FONT>",
+		 "<FONT size=-2>Comments</FONT>"]),"</TR>";
+	$a=$data->{$rec->{tag}};
+	for $j (1..$#{$a}) {
+	    if ($$a[$j][1] == 0) { $val=$$a[$j][2]; }
+	    elsif ($$a[$j][1] == 1) { $val=$$a[$j][8]; }
+	    else { $val=$$a[$j][9]; }
+	    print "<TR>",
+	          td($$a[$j][5]==1?'!':''),td($val),td($$a[$j][6]),"</TR>";
+	}
+
+	if (@{$a} < 2) { print "<TR><TD>&nbsp;</TD></TR>"; }
+	print "</TABLE></TD>";
     } else {
       error("internal error (display_form)");
     }

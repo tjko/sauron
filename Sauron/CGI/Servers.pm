@@ -90,7 +90,7 @@ my %server_form = (
   {ftype=>0, name=>'Access control'},
   {ftype=>3, tag=>'named_flags_ac', name=>'Use access control from master',
    type=>'enum', enum=>{0=>'No',1=>'Yes'}, iff=>['masterserver','\d+',1]},
-  {ftype=>2, tag=>'allow_transfer', name=>'Allow-transfer', fields=>2,
+  {ftype=>12, tag=>'allow_transfer', name=>'Allow-transfer', fields=>2,
    type=>['cidr','text'], len=>[20,30], empty=>[0,1],
    elabels=>['CIDR','comment'], iff=>['named_flags_ac','0']},
   {ftype=>2, tag=>'allow_query', name=>'Allow-query', fields=>2,

@@ -1,6 +1,6 @@
 # Sauron::BackEnd.pm  -- Sauron back-end routines
 #
-# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000-2003.
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000-2005.
 # $Id$
 #
 package Sauron::BackEnd;
@@ -121,6 +121,13 @@ $VERSION = '$Id$ ';
 	     delete_key
 	     get_key_list
 	     get_key_by_name
+
+	     get_acl
+	     update_acl
+	     add_acl
+	     delete_acl
+	     get_acl_list
+	     get_acl_by_name
 
 	     add_news
 	     get_news_list
@@ -348,6 +355,22 @@ sub get_array_field($$$$$$$) {
   $$rec{$keyname}=$l;
 }
 
+sub get_aml_field($$$$$) {
+    my($serverid,$type,$ref,$rec,$keyname) = @_;
+    my(@list,$i,$l);
+
+    db_query("SELECT c.id,c.mode,c.ip,c.acl,c.tkey,c.op,c.comment,".
+	     " 0,a.name,k.name ".
+	     "FROM cidr_entries c LEFT JOIN acls a ON c.acl=a.id " .
+	     "LEFT JOIN keys k ON c.tkey=k.id " .
+	     "WHERE c.type=$type AND c.ref=$ref ORDER by c.id",\@list);
+    $l=[];
+    push @{$l}, [ 'aml', $serverid ];
+    for $i (0..$#list) { push @{$l}, $list[$i]; }
+    $$rec{$keyname}=$l;
+}
+
+
 sub get_field($$$$$) {
   my($table,$field,$rule,$tag,$rec)=@_;
   my(@list);
@@ -405,6 +428,14 @@ sub update_array_field($$$$$$) {
 
   return 0;
 }
+
+sub update_aml_field($$$$) {
+    my($type,$ref,$rec,$keyname) = @_;
+    return update_array_field("cidr_entries",7,
+			      "mode,ip,acl,tkey,op,comment,type,ref",
+			      $keyname,$rec,"$type,$ref");
+}
+
 
 sub update_field($$$$$$) {
   my($table,$field,$rfields,$rvals,$tag,$rec) = @_;
@@ -643,8 +674,10 @@ sub get_server($$) {
   return -1 if ($res < 0);
   fix_bools($rec,"no_roots,zones_only");
 
-  get_array_field("cidr_entries",3,"id,ip,comment","CIDR,Comments",
-		  "type=1 AND ref=$id ORDER BY ip",$rec,'allow_transfer');
+  #get_array_field("cidr_entries",3,"id,ip,comment","CIDR,Comments",
+  #		  "type=1 AND ref=$id ORDER BY ip",$rec,'allow_transfer');
+  get_aml_field($id,1,$id,$rec,'allow_transfer');
+
   get_array_field("cidr_entries",3,"id,ip,comment","CIDR,Comments",
 		  "type=7 AND ref=$id ORDER BY ip",$rec,'allow_query');
   get_array_field("cidr_entries",3,"id,ip,comment","CIDR,Comments",
@@ -713,8 +746,9 @@ sub update_server($) {
   $id=$rec->{id};
 
   # allow_transfer
-  $r=update_array_field("cidr_entries",3,"ip,comment,type,ref",
-			 'allow_transfer',$rec,"1,$id");
+  #$r=update_array_field("cidr_entries",3,"ip,comment,type,ref",
+#			 'allow_transfer',$rec,"1,$id");
+  $r=update_aml_field(1,$id,$rec,'allow_transfer');
   if ($r < 0) { db_rollback(); return -12; }
   # dhcp
   $r=update_array_field("dhcp_entries",3,"dhcp,comment,type,ref",'dhcp',$rec,
@@ -1013,7 +1047,7 @@ sub get_zone($$) {
 	       "server,active,dummy,type,reverse,class,name,nnotify," .
 	       "hostmaster,serial,refresh,retry,expire,minimum,ttl," .
 	       "chknames,reversenet,comment,cdate,cuser,mdate,muser," .
-	       "forward,serial_date,flags,rdate",
+	       "forward,serial_date,flags,rdate,transfer_source",
 	       $id,$rec,"id");
   return -1 if ($res < 0);
   fix_bools($rec,"active,dummy,reverse,noreverse");
@@ -1033,9 +1067,6 @@ sub get_zone($$) {
 
       $rec->{zonehostid}=$hid;
     }
-  }
-  elsif ($rec->{type} eq 'S') {
-    get_field("cidr_entries","ip","type=13 AND ref=$id",'transfer_src',$rec);
   }
 
   get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comments",
@@ -1091,15 +1122,6 @@ sub update_zone($) {
 
   db_begin();
   $id=$rec->{id};
-
-  if ($rec->{type} eq 'S') {
-    $rec->{transfer_src} .= '/32' if ($rec->{transfer_src} &&
-				      $rec->{transfer_src} !~ /\/32$/);
-    $r=update_field("cidr_entries","ip","type,ref","13,$id",
-		    'transfer_src',$rec);
-    if ($r < 0) { db_rollback(); return -1000+$r; }
-    delete $rec->{transfer_src};
-  }
 
   $r=update_record('zones',$rec);
   if ($r < 0) { db_rollback(); return $r; }
@@ -1297,21 +1319,11 @@ sub add_zone($) {
       $rec->{reversenet}=$new_net;
   }
 
-  if ($rec->{type} eq 'S') {
-    $transfer_src=$rec->{transfer_src};
-    delete $rec->{transfer_src}
-  }
-
   db_begin();
   $res = add_record('zones',$rec);
   if ($res < 0) { db_rollback(); return -1; }
   $id=$res;
 
-  if ($transfer_src) {
-    $res=update_field("cidr_entries","ip","type,ref","13,$id",
-		      'transfer_src',{transfer_src=>$transfer_src});
-    if ($res < 0) { db_rollback(); return -1000+$res; }
-  }
 
   if ($rec->{type} eq 'M') {
     # zone's host record (@)
@@ -2901,6 +2913,102 @@ sub get_key_by_name($$) {
   $name=db_encode_str($name);
   db_query("SELECT id FROM keys " .
 	   "WHERE type=1 AND ref=$serverid AND name=$name",\@q);
+  return ($q[0][0] > 0 ? $q[0][0] : -1);
+}
+
+
+############################################################################
+# ACL functions
+
+sub get_acl($$) {
+  my ($id,$rec) = @_;
+
+  return -100 if (get_record("acls",
+		      "server,name,type,comment,".
+		      "cdate,cuser,mdate,muser", $id,$rec,"id"));
+  add_std_fields($rec);
+  return 0;
+}
+
+
+sub update_acl($) {
+  my($rec) = @_;
+  my($r,$id);
+
+  del_std_fields($rec);
+
+  db_begin();
+  $r=update_record('acls',$rec);
+  if ($r < 0) { db_rollback(); return $r; }
+
+  # FIXME...
+
+  return db_commit();
+}
+
+sub add_acl($) {
+  my($rec) = @_;
+  my($res,$id,$i);
+
+  db_begin();
+  $rec->{cdate}=time;
+  $rec->{cuser}=$muser;
+  $res = add_record('acls',$rec);
+  if ($res < 0) { db_rollback(); return -1; }
+  $id=$res;
+
+  # FIXME...
+
+  return -10 if (db_commit() < 0);
+  return $id;
+}
+
+sub delete_acl($) {
+  my($id) = @_;
+  my($res);
+
+  return -100 unless ($id > 0);
+
+  db_begin();
+
+  $res=db_exec("DELETE FROM acls WHERE id=$id");
+  if ($res < 0) { db_rollback(); return -1; }
+
+  $res=db_exec("DELETE FROM cidr_entries WHERE type=0 AND ref=$id");
+  if ($res < 0) { db_rollback(); return -9; }
+  $res=db_exec("UPDATE cidr_entries SET acl=-1 WHERE acl=$id");
+  if ($res < 0) { db_rollback(); return -10; }
+
+  return db_commit();
+}
+
+sub get_acl_list($$$) {
+  my($serverid,$rec,$lst) = @_;
+  my(@q,$i);
+
+  undef @{$lst};
+  push @{$lst},  -1;
+  undef %{$rec};
+  $$rec{-1}='--None--';
+  return if ($serverid < 1);
+
+  db_query("SELECT id,name FROM acls " .
+	   "WHERE server=$serverid OR server=-1 ORDER BY name;",\@q);
+  for $i (0..$#q) {
+    push @{$lst}, $q[$i][0];
+    $$rec{$q[$i][0]}=$q[$i][1];
+  }
+}
+
+sub get_acl_by_name($$) {
+  my($serverid,$name) = @_;
+  my(@q);
+
+  return -100 unless ($serverid > 0);
+  return -101 unless ($name);
+  $name=db_encode_str($name);
+  db_query("SELECT id FROM acls " .
+	   "WHERE server=$serverid AND name=$name",\@q);
   return ($q[0][0] > 0 ? $q[0][0] : -1);
 }
 
