@@ -894,6 +894,7 @@ sub make_dhcp() {
   db_query("SELECT h.ether,a.ip FROM hosts h,zones z,a_entries a " .
 	   "WHERE z.server=$serverid AND h.zone=z.id AND a.host=h.id " .
 	   " AND h.ether NOTNULL;",\@q);
+  error(db_errormsg()) if (db_errormsg());
   for $i (0..$#q) {
     unless ($q[$i][0] =~ /^[0-9A-F]{12}$/) {
       error("Invalid ethernet address ($q[$i][0]) skipped");
@@ -902,6 +903,21 @@ sub make_dhcp() {
     $etherhash{$q[$i][0]}=[] unless ($etherhash{$q[$i][0]});
     push @{$etherhash{$q[$i][0]}}, $q[$i][1];
   }
+  # add ehter_aliases to ether hash too
+  undef @q;
+  db_query("SELECT b.ether,c.ip FROM hosts a, hosts b, zones z, a_entries c ".
+	   "WHERE z.server=$serverid AND a.zone=z.id AND a.ether_alias=b.id ".
+	   " AND c.host=a.id;",\@q);
+  error(db_errormsg()) if (db_errormsg());
+  for $i (0..$#q) {
+    unless ($q[$i][0] =~ /^[0-9A-F]{12}$/) {
+      error("Invalid ethernet address ($q[$i][0]) skipped (ether_alias)");
+      next;
+    }
+    $etherhash{$q[$i][0]}=[] unless ($etherhash{$q[$i][0]});
+    push @{$etherhash{$q[$i][0]}}, $q[$i][1];
+  }
+
 
   # host dhcp hash
   undef @q;
