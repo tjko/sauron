@@ -151,6 +151,16 @@ while (<NAMEDCONF>) {
 	   push @{$ref}, $ip;
 	   next;
        }
+       if ($cur =~ "also-notify" && ($ip=is_cidr($line))) {
+	   #print "also-notify ($curzone) ip=$ip\n";
+	   $ref = $alsonotify{$curzone};
+	   unless ($ref) {
+	     $alsonotify{$curzone}=[];
+	     $ref = $alsonotify{$curzone};
+	   }
+	   push @{$ref}, $ip;
+	   next;
+       }
    }
 
     print "UNPROCESSED: $_\n";
@@ -271,6 +281,13 @@ for ($i=0; $i <= $#zones; $i+=1) {
     die("cannot insert allow-update IPs id=$zoneid!") if (db_exec($sqlstr)<0);
   }
 
+  # also-notify IPs...
+  foreach $ip (@{$alsonotify{$zones[$i]}}) {
+    $sqlstr="INSERT INTO cidr_entries (type,ref,ip) ".
+      "VALUES(6,$zoneid,'$ip');";
+    die("cannot insert also-notify IPs id=$zoneid!") if (db_exec($sqlstr)<0);
+  }
+
 
   push(@loopbacks_list,$zoneid) if ($loopback eq 'true');
 
@@ -345,7 +362,7 @@ for ($i=0; $i <= $#zones; $i+=1) {
   $res = db_exec($sqlstr);
   die("Cannot update zone record '$zone'") if ($res < 0);
 
-  delete $zonedata{$origin} if (@{$rec->{A}} < 1);
+  #delete $zonedata{$origin} if (@{$rec->{A}} < 1);
 
 
 
@@ -406,7 +423,7 @@ for ($i=0; $i <= $#zones; $i+=1) {
 	  $sqlstr = "SELECT a_entries.id, hosts.domain, zones.name " .
 #	          "hosts.domain || '.' || zones.name || '.' AS dname " .
 		  "FROM a_entries,hosts,zones,servers " .
-	          "WHERE a_entries.type=2 AND a_entries.ref=hosts.id " .
+	          "WHERE a_entries.host=hosts.id " .
 		  "AND hosts.zone=zones.id " .
 		  "AND zones.server=servers.id AND servers.id=$serverid AND " .
 #		  "AND zones.server=servers.id AND " .
@@ -458,6 +475,17 @@ for ($i=0; $i <= $#zones; $i+=1) {
 
 
   # hande normal zone
+
+
+  # add host record for zone....
+  die("Cannot insert host record for zone $zone")
+    if (db_exec("INSERT INTO hosts (zone,type,domain,comment) " .
+		"VALUES($zoneid,1,'\@','zone record');") < 0);
+  $oid=db_lastoid();
+  die("cannot get id for zone host record!")
+    if(db_exec("SELECT id FROM hosts WHERE OID=$oid;") < 0);
+  $zonehostid=db_getvalue(0,0);
+
 
   undef @gluelist;
   undef %mxhash;
@@ -713,22 +741,21 @@ for ($i=0; $i <= $#zones; $i+=1) {
     $reverse='true';
 
     if ($host eq $origin) {
-      $atype=1;
-      $hostid=$zoneid;
+      $hostid=$zonehostid;
     }
     else {
-      $atype=2;
       $hostid=$rec->{ID};
-      unless ($hostid > 0) {
-	warn("no id found in hash for host $host (adding A records)!") ;
-	next;
-      }
+    }
+
+    unless ($hostid > 0) {
+      warn("no id found in hash for host $host (adding A records)!") ;
+      next;
     }
 
     for($k=0; $k < $c; $k+=1) {
       $ip=$rec->{A}[$k];
-      $sqlstr = "INSERT INTO a_entries (type,ref,ip,reverse) " .
-	"VALUES($atype,$hostid,'$ip',$reverse);";
+      $sqlstr = "INSERT INTO a_entries (host,ip,reverse) " .
+	"VALUES($hostid,'$ip',$reverse);";
 
       $j++;
       $str.=$sqlstr . "\n";
@@ -881,7 +908,7 @@ sub find_multi_ips($) {
   undef %mips;
 
   $sqlstr = "SELECT a_entries.ip,COUNT(*) FROM a_entries,hosts,zones " .
-	    "WHERE a_entries.type=2 AND a_entries.ref=hosts.id " .
+	    "WHERE a_entries.host=hosts.id " .
 	    " AND hosts.zone=zones.id " .
 	    " AND zones.server=$serverid " .
 	    "GROUP BY a_entries.ip " .

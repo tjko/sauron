@@ -160,8 +160,8 @@ foreach $host (keys %zonedata) {
   for $i (0..$#{$rec->{A}}) {
     $ip=$rec->{A}[$i];
     die("cannot insert A record for host!")
-      if (db_exec("INSERT INTO a_entries (type,ref,ip,reverse,forward) " .
-		  "VALUES(2,$id,'$ip',true,true);") < 0);
+      if (db_exec("INSERT INTO a_entries (host,ip,reverse,forward) " .
+		  "VALUES($id,'$ip',true,true);") < 0);
   }
 
   #delete $zonedata{$host};
@@ -194,7 +194,7 @@ foreach $host (keys %zonedata) {
       next;
     }
     die("cannot delete A records for host id=$id!") 
-      if (db_exec("DELETE FROM a_entries WHERE type=2 AND ref=$id;") < 0);
+      if (db_exec("DELETE FROM a_entries WHERE host=$id;") < 0);
     die("cannot update host record id=$id!")
       if (db_exec("UPDATE hosts SET type=7 WHERE id=$id;") < 0);
     die("cannot add AREC entry")
@@ -483,7 +483,7 @@ foreach $host (keys %zonedata) {
     $info=db_encode_str($rec->{INFO}) if ($rec->{INFO} ne '');
 
     $sqlstr = "UPDATE hosts SET ether=$ether, model=$model, serial=$serial, " .
-              "misc=$muuta, info=$info, grp=$group, prn=$prn " .
+              "misc=$muuta, info=$info, grp=$group, prn=$prn, " .
 	      "ether_alias=$ether_alias " .
 		"WHERE id=$lastid;";
 #              "WHERE zone=$zoneid AND domain='$hostname';";

@@ -190,7 +190,8 @@ do "$PROG_DIR/back_end.pl";
 
 
 %host_types=(0=>'Any type',1=>'Host',2=>'Delegation',3=>'Plain MX',
-	     4=>'Alias',5=>'Printer',6=>'Glue record',7=>'AREC Alias');
+	     4=>'Alias',5=>'Printer',6=>'Glue record',7=>'AREC Alias',
+	     8=>'SRV record');
 
 
 %host_form = (
@@ -223,7 +224,10 @@ do "$PROG_DIR/back_end.pl";
   {ftype=>1, tag=>'hinfo_sw', name=>'HINFO sowftware', type=>'hinfo', len=>20,
    iff=>['type','1']},
   {ftype=>1, tag=>'ether', name=>'Ethernet address', type=>'mac', len=>12,
-   iff=>['type','1'], empty=>1},
+   iff=>['type','1'], iff2=>['ether_alias','-1'], empty=>1},
+  {ftype=>4, tag=>'ether_alias_info', name=>'ETHER2', 
+   iff=>['type','1'], iff2=>['ether_alias','\d+']},
+
   {ftype=>4, tag=>'card_info', name=>'Card manufacturer', iff=>['type','1']},
   {ftype=>1, tag=>'model', name=>'Model', type=>'text', len=>30, empty=>1, 
    iff=>['type','1']},
@@ -253,7 +257,13 @@ do "$PROG_DIR/back_end.pl";
    type=>['text','text'], fields=>2,len=>[40,20], empty=>[0,1], 
    elabels=>['PRINTER','comment'], iff=>['type','[15]']},
   {ftype=>0, name=>'Aliases', no_edit=>1, iff=>['type','1']},
-  {ftype=>8, tag=>'alias_l', name=>'Aliases', fields=>3, iff=>['type','1']}
+  {ftype=>8, tag=>'alias_l', name=>'Aliases', fields=>3, iff=>['type','1']},
+
+  {ftype=>0, name=>'SRV records', no_edit=>1, iff=>['type','8']},
+  {ftype=>2, tag=>'srv_l', name=>'SRV entries', fields=>5,len=>[5,5,5,30,10],
+   empty=>[0,0,0,0,1],elabels=>['Priority','Weight','Port','Target','Comment'],
+   type=>['priority','priority','priority','fqdn','text'],
+   iff=>['type','8']}
  ]
 );
 
@@ -401,6 +411,8 @@ do "$PROG_DIR/back_end.pl";
   {ftype=>4, tag=>'subnet', name=>'Type', type=>'enum',
    enum=>{t=>'Subnet',f=>'Net'}},
   {ftype=>1, tag=>'net', name=>'Net (CIDR)', type=>'cidr'},
+  {ftype=>1, tag=>'vlan', name=>'VLAN', type=>'int',
+   iff=>['subnet','t']},
   {ftype=>1, tag=>'comment', name=>'Comment', type=>'text',
    len=>60, empty=>1},
   {ftype=>0, name=>'Auto assign address range', iff=>['subnet','t']},
@@ -2908,6 +2920,7 @@ sub form_magic($$$) {
       $val=$data->{$rec->{tag}};
       $val="\L$val" if ($rec->{conv} eq 'L');
       $val="\U$val" if ($rec->{conv} eq 'U');
+      $val=~ s/\s+$//;
       $p1=$prefix."_".$rec->{tag};
 
       if ($rec->{ftype} == 1 || $rec->{ftype} == 101) {
@@ -2919,7 +2932,9 @@ sub form_magic($$$) {
 	for $j (1..$#{$a}) {
 	  param($p1."_".$j."_id",$$a[$j][0]);
 	  for $k (1..$rec->{fields}) {
-	    param($p1."_".$j."_".$k,$$a[$j][$k]);
+	    $val=$$a[$j][$k];
+	    $val =~ s/\/32$// if ($rec->{type}[$k-1] eq 'ip');
+	    param($p1."_".$j."_".$k,$val);
 	  }
 	}
 	param($p1."_count",($#{$a} < 0 ? 0 : $#{$a}));
@@ -3286,7 +3301,7 @@ sub display_form($$) {
 	for $k (1..$rec->{fields}) {
 	  $val=$$a[$j][$k];
 	  $val =~ s/\/32$// if ($rec->{type}[$k-1] eq 'ip');
-	  $val='&nbsp;' unless ($val);
+	  $val='&nbsp;' if ($val eq '');
 	  print td($val);
 	}
       }

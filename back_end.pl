@@ -151,7 +151,7 @@ sub update_array_field($$$$$$) {
     $id=$$list[$i][0];
     if ($m == -1) { # delete record
       $str="DELETE FROM $table WHERE id=$id;";
-      print "<BR>DEBUG: delete record $id $str";
+      #print "<BR>DEBUG: delete record $id $str";
       return -5 if (db_exec($str) < 0);
     }
     elsif ($m == 1) { # update record
@@ -163,7 +163,7 @@ sub update_array_field($$$$$$) {
 	$flag=1 if (!$flag);
       }
       $str.=" WHERE id=$id;";
-      print "<BR>DEBUG: update record $id $str";
+      #print "<BR>DEBUG: update record $id $str";
       return -6 if (db_exec($str) < 0);
     } 
     elsif ($m == 2) { # add record
@@ -175,7 +175,7 @@ sub update_array_field($$$$$$) {
 	$flag=1 if (!$flag);
       }
       $str.=",$vals);";
-      print "<BR>DEBUG: add record $id $str";
+      #print "<BR>DEBUG: add record $id $str";
       return -7 if (db_exec($str) < 0);
     }
   }
@@ -905,7 +905,7 @@ sub get_host($$) {
   $res = get_record("hosts",
 	       "zone,type,domain,ttl,class,grp,alias,cname_txt," .
 	       "hinfo_hw,hinfo_sw,wks,mx,rp_mbox,rp_txt,router," .
-	       "prn,ether,info,location,dept,huser,model,serial,misc,comment",
+	       "prn,ether,ether_alias,info,location,dept,huser,model,serial,misc,comment",
 		    $id,$rec,"id");
 
   return -1 if ($res < 0);
@@ -927,6 +927,9 @@ sub get_host($$) {
 		  "type=3 AND ref=$id ORDER BY dhcp",$rec,'dhcp_l');
   get_array_field("printer_entries",3,"id,printer,comment","PRINTER,Comments",
 		  "type=2 AND ref=$id ORDER BY printer",$rec,'printer_l');
+  get_array_field("srv_entries",6,"id,pri,weight,port,target,comment",
+		  "Priority,Weight,Port,Target",
+		  "type=1 AND ref=$id ORDER BY port,pri,weight",$rec,'srv_l');
 
   get_array_field("hosts",4,"0,id,domain,type","Domain,cname",
 	          "type=4  AND alias=$id ORDER BY domain",$rec,'alias_l');
@@ -944,6 +947,12 @@ sub get_host($$) {
     get_field("ether_info","info","ea='$t'","card_info",$rec);
   }
   $rec->{card_info}='&nbsp;' if ($rec->{card_info} eq '');
+
+  if ($rec->{ether_alias} > 0) {
+    get_field("hosts","domain","id=$rec->{ether_alias}",
+	      'ether_alias_info',$rec);
+  }
+  $rec->{ether_alias_info}='&nbsp;' unless ($rec->{ether_alias_info});
 
   if ($rec->{wks} > 0) {
     $wrec={};
@@ -988,6 +997,7 @@ sub update_host($) {
   my($r,$id);
 
   delete $rec->{card_info};
+  delete $rec->{ether_alias_info};
   delete $rec->{wks_rec};
   delete $rec->{mx_rec};
   delete $rec->{grp_rec};
@@ -1017,6 +1027,10 @@ sub update_host($) {
   $r=update_array_field("printer_entries",3,"printer,comment,type,ref",
 			'printer_l',$rec,"2,$id");
   if ($r < 0) { db_rollback(); return -17; }
+  $r=update_array_field("srv_entries",6,
+			"pri,weight,port,target,comment,type,ref",
+			'srv_l',$rec,"1,$id");
+  if ($r < 0) { db_rollback(); return -18; }
 
   $r=update_array_field("a_entries",4,"ip,reverse,forward,host",
 			'ip',$rec,"$id");
@@ -1519,11 +1533,11 @@ sub get_net($$) {
 
   return -100 if (get_record("nets",
                       "server,name,net,subnet,rp_mbox,rp_txt,no_dhcp,comment,".
-		      "range_start,range_end",$id,$rec,"id"));
+		      "range_start,range_end,vlan",$id,$rec,"id"));
 
   get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comment",
 		  "type=4 AND ref=$id ORDER BY dhcp",$rec,'dhcp_l');
-  
+
   return 0;
 }
 
