@@ -2,7 +2,7 @@
 #
 # generatehosts - utility to add host records
 #
-# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2001-2003.
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2001-2004.
 # $Id$
 #
 require 5;
@@ -39,7 +39,7 @@ sub tag_expand($) {
     $str=~ s/:IP4:/$ip4/g;
   }
 
-  $str =~ s/:N:/$i/g;
+  $str =~ s/:N:/$i1/g;
   $str =~ s/:N2:/$i2/g;
   $str =~ s/:N3:/$i3/g;
   $str =~ s/:N4:/$i4/g;
