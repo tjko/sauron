@@ -9,24 +9,10 @@ require 5;
 use Getopt::Long;
 use Sauron::DB;
 use Sauron::Util;
+use Sauron::Sauron;
 
-my ($PG_DIR,$PG_NAME) = ($0 =~ /^(.*\/)(.*)$/);
-$0 = $PG_NAME;
+load_config();
 
-if (-r "/etc/sauron/config") {
-  $config_file="/etc/sauron/config";
-} elsif (-r "/usr/local/etc/sauron/config") {
-  $config_file="/usr/local/etc/sauron/config";
-} else {
-  die("cannot find config file in /etc/sauron or /usr/local/etc/sauron");
-}
-
-do "$config_file" || die("cannot load config: $config_file");
-
-
-##############################################
-
-# $user = (getpwuid($<))[0];
 GetOptions("help|h","name=s","group=s");
 
 if ($opt_help || $opt_help > 0) {
@@ -43,8 +29,12 @@ unless ($opt_group) {
   chomp ($opt_group = lc(<STDIN>));
   $i=1;
 }
-fatal("Invalid groupname '$opt_group'!") 
+fatal("Invalid groupname '$opt_group'!")
   unless ($opt_group =~ /^[a-z0-9_\-]+$/);
+
+undef @q;
+db_query("SELECT id FROM user_groups WHERE name='$opt_group'",\@q);
+fatal("Group allready exists!") if ($q[0][0] > 0);
 
 unless ($opt_name) {
   print "Enter group description: ";
@@ -65,8 +55,6 @@ if ($i) { # ask confirmation only in interactive session...
   }
 }
 
-db_query("SELECT id FROM user_groups WHERE name='$opt_group'",\@q);
-fatal("Group allready exists!") if ($q[0][0] > 0);
 
 $res=db_exec("INSERT INTO user_groups " .
 	     "(name,comment) VALUES('$opt_group','$opt_name');");
