@@ -17,6 +17,9 @@ do "$PG_DIR/util.pl";
 do "$PG_DIR/db.pl";
 
 
+$cdate = time;
+$user = (getpwuid($<))[0];
+
 sub fatal($) {
   my ($msg) = @_;
   print STDERR "$0: $msg\n";
@@ -30,11 +33,13 @@ my(
    $i,$t,$r,$res
   );
 
-$result = GetOptions("user=s","superuser","help|h","passwd=s","name=s");
+$result = GetOptions("user=s","superuser","help|h","passwd=s","name=s",
+		     "group=s");
 
 if ($opt_help) {
-  print "syntax: $0 [--user=<username>] [--superuser] [--help]\n" ,
-        "\t\t[--passwd=<password>] [--name=\"<user's full name>\"]\n";
+  print "syntax: $0 [--user=username] [--group=name] [--superuser] " .
+        "[--help]\n" ,
+        "\t\t[--passwd=password] [--name=\"<user's full name>\"]\n";
   exit(0);
 }
 
@@ -48,6 +53,23 @@ unless ($opt_user) {
   $i=1;
 }
 fatal("Invalid username '$opt_user'!") unless ($opt_user =~ /^\S+$/);
+
+unless ($opt_group) {
+  print "Enter group name (empty for none): ";
+  $opt_group = ReadLine 0;
+  chomp $opt_group;
+  $i=1;
+}
+
+if ($opt_group) {
+  undef @q;
+  db_query("SELECT id FROM user_groups WHERE name='$opt_group';",\@q);
+  fatal("Cannot find group '$opt_group'") unless (@q > 0);
+  $gid=$q[0][0];
+} else {
+  $gid=-1;
+}
+
 
 unless ($opt_name) {
   print "Enter user description (full name): ";
@@ -86,11 +108,12 @@ if ($i) { # ask confirmation only in interactive session...
 }
 
 $res=db_exec("INSERT INTO users " .
-	     "(username,password,name,superuser,muser,cuser) " .
+	     "(username,password,name,superuser,muser,cuser,cdate,gid) " .
 	     "VALUES('$opt_user','$pwd','$opt_name',$superuser," .
-	     " '$user','$user');");
+	     " '$user','$user',$cdate,$gid);");
 
-fatal("Cannot add user to users table! (user already exists?)") if ($res < 0);
+fatal("Cannot add user to users table! (user already exists?)\n" . 
+      db_errormsg()) if ($res < 0);
 
 print "User $opt_user added succesfully.\n";
 print "Remember to give user some rights with moduser command.\n"

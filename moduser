@@ -24,6 +24,10 @@ sub fatal($) {
 }
 
 
+$modgroup = ($PG_NAME eq 'modgroup' ? 1 : 0);
+$fooname=($modgroup ? 'groupname' : 'username');
+
+
 $user = (getpwuid($<))[0];
 $mdate = db_timestamp_str();
 
@@ -32,17 +36,25 @@ $mdate = db_timestamp_str();
 ##############################################
 
 $result = GetOptions("help|h","list!","add:s","delall!","del=s","passwd:s",
-		     "name=s","superuser=s","lock!","unlock!","edit!",
-		     "listusers!");
+		     "name=s","superuser=s","lock!","unlock!","edit!");
 
 $opt_user=$ARGV[0];
 
 
 if ($opt_help || ($opt_user eq '' &&  $opt_listusers eq '')) {
-  print "syntax: $0 <username> [--list|add|del|delall|edit]\n" ,
-        "\t\t[--name=\"<user's full name>\"] [--superuser=<yes|no>]\n",
-        "\t\t[--passwd] [--passwd=<password>] [--lock|unlock] [--help]\n\n";
-  print " Parameter descriptions: \n",
+  print "syntax: $0 <$fooname> [options]\n\n";
+  print " Option descriptions: \n";
+
+  print "   --name=\"user name\"                    full user name\n",
+        "   --superuser=<yes|no>                  toggle superuser flag\n",
+        "   --passwd                              set password (interactive)\n",
+        "   --passwd=<password>                   set password\n",
+        "   --list                                list all $fooname\n",
+        "   --lock                                lock account\n",
+        "   --unlock                              unlock account\n\n"
+	  unless ($modgroup);
+
+  print "                                         Priviliges\n",
         "   --add                                 interactive add\n",
         "   --add=\"server,<servername>,<mode>\"    add server (mode=R|RW|RWS)\n",
         "   --add=\"zone,<zonename>,<mode>\"        add zone (mode=R|RW|RWS)\n",
@@ -51,8 +63,7 @@ if ($opt_help || ($opt_user eq '' &&  $opt_listusers eq '')) {
         "   --del=\"<type>,<name|net|mask>\"        delete right\n",
         "                                         (type=server|zone|net|host)\n",
         "   --delall                              delete all rights\n",
-        "   --list                                list all rights\n",
-        "   --listusers                          list all users\n",
+#        "   --list                                list all rights\n",
         "\n";
   exit(0);
 }
@@ -72,126 +83,134 @@ if ($opt_listusers) {
   exit 0;
 }
 
-fatal("Invalid username '$opt_user'!") unless ($opt_user =~ /^\S+$/);
+fatal("Invalid $fooname '$opt_user'!") unless ($opt_user =~ /^\S+$/);
 
-undef @q;
-db_query("SELECT id,name,superuser,comment,password FROM users " .
-	 "WHERE username='$opt_user';",\@q);
-fatal("Cannot find user '$opt_user' from users table!") if (@q < 1);
 
-$id=$q[0][0];
-$pwd=$q[0][4];
+if ($modgroup) {
+  undef @q;
+  db_query("SELECT id,comment FROM user_groups " .
+	   "WHERE name='$opt_user';",\@q);
+  fatal("Cannot find usergroup '$opt_user' from user_groups table!") 
+    if (@q < 1);
 
-if ($opt_name) {
-  $res=db_exec("UPDATE users SET name='$opt_name', " .
-	       " muser='$user',mdate='$mdate' WHERE id=$id;");
-  fatal("Cannot update user description!") if ($res < 0);
-  print "User description succesfully updated.\n";
-}
+  $id=$q[0][0];
+  $utype=1;
 
-if ($opt_superuser) {
-  if ($opt_superuser eq 'yes') { $superuser='true'; }
-  elsif ($opt_superuser eq 'no') { $superuser='false'; }
-  else { fatal("Invalid argument to option superuser!"); }
-  $res=db_exec("UPDATE users SET superuser=$superuser, " .
-	       "muser='$user',mdate='$mdate' WHERE id=$id;");
-  fatal("Cannot update user superuser status!") if ($res < 0);
-  print "User superuser status succesfully updated.\n";
-}
+  print "\n Groupname: $opt_user (id=$id)\n",
+        "   Comment: $q[0][1]\n\n";
 
-if (defined $opt_passwd) {
-  unless ($opt_passwd) {
-    print "Enter password: ";
-    ReadMode 'noecho';
-    $opt_passwd = ReadLine 0;
-    print "\n";
-    ReadMode 'normal';
-    chomp $opt_passwd;
+} else {
+  undef @q;
+  db_query("SELECT id,name,superuser,comment,password FROM users " .
+	   "WHERE username='$opt_user';",\@q);
+  fatal("Cannot find user '$opt_user' from users table!") if (@q < 1);
+
+  $id=$q[0][0];
+  $pwd=$q[0][4];
+  $utype=2;
+
+  if ($opt_name) {
+    $res=db_exec("UPDATE users SET name='$opt_name', " .
+		 " muser='$user',mdate='$mdate' WHERE id=$id;");
+    fatal("Cannot update user description!") if ($res < 0);
+    print "User description succesfully updated.\n";
   }
 
-  $salt=int(rand(900000)+100000);
-  $pwd=pwd_crypt($opt_passwd,$salt);
-  $res=db_exec("UPDATE users SET password='$pwd', " .
-	       " muser='$user',mdate='$mdate' WHERE id=$id;");
-  fatal("Cannot update user password!") if ($res < 0);
-  print "User password succesfully updated.\n";
+  if ($opt_superuser) {
+    if ($opt_superuser eq 'yes') { $superuser='true'; }
+    elsif ($opt_superuser eq 'no') { $superuser='false'; }
+    else { fatal("Invalid argument to option superuser!"); }
+    $res=db_exec("UPDATE users SET superuser=$superuser, " .
+		 "muser='$user',mdate='$mdate' WHERE id=$id;");
+    fatal("Cannot update user superuser status!") if ($res < 0);
+    print "User superuser status succesfully updated.\n";
+  }
+
+  if (defined $opt_passwd) {
+    unless ($opt_passwd) {
+      print "Enter password: ";
+      ReadMode 'noecho';
+      $opt_passwd = ReadLine 0;
+      print "\n";
+      ReadMode 'normal';
+      chomp $opt_passwd;
+    }
+
+    $salt=int(rand(900000)+100000);
+    $pwd=pwd_crypt($opt_passwd,$salt);
+    $res=db_exec("UPDATE users SET password='$pwd', " .
+		 " muser='$user',mdate='$mdate' WHERE id=$id;");
+    fatal("Cannot update user password!") if ($res < 0);
+    print "User password succesfully updated.\n";
+  }
+
+  if ($opt_lock) {
+    if ($pwd =~ /^LOCKED/) {  fatal("account already locked!"); }
+    $pwd="LOCKED:$pwd";
+    $res=db_exec("UPDATE users SET password='$pwd', " .
+		 " muser='$user',mdate='$mdate' WHERE id=$id;");
+    fatal("Cannot update user password!") if ($res < 0);
+    print "User account succesfully locked.\n";
+  }
+
+  if ($opt_unlock) {
+    unless ($pwd =~ /^LOCKED/) {  fatal("account not locked!"); }
+    $pwd =~ s/^LOCKED://g;
+    $res=db_exec("UPDATE users SET password='$pwd', " .
+		 " muser='$user',mdate='$mdate' WHERE id=$id;");
+    fatal("Cannot update user password!") if ($res < 0);
+    print "User account succesfully unlocked.\n";
+  }
+
+
+  undef @q;
+  db_query("SELECT u.id,u.name,u.superuser,u.comment,u.password,u.gid " .
+	   "FROM users u " .
+	   "WHERE u.username='$opt_user';",\@q);
+  fatal("Cannot find user '$opt_user' from users table!") if (@q < 1);
+
+  $status=($pwd=~/^LOCKED/?"LOCKED!":"valid");
+  $status="Invalid password" unless $pwd =~ /^(LOCKED|MD5)/;
+
+  $gid=$q[0][5];
+  $gidname='<none>';
+  if ($gid > 0) {
+    undef @q;
+    db_query("SELECT name FROM user_groups WHERE id=$gid;",\@q);
+    $gidname=$q[0][0] if (@q > 0);
+  }
+
+  print "\n Username: $opt_user (id=$id)\n",
+        " Longname: $q[0][1]\n",
+        "superuser: " ,($q[0][2] eq 't' ? 'Yes':'No'), "\n",
+        "    group: $gidname (gid=$gid)\n",
+	"   status: $status\n\n";
 }
 
-if ($opt_lock) {
-  if ($pwd =~ /^LOCKED/) {  fatal("account already locked!"); }
-  $pwd="LOCKED:$pwd";
-  $res=db_exec("UPDATE users SET password='$pwd', " .
-	       " muser='$user',mdate='$mdate' WHERE id=$id;");
-  fatal("Cannot update user password!") if ($res < 0);
-  print "User account succesfully locked.\n";
-}
-
-if ($opt_unlock) {
-  unless ($pwd =~ /^LOCKED/) {  fatal("account not locked!"); }
-  $pwd =~ s/^LOCKED://g;
-  $res=db_exec("UPDATE users SET password='$pwd', " .
-	       " muser='$user',mdate='$mdate' WHERE id=$id;");
-  fatal("Cannot update user password!") if ($res < 0);
-  print "User account succesfully unlocked.\n";
-}
 
 
-undef @q;
-db_query("SELECT id,name,superuser,comment,password FROM users " .
-	 "WHERE username='$opt_user';",\@q);
-fatal("Cannot find user '$opt_user' from users table!") if (@q < 1);
+########################################
 
-$status=($pwd=~/^LOCKED/?"LOCKED!":"valid");
-$status="Invalid password" unless $pwd =~ /^(LOCKED|MD5)/;
-
-print " Username: $opt_user (id=$id)\n",
-      " Longname: $q[0][1]\n",
-      "superuser: " ,($q[0][2] eq 't' ? 'Yes':'No'), "\n",
-      "   status: $status\n\n";
-
-
-
-if ($opt_list) {
+unless ($opt_add || $opt_del || $opt_delall) {
   print 
     "Type     Ref.                      Mode\n",
     "-------- ------------------------- --------------------------------\n";
 
-  undef @d;
-  db_query("SELECT a.mode,b.name FROM user_rights a, servers b " .
-	   "WHERE a.type=1 AND a.ref=b.id AND a.uref=$id;",\@d);
-  #print "Server records:\n";
-  for $i (0..$#d) { 
-    printf "%-8s %-25s %s\n","server",$d[$i][1],$d[$i][0];
-  }
-
-  undef @d;
-  db_query("SELECT a.mode,b.name FROM user_rights a, zones b " .
-	   "WHERE a.type=2 AND a.ref=b.id AND a.uref=$id;",\@d);
-  #print "Zone   records:\n";
-  for $i (0..$#d) { 
-    printf "%-8s %-25s %s\n","zone",$d[$i][1],$d[$i][0];
-  }
-
-  undef @d;
-  db_query("SELECT a.mode,b.net FROM user_rights a, nets b " .
-	   "WHERE a.type=3 AND a.ref=b.id AND a.uref=$id;",\@d);
-  #print "Net    records:\n";
-  for $i (0..$#d) { 
-    printf "%-8s %-25s %s\n","net",$d[$i][1],$d[$i][0];
-  }
-
-  undef @d;
-  db_query("SELECT a.mode  FROM user_rights a " .
-	   "WHERE a.type=4 AND a.uref=$id;",\@d);
-  #print "hostnamemask    records:\n";
-  for $i (0..$#d) { 
-    printf "%-8s %-25s %s\n","hostname",$d[$i][0],"(hostnamemask)";
-  }
-
+  print "[User priviliges]\n" if ($utype == 2);
+  list_privs($id,$utype);
   print "\n";
+
+  if ($utype == 2 && $gid > 0) {
+    print "[Group ($gidname) priviliges]\n";
+    list_privs($gid,1);
+  }
+
   exit;
+
 }
-elsif (defined $opt_add) {
+
+
+if (defined $opt_add) {
   unless ($opt_add) {
   add_i:
     print "Record type [1=server,2=zone,3=net,4=hostnamemask]: ";
@@ -236,9 +255,9 @@ elsif (defined $opt_add) {
       $mode=$tmp;
       $ref=-1;
     }
-    
-    $res=db_exec("INSERT INTO user_rights (uref,type,ref,mode) " .
-		 "VALUES($id,$type,$ref,'$mode');");
+
+    $res=db_exec("INSERT INTO user_rights (type,ref,rtype,rref,rule) " .
+		 "VALUES($utype,$id,$type,$ref,'$mode');");
     fatal("cannot insert record to user_rights table!") if ($res < 0);
     exit;
   }
@@ -273,8 +292,8 @@ elsif (defined $opt_add) {
   }
 
   #print "$type,$ref,$mode\n";
-  $res=db_exec("INSERT INTO user_rights (uref,type,ref,mode) " .
-	       "VALUES($id,$type,$ref,'$mode');");
+  $res=db_exec("INSERT INTO user_rights (type,ref,rtype,rref,rule) " .
+	       "VALUES($utype,$id,$type,$ref,'$mode');");
   fatal("cannot insert record to user_rights table!") if ($res < 0);
 
 }
@@ -287,28 +306,32 @@ elsif (defined $opt_del) {
   if ($type eq 1) {
     undef @d;
     db_query("SELECT a.id FROM user_rights a, servers b " .
-       "WHERE a.uref=$id AND a.type=1 AND a.ref=b.id AND b.name='$tmp';",\@d);
+       "WHERE a.type=$utype AND a.ref=$id " . 
+       " AND a.rtype=1 AND a.rref=b.id AND b.name='$tmp';",\@d);
     fatal("cannot find record (server) '$tmp'") if (@d < 1);
     $ref=$d[0][0];
   }
   elsif ($type eq 2) {
     undef @d;
     db_query("SELECT a.id FROM user_rights a, zones b " .
-	"WHERE a.uref=$id AND a.type=2 AND a.ref=b.id AND b.name='$tmp';",\@d);
+	"WHERE a.type=$utype AND a.ref=$id " .
+	" AND a.rtype=2 AND a.rref=b.id AND b.name='$tmp';",\@d);
     fatal("cannot find record (zone) '$tmp'") if (@d < 1);
     $ref=$d[0][0];
   }
   elsif ($type eq 3) {
     undef @d;
-    db_query("SELECT a.id FROM user_rights a, nets b " .  
-     "WHERE a.uref=$id AND a.type=3 AND a.ref=b.id AND net='$tmp';",\@d);
+    db_query("SELECT a.id FROM user_rights a, nets b " .
+     "WHERE a.type=$utype AND a.ref=$id " .
+     " AND a.rtype=3 AND a.rref=b.id AND b.net='$tmp';",\@d);
     fatal("cannot find net '$tmp'") if (@d < 1);
     $ref=$d[0][0];
   }
   elsif ($type eq 4) {
     undef @d;
     $tmp=~s/\\/\\\\/g;
-    db_query("SELECT id FROM user_rights WHERE uref=$id AND mode='$tmp';",\@d);
+    db_query("SELECT id FROM user_rights " .
+             "WHERE type=$utype AND ref=$id AND rtype=4 AND rule='$tmp';",\@d);
     fatal("cannot find hostnamemask '$tmp'") if (@d < 1);
     $ref=$d[0][0];
   }
@@ -320,7 +343,7 @@ elsif (defined $opt_del) {
 }
 elsif ($opt_delall) {
   db_begin();
-  $res=db_exec("DELETE FROM user_rights WHERE uref=$id;");
+  $res=db_exec("DELETE FROM user_rights WHERE type=$utype AND ref=$id;");
   fatal("cannot delete all users records!") if ($res <0);
   fatal("commit failed!") if (db_commit()<0);
 }
@@ -352,3 +375,44 @@ sub ask_mode($n) {
   return $mode;
 }
 
+
+sub list_privs($$) {
+  my($id,$utype) = @_;
+  my($i,@d);
+
+  undef @d;
+  db_query("SELECT a.rule,b.name FROM user_rights a, servers b " .
+	   "WHERE a.rtype=1 AND a.rref=b.id AND a.ref=$id AND a.type=$utype;",
+	   \@d);
+  #print "Server records:\n";
+  for $i (0..$#d) { 
+    printf "%-8s %-25s %s\n","server",$d[$i][1],$d[$i][0];
+  }
+
+  undef @d;
+  db_query("SELECT a.rule,b.name FROM user_rights a, zones b " .
+	   "WHERE a.rtype=2 AND a.rref=b.id AND a.ref=$id AND a.type=$utype;",
+	   \@d);
+  #print "Zone   records:\n";
+  for $i (0..$#d) { 
+    printf "%-8s %-25s %s\n","zone",$d[$i][1],$d[$i][0];
+  }
+
+  undef @d;
+  db_query("SELECT a.rule,b.net FROM user_rights a, nets b " .
+	   "WHERE a.rtype=3 AND a.rref=b.id AND a.ref=$id AND a.type=$utype;",
+	   \@d);
+  #print "Net    records:\n";
+  for $i (0..$#d) { 
+    printf "%-8s %-25s %s\n","net",$d[$i][1],$d[$i][0];
+  }
+
+  undef @d;
+  db_query("SELECT a.rule  FROM user_rights a " .
+	   "WHERE a.type=4 AND a.ref=$id AND a.type=$utype;",\@d);
+  #print "hostnamemask    records:\n";
+  for $i (0..$#d) { 
+    printf "%-8s %-25s %s\n","hostname",$d[$i][0],"(hostnamemask)";
+  }
+
+}

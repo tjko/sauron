@@ -129,6 +129,11 @@ while (<NAMEDCONF>) {
 	   $checknames{$curzone} = $1;
 	   next;
        }
+       if ( /notify\s+(\S+)\s*;/ ) {
+	   #print "notify=$1\n";
+	   $notify{$curzone} = ("\L$1" eq 'no' ? 'no' : 'yes');
+	   next;
+       }
    }
    if ($prev =~ /^zone\s+(.*)$/) {
        $curzone=$1;
@@ -256,12 +261,15 @@ for ($i=0; $i <= $#zones; $i+=1) {
   elsif ($check_names =~ /fail/) { $check_names='F'; }
   elsif ($check_names =~ /warn/) { $check_names='W'; }
   else { $check_names='D'; };
-
+  $nnotify='D';
+  $nnotify='N' if ($notify{$zones[$i]} eq 'no');
+  $nnotify='Y' if ($notify{$zones[$i]} eq 'yes');
 
   $sqlstr="INSERT INTO zones " .
-    "(cdate,cuser,muser,server,type,reverse,name,chknames) " .
+    "(cdate,cuser,muser,server,type,reverse,name,chknames,nnotify) " .
     "VALUES" .
-    "($cdate,'$user','$user',$serverid,'$type',$rev,'$zone','$check_names');";
+    "($cdate,'$user','$user',$serverid,'$type',$rev,'$zone','$check_names', ".
+    "'$nnotify');";
   $res=db_exec($sqlstr);
   if ($res < 0) {
     print "zone allready exists! skipping\n";
@@ -481,7 +489,7 @@ for ($i=0; $i <= $#zones; $i+=1) {
   # add host record for zone....
   die("Cannot insert host record for zone $zone")
     if (db_exec("INSERT INTO hosts (cdate,cuser,zone,type,domain,comment) " .
-		"VALUES($cdate,'$cuser',$zoneid,1,'\@','zone record');") < 0);
+		"VALUES($cdate,'$user',$zoneid,1,'\@','zone record');") < 0);
   $oid=db_lastoid();
   die("cannot get id for zone host record!")
     if(db_exec("SELECT id FROM hosts WHERE OID=$oid;") < 0);
@@ -506,9 +514,8 @@ for ($i=0; $i <= $#zones; $i+=1) {
     $c=$wkshash{$wks};
     #print "wks: '$wks' $c\n";
     $wks_i_count++;
-    $sqlstr="INSERT INTO wks_templates (server,name) " .
-            "VALUES($serverid," .
-            "'$servername:$wks_i_count');";
+    $sqlstr="INSERT INTO wks_templates (cdate,cuser,server,name) " .
+            "VALUES($cdate,'$user',$serverid,'$servername:$wks_i_count');";
     $res=db_exec($sqlstr);
     die("cannot insert record in wks_templates") if ($res < 0);
     $oid=db_lastoid();
@@ -535,8 +542,8 @@ for ($i=0; $i <= $#zones; $i+=1) {
     $c=$mxhash{$mx};
     #print "mx: '$mx' $c\n";
     $mx_i_count++;
-    $sqlstr="INSERT INTO mx_templates (zone,name) VALUES($zoneid," .
-            "'$zone:$mx_i_count');";
+    $sqlstr="INSERT INTO mx_templates (cdate,cuser,zone,name) " .
+            "VALUES($cdate,'$user',$zoneid,'$zone:$mx_i_count');";
     $res=db_exec($sqlstr);
     die("cannot insert record in mx_templates") if ($res < 0);
     $oid=db_lastoid();
@@ -618,9 +625,9 @@ for ($i=0; $i <= $#zones; $i+=1) {
     #print STDERR "$host: many IPs\n" if (@{$rec->{A}} > 1); 
 
     $sqlstr = "INSERT INTO hosts " .
-        "(cuser,muser,zone,type,domain,class,mx,wks,hinfo_hw,hinfo_sw) " .
+        "(cdate,cuser,zone,type,domain,class,mx,wks,hinfo_hw,hinfo_sw) " .
 	"VALUES(" .
-	"'$user','$user',$zoneid,$hosttype,'$host2','$class'," .
+	"$cdate,'$user',$zoneid,$hosttype,'$host2','$class'," .
 	"$mx,$wks,'$hinfo1','$hinfo2'" .
 	");";
     #print RRFILE "$sqlstr\n";
@@ -700,9 +707,9 @@ for ($i=0; $i <= $#zones; $i+=1) {
     $host2=remove_origin($host,$origin);
 
     $sqlstr = "INSERT INTO hosts " .
-      "(cuser,muser,zone,type,domain,class,alias,cname_txt) ".
+      "(cdate,cuser,zone,type,domain,class,alias,cname_txt) ".
 	"VALUES(" .
-	"'$user','$user',$zoneid,4,'$host2','$class'," .
+	"$cdate,'$user',$zoneid,4,'$host2','$class'," .
 	"$alias,$cname2);";
 
     delete $zonedata{$host};

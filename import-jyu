@@ -47,6 +47,7 @@ $zonename = $ARGV[1];
 $hostsfile = $ARGV[2];
 $user = (getpwuid($<))[0];
 $origin = "$zonename.";
+$cdate = time;
 
 db_connect();
 db_debug(1);
@@ -150,8 +151,8 @@ foreach $host (keys %zonedata) {
 
 
   die("cannot insert record $host!")
-    if (db_exec("INSERT INTO hosts (zone,type,domain) " .
-		"VALUES($zoneid,1,'$host'); ") < 0);
+    if (db_exec("INSERT INTO hosts (cdate,cuser,zone,type,domain) " .
+		"VALUES($cdate,'$user',$zoneid,1,'$host'); ") < 0);
   $oid=db_lastoid();
   undef @q;
   db_query("SELECT id FROM hosts WHERE OID=$oid;",\@q);
@@ -246,9 +247,9 @@ foreach $net (keys %rhash) {
   #print "$n $rec->{NAME} $rec->{ETHER}\n" if ($rec->{ETHER} ne '');
   #print "$n $rec->{NAME} : $net : $rec->{MASK} : $rec2->{INFO}\n";
 
-  $sqlstr = "INSERT INTO nets (cuser,muser,server,net,comment," .
+  $sqlstr = "INSERT INTO nets (cdate,cuser,server,net,comment," .
             "subnet,no_dhcp,range_start,range_end) " .
-    "VALUES('$user','$user',$serverid,'$n','$rec2->{INFO}'," .
+    "VALUES($cdate,'$user',$serverid,'$n','$rec2->{INFO}'," .
     "true,false,'$range1','$range2');";
 
   if (db_exec($sqlstr) < 0) {
@@ -315,8 +316,8 @@ foreach $group (keys %grouphash) {
   }
 
   $sqlstr="INSERT INTO groups " .
-          "(cuser,muser,server,name,comment) " .
-          "VALUES('$user','$user',$serverid,'$group','$comment');";
+          "(cdate,cuser,server,name,comment) " .
+          "VALUES($cdate,'$user',$serverid,'$group','$comment');";
   if (db_exec($sqlstr) < 0) {
     die("group '$group' allready exists") 
   } else {
@@ -371,8 +372,8 @@ foreach $host (keys %zonedata) {
       $ptype=3;
       print "printer class: $host2\n";
       $sqlstr="INSERT INTO printer_classes " .
-	"(cuser,muser,name,comment) " .
-	  "VALUES('$user','$user','$host2','imported entry');";
+	"(cdate,cuser,name,comment) " .
+	  "VALUES($cdate,'$user','$host2','imported entry');";
       if (db_exec($sqlstr) < 0) {
 	die("cannot insert printer_class '$host2'") ;
 	$lastid=-1;
@@ -385,9 +386,9 @@ foreach $host (keys %zonedata) {
       $ptype=2;
       print "printer: $host $rec->{GROUP}\n";
       $sqlstr="INSERT INTO hosts " .
-	"(cuser,muser,zone,type,domain,hinfo_hw,hinfo_sw," .
+	"(cdate,cuser,zone,type,domain,hinfo_hw,hinfo_sw," .
 	"info,comment,grp,prn) " .
-	"VALUES('$user','$user',$zoneid,5,'$host2','REMOTE-PRINTER'," .
+	"VALUES($cdate,'$user',$zoneid,5,'$host2','REMOTE-PRINTER'," .
 	"'POSTSCRIPT','$info','virtual printer entry'," .
 	"$group,true );";
       if (db_exec($sqlstr) < 0) {
