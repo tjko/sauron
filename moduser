@@ -149,7 +149,6 @@ GetOptions("help|h","list!","add:s","delall!","del=s","passwd:s",
 
 $opt_user=$ARGV[0];
 
-
 if ($opt_help || ($opt_user eq '' &&  $opt_list eq '')) {
   print "syntax: $0 <$fooname> [options]\n\n";
   print " Option descriptions: \n";
@@ -183,8 +182,13 @@ if ($opt_help || ($opt_user eq '' &&  $opt_list eq '')) {
         "   --del=<id>                            delete rule by id\n",
         "   --delall                              delete all rules\n",
         "\n";
+  print "" if ($opt_help);
   exit(0);
 }
+
+$opt_lock = ($opt_lock ? 1 : 0);
+$opt_unlock = ($opt_unlock ? 1 : 0);
+$opt_edit = ($opt_edit ? 1 : 0);
 
 fatal("DB_CONNECT not defined in configuration!") unless ($DB_CONNECT);
 db_connect($DB_CONNECT);

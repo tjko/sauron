@@ -2,7 +2,7 @@
 #
 # runsql - utility to run SQL code from files given as parameters
 #
-# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2001.
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2001-2003.
 # $Id$
 #
 require 5;
@@ -33,8 +33,8 @@ if ($opt_help || $count < 1) {
   print "syntax: $0 [--help] [--separate] <filename> [<filename> ...]\n\n";
   print " Parameter descriptions: \n",
         "   --notransaction  do not use transactions\n",
-        "   --verbose        display SQL code\n",
-        "\n";
+        "   --verbose        display SQL code\n\n";
+  print "" if ($opt_help);
   exit(0);
 }
 
@@ -42,7 +42,7 @@ fatal("DB_CONNECT not defined in configuration!") unless ($DB_CONNECT);
 db_connect($DB_CONNECT);
 db_debug(0);
 
-$verbose=1 if ($opt_verbose);
+$opt_verbose = ($opt_verbose ? 1 : 0);
 
 db_begin() unless ($opt_notransaction);
 
@@ -52,7 +52,7 @@ while ($filename=$ARGV[0]) {
     error("cannot open file: $filename");
     next;
   }
-  print "Processing file: $filename\n" if ($verbose);
+  print "Processing file: $filename\n" if ($opt_verbose);
   $comment=0;
   $cmd='';
 
@@ -78,7 +78,7 @@ while ($filename=$ARGV[0]) {
       $cmd .= $last;
       $cmd =~ s/^\s+//;
       unless ($cmd =~ /^\s*$/) {
-	print "command: '$cmd'\n" if ($verbose);
+	print "command: '$cmd'\n" if ($opt_verbose);
 	$res = db_exec($cmd);
 	if ($res < 0) {
 	  error("SQL command failed at $filename($.) : " . db_errormsg());
@@ -90,7 +90,7 @@ while ($filename=$ARGV[0]) {
       goto fileloop;
     }	
 
-    #print "   $_\n" if ($verbose);
+    #print "   $_\n" if ($opt_verbose);
     s/\s+/ /g;
     $cmd .= $_;
   }

@@ -2,7 +2,7 @@
 #
 # import - imports BIND configuration/databases
 #
-# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000,2001.
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000-2003.
 # $Id$
 #
 require 5;
@@ -44,10 +44,11 @@ if ($opt_help || @ARGV < 2) {
 	  "\t\t\t\t(if not in directory specified in named.conf)\n",
 	  "\t--verbose\t\tdisplay more detailed progress reports\n",
 	  "\t--help\t\t\tdisplay this help\n\n";
+    print "" if ($opt_help);
     exit(1);
 }
 
-$verbose = ($opt_verbose ? 1 : 0);
+$opt_verbose = ($opt_verbose ? 1 : 0);
 $servername = $ARGV[0];
 $namedf = $ARGV[1];
 $user = (getpwuid($<))[0];
@@ -69,6 +70,9 @@ if ($namedf =~ /(^.*\/)/) {
     $dir="./";
 }
 
+if ($opt_verbose) {
+  print "Zone for orphan records: $opt_orphans\n" if ($opt_orphans);
+}
 #print "servername: $servername\n";
 #print "dir: $dir\n";
 
@@ -158,18 +162,18 @@ foreach $line (@NAMEDCONF) {
   if ($cur =~ "options")  {
     if ( /directory\s+\"(.*?)\"\s*;/ ) {
       $directory=$1; 
-      print "directory=$directory\n" if ($verbose);
+      print "directory=$directory\n" if ($opt_verbose);
       next;
     }
     if ( /version\s+\"(.*?)\"\s*;/ ) {
       $version=$1;
-      print "version=$version\n" if ($verbose);
+      print "version=$version\n" if ($opt_verbose);
       next;
     }
   }
    if ($prev =~ "options") {
        if ($cur =~ "allow-transfer" && ($ip=is_cidr($line)) ) {
-	   #print "allow transfer ip=$ip\n" if ($verbose);
+	   #print "allow transfer ip=$ip\n" if ($opt_verbose);
 	   push @allow_transfer, [0,$ip,''];
 	   next;
        }
@@ -268,7 +272,7 @@ $serverid = add_server({
 
 fatal("Cannot create server record '$servername' ($serverid)")
 			       if ($serverid < 0);
-print "server id=$serverid\n" if ($verbose);
+print "server id=$serverid\n" if ($opt_verbose);
 
 
 #########################################

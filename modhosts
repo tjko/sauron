@@ -2,7 +2,7 @@
 #
 # modhosts - utility to modify (move,delete) host records
 #
-# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2001.
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2001-2003.
 # $Id$
 #
 require 5;
@@ -51,6 +51,7 @@ if ($opt_help || @ARGV < 2) {
 	"\n",
 	"\t--commit\t\tcommit changes (w/o this NO changes are made)\n",
 	"\n";
+  print "" if ($opt_help);
   exit(0);
 }
 
@@ -62,7 +63,8 @@ set_muser($user);
 
 $server=$ARGV[0];
 $zone=$ARGV[1];
-$verbose=($opt_verbose?1:0);
+$opt_verbose=($opt_verbose ? 1 : 0);
+$opt_etherempty=($opt_etherempty ? 1 : 0);
 
 $serverid=get_server_id($server);
 fatal("cannot find server '$server'") unless ($serverid > 0);
@@ -168,7 +170,7 @@ $sql="SELECT h.id,h.domain,h.type,h.ether $cidr_f FROM hosts h $cidr_t " .
      "WHERE h.zone=$zoneid $cidr_r $cidr $name $ether $info $type " .
      "ORDER BY h.domain;";
 
-print "$sql\n" if ($verbose);
+print "$sql\n" if ($opt_verbose);
 
 db_query($sql,\@q);
 print db_errormsg() . "\n" if (db_errormsg());

@@ -2,7 +2,7 @@
 #
 # generatehosts - utility to add host records
 #
-# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2001.
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2001-2003.
 # $Id$
 #
 require 5;
@@ -81,11 +81,12 @@ if ($opt_help || @ARGV < 5) {
 	"\t:IP4:\t\tfourth octet of current IP-number\n",
 	"\t:N:\t\tsequence number\n",
 	"\n";
+  print "" if ($opt_help);
   exit(0);
 }
 
-fatal("DB_CONNECT not defined in configuration!") unless ($DB_CONNECT);
-db_connect($DB_CONNECT);
+$opt_commit = ($opt_commit ? 1 : 0);
+$opt_noreverse = ($opt_noreverse ? 1 : 0);
 
 $server=$ARGV[0];
 $zone=$ARGV[1];
@@ -94,6 +95,11 @@ $startip=$ARGV[3];
 $count=$ARGV[4];
 $gid=-1;
 $seq_start=0;
+$add_count=0;
+
+
+fatal("DB_CONNECT not defined in configuration!") unless ($DB_CONNECT);
+db_connect($DB_CONNECT);
 
 if ($opt_seqstart) {
   $seq_start = $opt_seqstart;
@@ -160,12 +166,14 @@ foreach $i (0..$count-1) {
 
   $id=add_host(\%host);
   fatal("cannot insert host_record! $id") unless ($id > 0);
-
+  $add_count++;
 }
 
 
 
 db_ignore_begin_and_commit(0);
+
+print "$add_count host(s) added.\n" if ($opt_verbose);
 
 if ($opt_commit) {
   fatal("cannot commit changes to database") if (db_commit() < 0);

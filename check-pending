@@ -30,6 +30,7 @@ $MAXLINES = 100;
 $result = GetOptions("help|h");
 if ($opt_help || @ARGV < 2 || $result < 1) {
     print "syntax: $0 [--help] <servername> <emailaddress>\n\n";
+    print "" if ($opt_help);
     exit(1);
 }
 

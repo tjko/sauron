@@ -3,7 +3,7 @@
 # update-dhcp-info  reads dhcpd syslog entries and updates host dhcp_date
 #                   field in hosts table (for given server)
 #
-# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2001-2002.
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2001-2003.
 # $Id$
 #
 require 5;
@@ -19,7 +19,7 @@ $0 = $PG_NAME;
 if (-r "/etc/sauron/config") {
   $config_file="/etc/sauron/config";
 } elsif (-r "/usr/local/etc/sauron/config") {
-  $config_file="/usr/local/etc/sauron/config"; 
+  $config_file="/usr/local/etc/sauron/config";
 } else {
   die("cannot find config file in /etc/sauron or /usr/local/etc/sauron");
 }
@@ -31,14 +31,16 @@ do "$config_file" || die("cannot load config: $config_file");
 
 ###################################################################
 
-GetOptions("help|h","verbose|v");
+GetOptions("help|h","verbose|v","debug|d");
 
 if ($opt_help || @ARGV < 2) {
-  print "syntax: $0 [--help] [--verbose] <servername> <logfile>\n";
+  print "syntax: $0 [--help] [--verbose] <servername> <logfile>\n\n";
+  print "" if ($opt_help);
   exit(0);
 }
 
-$verbose=1 if (defined $opt_verbose);
+$opt_verbose = ($opt_verbose ? 1 : 0);
+$opt_debug = ($opt_debug ? 1 : 0);
 $servername=$ARGV[0];
 $file=$ARGV[1];
 $year=(localtime(time))[5];
@@ -50,7 +52,7 @@ db_connect($DB_CONNECT);
 
 $serverid=get_server_id($servername);
 fatal("cannot find server '$servername'") unless ($serverid > 0);
-print "Updating server: $servername ($serverid)\n" if ($verbose);
+print "Updating server: $servername ($serverid)\n" if ($opt_verbose);
 
 undef @q;
 db_query("SELECT MAX(h.dhcp_date) FROM hosts h, zones z " .
@@ -59,10 +61,10 @@ $latest=($q[0][0] > 0 ? $q[0][0] : 0);
 $latest_str = localtime($latest);
 
 print "Latest dhcp_date for this server: $latest_str ($latest)\n"
-  if ($verbose);
+  if ($opt_verbose);
 
 
-print "Reading logfile..." if ($verbose);
+print "Reading logfile..." if ($opt_verbose);
 
 if ($file =~ /\.gz$/) {
   open(FILE,"gzip -dc $file |") || fatal("cannot decompress file: $file");
@@ -76,7 +78,8 @@ while (<FILE>) {
   $m=$months{$1}; $d=$2; $hour=$3; $min=$4; $sec=$5; $host=$6; $rest=$7;
   $t=timelocal($sec,$min,$hour,$d,$m,$year);
   $first_date = $t unless (defined $first_date);
-  if (($t+86400) < $firstdate) {
+  $first_host = $host unless (defined $first_host);
+  if (($t+86400) < $first_date) {
     fatal("Log contains new year or time shifts backwards");
   }
   $mac=''; $cmd='';
@@ -120,15 +123,15 @@ while (<FILE>) {
 close(FILE);
 
 $hashcount = (keys %hash);
-print "done. (found $hashcount different MACs)\n" if ($verbose);
+print "done. (found $hashcount different MACs)\n" if ($opt_verbose);
 
-print "Fetching host info from database..." if ($verbose);
+print "Fetching host info from database..." if ($opt_verbose);
 undef @q;
 db_query("SELECT h.id,h.ether,h.dhcp_date,h.domain FROM hosts h,zones z " .
 	 "WHERE z.server=$serverid AND h.zone=z.id AND h.type=1 " .
 	 " AND NOT h.ether ISNULL;",\@q);
 $c=@q;
-print "done. ($c MACs found in database)\n" if ($verbose);
+print "done. ($c MACs found in database)\n" if ($opt_verbose);
 
 for $i (0..$#q) {
   $mac="\U$q[$i][1]";
@@ -142,23 +145,24 @@ for $i (0..$#q) {
   $t = $hash{$mac}->{DHCPACK} > 0  ?  $hash{$mac}->{DHCPACK}  :  0;
   $t = $hash{$mac}->{BOOTREPLY} if ($hash{$mac}->{BOOTREPLY} > $t);
   unless ($t > $date) {
-    #print "notupdating: $domain : $t : $date\n";
+    print "notupdating: $domain : $t : $date\n" if ($opt_debug);
     $notupdated++;
     next;
   }
-  #print "match: $domain $id $date : $t\n";
+  print "match: $domain $id $date : $t\n" if ($opt_debug);
   push @match, [$id,$t];
 }
 
-#print "$notfound,$notupdated\n";
+print "$notfounds host(s) not found from database\n",
+      "$notupdated hosts(s) info not updated\n" if ($opt_verbose);
 
 $mcount=@match;
 unless ($mcount > 0) {
-  print "Nothing to do (no records to be updated)\n" if ($verbose);
+  print "Nothing to do (no records to be updated)\n" if ($opt_verbose);
   exit;
 }
 
-print "Updating dhcp_date for $mcount host records..." if ($verbose);
+print "Updating dhcp_date for $mcount host records..." if ($opt_verbose);
 
 db_begin();
 for $i (0..$#match) {
@@ -169,7 +173,7 @@ for $i (0..$#match) {
 }
 fatal("cannot commit changes to database") if (db_commit() < 0);
 
-print "done.\n" if ($verbose);
+print "done.\n" if ($opt_verbose);
 
 exit 0;
 

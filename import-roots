@@ -2,7 +2,7 @@
 #
 # import-roots  imports root servers from named.roots (named.ca) file.
 #
-# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2001.
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2001-2003.
 # $Id$
 #
 require 5;
@@ -27,15 +27,19 @@ do "$config_file" || die("cannot load config: $config_file");
 
 ###################################################################
 
-GetOptions("help|h","update|u");
+GetOptions("help|h","update|u","verbose");
 
 if ($opt_help || @ARGV < 2) {
-  print "syntax: $0 [--help] [--update] <servername | default> <named.root>\n";
+  print "syntax: $0 [--help] [--update] <servername | default> <named.root>\n",
+        "\n";
+  print "" if ($opt_help);
   exit(0);
 }
 
-$servername=$ARGV[0];
-$file=$ARGV[1];
+$servername=shift;
+$file=shift;
+$opt_update=($opt_update ? 1 : 0);
+$opt_verbose=($opt_verbose ? 1 : 0);
 
 fatal("cannot read input file '$file'") unless (-r $file);
 
@@ -51,6 +55,7 @@ if ($servername eq 'default') {
   print "Creating root servers for server: $servername (id=$serverid)\n";
 }
 
+print "Importing root servers from file: $file\n" if ($opt_verbose);
 process_zonefile($file,".",\%zonedata,0);
 $count = keys %zonedata;
 
@@ -68,7 +73,7 @@ unless ($opt_update) {
 
 foreach $host (keys %zonedata) {
   $rec=$zonedata{$host};
-  print "host: $host $rec->{TTL}\n";
+  print "host: $host $rec->{TTL}\n" if ($opt_verbose);
   $ttl=$rec->{TTL};
   $ttl=3600000 unless ($ttl > 0);
 

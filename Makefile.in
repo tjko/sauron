@@ -126,6 +126,16 @@ all:	docs
 #strip:
 #	for i in $(PKGNAME) ; do [ -x $$i ] && $(STRIP) $$i ; done
 
+check:	
+	@echo "Checking modules..."
+	@for f in $(MODULES); do \
+		$(PERL) -w -c $$f; \
+	done
+	@echo "Checking programs..."
+	@for f in $(PROGS); do \
+		$(PERL) -w -c $$f; \
+	done
+
 clean:
 	rm -f *~ *.o core a.out make.log \#*\# $(OBJS) $(BINARIES)
 

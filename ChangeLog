@@ -1,6 +1,7 @@
 $Id$
 
 0.5.1
+	- general code cleanup for command-line utilities (no more warnings)
 	- backend: add_net now adds default auto assign ranges, 
 	  update_net now also checks that auto assign is inside given net
 	- frames mode now (hopefully) works better with non-Mozilla

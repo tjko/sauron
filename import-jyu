@@ -28,7 +28,7 @@ use Sauron::Util;
 use Sauron::UtilZone;
 use Sauron::BackEnd;
 
-($PG_DIR,$PG_NAME) = ($0 =~ /^(.*\/)(.*)$/);
+my ($PG_DIR,$PG_NAME) = ($0 =~ /^(.*\/)(.*)$/);
 $0 = $PG_NAME;
 
 if (-r "/etc/sauron/config") {
@@ -46,7 +46,8 @@ do "$config_file" || die("cannot load config: $config_file");
 getopts("hs");
 
 if (@ARGV != 3 || $opt_h) {
-    print "syntax: $0 [-h] <servername> <zone> <.hosts file>\n";
+    print "syntax: $0 [-h] <servername> <zone> <.hosts file>\n\n";
+    print "" if ($opt_h);
     exit(1);
 }
 
@@ -58,7 +59,7 @@ $user = (getpwuid($<))[0];
 $origin = "$zonename.";
 $cdate = time;
 
-
+fatal("DB_CONNECT not defined in configuration!") unless ($DB_CONNECT);
 db_connect($DB_CONNECT);
 #db_debug(1);
 
@@ -130,7 +131,7 @@ foreach $host (keys %zonedata) {
   print "out-of-zone: $host\n";
 
   undef @q;
-  for $i (0..$#{$rec->{A}}) { push @q,[0,$rec->{A}[$i],true,true]; }
+  for $i (0..$#{$rec->{A}}) { push @q,[0,$rec->{A}[$i],'t','t']; }
   fatal("cannot insert host $host!")
     if (add_host({zone=>$zoneid,type=>1,domain=>$host,ip=>\@q}) < 0);
 
@@ -292,6 +293,8 @@ undef %grouphash;
 
 
 # printer definitions
+undef %printerhash;
+
 foreach $host (keys %zonedata) {
   $rec = $zonedata{$host};
   if (@{$rec->{A}} < 1 && @{$rec->{PRINTER}} > 0 &&

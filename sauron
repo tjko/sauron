@@ -2,7 +2,7 @@
 #
 # sauron - generates BIND/DHCP/printer configuration files from database
 #
-# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000-2002.
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000-2003.
 # $Id$
 #
 require 5;
@@ -1530,14 +1530,22 @@ if ($opt_help || @ARGV < 1 || $result < 1) {
       "\t--updateserial   force serial update on master zones\n\n",
       "\t--dhcp2          enable DHCPv2 compatibilty mode\n\n",
       "\t--mail           enable email notification sending\n\n";
+    print "" if ($opt_help);
     exit(1);
 }
 
+$opt_verbose=($opt_verbose ? 1 : 0);
+$opt_clean=($opt_clean ? 1 : 0);
+$opt_dhcp=($opt_dhcp ? 1 : 0);
+$opt_bind=($opt_bind ? 1 : 0);
+$opt_printer=($opt_printer ? 1 : 0);
+$opt_dhcp2=($opt_dhcp2 ? 1 : 0);
+$opt_updateserial=($opt_updateserial ? 1 : 0);
+$opt_noupdateserial=($opt_noupdateserial ? 1 : 0);
 
 $dhcp_conf=1 if ($opt_dhcp || $opt_all);
 $bind_conf=1 if ($opt_bind || $opt_all);
 $printer_conf=1 if ($opt_printer || $opt_all);
-$verbose=($opt_verbose ? 1 : 0);
 $dhcp2_mode=1 if ($opt_dhcp2);
 
 $servername = $ARGV[0];
@@ -1569,7 +1577,7 @@ $mailnotify_mode = 0 unless ($SAURON_MAIL_FROM);
 error("mailer settings missing from config")
   if ($opt_mail && $mailnotify_mode == 0);
 print "Email notification sending: " .
-      ($mailnotify_mode ? 'enabled':'disabled') . "\n" if ($verbose);
+      ($mailnotify_mode ? 'enabled':'disabled') . "\n" if ($opt_verbose);
 
 fatal("DB_CONNECT not defined in configuration!") unless ($DB_CONNECT);
 db_connect($DB_CONNECT);
@@ -1591,7 +1599,8 @@ foreach $zone (@{$zonelist}) { $zonelist_hash{$$zone[0]}=$zone; }
 
 $normalzones = @{$zonelist};
 if ($server{masterserver} > 0) {
-  print "this server is slave (for id=$server{masterserver})\n" if ($verbose);
+  print "this server is slave (for id=$server{masterserver})\n"
+    if ($opt_verbose);
   fatal("Cannot get master server record!")
     if (get_server($server{masterserver},\%masterserver));
   push @{master_server_ips}, [$masterserver{hostaddr}];
@@ -1601,7 +1610,8 @@ if ($server{masterserver} > 0) {
   foreach $zone (@{$zonelist2}) {
     #print "zone: $$zone[0]\n";
     if ($zonelist_hash{$$zone[0]}) {
-      print "skipping duplicate zone from master ($$zone[0])\n"	if ($verbose);
+      print "skipping duplicate zone from master ($$zone[0])\n"	
+	if ($opt_verbose);
       next;
     }
     next unless ($$zone[2] =~ /^[MS]$/);

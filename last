@@ -2,7 +2,7 @@
 #
 # last -- utlity to display lastlog info
 #
-# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2001.
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2001-2003.
 # $Id$
 #
 require 5;
@@ -26,8 +26,6 @@ do "$config_file" || die("cannot load config: $config_file");
 
 ##############################################
 
-$argcount=@ARGV;
-
 if (($ARGV[0] =~ /^--?h/)) {
   print "syntax: $0 [-h] [-num] [name]\n\n";
   exit(0);
@@ -40,6 +38,7 @@ if ($ARGV[0] =~ /^-(\d+)/) {
 
 $user_rule="$ARGV[0]" if ($ARGV[0]);
 
+fatal("DB_CONNECT not defined in configuration!") unless ($DB_CONNECT);
 db_connect($DB_CONNECT);
 
 $count=get_lastlog($count_rule,$user_rule,\@q);

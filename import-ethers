@@ -3,7 +3,7 @@
 # import-ethers  imports Ethernet card manufacturer codes&descriptions
 #                from text file (Ethernet.txt)
 #
-# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000.
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000-2003.
 # $Id$
 #
 require 5;
@@ -27,18 +27,20 @@ do "$config_file" || die("cannot load config: $config_file");
 ###################################################################
 
 my(
-   $result,$file,$c,
+   $file,$c,
    $code,$info,%ethers,$icount,$ea,$res,$ucount
   );
 
-$result = GetOptions("help|h","force|f");
+GetOptions("help|h","force|f");
 
 if ($opt_help || @ARGV < 1) {
-  print "syntax: $0 [--help] [--force] <Ethernet.txt>\n";
+  print "syntax: $0 [--help] [--force] <Ethernet.txt>\n\n";
+  print "" if ($opt_help);
   exit(0);
 }
 
-$file=$ARGV[0];
+$opt_force = ($opt_force ? 1 : 0);
+$file=shift;
 
 fatal("cannot read input file '$file'") unless (-r $file);
 fatal("DB_CONNECT not defined in configuration!") unless ($DB_CONNECT);

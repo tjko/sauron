@@ -2,7 +2,7 @@
 #
 # import-dhcp - imports ISC DHCPD configuration
 #
-# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000,2001.
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2002,2003.
 # $Id$
 #
 require 5;
@@ -42,10 +42,12 @@ if ($opt_help || @ARGV < 2) {
 	  "\t--global\t\timport 'global' entires into server settings\n",
 	  "\t--verbose\t\tdisplay more detailed progress reports\n",
 	  "\t--help\t\t\tdisplay this help\n\n";
+    print "" if ($opt_help);
     exit(1);
 }
 
-$verbose = ($opt_verbose ? 1 : 0);
+$opt_verbose = ($opt_verbose ? 1 : 0);
+$opt_global = ($opt_global ? 1 : 0);
 $servername = $ARGV[0];
 $dhcpdf = $ARGV[1];
 $user = (getpwuid($<))[0];
@@ -81,7 +83,7 @@ if ($opt_global) {
   foreach $line (@{$data{GLOBAL}}) {
     next unless $line =~ /;\s*$/;
     $line =~ s/;\s*//;
-    print "GLOBAL: $line\n" if ($verbose);
+    print "GLOBAL: $line\n" if ($opt_verbose);
     push @{$server{dhcp}}, [0,$line,'',2];
   }
 
@@ -98,7 +100,7 @@ foreach $key (sort keys %{$data{'shared-network'}}) {
   ($net = $key) =~  s/^\"|\"$//g;
   $vlancounter++;
   $name = (valid_texthandle($net) ? $net : "vlan-$vlancounter");
-  print "shared-network($vlancounter):  $net ($name)\n" if ($verbose);
+  print "shared-network($vlancounter):  $net ($name)\n" if ($opt_verbose);
 
   if ($net eq $chaosnet) {
     $vlans{$key}=-1;
@@ -152,14 +154,14 @@ foreach $key (sort keys %{$data{subnet}}) {
     $line =~ s/;\s*$//;
     if ($line =~ /^\s*option\s+routers\s+(\S+)\s*$/) {
       $routerip=$1;
-      print "router interface: $routerip\n" if ($verbose);
+      print "router interface: $routerip\n" if ($opt_verbose);
       $routers{$routerip}=-1;
     } else {
       push @q, [0,$line];
     }
   }
 
-  print "net: $cidr ($name) (vlan id=$id)\n" if ($verbose);
+  print "net: $cidr ($name) (vlan id=$id)\n" if ($opt_verbose);
   $res = add_net({server=>$serverid,netname=>$name,name=>$name,
 		  net=>$cidr,subnet=>'true',vlan=>$id, dhcp_l=>\@q});
   fatal("cannot add NET ($key)") if ($res < 0);
@@ -173,7 +175,7 @@ print "Found $c groups\n";
 
 foreach $key (sort keys %{$data{group}}) {
   $rec = $data{group}->{$key};
-  print "group: $key\n" if ($verbose);
+  print "group: $key\n" if ($opt_verbose);
 
   undef @q;
   foreach $line (@{$rec}) {
@@ -228,7 +230,7 @@ foreach $key (keys %{$data{host}}) {
   }
 
   next unless ($ip && $ether);
-  print "host: $key ip=$ip,ether=$ether,groupid=$id\n" if ($verbose);
+  print "host: $key ip=$ip,ether=$ether,groupid=$id\n" if ($opt_verbose);
   $hosts{$ip}=[$ether,$id,$key];
 }
 
@@ -265,7 +267,7 @@ foreach $ip (keys %hostrefs) {
   $ip=$list[$i][2];
 
   print "Updating $domain ($ip,$id) <-- ",
-        "$hosts{$ip}[0],$hosts{$ip}[1],$hosts{$ip}[2]\n" if ($verbose);
+        "$hosts{$ip}[0],$hosts{$ip}[1],$hosts{$ip}[2]\n" if ($opt_verbose);
   $res = update_host({id=>$id,ether=>$hosts{$ip}[0],grp=>$hosts{$ip}[1]});
   fatal("cannot update host: $domain ($res)\n".db_errormsg()) if ($res < 0);
 }
@@ -277,7 +279,7 @@ foreach $ip (keys %routers) {
   $i=$routers{$ip};
   $id=$list[$i][0];
   $domain=$list[$i][1];
-  print "router interface: $ip $domain (id=$id)\n" if ($verbose);
+  print "router interface: $ip $domain (id=$id)\n" if ($opt_verbose);
   fatal("cannot update router info for: $domain ($ip)")
     if (update_host({id=>$id,router=>1}) < 0);
 }
