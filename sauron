@@ -1,0 +1,643 @@
+#!/usr/bin/perl
+#
+# sauron - generates BIND/DHCP/printer configuration files from database
+#
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000.
+#
+require 5;
+use Net::Netmask;
+
+($PG_DIR,$PG_NAME) = ($0 =~ /^(.*\/)(.*)$/);
+$0 = $PG_NAME;
+
+do "$PG_DIR/config" || die("cannot load config");
+do "$PG_DIR/util.pl";
+do "$PG_DIR/db.pl";
+
+$bind_conf=1;
+$dhcp_conf=0;
+$printer_conf=0;
+
+
+#@a = (1,2,3);
+#@b = (5,6,7);
+#@c = (@a , @b);
+#print @a . " " . join(",",@a) . "\n";
+#print @b . " " . join(",",@b) . "\n";
+#print @c . " " . join(",",@c) . "\n";
+
+
+
+##############################
+
+for ($i=0; $i < @ARGV; $i++) {
+  $argument=$ARGV[$i];
+  last unless ($argument =~ /^-\S+$/);
+
+  for ($j=1;$j < length($argument); $j++) {
+    $arg=substr($argument,$j,1);
+
+    if ($arg eq 'a') {
+      $bind_conf=1; 
+      $dhcp_conf=1; 
+      $printer_conf=1;
+    } 
+    elsif ($arg eq 'b') {
+      $bind_conf=1;
+    } 
+    elsif ($arg eq 'd') {
+      $dhcp_conf=1;
+    } 
+    elsif ($arg eq 'p') {
+      $printer_conf=1;
+    } 
+    else {
+      print STDERR "$0: unknown command line option '$arg' (ignored)\n";
+    }
+  }
+
+}
+
+$argc=@ARGV - $i;
+
+if ($argc < 1 || $argc > 2) {
+    print "syntax: $0 [-abdp] <servername> [<target directory>]\n";
+    exit(1);
+}
+
+
+$servername = $ARGV[$i];
+if ($argc > 1) {
+	$targetdir = $ARGV[$i+1];
+	$targetdir .= "/" unless ($targetdir =~ /\/$/);
+} else {
+	$targetdir = "./";
+}
+$user = (getpwuid($<))[0];
+
+
+die("target directory is a file! ($targetdir)") if (-f $targetdir);
+die("target directory does not exists ($targetdir)") if (! -d $targetdir);
+die("no permissions to target directory!") 
+	unless (-r $targetdir && -x $targetdir && -w $targetdir);
+
+print "server name: $servername\n";
+print "target directory: $targetdir\n";
+
+chdir($targetdir) || die("Cannot change to directory '$targetdir'!");
+
+db_connect();
+
+#########################################################################
+
+
+
+$serverid = get_server_id($servername);
+fatal("Cannot find server '$servername' from database.") if ($serverid < 0);
+fatal("Cannot get server record!") if (get_server($serverid,\%server));
+
+goto foo;
+
+foreach $key (keys %server) {
+  print "key='$key' value=$server{$key}\n";
+  print join(",",@{$server{$key}}) . " foo\n" if ($key eq 'allow_transfer') ;
+}
+
+print "update...\n";
+$server2{'comment'}="foo bar";
+$server2{'id'}=$server{'id'};
+$r=update_server(\%server2);
+print "r=$r\n";
+
+
+
+print "zone id=" . get_zone_id("jyu.fi",$serverid) . "\n";
+
+$listref = get_zone_list($serverid);
+for($i=0;$i < @{$listref}; $i++) {
+  $r=$$listref[$i];
+  print "$i: $$r[0] $$r[1] $$listref[$i][0]\n";
+}
+
+db_debug(1);
+fatal("Cannot get zone record!") if (get_zone(get_zone_id("jyu.fi",$serverid),\%zone));
+foreach $key (keys %zone) {
+  $r=$zone{$key};
+  print "zone key=$key value=$r\n";
+  print "ARRAY: " . join(",",@{$r}) . "\n" 
+    if (ref($r) eq 'ARRAY');
+#  print "ref: " . ref($zone{$key}) . ":\n";
+#    if (ref($key) eq ARRAY) ;
+}
+
+foo:
+
+$zonelist = get_zone_list($serverid);
+#$zonelist2 = get_zone_list(0);
+#$zonelist = [@{$zonelist1},@{$zonelist2}];
+
+$zones = @{$zonelist};
+print "Server '$servername' has $zones zones.\n";
+
+make_bind() if ($bind_conf);
+
+exit;
+#######
+
+sub make_bind() {
+  print "BIND configuration\n";
+  $time_now = gmtime;
+
+  ##################################################
+  # named.conf
+  print "Generating named.conf...\n";
+  
+  open(BINDFILE,">named.conf") || fatal("Cannot create named.conf!");
+  print BINDFILE "// named.conf -- automagically generated using $0 $VER\n";
+  print BINDFILE "//               created by $user at $time_now\n//\n";
+
+  #options section
+  print BINDFILE "options {\n";
+  print BINDFILE "\tdirectory \"$server{'directory'}\";\n"
+    if ($server{'directory'} ne '');
+  if (@{$server{'allow_transfer'}} > 0) {
+    print BINDFILE "\tallow-transfer {\n";
+    for($i=0; $i < @{$server{'allow_transfer'}}; $i++) {
+      $ip=${$server{'allow_transfer'}}[$i];
+      print BINDFILE "\t\t$ip;\n";
+    }
+    print BINDFILE "\t};\n";
+  }
+  print BINDFILE "};\n";
+
+
+  #zones section
+  print BINDFILE "\n\nzone \".\" in {\n";
+  print BINDFILE "\ttype hint;\n";
+  print BINDFILE "\tfile \"$server{'named_ca'}\";\n";
+  print BINDFILE "};\n\n\n";
+
+  for($i=0; $i < $zones; $i++) {
+    $zonename=$$zonelist[$i][0];
+    $zonename =~ s/\.$//g;
+    $origin = $zonename . '.';
+    $zoneid=$$zonelist[$i][1];
+    #print "zone: $zonename id=$zoneid\n";
+    fatal("Cannot get zone record: $zonename (id=$zoneid)!") 
+      if (get_zone($zoneid,\%zone));
+
+    if ($zone{'type'} eq 'M') { $type='master'; }
+    elsif ($zone{'type'} eq 'S') { $type='slave'; }
+    elsif ($zone{'type'} eq 'H') { $type='hint'; }
+    elsif ($zone{'type'} eq 'F') { $type='forward'; }
+
+    if ($type eq 'master') { $zfile=$server{'mzone_path'}; } 
+    elsif ($type eq 'slave') { $zfile=$server{'szone_path'}; }
+    else { $zfile=''; }
+    $zfile.=$zonename . ".zone";
+
+    print BINDFILE "zone \"$zonename\" $zone{'class'} {\n";
+    print BINDFILE "\ttype $type;\n";
+    print BINDFILE "\tfile \"$zfile\";\n"
+      if ($type eq 'master' || $type eq 'slave');
+    print BINDFILE "};\n\n\n";
+
+    next unless ($type eq 'master');
+   
+    ######################
+    # .zone files
+    print "Generating zone file: $zfile\n";
+    open(ZONEFILE, ">$zfile") || fatal("Cannot create file: $zfile!");
+    $time_now=gmtime;
+    print ZONEFILE "; zone $zonename - automagically generated by $0 $VER\n";
+    print ZONEFILE "; =====" . '=' x length($zonename) . "\n;\n";
+    print ZONEFILE "; created by: $user  $time_now\n";
+    print ZONEFILE ";\n;\n";
+
+    $rev=$zone{'reverse'};
+    $class=$zone{'class'};
+    $class=~s/\s+$//g;
+    $ttl=$zone{'ttl'};
+    $ttl='' unless ($ttl > 0);
+    $serial=new_serial($zone{'serial'});
+    $hostname=$server{'hostname'};
+    $hostmaster=$zone{'hostmaster'};
+    $hostmaster=$server{'hostmaster'} if ($hostmaster eq '');
+    fatal("no hostmaster defined either in server nor zone record for: " .
+	  "$zonename") if ($hostmaster eq '');
+    fatal("server hostname not defined!") if ($hostname eq '');
+
+    print ZONEFILE "@\t$ttl\t$class\tSOA\t$hostname $hostmaster (\n";
+    print ZONEFILE "\t\t\t\t\t$serial\t; searial number\n" .
+                   "\t\t\t\t\t$zone{'refresh'}\t; refresh\n" .
+		   "\t\t\t\t\t$zone{'retry'}\t; retry\n" .
+                   "\t\t\t\t\t$zone{'expire'}\t; expire\n" .
+		   "\t\t\t\t\t$zone{'minimum'}\t; minimum\n\t\t\t\t\t)\n";
+    print ZONEFILE ";\n; zone nameservers\n;\n";
+    foreach $ns (@{$zone{'ns'}}) {
+      print ZONEFILE "\t\t$class\tNS\t$ns\n";
+    }
+    if ($rev eq 'f') {
+      print ZONEFILE ";\n; zone mail exchanges\n;\n";
+      foreach $mx (@{$zone{'mx'}}) {
+	print ZONEFILE "\t\t$class\tMX\t$mx\n";
+      }
+      print ZONEFILE ";\n; contact info\n;\n";
+      foreach $txt (@{$zone{'txt'}}) {
+	print ZONEFILE "\t\t$class\tTXT\t\"$txt\"\n";
+      }
+
+      # zone A records
+      undef @q;
+      db_query("SELECT ip FROM hosts,rr_a,zones " .
+	       "WHERE hosts.zone=zones.id AND rr_a.host=hosts.id AND " .
+	       "zones.id=$zoneid AND domain='\@';",\@q);
+      if (@q > 0) {
+	print ZONEFILE ";\n; zone A record(s)\n;\n";
+	for $i (0 .. $#q) {
+	  $net = new Net::Netmask($q[$i][0]);
+	  print ZONEFILE "\t\t$class\tA\t" . $net->base() . "\n";
+	}
+      }
+
+    }
+
+
+    # delegated zones
+    undef @q;
+    db_query("SELECT hosts.domain,hosts.ns FROM hosts,zones " .
+	     "WHERE hosts.zone=zones.id " .
+	     "AND zones.id=$zoneid AND hosts.type=2 " .
+	     "ORDER BY hosts.domain;",\@q);
+    if (@q > 0) {
+      print ZONEFILE ";\n;\n; delegated zones\n;\n";
+      for $i (0 .. $#q) {
+	$domain=$q[$i][0];
+	$ns=db_decode_list_str($q[$i][1]);
+	for $k (0 .. $#{$ns}) {
+	  print ZONEFILE "$domain\t\t$class\tNS\t" . $$ns[$k] . "\n";
+	}
+	print ZONEFILE ";\n";
+      }
+    }
+
+    
+    if ($rev eq 't') {
+      # reverse zone
+      print "reversenet " . $zone{'reversenet'} . "\n";
+      print cidr2arpa($zone{'reversenet'}) . "\n";
+      foreach $rzoneid (@{$zone{'reverses'}}) {
+	print "rzoneid=$rzoneid\n";
+      }
+
+    } else {
+      # normal zone
+
+      # glue records needed for delgated zones
+      undef @q;
+      db_query("SELECT hosts.domain,rr_a.ip FROM hosts,zones,rr_a " .
+	       "WHERE hosts.zone=zones.id AND hosts.id=rr_a.host " .
+	       "AND zones.id=$zoneid AND hosts.type=6 " .
+	       "ORDER BY hosts.domain;",\@q);
+      if (@q > 0) {
+	print ZONEFILE ";\n; Glue A records\n;\n";
+	for $i (0 .. $#q) {
+	  $domain=$q[$i][0];
+	  $ip=$q[$i][1];
+	  $ip =~ s/\/\d{1,2}$//g;
+	  print ZONEFILE "$domain\t\t$class\tA\t$ip\n";
+	}
+      }
+
+
+      # plain MX domains
+      undef @q;
+      db_query("SELECT hosts.domain,rr_mx.mx FROM hosts,zones,rr_mx " .
+	       "WHERE hosts.zone=zones.id AND hosts.mx=rr_mx.id " .
+	       "AND zones.id=$zoneid AND hosts.type=3 " .
+	       "ORDER BY hosts.domain;",\@q);
+      if (@q > 0) {
+	print ZONEFILE ";\n;\n; MX only domains\n;\n";
+	for $i (0 .. $#q) {
+	  $domain=$q[$i][0];
+	  $mx=db_decode_list_str($q[$i][1]);
+	  for $k (0 .. $#{$mx}) {
+	    print ZONEFILE "$domain" if ($k < 1);
+	    print ZONEFILE "\t\t$class\tMX\t" . $$mx[$k] . "\n";
+	  }
+	  print ZONEFILE ";\n";
+	}
+      }
+
+
+      ## wks hash
+      undef %wkshash;
+      undef @q;
+      db_query("SELECT hosts.domain,rr_wks.wks FROM hosts,zones,rr_wks " .
+	       "WHERE hosts.zone=zones.id AND hosts.wks=rr_wks.id " .
+	       "AND zones.id=$zoneid AND hosts.type=1 " .
+	       "ORDER BY hosts.domain;",\@q);
+      if (@q > 0) {
+	$wks_count=@q;
+	#print "found $wks_count wks entries!\n";
+	for $i (0 .. $#q) {
+	  $wkshash{$q[$i][0]}=db_decode_list_str($q[$i][1]);
+	}
+      }
+
+
+      ## wks hash
+      undef %mxhash;
+      undef @q;
+      db_query("SELECT hosts.domain,rr_mx.mx FROM hosts,zones,rr_mx " .
+	       "WHERE hosts.zone=zones.id AND hosts.mx=rr_mx.id " .
+	       "AND zones.id=$zoneid AND hosts.type=1 " .
+	       "ORDER BY hosts.domain;",\@q);
+      if (@q > 0) {
+	$mx_count=@q;
+	#print "found $mx_count mx entries!\n";
+	for $i (0 .. $#q) {
+	  $mxhash{$q[$i][0]}=db_decode_list_str($q[$i][1]);
+	}
+      }
+
+
+      # normal host entries
+      undef @q;
+      db_query("SELECT hosts.domain,ip,hinfo_hw,hinfo_sw,txt " .
+	       "FROM hosts,rr_a " .
+	       "WHERE hosts.zone=zones.id AND rr_a.host=hosts.id " .
+	       "AND zones.id=$zoneid AND hosts.type=1 " .
+	       "AND hosts.domain <> '\@' " .
+	       "ORDER BY rr_a.ip;",\@q);
+      if (@q > 0) {
+	print ZONEFILE ";\n;\n; A records\n;\n";
+	for $i (0 .. $#q) {
+	  $domain=$q[$i][0];
+	  $ip=$q[$i][1];
+	  $ip =~ s/\/\d\d$//g;
+	  $hinfo_hw=$q[$i][2];
+	  $hinfo_sw=$q[$i][3];
+	  $txt=db_decode_list_str($q[$i][4]);
+	  $wks=$wkshash{$domain};
+	  $mx=$mxhash{$domain};
+	  #	print ZONEFILE "$domain\t\t$class\tA\t" . $ip . "\n";
+	  printf ZONEFILE "%-22s\t\t%s  A\t%s\n",$domain,$class,$ip;
+	  print ZONEFILE "\t\t$class  HINFO\t$hinfo_hw $hinfo_sw\n"
+	    if ($hinfo_hw ne '' && $hinfo_sw ne '');
+	  if ($wks) {
+	    for $k (0 .. $#{$wks}) {
+	      print ZONEFILE "\t\t$class  WKS\t$ip " . $$wks[$k] . "\n";
+	    }
+	  }
+	  if ($mx) {
+	    for $k (0 .. $#{$mx}) {
+	      $$mx[$k] =~ s/\$DOMAIN/$domain/g;
+	      print ZONEFILE "\t\t$class  MX\t" . $$mx[$k] . "\n";
+	    }
+	  }
+	  for $k (0 .. $#{$txt}) {
+	    print ZONEFILE "\t\t$class  TXT\t\"" . $$txt[$k] . "\"\n";
+	  }
+	  
+	  print ZONEFILE ";\n";
+	}
+      }
+
+
+      # aliases (CNAME records)
+      undef @q;
+      db_query("SELECT a.domain,b.domain FROM hosts a, hosts b,zones " .
+	       "WHERE a.zone=zones.id AND zones.id=$zoneid " .
+	       "AND a.type=4 AND a.cname=b.id " .
+	       "ORDER BY a.domain;",\@q);
+      if (@q > 0) {
+	print ZONEFILE ";\n;\n; In-zone aliases (CNAME records)\n;\n";
+	for $i (0 .. $#q) {
+	  $domain=$q[$i][0];
+	  $alias=$q[$i][1];
+	  $alias="$alias.$origin" unless ($alias =~ /\.$/);
+	  printf ZONEFILE "%-22s\t\t%s  CNAME\t%s\n",$domain,$class,$alias;
+	}
+      }
+      # aliases outside zone
+      undef @q;
+      db_query("SELECT domain,cname_txt FROM hosts,zones " .
+	       "WHERE hosts.zone=zones.id AND zones.id=$zoneid " .
+	       "AND hosts.type=4 AND hosts.cname=-1 " .
+	       "ORDER BY hosts.domain;",\@q);
+      if (@q > 0) {
+	print ZONEFILE ";\n;\n; Outside-zone aliases (CNAME records)\n;\n";
+	for $i (0 .. $#q) {
+	  $domain=$q[$i][0];
+	  $alias=$q[$i][1];
+	  printf ZONEFILE "%-22s\t\t%s  CNAME\t%s\n",$domain,$class,$alias;
+	}
+      }
+
+    }
+
+    close(ZONEFILE);
+  }
+
+  close(BINDFILE);
+
+}
+
+
+############################################################################
+
+sub new_serial($) {
+  my ($serial) = @_;
+  my ($sec,$min,$hour,$day,$mon,$year,$s);
+
+  if (! $serial) {
+    warn("no serial number passed to new_serial() !");
+    return "0";
+  }
+
+  ($sec,$min,$hour,$day,$mon,$year) = localtime(time);
+  
+  $s=sprintf("%04d%02d%02d%02d",1900+$year,1+$mon,$day,$hour);
+  $s=$serial + 1 if ($s < $serial);
+
+  die("new_serial($serial) failed! return value='$s'")
+    if ($s < $serial);
+
+  return $s;
+}
+
+sub get_record($$$$) {
+  my ($table,$fields,$key,$rec,$keyname) = @_;
+  my (@list,$res,$i,$val);
+
+  $keyname='id' unless ($keyname);
+  undef %{$rec};
+  @list = split(",",$fields);
+  $fields =~ s/\@//g;
+  $res=db_exec("SELECT $fields FROM $table WHERE $keyname='$key';");
+  return -1 if ($res < 1);
+
+  $$rec{$keyname}=$key;
+  for($i=0; $i < @list; $i++) {
+    $val=db_getvalue(0,$i);
+    if ($list[$i] =~ /^\@/ ) {
+      $$rec{substr($list[$i],1)}=db_decode_list_str($val);
+    } else {
+      $$rec{$list[$i]}=$val;
+    }
+  }
+
+  return 0;
+}
+
+
+sub update_record($$) {
+  my ($table,$rec) = @_;
+  my ($key,$sqlstr,$id,$flag,$r);
+  
+  return -128 unless ($table);
+  return -1 unless (ref($rec) eq 'HASH');
+  return -2 unless ($$rec{'id'} > 0);
+
+  $id=$$rec{'id'};
+  delete $$rec{'id'};
+
+  $sqlstr="UPDATE $table SET ";
+
+  foreach $key (keys %{$rec}) {
+    $sqlstr.="," if ($flag);
+    if (ref($$rec{$key}) eq 'ARRAY') {
+      $sqlstr.="$key=" . db_encode_list_str($$rec{$key});
+    } else {
+      $sqlstr.="$key=" . db_encode_str($$rec{$key});
+    }
+   
+    $flag=1 if (! $flag);
+  }
+
+  $sqlstr.=" WHERE id=$id;";
+  #print "sql=$sqlstr\n";
+
+  return db_exec($sqlstr);
+}
+
+
+############################################################################
+# server table function
+
+sub get_server_id($) {
+  my ($server) = @_;
+
+  return -1 unless ($server);
+  return -1 
+    unless (db_exec("SELECT id FROM servers WHERE name='$server';")>0);
+  return db_getvalue(0,0);
+}
+
+sub get_server_list() {
+  my ($res,$list,$i,$id,$name,$rec);
+
+  $list=[];
+  $res=db_exec("SELECT name,id FROM servers ORDER BY name;");
+
+  for($i=0; $i < $res; $i++) {
+    $name=db_getvalue($i,0);
+    $id=db_getvalue($i,1);
+    $rec=[$name,$id];
+    push @{$list}, $rec;
+  }
+  return $list;
+}
+
+	       
+sub get_server($$) {
+  my ($id,$rec) = @_;
+  return get_record("servers",
+		    "name,directory,named_ca,\@allow_transfer," .
+		    "pzone_path,szone_path,hostname,hostmaster,comment",
+		    $id,
+		    $rec);
+}
+
+
+
+sub update_server($) {
+  my($rec) = @_;
+  return update_record('servers',$rec);
+}
+
+############################################################################
+# zone table functions
+
+sub get_zone_id($$) {
+  my ($zone,$serverid) = @_;
+
+  return -1 unless ($zone && $serverid);
+  return -1 
+    unless (db_exec("SELECT id FROM zones " .
+		    "WHERE server=$serverid AND name='$zone';")>0);
+  return db_getvalue(0,0);
+}
+
+sub get_zone_list($$$) {
+  my ($serverid,$type,$reverse) = @_;
+  my ($res,$list,$i,$id,$name,$rec);
+
+  if ($type) {
+    $type=" AND type='$type' ";
+  } else {
+    $type='';
+  }
+
+  if ($reverse) {
+    $reverse=" AND reverse='$reverse' ";
+  } else {
+    $reverse='';
+  }
+
+  $list=[];
+  return $list unless ($serverid >= 0);
+
+  $res=db_exec("SELECT name,id FROM zones " .
+	       "WHERE server=$serverid $type $reverse " .
+	       "ORDER BY type,reverse,reversenet,name;");
+
+  for($i=0; $i < $res; $i++) {
+    $name=db_getvalue($i,0);
+    $id=db_getvalue($i,1);
+    $rec=[$name,$id];
+    push @{$list}, $rec;
+  }
+  return $list;
+}
+
+sub get_zone($$) {
+  my ($id,$rec) = @_;
+  
+  return get_record("zones",
+	       "server,active,type,reverse,class,name," .
+	       "hostmaster,serial,refresh,retry,expire,minimum,ttl," .
+	       "\@ns,\@mx,\@txt,\@dhcp,comment,\@reverses,reversenet," .
+	       "\@masters",
+	       $id,$rec);
+}
+
+sub update_zone($) {
+  my($rec) = @_;
+  return update_record('zones',$rec);
+}
+
+############################################################################
+
+sub error($) {
+  my ($msg) = @_;
+
+  print STDERR "$0: $msg\n";
+}
+
+sub fatal($) {
+  my ($msg) = @_;
+  error($msg);
+  exit 1;
+}
