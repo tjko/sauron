@@ -620,7 +620,7 @@ sub make_dhcp() {
     $net=$nets[$i][0];
     print DHCPFILE "# net: $net\n\n";
     undef @q;
-    db_query("SELECT net,dhcp,name FROM nets " .
+    db_query("SELECT net,id,name FROM nets " .
 	     "WHERE server=$serverid AND no_dhcp=false AND subnet=true " .
 	     "AND net << '$net' ORDER BY net;",\@q);
     if (@q < 1 ) {
@@ -639,7 +639,7 @@ sub make_dhcp() {
 	$ssnet = new Net::Netmask($q[$j][0]);
 	$snet = $ssnet->base();
         $nmask = $ssnet->mask();
-	$dhcp = db_decode_list_str($q[$j][1]);
+	$dhcpid = $q[$j][1];
 	print DHCPFILE "\t# $q[$j][2]\n";
 	print DHCPFILE "\tsubnet $snet netmask $nmask {\n";
 
@@ -658,9 +658,13 @@ sub make_dhcp() {
 	  print "no router interface found for subnet: $snet $nmask\n";
 	}
 
-	for $k (0 .. $#{$dhcp}) {
-	  print DHCPFILE "\t\t$$dhcp[$k];\n";
+	undef @qqq;
+	db_query("SELECT d.dhcp FROM dhcp_entries d " .
+		 "WHERE d.type=4 AND d.ref=$dhcpid;",\@qqq);
+	for $k (0..$#qqq) {
+	  print DHCPFILE "\t\t$qqq[$k][0];\n";
 	}
+
 	print DHCPFILE "\t}\n";
       }
     }
@@ -672,7 +676,7 @@ sub make_dhcp() {
   print DHCPFILE "# groups\n\n";
 
   undef @groups;
-  db_query("SELECT id,name,dhcp FROM groups WHERE server=$serverid;",\@groups);
+  db_query("SELECT id,name FROM groups WHERE server=$serverid;",\@groups);
   if (@groups < 1) {
     error("no groups found for this server");
   } 
@@ -688,10 +692,14 @@ sub make_dhcp() {
       for $i (0.. $#groups) {
 	$gid=$groups[$i][0];
 	$group=$groups[$i][1];
-	$dhcp=db_decode_list_str($groups[$i][2]);
+	# $dhcp=db_decode_list_str($groups[$i][2]);
 	print DHCPFILE "group {  # $group\n";
-	for $j (0 .. $#{$dhcp}) {
-	  print DHCPFILE "\t$$dhcp[$j];\n";
+	undef @qqq;
+	db_query("SELECT d.dhcp FROM dhcp_entries d " .
+		 "WHERE d.type=5 AND d.ref=$gid;",\@qqq);
+	for $k (0..$#qqq) {
+	  $qqq[$k][0] =~ s/\\"/"/g;
+	  print DHCPFILE "\t$qqq[$k][0];\n";
 	}
 	print DHCPFILE "\t\n";
 
