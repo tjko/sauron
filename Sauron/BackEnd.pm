@@ -14,6 +14,7 @@ require Exporter;
 	     set_muser
 	     new_serial
 	     auto_address
+	     next_free_ip
 	     ip_in_use
 	     domain_in_use
 	     hostname_in_use
@@ -190,6 +191,30 @@ sub auto_address($$) {
   }
 
   return "No free addresses left";
+}
+
+sub next_free_ip($$)
+{
+  my($serverid,$ip) = @_;
+  my(@q,@ips,%h,$net,$i,$t);
+
+  return '' unless ($serverid > 0);
+  return '' unless (is_cidr($ip));
+
+  db_query("SELECT net FROM nets WHERE server=$serverid AND net >> '$ip' " .
+	   "ORDER BY net DESC",\@q);
+  return '' unless (@q > 0);
+  db_query("SELECT a.ip FROM hosts h , a_entries a, zones z " .
+	   "WHERE z.server=$serverid AND h.zone=z.id AND a.host=h.id " .
+	   " AND '$q[0][0]' >> a.ip ORDER BY a.ip;",\@ips);
+  for $i (0..$#ips) { $h{$ips[$i][0]} = 1; }
+  $net = new Net::Netmask($q[0][0]);
+  $i = ip2int($ip) + 1;
+  while ($net->match(($t=int2ip($i)))) {
+    return $t unless ($h{$t});
+    $i++;
+  }
+  return '';
 }
 
 sub ip_in_use($$) {
