@@ -106,13 +106,15 @@ if (defined $opt_pending) {
       next if ($serverid < 0);
       $server=$servers_h{$serverid};
 
-      undef @q;
+      db_query("SELECT COUNT(id) FROM zones " .
+	       "WHERE server=$serverid AND rdate > serial_date",\@q);
+      $removedhosts=($q[0][0] > 0 ? $q[0][0] : 0);
       db_query("SELECT COUNT(h.id) FROM hosts h, zones z " .
 	       "WHERE z.server=$serverid AND h.zone=z.id " .
 	       " AND (h.mdate > z.serial_date OR h.cdate > z.serial_date);",
 	       \@q);
-      next if ($opt_quiet && $q[0][0] < 1);
-      printf "%-50s %d\n",substr($server,0,50),$q[0][0];
+      next if ($opt_quiet && $q[0][0] < 1 && $removedhosts==0);
+      printf "%-50s %d\n",substr($server,0,50),$q[0][0]+$removedhosts;
     }
     exit;
   }
