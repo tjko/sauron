@@ -80,15 +80,15 @@ print FILE "! VMPS domain\n",
 
 
 db_query("SELECT h.id,h.domain,h.ether,v.name,a.ip,h.expiration " .
-	 "FROM zones z, hosts h, a_entries a, nets n, vlans v " .
-	  ($opt_all ? '' : ', groups g ') .
-	 "WHERE z.server=$serverid AND h.zone=z.id AND a.host=h.id " .
-	 " AND h.type=1 AND h.ether != '' " .
-	  ($opt_all ? "" : " AND h.grp=g.id AND g.vmps=$vmpsid ") .
-         " AND a.ip << n.net AND n.vlan=v.id " .
+	 "FROM zones z JOIN hosts h ON h.zone=z.id " .
+         " JOIN a_entries a ON a.host=h.id JOIN nets n ON a.ip << n.net " .
+         " JOIN vlans v ON n.vlan=v.id LEFT JOIN groups g ON h.grp=g.id " .
+         " LEFT JOIN vmps w ON g.vmps=w.id " .
+	 "WHERE z.server=$serverid AND h.type=1 AND h.ether != '' " .
+	  ($opt_all ? "" : " AND w.id=$vmpsid ") .
          "ORDER BY a.ip,n.net",\@q);
 
-#print "results=".@q."\n";
+print "Found ".@q." results in database\n" if ($opt_verbose);
 
 
 for $i (0..$#q) {
