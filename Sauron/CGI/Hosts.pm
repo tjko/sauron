@@ -344,9 +344,10 @@ my %new_alias_form = (
 my %browse_page_size=(0=>'25',1=>'50',2=>'100',3=>'256',4=>'512',5=>'1000');
 my %browse_search_fields=(0=>'Ether',1=>'Info',2=>'User',3=>'Location',
 		       4=>'Department',5=>'Model',6=>'Serial',7=>'Misc',
+		       8=>'Asset ID',
 		       -1=>'<ANY>');
 my @browse_search_f=('ether','info','huser','location','dept','model',
-		  'serial','misc');
+		  'serial','misc','asset_id');
 
 my %browse_hosts_form=(
  data=>[

@@ -1,6 +1,7 @@
 $Id$
 
 0.7.1beta
+	- CGI interface: added ability to search by asset IDs
 	- initial "plugin" support for CGI interface 
 	  (one sample/test plugin provided as an example)
 	- new command "Clear Defaults" in web interface

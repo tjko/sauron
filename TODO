@@ -31,7 +31,6 @@ sauron.cgi:
 	- templates for adding hosts
 	- advertise "Save settings" feature if user doesn't have any
           default settings	
-	- search by asset tag.... (other fields too?)
 	- allow user to list her previous sessions (similar to
           "last" command-line command)
         - more detailed logging (especially  host add/edit/delete)
