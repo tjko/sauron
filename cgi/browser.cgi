@@ -3,7 +3,7 @@
 # browser.cgi
 # $Id$
 #
-# Copyright (c) Timo Kokkonen <tjko@iki.fi>, 2001-2003.
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>, 2001-2005.
 # All Rights Reserved.
 #
 use CGI qw/:standard *table -no_xhtml/;
@@ -137,7 +137,7 @@ print header(-charset=>$BROWSER_CHARSET),
       start_html(-title=>"Sauron DNS Browser $VER",-BGCOLOR=>$bgcolor,
 		 -meta=>{'keywords'=>'GNU Sauron DNS DHCP tool'}),
       "\n\n<!-- Sauron DNS Browser v$VER -->\n",
-      "<!-- Copyright (c) Timo Kokkonen <tjko\@iki.fi>  2001-2003. -->\n\n";
+      "<!-- Copyright (c) Timo Kokkonen <tjko\@iki.fi>  2001-2005. -->\n\n";
 
 
 $key = $pathinfo;
@@ -228,8 +228,9 @@ sub do_search() {
     alert2("Invalid input!");
     return;
   }
-  if ($mask =~ /^\s*$/) {
-    #alert2("Nothing to search for!");
+  return if ($mask =~ /^\s*$/);
+  if ($mask =~ /^[\*\?]$/) {
+    print "Invalid regular expression<br>";
     return;
   }
 
@@ -318,7 +319,10 @@ sub do_search() {
 
   #print "<p>sql '$sql'";
   db_query($sql,\@q);
-  print "SQL error:<br>$sql<br>" . db_errormsg()  if (db_errormsg());
+  if (db_errormsg()) {
+      print db_errormsg() ."<br>";
+      return;
+  }
   $count = @q;
 
   $count=$show_max if ($count > $show_max);
