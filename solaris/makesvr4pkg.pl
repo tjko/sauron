@@ -18,7 +18,7 @@ my @SYS_DIRS = qw#
     /usr
     /usr/(bin|sbin|lib|share|local)
     /usr/share/(man|man/man.)
-    /usr/local/(etc|bin|doc|sbin|libexec|man|man/man.|share|lib)
+    /usr/local/(etc|bin|doc|sbin|libexec|man|man/man.|share|lib|include)
     /var
     /var/(opt|run|tmp)
     /tmp
@@ -39,7 +39,8 @@ chomp($ARCH = `uname -p`);
 $USER = (getpwuid($<))[0];
 
 GetOptions("base=s","email=s","name=s","vendor=s","arch=s","desc=s",
-	   "classes=s","category=s","help|h","pstamp=s","verbose","build");
+	   "classes=s","category=s","help|h","pstamp=s",
+	   "verbose","build","rename");
 
 $PKG=shift;
 $VERSION=shift;
@@ -58,7 +59,9 @@ unless ($PKG && $VERSION && $dir || $opt_help) {
           " --email=<email>\n",
           " --category=<category>\n",
           " --basedir=<basedir>\n",
-          " --classes=<classes>\n\n";
+          " --classes=<classes>\n\n",
+          " --build\t\trun build script also\n",
+          " --rename\t\trename invalid filenames in source\n\n";
     exit;
 }
 
@@ -107,6 +110,7 @@ chdir($dir) || fatal("failed to chdir to: $dir");
 
 # remove existing package dir if it exists
 if (-d "$dir/$PKG") {
+    print "Removing existing package dir: $dir/$PKG ...\n";
     rmtree("$dir/$PKG");
     fatal("failed to remove pkg dir: $dir/$PKG")
 	if (-d "$dir/$PKG");
@@ -124,6 +128,28 @@ print FILE $pkginfo;
 close(FILE);
 
 
+# check for filenames that would choke pkgmk
+print "Checking invalid filenames...\n";
+my $filenames_ok = 1;
+open(PIPE,"find . -type f -o -type l | sort |") || fatal("pipe failed");
+while (<PIPE>) {
+    chomp;
+    my $old = $_;
+    next unless /[\ \=]/;
+    s/[\ \=]/_/g;
+    my $new = $_;
+    if ($opt_rename) {
+	print "Renaming '$old' ==> '$new'\n";
+	fatal("rename failed") unless(rename($old,$new));
+    } else {
+	print "$old\n";
+	$filenames_ok=0;
+    }
+}
+close(PIPE);
+fatal("invalid filenames in sources") unless ($filenames_ok);
+
+
 # create prototype file...
 
 print "Building prototype file...";
@@ -137,8 +163,10 @@ while(<PIPE>) {
     chomp;
     next if /^f\s+\S+\s+(prototype|pkginfo)\s/;
     my @l = split(/\s+/);
-    $l[4]='root';
-    $l[5]='sys';
+    unless ($l[0] eq 's') {
+	$l[4]='root';
+	$l[5]='sys';
+    }
     my $tmp = $opt_basedir . $l[2];
     foreach $sysdir (@SYS_DIRS) {
 	if ($tmp =~ /^($sysdir)$/) { $l[3]='?'; $l[4]='?'; $l[5]='?'; }
@@ -157,7 +185,7 @@ print "found $count file(s)\n";
 print "Creating build script...\n";
 
 $cmd1="pkgmk -d $dir -f $dir/prototype -r $dir -o";
-$cmd2="echo | pkgtrans -os $dir $targetdir/$PKG-$UNAME_S-$UNAME_R-$ARCH-$VERSION.pkg";
+$cmd2="echo | pkgtrans -os $dir $targetdir/$PKG-$VERSION-$UNAME_S-$UNAME_R-$ARCH.pkg";
 
 open(FILE,">build.sh") || fatal("failed to create: build.sh");
 print FILE "#!/bin/sh\n",
