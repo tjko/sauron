@@ -1,0 +1,58 @@
+#!/usr/bin/perl
+#
+# kerberos-auth - validate login/passwd pair using Kerberos
+#                 (sample external authenticator for Sauron)
+#
+# reads on line from input that is expected to be in following format:
+# <username> <password>
+#
+# then returns:
+#    0 = authentication successful
+#   -1 = authentication failed
+#
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2003.
+# $Id$
+#
+
+# uncomment to explicitly specify kerberos realm to kinit
+# $REALM = 'FOO.BAR';
+
+$KINIT = '/usr/kerberos/bin/kinit';
+$KDESTROY = '/usr/kerberos/bin/kdestroy';
+$TMPDIR = '/var/tmp';
+
+#######################################################################
+
+die("cannot execute kinit: $KINIT") unless (-x $KINIT);
+die("cannot execute kdestroy: $KDESTROY") unless (-x $KDESTROY);
+die("temp dir not a directory: $TMPDIR") unless (-d $TMPDIR);
+
+$ENV{KRB5CCNAME}="FILE:$TMPDIR/kerberos-auth_$$";
+
+# read input from STDIN
+chomp($input=<>);
+die("Invalid input") unless ($input =~ /^(\S+)\s(.*)$/);
+$login=$1;
+$passwd=$2;
+
+
+# check password using kinit
+
+$realm = ($REALM ? "\@$REALM" : "");
+open(PIPE,"| $KINIT $login$realm") || die("cannot open pipe");
+print PIPE "$passwd\n";
+close(PIPE);
+$res=$?;
+
+
+# destroy tickets (if any)
+
+system("$KDESTROY -q") if ($res==0);
+
+
+print "kerberos-auth: ",($res==0?"OK":"FAIL"),"\n";
+exit(($res==0?0:-1));
+
+# eof
+
+
