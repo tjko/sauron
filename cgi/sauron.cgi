@@ -1083,7 +1083,12 @@ $selfurl = $s_url . $pathinfo;
 $menu=param('menu');
 #$menu='login' unless ($menu);
 $remote_addr = $ENV{'REMOTE_ADDR'};
+$remote_addr = '0.0.0.0' if ($SAURON_NO_REMOTE_ADDR_AUTH);
 $remote_host = remote_host();
+
+logmsg("notice","Warning: www server does not set standard CGI " .
+                "environment variable: REMOTE_ADDR!!!")
+  if ($ENV{'REMOTE_ADDR'} =~ /^\s*$/);
 
 ($scookie = cookie(-name=>"sauron-$SERVER_ID")) =~ s/[^A-Fa-f0-9]//g;
 if ($scookie) {
@@ -1128,8 +1133,8 @@ if ((time() - $state{'last'}) > $SAURON_USER_TIMEOUT) {
 
 if ($remote_addr ne $state{'addr'}) {
   logmsg("notice",
-	 "cookie reseived from wrong host: " . $remote_addr .
-	 " ($state{user})");
+	 "cookie for '$state{user}' reseived from wrong host: " .
+	 $remote_addr . " (expecting it from: $state{addr})");
   html_error("Unauthorized Access denied!");
 }
 
@@ -3630,8 +3635,8 @@ sub login_auth() {
 	}
 
 	print "</CENTER></td></tr></table>\n";
-	logmsg("notice","user ($u) logged in from " . $ENV{'REMOTE_ADDR'});
-	$last_from = db_encode_str($ENV{'REMOTE_ADDR'});
+	logmsg("notice","user ($u) logged in from: $remote_addr");
+	$last_from = db_encode_str($remote_addr);
 	db_exec("UPDATE users SET last=$ticks,last_from=$last_from " .
 		"WHERE id=$user{'id'};");
 	update_lastlog($state{uid},$state{sid},1,
@@ -3843,7 +3848,7 @@ sub make_cookie($) {
   undef %state;
   $state{auth}='no';
   #$state{'host'}=remote_host();
-  $state{addr}=($ENV{'REMOTE_ADDR'} ? $ENV{'REMOTE_ADDR'} : '0.0.0.0');
+  $state{addr}=($remote_addr ? $remote_addr : '0.0.0.0');
   save_state($val);
   $ncookie=$val;
   return cookie(-name=>"sauron-$SERVER_ID",-expires=>'+7d',
