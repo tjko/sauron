@@ -124,10 +124,10 @@
         SQL-database (see <xref linkend="overview-fig">). 
         Sauron is able to dynamically generate
         complete DNS (ISC BIND) and DHCP (ISC DHCP) configurations based
-        on the data stored in the SQL-databse. Sauron is currently written
+        on the data stored in the SQL-database. Sauron is currently written
         almost completely in Perl using only standard perl modules and
-        couple of additional modules from CPAN. Web interface is standalone
-        CGI script and should work with almost any www server that supports
+        couple of additional modules from CPAN. Web interface is stand-alone
+        CGI script and should work with almost any WWW server that supports
         CGI.
       </para>
       <para>
@@ -171,7 +171,7 @@
         (requires DHCP v3)
        </para></listitem>
        <listitem><para>
-         DHCP failover support (requires DHCP v3)
+         DHCP fail-over support (requires DHCP v3)
        </para></listitem>
        <listitem><para>
          MX and WKS record templates for hosts
@@ -227,8 +227,8 @@
       <para>
          <itemizedlist>
 	  <listitem><para>
-           <email>sauron-announce@lists.jyu.fi</> - new releace
-           announcements and other ipmortant messages (moderated)
+           <email>sauron-announce@lists.jyu.fi</> - new release
+           announcements and other important messages (moderated)
           </para></listitem>
 	  <listitem><para>
            <email>sauron-users@lists.jyu.fi</> - general discussion
@@ -318,7 +318,7 @@
 	    </itemizedlist>
           </para></listitem>
 	  <listitem><para>
-            Apache or any other www server that supports CGI
+            Apache or any other WWW server that supports CGI
             (for WWW interface)
           </para></listitem>
         </itemizedlist>
@@ -336,7 +336,7 @@
 
         <itemizedlist>
           <listitem><para>BIND 8.2.x or later 
-           (9.2.x or newere recommended)</></>
+           (9.2.x or newer recommended)</></>
 	  <listitem><para>DHCP v2 or later 
            (3.x or newer strongly recommended)</></>
         </itemizedlist>
@@ -394,7 +394,7 @@
         <title>Installing from the RPM</>
        <para>
        To install (or update) Sauron from RPM package you can simply
-       istall the package as follows:
+       install the package as follows:
        <screen>
        rpm -Uvh sauron-0.5.0-1.noarch.rpm
        </screen>
@@ -432,7 +432,7 @@
          </para>
          <para>
            To setup connection to a database named <database>sauron</>
-           in localhost, you might vant to set this variable to:
+           in localhost, you might want to set this variable to:
            <screen>
            "dbname=sauron user=foo password=bar"
            </screen>
@@ -442,7 +442,7 @@
            </screen>
          </para>
          <para>
-           <table frame=all><title>Database Connection String Paramaters</>
+           <table frame=all><title>Database Connection String Parameters</>
              <tgroup cols=3 align=left colsep=1 rowsep=1>
              <colspec colname=c1>
              <colspec colname=c2>
@@ -464,11 +464,11 @@
               <entry>Port to connect on database server.</>
              </row>
              <row>
-              <entry>dbname</><entry>current userid</>
+              <entry>dbname</><entry>current user-id</>
               <entry>Database name to connect.</>
              </row>
              <row>
-              <entry>user</><entry>current userid</>
+              <entry>user</><entry>current user-id</>
               <entry>Database username.</>
              </row>
              <row>
@@ -507,9 +507,9 @@
            Unique identifier for this Sauron installation. This identifier
            is used by the web interface to generate unique cookies names,
            so you can access several different Sauron web interfaces 
-           simulteneously from your browser. This identifier is also displayed
+           simultaneously from your browser. This identifier is also displayed
            by the web interface, to help you to identify which Sauron web
-           interface you're currently connnected to. 
+           interface you're currently connected to. 
          </para></listitem>
         </varlistentry>
 
@@ -529,7 +529,7 @@
       <title>Creating database for Sauron</>
       <para>
         Choose name for your database (for example: <filename>sauron</>)
-        and create empty databse in PostgreSQL using <application>createdb</>
+        and create empty database in PostgreSQL using <application>createdb</>
         program.
         <screen>
         createdb sauron
@@ -622,8 +622,8 @@ No servers found in database!
       <para>
         To be able to use Sauron's web interface you need to make
         <filename>sauron.cgi</> and <filename>browser.cgi</>
-        (if you wan't to use the Sauron DNS browser) available through
-        your www server. To do this you typically would either make symbolic
+        (if you want to use the Sauron DNS browser) available through
+        your WWW server. To do this you typically would either make symbolic
         links to these files or copy these files in your 
         <filename class=directory>cgi-bin</> directory. Note, if you're
         installing from the <acronym>RPM</> package, these symbolic links
@@ -646,7 +646,7 @@ No servers found in database!
          (unless you're installing from the RPM which does this automatically
          for you).
          To do this you can create that directory under your
-         www server root and then either make symbolic links or copy
+         WWW server root and then either make symbolic links or copy
          all the image files from 
          <filename class=directory>&lt;sauron top-level directory&gt;/icons/</>
          into this directory.
@@ -660,7 +660,7 @@ No servers found in database!
     <title>Getting Started</>
     <para>
       This chapter is intended as a brief overview of how to build a simple
-      DNS & DHCP server configuraton using Sauron. For those in hurry, 
+      DNS & DHCP server configuration using Sauron. For those in hurry, 
       there is also small demonstration database that can be used to test 
       Sauron quickly (see <xref linkend="demo-db-sec">).
     </para>
@@ -696,14 +696,14 @@ Enter password [JD!JqRGg]:
          expiration: &lt;none&gt;
           superuser: true
 Add this user [y/n]?y
-User admin added succesfully.
+User admin added successfully.
       </screen>
       Normal users accounts can be added interactively by starting 
       <application>adduser</> without any arguments. Difference between
       superuser accounts and normal user accounts is that normal accounts
-      need to be granted permission to acces/modify desired 
+      need to be granted permission to access/modify desired 
       servers/zones/hosts. See <xref linkend="account-management"> for
-      more infomation about maning user accounts and priviliges.
+      more information about managing user accounts and privileges.
     </para>
     </section>
 
@@ -774,7 +774,7 @@ User admin added succesfully.
       </para>
 
       <para>
-        Next step is to add the deault zones (localhost and reverse
+        Next step is to add the default zones (localhost and reverse
         zones for 0.0.0.0/8, 127.0.0.0/8, and 255.0.0.0/8) into the server.
         This can be done from <guimenu>Zones</> menu using
         <guimenuitem>Add Default Zones</>, which should produce following
@@ -840,10 +840,10 @@ Adding zone: 255.in-addr.arpa...OK (id=4)
         ./import ns1 /etc/named.conf
         </screen>
         Where import will read your BIND configuration from 
-        <filename>named.conf</>. Import will read also master zonefiles 
+        <filename>named.conf</>. Import will read also master zone-files 
         from directories specified in <filename>named.conf</>. Use
         <option>--dir=&lt;directory&gt;</> to specify alternate location
-        for zonefile if they're not located in the directories specified
+        for zone-file if they're not located in the directories specified
         in <filename>named.conf</>.
       </para>
       <para>
@@ -864,7 +864,7 @@ Adding zone: 255.in-addr.arpa...OK (id=4)
       <section id="demo-db-sec">
       <title>Using Demonstration Database</title>
       <para>
-        There is small demonstration database inlcuded with Sauron 
+        There is small demonstration database included with Sauron 
         distribution. This database is a dump of Sauron database that
         contains sample server which demonstrates some features of Sauron.
       </para>
@@ -879,7 +879,7 @@ Adding zone: 255.in-addr.arpa...OK (id=4)
         psql sauron-demo -f sauron-demo.dump
         </screen>
         After creating the database you need to set DB_CONNECT variable
-        in <filename>config</> file to connecto to this database.
+        in <filename>config</> file to connect to this database.
       </para>
       <para>
       This demonstration database has three user accounts already setup:
@@ -908,7 +908,7 @@ Adding zone: 255.in-addr.arpa...OK (id=4)
     <title>Generating DNS & DHCP Configurations</title>
     <para>
       Generation of BIND and dhcpd configurations files is done using
-      command-line utilitye <filename>sauron</>. Configuration files
+      command-line utility <filename>sauron</>. Configuration files
       can be generated at the server where Sauron and PostgreSQL are installed,
       or Sauron software can be installed also in the actual DNS & DHCP
       server and configured to connect to PostgreSQL database over network
@@ -916,7 +916,7 @@ Adding zone: 255.in-addr.arpa...OK (id=4)
       should be used).
     </para>
     <para> 
-      To generate complete BIND configuration fileset as well as dhcpd
+      To generate complete BIND configuration file set as well as dhcpd
       configuration file, following command could be used:
       <screen>
       ./sauron --bind --dhcp --updateserial ns1 /opt/ns/
@@ -967,7 +967,7 @@ $SAURON_MAIL_FROM = 'postmaster@middle.earth';
       <email>postmaster@middle.earth</email>.
     </para>
     <para>
-      You can automate BIND & dhcpd configuraton files generation using
+      You can automate BIND & dhcpd configuration files generation using
       for example a simple shell script that is run periodically from
       <application>cron</>. But you should use <option>--check</>
       when doing this to make sure you always end up with valid
@@ -980,16 +980,16 @@ $SAURON_MAIL_FROM = 'postmaster@middle.earth';
   <chapter id="account-management">
   <title>Account Management</>
   <para>
-    Currently user accounts and priviliges are used only by the Sauron's
+    Currently user accounts and privileges are used only by the Sauron's
     Web Interface. A text-based interface (to be used via
-    <acronym>SSH</> or locally) is planneded and will use the same user
-    accounts and priviliges as the web interface. 
+    <acronym>SSH</> or locally) is planned and will use the same user
+    accounts and privileges as the web interface. 
   </para>
   <para>
-    There are two ways to assign priviliges to users either directly setting
-    priviliges to a user or assigning user to a user group and then 
-    setting priviliges to that user group. It is recommended to use user
-    groups to grant users priviliges, since when there is large number
+    There are two ways to assign privileges to users either directly setting
+    privileges to a user or assigning user to a user group and then 
+    setting privileges to that user group. It is recommended to use user
+    groups to grant users privileges, since when there is large number
     of user accounts, it is much easier to modify permissions of a user
     group than having to modify each user's permission individually.
   </para>
@@ -1015,7 +1015,7 @@ $SAURON_MAIL_FROM = 'postmaster@middle.earth';
     <para>
       User accounts are created using <filename>adduser</> utility.
       This utility allow adding user accounts either interactively or
-      in batch mode bys pecifying all the required information on 
+      in batch mode by specifying all the required information on 
       command-line. Following example shows how to add normal user
       account interactively (see <xref linkend="adduser-cmd"> for
       information how to use this command in non-interactive mode).
@@ -1024,7 +1024,7 @@ $SAURON_MAIL_FROM = 'postmaster@middle.earth';
       <screen>
         ./adduser
       </screen>
-      When started without any argumets (or without <option>--user</> and
+      When started without any arguments (or without <option>--user</> and
       <option>--passwd</> option), interactive mode is started. 
       Below is an example session how to add an account:
       <screen>
@@ -1043,40 +1043,40 @@ Enter password [UtH4RCda]:
          expiration: &lt;none&gt;
           superuser: false
 Add this user [y/n]?y
-User pippin added succesfully.
+User pippin added successfully.
       </screen>
       When creating account and not setting group for that account,
-      <filename>adduser</> will remind that some priviliges should be
+      <filename>adduser</> will remind that some privileges should be
       set for the user, before account can be used. This is not the case
       when assigning user to a group, since it's assumed that group contains
-      necessary priviliges for the account. 
+      necessary privileges for the account. 
       See <xref linkend="priviliges-sec"> for more information about
-      user priviliges and how to modify them.
+      user privileges and how to modify them.
     </para>
     </section>
 
     <section id="priviliges-sec">
-    <title>Setting Priviliges</>
+    <title>Setting Privileges</>
     <para>
-      Accounts must have some priviliges (except superuser/administrator
-      accounts) for them to be useful. Priviliges can be assigned directly
+      Accounts must have some privileges (except superuser/administrator
+      accounts) for them to be useful. Privileges can be assigned directly
       to the user account using <filename>moduser</> utility or indirectly
-      to a group using <filename>modgroup</> utlility. 
+      to a group using <filename>modgroup</> utility. 
     </para>
     <para>
       Typically user (or group) is assigned one or more <quote>server</> 
-      priviliges, that grant user read-only access into those server(s).
-      Then user is assigned <quote>zone</> priviliges that grant
-      user acces into all hosts inside certain zone(s). If needed, user's
+      privileges, that grant user read-only access into those server(s).
+      Then user is assigned <quote>zone</> privileges that grant
+      user access into all hosts inside certain zone(s). If needed, user's
       access into all hosts inside the zone(s) user has write access can
-      be further limited by assigning restrictive priviliges to limit users 
+      be further limited by assigning restrictive privileges to limit users 
       access to only a subset of hosts inside the zone(s). For this there
       are rules to limit access by hostname (regexp) or by IP number
       (either by network/subnet or by IP-mask).
       See <xref linkend="privilige-table"> for complete list of available
-      user/group priviliges.
+      user/group privileges.
     </para>
-    <table frame=all id="privilige-table"><title>Account/Group Priviliges</>
+    <table frame=all id="privilige-table"><title>Account/Group Privileges</>
       <tgroup cols=4>
       <thead>
         <row>
@@ -1111,7 +1111,7 @@ User pippin added succesfully.
            <entry>IP mask</>
            <entry></>
            <entry>Limits users ability to use only IP addresses
-                  to those matchin the IP-mask</>
+                  to those matching the IP-mask</>
            <entry>IP-mask (for example: 192.168.1-10.*</>
         </row>
         <row>
@@ -1119,7 +1119,7 @@ User pippin added succesfully.
            <entry></>
            <entry>Limits user to be able to modify only
                   hosts with domainname matching any
-                  of Hostaname mask rules.</>
+                  of Hostname mask rules.</>
            <entry>regular expression (for example: ^\.math$)</>
         </row>
         <row>
@@ -1130,12 +1130,12 @@ User pippin added succesfully.
                   into templates/groups, and also to control
                   how much information about networks is
                   displayed to the user.</>
-           <entry>authorizaton level (0-999, 0=default)</>
+           <entry>authorization level (0-999, 0=default)</>
         </row>
         <row>
            <entry>Host Expiration Limit</>
            <entry></>
-           <entry>If defined, user can only create host entires
+           <entry>If defined, user can only create host entries
                   that expire in n days or sooner.</> 
            <entry>expiration limit (in days)</>
         </row>
@@ -1149,21 +1149,21 @@ User pippin added succesfully.
       </tgroup>
     </table>
     <para>
-      In addition to modifying the user acconut itself, <filename>moduser</>
-      utility can also be used to modify user priviliges. To add privileges
+      In addition to modifying the user account itself, <filename>moduser</>
+      utility can also be used to modify user privileges. To add privileges
       interactively for given account, just invoke <filename>moduser</> with
       <option>--add</> option. For example:
       <screen>
       ./moduser pippin --add
       </screen>
-      After adding priviliges to a user, <filename>moduser</> utlility can
-      be also used to display user's current priviliges by giving only
+      After adding privileges to a user, <filename>moduser</> utility can
+      be also used to display user's current privileges by giving only
       a username as argument. For example:
       <screen>
       ./moduser pippin
       </screen>
       This should produce output similar to below displaying account
-      details and priviliges.
+      details and privileges.
       <screen>
            Username: pippin (id=2)
            longname: Peregrin Took
@@ -1179,10 +1179,10 @@ User pippin added succesfully.
 
 ID     Type     Ref.                      Mode
 ------ -------- ------------------------- --------------------------------
-[User priviliges]
+[User privileges]
 3      hostname \.shire$                  (hostname constraint)
 
-[Group (hobbits) priviliges]
+[Group (hobbits) privileges]
 1      server   test                      R
 2      zone     test:middle.earth         RW
       </screen>
@@ -1192,7 +1192,7 @@ ID     Type     Ref.                      Mode
     <section>
     <title>Removing User</>
     <para>
-      User account can be removed using <filename>deluser</> utitity. This
+      User account can be removed using <filename>deluser</> utility. This
       utility works interactively when started without any arguments. To
       remove user(s) non-interactively use <option>--user=&lt;username&gt;</>
     </para>
@@ -1236,15 +1236,15 @@ ID     Type     Ref.                      Mode
   </section>
 
   <section>
-  <title>Managin User Groups</>
+  <title>Managing User Groups</>
   <para>
-    User groups are meant to ease the user privilige management, by allowing
-    user priviliges to be set for a user group and then user can be assigned
+    User groups are meant to ease the user privilege management, by allowing
+    user privileges to be set for a user group and then user can be assigned
     to a desired user group. 
-    User inherits all the priviliges from the group she
-    belongs to. User can still have user specific priviliges defined, even
-    if user belongs to a group. User's actual priviliges are combination
-    of user specific and group based priviliges.
+    User inherits all the privileges from the group she
+    belongs to. User can still have user specific privileges defined, even
+    if user belongs to a group. User's actual privileges are combination
+    of user specific and group based privileges.
   </para>
     <section>
     <title>Creating Group</>
@@ -1262,32 +1262,32 @@ Enter group description: Shire Hobbits
          Groupname: hobbits
          Description: Shire Hobbits
 Add this group [y/n]?y
-Group hobbits added succesfully.
+Group hobbits added successfully.
     </screen>
-       After creating a new group, it should be assigned some priviliges
+       After creating a new group, it should be assigned some privileges
        as described in <xref linkend="group-priviliges-sec">.
     </para>
     </section>
 
     <section id="group-priviliges-sec">
-    <title>Setting Group Priviliges</>
+    <title>Setting Group Privileges</>
     <para>
-      User groups (like User accounts) must have some priviliges assigned
-      to them for them to be useful. Priviliges can be assigned directly
+      User groups (like User accounts) must have some privileges assigned
+      to them for them to be useful. Privileges can be assigned directly
       to the user group using <filename>modgroup</> utility.
-      Priviliges that can be set to a user group are same as the priviliges
-      for a user. For more information about priviliges see
+      Privileges that can be set to a user group are same as the privileges
+      for a user. For more information about privileges see
       <xref linkend="priviliges-sec">.
     </para>
     <para>
-      To add priviliges for a user group interactively, start 
+      To add privileges for a user group interactively, start 
       <filename>modgroup</> utility with the <option>--add</> option.
       This can be done as follows from the Sauron top-level directory:
       <screen>
       ./modgroup hobbits --add
       </screen>
-      After adding desired priviliges to the group, <filename>modgroup</>
-      utility can also be used to display group's priviliges by starting
+      After adding desired privileges to the group, <filename>modgroup</>
+      utility can also be used to display group's privileges by starting
       it with only the group name as argument.
       <screen> 
       ./modgroup hobbits
@@ -1308,7 +1308,7 @@ ID     Type     Ref.                      Mode
     <section>
     <title>Removing Group</>
     <para>
-      User group can be removed using <filename>delgroup</> utitity. This
+      User group can be removed using <filename>delgroup</> utility. This
       utility works interactively when started without any arguments. To
       remove user(s) non-interactively use <option>--group=&lt;groupname&gt;</>
     </para>
@@ -1326,14 +1326,14 @@ ID     Type     Ref.                      Mode
   <title>External User Authentication</>
   <para>
     Normally users are authenticated against encrypted passwords stored
-    into <filename>users</> table in Sauron database. Sauron curently
+    into <filename>users</> table in Sauron database. Sauron currently
     uses by default standard Unix passwords. 
     However, it is possible to use external authentication program for
     user authentication. Which makes it possible to authenticate user's
     against almost any service.
   </para>
   <para>
-    To enable external user authentcation, <varname>SAURON_AUTH_PROG</> in
+    To enable external user authentication, <varname>SAURON_AUTH_PROG</> in
     variable in sauron configuration file must be set to point to external 
     authentication script or program.
   </para>
@@ -1352,7 +1352,7 @@ ID     Type     Ref.                      Mode
     </screen>
     Authentication program should then authenticate the user using the
     given username and password, and return with exit code 0 (zero) if 
-    authentication was successfull. Otherwise a non-zero exit code should 
+    authentication was successful. Otherwise a non-zero exit code should 
     be used.
   </para>
   </section>
@@ -1363,17 +1363,17 @@ ID     Type     Ref.                      Mode
   <chapter id="web-interface">
     <title>Web Interface</>
     <para>
-      Web based user interface for Sauron is implemeted as 
+      Web based user interface for Sauron is implemented as 
       a single <acronym>CGI</> script (<filename>sauron.cgi</>).
-      To use this script a www server software that supports 
+      To use this script a WWW server software that supports 
       CGI programs is needed. Currently this interface is developed
       and tested using <application>Apache</>, but it should work
-      with any www server software, as long as it has support for CGIs.
+      with any WWW server software, as long as it has support for CGIs.
     </para>
     <para>
-      It is recommended to setup your www server to use <acronym>HTTPS</>
+      It is recommended to setup your WWW server to use <acronym>HTTPS</>
       and only allow access to the <filename>sauron.cgi</> CGI script
-      using encrypted <acronym>HTTPS</> conection. If your www server
+      using encrypted <acronym>HTTPS</> connection. If your WWW server
       supports both unencrypted (<acronym>HTTP</>) and encrypted
       (<acronym>HTTPS</>) connections, it is recommended to setup
       a separate <quote>cgi-bin</> directory for <acronym>HTTPS</>
@@ -1381,15 +1381,15 @@ ID     Type     Ref.                      Mode
       link to it) only in that directory.
     </para>
     <para> 
-      Altough <filename>sauron.cgi</> has it's own access control 
+      Although <filename>sauron.cgi</> has it's own access control 
       mechanism, it is recommended to further improve security 
       by restricting access
       to the web interface for only the hosts that need access to the
-      Sauron using the www server configuration and/or a firewall.
+      Sauron using the WWW server configuration and/or a firewall.
     </para>
     <para> 
       Sauron's web interface doesn't use JavaScript, only standard 
-      <acronym>HTML</> is used. Goal is to keep the web interace
+      <acronym>HTML</> is used. Goal is to keep the web interface
       light weight and usable by all browsers (graphical as well as
       text-based). 
     </para>
@@ -1443,7 +1443,7 @@ ID     Type     Ref.                      Mode
     <section><title>Delete</>
     <para>
     <guimenuitem>Delete</> command allows removal of a server.
-    This command should be used with cauion, since it will remove the
+    This command should be used with caution, since it will remove the
     entire server from the database.
     This command is available only for administrator.
     </para>
@@ -1483,7 +1483,7 @@ ID     Type     Ref.                      Mode
 
     <section><title>Show Pending</>
     <para>
-    <guimenuitem>Show Pending</> command displays list of pendig changes
+    <guimenuitem>Show Pending</> command displays list of pending changes
     for hosts in this zone. This list currently displays all new
     or modified hosts (or aliases) since DNS configuration was last
     time generated. 
@@ -1533,14 +1533,14 @@ ID     Type     Ref.                      Mode
     <guimenuitem>Copy</> command copies entire zone (including all the
     hosts in a master zone) under new name. This option can be used
     to use existing zone as a template when creating new zones.
-    This command is availabele only for administrator.
+    This command is available only for administrator.
     </para>
     </section>
 
     <section><title>Delete</>
     <para>
     <guimenuitem>Delete</> command allows removal of a zone.
-    This command should be used with cauion, since it will remove the
+    This command should be used with caution, since it will remove the
     entire zone from the database.
     This command is available only for administrator.
     </para>
@@ -1571,7 +1571,7 @@ ID     Type     Ref.                      Mode
       Most of the host specific commands are not in the <guimenu>Hosts</>
       menu itself, but are displayed as buttons when user views a host record.
       Some of these buttons such as <guibutton>Edit</> or 
-      <guibutton>Delete</> are only available when user has priviliges to
+      <guibutton>Delete</> are only available when user has privileges to
       make modifications to hosts in that zone.
     </para>
       <section><title>Search</>
@@ -1589,14 +1589,14 @@ ID     Type     Ref.                      Mode
       <section><title>Last Search</>
       <para>
         <guimenuitem>Last Search</> command performs the previous search 
-        again. This provis a quick way to redo a search you did earlier.
+        again. This provides a quick way to redo a search you did earlier.
       </para>
       </section>
 
       <section><title>Add host</>
       <para>
         <guimenuitem>Add host</> command is used to create a host.
-        This command displays slightly different dialog for aministrators
+        This command displays slightly different dialog for administrators
         or users with <quote>RWX</> access to the zone than normal
         users who will get more restrictive dialog.
         See <xref linkend="new-host-dialog"> for descriptions of the
@@ -1610,7 +1610,7 @@ ID     Type     Ref.                      Mode
       <para>
         <guibutton>Edit</> button is used to modify existing host.
         This button can only be used by normal user if she has necessary
-        priviliges to make modifications to the host.
+        privileges to make modifications to the host.
         See <xref linkend="edit-host-dialog"> for description of the
         fields used in this dialog.
         
@@ -1622,7 +1622,7 @@ ID     Type     Ref.                      Mode
       <para>
         <guibutton>Delete</> button is used to delete a host.
         This button can only be used by normal user if she has necessary
-        priviliges to make modifications to the host. If a host
+        privileges to make modifications to the host. If a host
         has dynamic aliases that point to it those aliases are
         also automatically removed when the host is deleted.
       </para>
@@ -1634,7 +1634,7 @@ ID     Type     Ref.                      Mode
         a host easily. This button will take the information from the
         current host and use this information to pre-fill 
         <guimenuitem>Add host</> command dialog. If hostname contains
-        number it is incremented, otherwis hostname is appended by
+        number it is incremented, otherwise hostname is appended by
         number two.
       </para>
       </section>
@@ -1646,7 +1646,7 @@ ID     Type     Ref.                      Mode
         available IP address within the auto assign address range of that
         network is suggested as new IP address for the host. 
         This button can only be used by normal user if she has necessary
-        priviliges to make modifications to the host.
+        privileges to make modifications to the host.
       </para>
       </section>
 
@@ -1655,7 +1655,7 @@ ID     Type     Ref.                      Mode
         <guibutton>Alias</> button is used to add a dynamic
         (CNAME or A record) alias for a host.
         This button can only be used by normal user if she has necessary
-        priviliges to make modifications to the host.
+        privileges to make modifications to the host.
       </para>
       </section>
 
@@ -1757,7 +1757,7 @@ ID     Type     Ref.                      Mode
       <para>
         <guibutton>Ping</> button allows user to run <quote>ping</>
         command against the selected host.
-        This option is only available when it is explictly enabled
+        This option is only available when it is explicitly enabled
         in configuration file and user has at least the required
         authorization level.
       </para>
@@ -1767,7 +1767,7 @@ ID     Type     Ref.                      Mode
       <para>
         <guibutton>Traceroute</> button allows user to 
         run <quote>traceroute</> command against the selected host.
-        This option is only available when it is explictly enabled
+        This option is only available when it is explicitly enabled
         in configuration file and user has at least the required
         authorization level.
       </para>
@@ -1778,15 +1778,15 @@ ID     Type     Ref.                      Mode
     <section id="templates-menu">
     <title>Templates Menu</>
     <para>
-      <guimenu>Templates</> menu contains commans for creating and modifying
-      teamplates. Only <quote>show</> commands under this menu are available
+      <guimenu>Templates</> menu contains commands for creating and modifying
+      templates. Only <quote>show</> commands under this menu are available
       for normal users. 
     </para>
     <para>
       Templates are used by hosts, they can be used to specify 
       common MX, WKS, or HINFO records for groups of hosts. 
       Normal users can only use templates that have same or lover
-      privilige level than the user has.
+      privilege level than the user has.
     </para>
 
       <section><title>Show MX</>
@@ -1852,7 +1852,7 @@ ID     Type     Ref.                      Mode
     <section id="groups-menu">
     <title>Groups Menu</>
     <para>
-      <guimenu>Groups</> menu contains commans for creating and modifying
+      <guimenu>Groups</> menu contains commands for creating and modifying
       (host) groups. Normal users can only list and view group details,
       all other commands are for administrator only.
     </para>
@@ -1860,7 +1860,7 @@ ID     Type     Ref.                      Mode
       Groups are used by hosts, they are used to specify common
       attributes for hosts. 
       Normal users can only use groups that have same or lover
-      privilige level than the user has.
+      privilege level than the user has.
       There are currently three different types of groups.
       <variablelist><title>Group Types</>
         <varlistentry>
@@ -1887,7 +1887,7 @@ ID     Type     Ref.                      Mode
             IP address pool for a DHCP server. For each dynamic address pool
             for DHCP server, group of host entries that belong to this group
             should be created (IP addresses of these hosts don't 
-            necessarily have to be successive, but for each group a spearate
+            necessarily have to be successive, but for each group a separate
             pool statement will be created in <filename>dhcpd.conf</>).
             When generating DHCP configuration, 
             dynamic address pools are automatically
@@ -1926,9 +1926,9 @@ ID     Type     Ref.                      Mode
     <para>
       <guimenu>Nets</> menu contains commands for managing networks and
       <acronym>VLANs</> (Layer-2 networks). Normal user can only see
-      list of networks that have lower or same privilige level set than
+      list of networks that have lower or same privilege level set than
       the user has. VLAN information is by default visible only for
-      users with privilige leverl 5 or above (this can be controlled
+      users with privilege level 5 or above (this can be controlled
       via <varname>ALEVEL_VLANS</> variable in configuration file).
     </para>
     <para>
@@ -1943,7 +1943,7 @@ ID     Type     Ref.                      Mode
       VLANs are used to describe the <quote>Layer-2 network</> topology
       of your network. Each network can be assigned to one VLAN. All
       networks that don't have VLAN set are part of virtual VLAN
-      calles <quote>CHAOS</> (normal VLAN names are always lower case).
+      called <quote>CHAOS</> (normal VLAN names are always lower case).
     </para>
 
       <section><title>Networks</>
@@ -2003,7 +2003,7 @@ ID     Type     Ref.                      Mode
       <section><title>Add vlan</>
       <para>
         <guimenuitem>Add vlan</> command is used to create a new VLAN
-        (Layer-2 netowrk) entry for active server.
+        (Layer-2 network) entry for active server.
         This command is only available for administrator.
       </para>
       </section>
@@ -2021,9 +2021,9 @@ ID     Type     Ref.                      Mode
       <section><title>User Info</>
       <para> 
         <guimenuitem>User Info</> command displays general information
-        about current user's account and user priviliges (permissions).
+        about current user's account and user privileges (permissions).
         See <xref linkend="privilige-table"> for description about 
-        user priviliges.
+        user privileges.
       </para>
       </section>
 
@@ -2054,7 +2054,7 @@ ID     Type     Ref.                      Mode
       <section><title>Logout</>
       <para> 
         <guimenuitem>Login</> command allows user to logout
-        from the system. Thiss will also try to erase session cookie
+        from the system. This will also try to erase session cookie
         from user's browser by issuing new cookie <quote>dummy</> cookie
         with expiration time set to <quote>now</>.
       </para>
@@ -2291,7 +2291,7 @@ ID     Type     Ref.                      Mode
       table. This database version number must match with the version
       sauron <quote>back end</> was made for. If database format changes
       in future versions, the database version number will be incremented 
-      and a conversion script from previous vesion will be shipped with
+      and a conversion script from previous version will be shipped with
       Sauron.
     </para>
     <para>
