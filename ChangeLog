@@ -1,6 +1,9 @@
 $Id$
 
-0.7.1beta
+0.7.1
+	- added "subgroups" for defining additional group(s) for host(s),
+	  currently subgroup memberships are used when generating DHCP class
+	  entries in dhcpd.conf.
 	- linking to "pages" inside Sauron now works (without frames)
 	- A host can now be a member of one of more "subgroups" in addition
 	  to one (main)group.
