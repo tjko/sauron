@@ -19,6 +19,7 @@ require Exporter;
 
 	     display_form
 	     display_dialog
+	     display_list
 
 	     alert1
 	     alert2
@@ -934,6 +935,31 @@ sub display_dialog($$$$$) {
   return 0;
 }
 
+sub display_list($$$)
+{
+  my($header,$list,$mode) = @_;
+  my($i,$j,$cols);
+
+  $cols = $#{$header};
+  print "<TABLE width=\"99%\" bgcolor=\"#ccccff\" cellspacing=1>\n",
+        "<TR bgcolor=\"#aaaaff\">";
+  for $i (0..$cols) {
+    print th(($$header[$i] ? $$header[$i] : '&nbsp;'));
+  }
+  print "</TR>\n";
+  for $i (0..$#{$list}) {
+    print "<TR bgcolor=\"#eeeebf\">";
+    for $j (0..$cols) {
+      if ($$header[$j] =~ /Date/) {
+	$$list[$i][$j] = localtime($$list[$i][$j])." "
+	  if ($$list[$i][$j] > 0);
+      }
+      print td(($$list[$i][$j] ? $$list[$i][$j] : '&nbsp;'));
+    }
+    print "</TR>\n";
+  }
+  print "</TABLE>\n";
+}
 
 ########################################################################
 
