@@ -3889,7 +3889,11 @@ sub save_state($) {
 	       ", superuser=$s_superuser $other " .
 	       "WHERE cookie='$id';");
 
-  html_error("cannot save state '$id' ($state{uid},$state{user})") if ($res < 0);
+  if ($res < 0) {
+    logmsg("notice","cannot save state '$id' ($state{uid},$state{user}): " .
+          db_errormsg());
+    html_error("cannot save state '$id' ($state{uid},$state{user})");
+  }
 }
 
 
