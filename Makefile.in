@@ -39,6 +39,8 @@ infodir = $(prefix)/info
 mandir = $(prefix)/man
 
 
+DBBACKEND = @PERL_DB_BACKEND@
+
 RUNSQL = $(srcdir)/runsql
 
 SGMLTOOLS = /usr/bin/sgmltools
@@ -89,8 +91,9 @@ PROGS = sauron addgroup adduser deluser delgroup modhosts \
 	export-networks generatehosts addhosts check-pending \
 	expire-hosts createtables import-zone remove-hosts
 
-MODULES = Sauron/Util.pm Sauron/DB.pm Sauron/BackEnd.pm Sauron/CGIutil.pm \
-	  Sauron/UtilZone.pm Sauron/Sauron.pm Sauron/UtilDhcp.pm
+MODULES = Sauron/Util.pm Sauron/BackEnd.pm Sauron/CGIutil.pm \
+	  Sauron/UtilZone.pm Sauron/Sauron.pm Sauron/UtilDhcp.pm \
+	  Sauron/DB-Pg.pm Sauron/DB-DBI.pm
 
 
 CONTRIB_FILES = contrib/additional-ether-codes.txt \
@@ -212,6 +215,9 @@ install: make_dirs
 	@[ -f $(INSTALL_ROOT)/$(bindir)/modgroup ] && \
 		 rm -f $(INSTALL_ROOT)/$(bindir)/modgroup || :
 	@ln -s moduser $(INSTALL_ROOT)/$(bindir)/modgroup
+	@[ -f $(INSTALL_ROOT)/$(bindir)/Sauron/DB.pm ] && \
+		 rm -f $(INSTALL_ROOT)/$(bindir)/Sauron/DB.pm || :
+	@ln -s $(DBBACKEND) $(INSTALL_ROOT)/$(bindir)/Sauron/DB.pm
 # fix paths in perl files
 	@echo "Fixing paths in perl files..."
 	@for f in $(PROGS) $(CGIFILES); do \

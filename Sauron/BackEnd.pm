@@ -124,6 +124,18 @@ $VERSION = '$Id$ ';
 
 my($muser);
 
+sub fix_bools($$) {
+  my($rec,$names) = @_;
+  my(@l,$name,$val);
+
+  @l=split(/,/,$names);
+  foreach $name (@l) {
+    $val=$rec->{$name};
+    $val=(($val eq 't' || $val == 1) ? 't' : 'f');
+    $rec->{$name}=$val;
+  }
+}
+
 sub sauron_db_version() {
   return "1.0"; # required db format version for this backend
 }
@@ -237,12 +249,10 @@ sub hostname_in_use($$) {
 }
 
 sub new_sid() {
-  my($sid);
+  my(@q);
 
-  return -1 if (db_exec("SELECT NEXTVAL('sid_seq');") < 0);
-  $sid=db_getvalue(0,0);
-  $sid=-1 unless ($sid > 0);
-  return $sid;
+  db_query("SELECT NEXTVAL('sid_seq')",\@q);
+  return ($q[0][0] > 0 ? $q[0][0] : -1);
 }
 
 sub get_host_network_settings($$$) {
@@ -281,18 +291,18 @@ sub get_host_network_settings($$$) {
 
 sub get_record($$$$$) {
   my ($table,$fields,$key,$rec,$keyname) = @_;
-  my (@list,$res,$i,$val);
+  my (@list,@q,$i,$val);
 
   $keyname='id' unless ($keyname);
   undef %{$rec};
   @list = split(",",$fields);
   $fields =~ s/\@//g;
-  $res=db_exec("SELECT $fields FROM $table WHERE $keyname='$key'");
-  return -1 if ($res < 1);
+  db_query("SELECT $fields FROM $table WHERE $keyname='$key'",\@q);
+  return -1 if (@q < 1);
 
   $$rec{$keyname}=$key;
   for($i=0; $i < @list; $i++) {
-    $val=db_getvalue(0,$i);
+    $val=$q[0][$i];
     if ($list[$i] =~ /^\@/ ) {
       $$rec{substr($list[$i],1)}=db_decode_list_str($val);
     } else {
@@ -567,11 +577,12 @@ sub del_std_fields($) {
 
 sub get_server_id($) {
   my ($server) = @_;
+  my (@q);
 
   return -1 unless ($server);
   $server=db_encode_str($server);
-  return -2 unless (db_exec("SELECT id FROM servers WHERE name=$server")>0);
-  return db_getvalue(0,0);
+  db_query("SELECT id FROM servers WHERE name=$server",\@q);
+  return ($q[0][0] > 0 ? $q[0][0] : -2);
 }
 
 sub get_server_list($$$) {
@@ -610,6 +621,7 @@ sub get_server($$) {
 		    "cdate,cuser,mdate,muser",
 		    $id,$rec,"id");
   return -1 if ($res < 0);
+  fix_bools($rec,"no_roots,zones_only");
 
   get_array_field("cidr_entries",3,"id,ip,comment","CIDR,Comments",
 		  "type=1 AND ref=$id ORDER BY ip",$rec,'allow_transfer');
@@ -939,12 +951,12 @@ sub delete_server($) {
 
 sub get_zone_id($$) {
   my ($zone,$serverid) = @_;
+  my (@q);
 
-  return -1 unless ($zone && $serverid);
-  return -1 
-    unless (db_exec("SELECT id FROM zones " .
-		    "WHERE server=$serverid AND name='$zone';")>0);
-  return db_getvalue(0,0);
+  return -1 unless ($zone && $serverid > 0);
+  $zone = db_encode_str($zone);
+  db_query("SELECT id FROM zones WHERE server=$serverid AND name=$zone",\@q);
+  return ($q[0][0] > 0 ? $q[0][0] : -2);
 }
 
 sub get_zone_list($$$) {
@@ -974,6 +986,7 @@ sub get_zone($$) {
 	       "forward,serial_date,flags",
 	       $id,$rec,"id");
   return -1 if ($res < 0);
+  fix_bools($rec,"active,dummy,reverse,noreverse");
 
   if ($rec->{type} eq 'M') {
     $hid=get_host_id($id,'@');
@@ -1036,7 +1049,7 @@ sub update_zone($) {
   $rec->{flags}|=0x01 if ($rec->{txt_auto_generation});
   delete $rec->{txt_auto_generation};
 
-  if ($rec->{reverse} eq 't') {
+  if ($rec->{reverse} eq 't' || $rec->{reverse} == 1) {
       $new_net=arpa2cidr($rec->{name});
       if (($new_net eq '0.0.0.0/0') or ($new_net eq '')) {
 	  return -100;
@@ -1536,8 +1549,8 @@ sub get_host($$) {
 	       "serial,misc,cdate,cuser,muser,mdate,comment,dhcp_date," .
 	       "expiration,asset_id,dhcp_info,flags",
 	       $id,$rec,"id");
-
   return -1 if ($res < 0);
+  fix_bools($rec,"prn");
 
   get_array_field("a_entries",4,"id,ip,reverse,forward",
 		  "IP,reverse,forward","host=$id ORDER BY ip",$rec,'ip');
@@ -2274,6 +2287,7 @@ sub get_user($$) {
 	       "mdate,muser",
 	       $uname,$rec,"username");
 
+  fix_bools($rec,"superuser");
   $rec->{email_notify} = ($rec->{flags} & 0x01 ? 1 : 0);
 
   add_std_fields($rec);
@@ -2359,7 +2373,7 @@ sub delete_user_group($$) {
     $res = db_exec("UPDATE users SET gid=$newid WHERE gid=$id;");
     if ($res < 0) { db_rollback(); return -3; }
   }
-  
+
   return db_commit();
 }
 
@@ -2368,7 +2382,7 @@ sub delete_user_group($$) {
 
 sub get_net_list($$) {
   my ($serverid,$subnets) = @_;
-  my ($res,$list,$i,$id,$net,$rec,$name);
+  my (@q,$list,$i);
 
   if ($subnets) {
     $subnets=($subnets==0?'false':'true');
@@ -2380,16 +2394,11 @@ sub get_net_list($$) {
   $list=[];
   return $list unless ($serverid >= 0);
 
-  $res=db_exec("SELECT net,id,name FROM nets " .
-	       "WHERE server=$serverid $subnets " .
-	       "ORDER BY net;");
+  db_query("SELECT net,id,name FROM nets " .
+	   "WHERE server=$serverid $subnets ORDER BY net",\@q);
 
-  for($i=0; $i < $res; $i++) {
-    $net=db_getvalue($i,0);
-    $id=db_getvalue($i,1);
-    $name=db_getvalue($i,2);
-    $rec=[$net,$id,$name];
-    push @{$list}, $rec;
+  for $i (0..$#q) {
+    push @{$list}, [ $q[$i][0], $q[$i][1], $q[$i][2] ];
   }
   return $list;
 }
@@ -2402,6 +2411,7 @@ sub get_net($$) {
 		      "range_start,range_end,vlan,cdate,cuser,mdate,muser,".
                       "netname,alevel,type", $id,$rec,"id"));
 
+  fix_bools($rec,"subnet,no_dhcp");
   get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comment",
 		  "type=4 AND ref=$id ORDER BY id",$rec,'dhcp_l');
 

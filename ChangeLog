@@ -1,6 +1,7 @@
 $Id$
 
 0.6.2beta
+	- preliminary support for DBI (DBD:Pg)
 	- fixes to zone file parsing code (UtilZone.pm)
 	- configuration file directory is now patched into Sauron.pm
 	  during install

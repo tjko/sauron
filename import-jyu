@@ -171,7 +171,7 @@ foreach $host (keys %zonedata) {
       $res = db_exec($sqlstr);
       fatal("Cannot update host record for router interface $host") 
 	if ($res<0);
-      print "no host found for router $host\n" if (db_status() ne 'UPDATE 1');
+      print "no host found for router $host\n" if ($res != 1);
 
       $rhash{$router[0]}={ MASK=>$router[1], NAME=>$host, VLAN=>$router[2]};
       $rcount++;
@@ -427,7 +427,7 @@ foreach $host (keys %zonedata) {
       die("Cannot update host $host") if (db_exec($str) < 0);
       $str='';
       $j=0;
-      print STDERR "."; # . db_status() . "\n";
+      print STDERR ".";
     }
 
     delete $zonedata{$host};

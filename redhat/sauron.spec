@@ -1,7 +1,7 @@
 Summary: Sauron - DNS/DHCP management system
 Name: sauron
-Version: 0.6.1
-Release: 1
+Version: 0.6.2beta
+Release: 2
 URL: http://sauron.jyu.fi/
 Packager: Timo Kokkonen <tjko@iki.fi>
 License: GPL
@@ -9,7 +9,8 @@ Group: Applications/Internet
 Source0: %{name}-%{version}.tar.gz
 BuildRoot: %{_tmppath}/%{name}-%{version}-buildroot
 BuildRequires: perl >= 0:5.004
-Requires: perl >= 0:5.004, perl-CGI, postgresql-perl
+Requires: perl >= 0:5.004, perl-CGI
+# Requires: postgresql-perl
 # Requires: perl-Net-Netmask
 BuildArch: noarch
 

@@ -452,7 +452,7 @@ sub make_bind() {
       if (@{$zone{ip}} > 1) {
 	print ZONEFILE ";\n; zone A record(s)\n;\n";
 	for $i (1..$#{$zone{ip}}) {
-	  next unless ($zone{ip}[$i][3] eq 't');
+	  next unless ($zone{ip}[$i][3] =~ /^(t|true|1)$/);
 	  ($ip=$zone{ip}[$i][1]) =~ s/\/32$//;
 	  $ttl=''; # fixme
 	  printf ZONEFILE $ZFORMAT, '',$ttl,$class,'A',$ip;

@@ -1366,7 +1366,7 @@ sub zones_menu() {
     $data{server}=$serverid;
     if (param('add_submit')) {
       unless (($res=form_check_form('addzone',\%data,\%new_zone_form))) {
-	if ($data{reverse} eq 't') {
+	if ($data{reverse} eq 't' || $data{reverse} == 1) {
 	  $new_net=arpa2cidr($data{name});
 	  if ($new_net eq '0.0.0.0/0') {
 	    print h2('Invalid name for reverse zone!');
@@ -1522,7 +1522,7 @@ sub zones_menu() {
   for $i (0 .. $#{$list}) {
     $type=$ztypenames{$$list[$i][2]};
     $color=$ztypecolors{$$list[$i][2]};
-    $rev=($$list[$i][3] eq 't' ? 'Yes' : 'No');
+    $rev=(($$list[$i][3] eq 't' || $$list[$i][3] == 1) ? 'Yes' : 'No');
     $id=$$list[$i][1];
     $name=$$list[$i][0];
     $comment=$$list[$i][4].'&nbsp;';
@@ -1553,7 +1553,7 @@ sub zones_menu() {
       next unless ($type =~ /^[MS]$/);
       $type=$ztypenames{$$list[$i][2]};
       $color=$ztypecolors{$$list[$i][2]};
-      $rev=($$list[$i][3] eq 't' ? 'Yes' : 'No');
+      $rev=(($$list[$i][3] eq 't' || $$list[$i][3] == 1) ? 'Yes' : 'No');
       $id=$$list[$i][1];
       $name=$$list[$i][0];
       $comment=$$list[$i][4].'&nbsp;';
@@ -2846,8 +2846,8 @@ sub nets_menu() {
         th("DHCP"),($novlans?'':th("VLAN")),th("Lvl"),"</TR>";
 
   for $i (0..$#q) {
-      $dhcp=($q[$i][5] eq 't' ? 'No' : 'Yes' );
-      if ($q[$i][3] eq 't') {
+      $dhcp=(($q[$i][5] eq 't' || $q[$i][5] == 1) ? 'No' : 'Yes' );
+      if ($q[$i][3] eq 't' || $q[$i][3] == 1) {
 	print $dhcp eq 'Yes' ? "<TR bgcolor=\"#eeeebf\">" :
 	       "<TR bgcolor=\"#eeeeee\">";
 	$type='Subnet';
@@ -2864,9 +2864,9 @@ sub nets_menu() {
       print "<td><a href=\"$selfurl?menu=nets&net_id=$q[$i][0]\">",
 	  "$q[$i][2]</a></td>",td($netname),
           td("<FONT size=-1>$name</FONT>"), td("<FONT size=-1>$type</FONT>"),
-          td("<FONT size=-1>$dhcp</FONT>"), 
+          td("<FONT size=-1>$dhcp</FONT>"),
 	  ($novlans?'':td("<FONT size=-1>$vlan</FONT>")),
-	  # td("<FONT size=-1>$comment</FONT>"), 
+	  # td("<FONT size=-1>$comment</FONT>"),
 	  td($q[$i][8].'&nbsp;'),"</TR>";
   }
 
@@ -3724,7 +3724,8 @@ sub login_auth() {
 	$state{'login'}=$ticks;
 	$state{'serverid'}=$user{'server'};
 	$state{'zoneid'}=$user{'zone'};
-	$state{'superuser'}='yes' if ($user{superuser} eq 't');
+	$state{'superuser'}='yes' if ($user{superuser} eq 't' ||
+				      $user{superuser} == 1);
 	if ($state{'serverid'} > 0) {
 	  $state{'server'}=$h{'name'} 
 	    unless(get_server($state{'serverid'},\%h));
@@ -4067,7 +4068,7 @@ sub load_state($) {
     $state{'uid'}=$q[0][0];
     $state{'addr'}=$q[0][1];
     $state{'addr'} =~ s/\/32\s*$//;
-    $state{'auth'}='yes' if ($q[0][2] eq 't');
+    $state{'auth'}='yes' if ($q[0][2] eq 't' || $q[0][2] == 1);
     $state{'mode'}=$q[0][3];
     if ($q[0][4] > 0) {
       $state{'serverid'}=$q[0][4];
@@ -4083,10 +4084,11 @@ sub load_state($) {
     $state{'searchopts'}=$q[0][11];
     $state{'searchdomain'}=$q[0][12];
     $state{'searchpattern'}=$q[0][13];
-    $state{'superuser'}='yes' if ($q[0][14] eq 't');
+    $state{'superuser'}='yes' if ($q[0][14] eq 't' || $q[0][14] == 1);
     $state{'gid'}=$q[0][15];
     $state{'sid'}=$q[0][16];
 
+    #logmsg("debug","load_state: " . join(',',@{$q[0]}));
     db_exec("UPDATE utmp SET last=" . time() . " WHERE cookie='$id';");
     return 1;
   }

@@ -1,4 +1,4 @@
-# Sauron::DB.pm  -- Sauron database interface routines
+# Sauron::DB.pm  -- Sauron database interface routines using Pg.pm module
 #
 # $Id$
 #

@@ -46,7 +46,8 @@ if ($opt_versions) {
 
   print "CGI: ",$CGI::VERSION,"\n";
   print "Digest::MD5: ",$Digest::MD5::VERSION,"\n";
-  print "Pg: ",$Pg::VERSION,"\n";
+  print "Pg: ",$Pg::VERSION,"\n" if ($Pg::VERSION);
+  print "DBI: ",$DBI::VERSION,"\n" if ($DBI::VERSION);
   print "Net::DNS: ",$Net::DNS::VERSION,"\n";
   print "Net::Netmask: ",$Net::Netmask::VERSION,"\n\n";
 

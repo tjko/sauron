@@ -16,6 +16,15 @@ AC_PROG_INSTALL
 AC_PROG_MAKE_SET
 AC_PROG_LN_S
 
+PERL_DB_BACKEND="DB-Pg.pm"
+
+AC_ARG_WITH(DBI, [  --with-DBI              use DBI module instead of Pg ],
+	[ if test $withval = yes; then
+            PERL_DB_BACKEND="DB-DBI.pm" 
+          fi
+          echo "foo: $withval"
+        ])
+
 AC_PATH_PROG(PERL,perl)
 
 dnl Checks for libraries.
@@ -46,7 +55,11 @@ AC_CHECK_SIZEOF(int)
 dnl Checks for library functions.
 AC_CHECK_FUNCS(getopt_long, break, [GNUGETOPT="getopt.o getopt1.o"])
 AC_SUBST(GNUGETOPT)
+AC_SUBST(PERL_DB_BACKEND)
 
+echo "------------------------------------------------------------"
+echo "Selected Perl Database backend: $PERL_DB_BACKEND"
+echo "------------------------------------------------------------"
 
 
 AC_OUTPUT(Makefile)

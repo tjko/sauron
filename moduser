@@ -231,7 +231,7 @@ if ($opt_list) {
 	}
       printf "%-10s %-10s %-25s %-25s %-5s\n", 
               $q[$i][1],$group,substr($q[$i][2],0,25),
-	      substr($q[$i][5],0,25),($q[$i][3] eq 't' ? 'Yes' : '');
+	      substr($q[$i][5],0,25),($q[$i][3] =~ /^(t|1)$/ ? 'Yes' : '');
     }
   }
 
@@ -395,7 +395,7 @@ if ($modgroup) {
         "           longname: $longname\n",
         "              email: $email\n",
         "               info: $comment\n",
-        "          superuser: " ,($q[0][2] eq 't' ? 'Yes':'No'), "\n",
+        "          superuser: " ,($q[0][2] =~ /^(t|1)$/ ? 'Yes':'No'), "\n",
         "              group: $gidname (gid=$gid)\n",
 	"      passwd status: $status\n",
 	"         last login: $last_from\n",

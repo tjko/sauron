@@ -401,9 +401,9 @@ sub form_magic($$$) {
 	  $ip=$$a[$j][1];
 	  $ip =~ s/\/\d{1,2}$//g;
 	  param($p1."_".$j."_1",$ip);
-	  $t=''; $t='on' if ($$a[$j][2] eq 't');
+	  $t=''; $t='on' if ($$a[$j][2] eq 't' || $$a[$j][2] == 1);
 	  param($p1."_".$j."_2",$t);
-	  $t=''; $t='on' if ($$a[$j][3] eq 't');
+	  $t=''; $t='on' if ($$a[$j][3] eq 't' || $$a[$j][3] == 1);
 	  param($p1."_".$j."_3",$t);
 	  #param($p1."_".$j."_4",$$a[$j][4]);
 	}
@@ -762,7 +762,7 @@ sub display_form($$) {
     }
     if ($rec->{'no_false'}) {
       $val=$data->{$rec->{tag}};
-      next if ($val =~ /^[Ff]/);
+      next if ($val =~ /^(f|F|false|0)$/);
     }
 
     $val=$data->{$rec->{tag}};
@@ -838,8 +838,8 @@ sub display_form($$) {
 	$ip=$$a[$j][1];
 	$ip=~ s/\/\d{1,2}$//g;
 	$ipinfo='';
-	$ipinfo.=' (no reverse)' if ($$a[$j][2] ne 't');
-	$ipinfo.=' (no A record)' if ($$a[$j][3] ne 't');
+	$ipinfo.=' (no reverse)' if ($$a[$j][2] ne 't' && $$a[$j][2] != 1);
+	$ipinfo.=' (no A record)' if ($$a[$j][3] ne 't' && $$a[$j][3] != 1);
 	print Tr(td($ip),td($ipinfo));
       }
       print "</TABLE></TD>\n";
