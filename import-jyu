@@ -121,19 +121,8 @@ warn("No SOA record found in hosts file!") unless ($rec);
 
 # update zone record
 if ($rec) {
-  print "Updating zone record...\n";
+  print "Updating zone/server specific stuff...\n";
   $dhcplist = db_build_list_str($rec->{DHCP});
-
-#  $sqlstr = "UPDATE zones " .
-#            "SET dhcp='{$dhcplist}' " .
-#	    "WHERE id=$zoneid;";
-#  $res = db_exec($sqlstr);
-#  die("Cannot update zone record '$zonename'!") if ($res < 0);
-
-  $sqlstr = "UPDATE servers SET dhcp='{$dhcplist}' " .
-            "WHERE id=$serverid;";
-  $res = db_exec($sqlstr);   # voi poistaa!!!!!!!!!!!!!!!!!!!
-  die("Cannot update server record!") if ($res < 0);
 
   foreach $rtmp (@{$rec->{DHCP}}) {
     next if ($rtmp =~ /^\s*$/);
@@ -187,10 +176,10 @@ foreach $net (keys %rhash) {
   #print "$n $rec->{NAME} $rec->{ETHER}\n" if ($rec->{ETHER} ne '');
   #print "$n $rec->{NAME} : $net : $rec->{MASK} : $rec2->{INFO}\n";
 
-  $sqlstr = "INSERT INTO nets (cuser,muser,server,net,comment,dhcp," .
+  $sqlstr = "INSERT INTO nets (cuser,muser,server,net,comment," .
             "subnet,no_dhcp) " .
     "VALUES('$user','$user',$serverid,'$n','$rec2->{INFO}'," .
-    "'{$dhcplist}',true,false);";
+    "true,false);";
 
   if (db_exec($sqlstr) < 0) {
     warn("net record for '$n' already exists!") 
@@ -243,7 +232,7 @@ foreach $host (keys %zonedata) { # find groups
   }
 }
 foreach $group (keys %grouphash) {
-  #print "group: $group\n";
+  print "group: $group\n";
   $host=add_origin($group,$origin);
   $rec=$zonedata{$host};
   if (! $rec) {
@@ -264,9 +253,8 @@ foreach $group (keys %grouphash) {
   }
 
   $sqlstr="INSERT INTO groups " .
-          "(cuser,muser,server,name,dhcp,printer,comment) " .
-          "VALUES('$user','$user',$serverid,'$group',$dhcplist," .
-	  "$printerlist,'$comment');";
+          "(cuser,muser,server,name,comment) " .
+          "VALUES('$user','$user',$serverid,'$group','$comment');";
   if (db_exec($sqlstr) < 0) {
     warn("group '$group' allready exists") 
   } else {
@@ -322,8 +310,8 @@ foreach $host (keys %zonedata) {
       $ptype=3;
       print "printer class: $host2\n";
       $sqlstr="INSERT INTO printer_classes " .
-	"(cuser,muser,name,printer,comment) " .
-	  "VALUES('$user','$user','$host2','{$prlist}','imported entry');";
+	"(cuser,muser,name,comment) " .
+	  "VALUES('$user','$user','$host2','imported entry');";
       if (db_exec($sqlstr) < 0) {
 	warn("cannot insert printer_class '$host2'") ;
 	$lastid=-1;
@@ -337,9 +325,9 @@ foreach $host (keys %zonedata) {
       print "printer: $host $rec->{GROUP}\n";
       $sqlstr="INSERT INTO hosts " .
 	"(cuser,muser,zone,type,domain,hinfo_hw,hinfo_sw," .
-	"info,printer,comment,grp,prn) " .
+	"info,comment,grp,prn) " .
 	"VALUES('$user','$user',$zoneid,5,'$host2','REMOTE-PRINTER'," .
-	"'POSTSCRIPT','$info','{$prlist}','virtual printer entry'," .
+	"'POSTSCRIPT','$info','virtual printer entry'," .
 	"$group,true );";
       if (db_exec($sqlstr) < 0) {
 	warn("cannot insert virtual printer '$host2'");
@@ -420,8 +408,8 @@ foreach $host (keys %zonedata) {
 
     #print "host: $host $hostname HW=$ether\n";
 
-    $sqlstr = "UPDATE hosts SET ether=$ether, dhcp=$dhcplist, " .
-              "printer=$prlist, grp=$group, prn=$prn " .
+    $sqlstr = "UPDATE hosts SET ether=$ether, " .
+              "grp=$group, prn=$prn " .
 		"WHERE id=$lastid;";
 #              "WHERE zone=$zoneid AND domain='$hostname';";
 

@@ -184,7 +184,7 @@ die("unexpected error: Cannot get server record id!") if ($res != 1);
 
 $serverid = db_getvalue(0,0);
 
-#print "id=$serverid\n";
+print "id=$serverid\n";
 
 # build & update allow_transfer field
 for($i=0; $i <= $#allow_transfer; $i+=1) {
@@ -480,8 +480,8 @@ for ($i=0; $i <= $#zones; $i+=1) {
     $c=$wkshash{$wks};
     #print "wks: '$wks' $c\n";
     $wks_i_count++;
-    $sqlstr="INSERT INTO rr_wks (server,wks,comment) " .
-            "VALUES($serverid,'{$wks}'," .
+    $sqlstr="INSERT INTO rr_wks (server,comment) " .
+            "VALUES($serverid," .
             "'$servername:$wks_i_count');";
     $res=db_exec($sqlstr);
     die("cannot insert record in rr_wks") if ($res < 0);
@@ -509,7 +509,7 @@ for ($i=0; $i <= $#zones; $i+=1) {
     $c=$mxhash{$mx};
     #print "mx: '$mx' $c\n";
     $mx_i_count++;
-    $sqlstr="INSERT INTO rr_mx (zone,mx,comment) VALUES($zoneid,'{$mx}'," .
+    $sqlstr="INSERT INTO rr_mx (zone,comment) VALUES($zoneid," .
             "'$zone:$mx_i_count');";
     $res=db_exec($sqlstr);
     die("cannot insert record in rr_mx") if ($res < 0);
@@ -803,7 +803,6 @@ for ($i=0; $i <= $#zones; $i+=1) {
   }  
   #die("Cannot commit MX & WKS tempate pointer updates!") if (db_commit() < 0);
   print "\n";
-
 
     
   print "Updating glue records...\n";

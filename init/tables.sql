@@ -92,9 +92,10 @@ CREATE TABLE nets (
        rp_mbox	   TEXT DEFAULT '.',
        rp_txt	   TEXT DEFAULT '.',
        no_dhcp     BOOL DEFAULT false, 
-       dhcp	   TEXT[],
 
        comment	   TEXT,
+
+	/* dhcp	(dhcp_entries) */
 
        CONSTRAINT  nets_key PRIMARY KEY (net,server)
 ) INHERITS(pokemon);
@@ -160,10 +161,11 @@ CREATE TABLE printer_classes (
        id           SERIAL PRIMARY KEY,
        name	    TEXT UNIQUE NOT NULL CHECK(name <> ''),
 
-       printer	    TEXT[],
-       dentries     TEXT[],  
-
        comment	    TEXT
+
+       /* printer (printer_entries) */
+       /* dentries */
+
 ) INHERITS(pokemon);
 
 
@@ -197,7 +199,7 @@ CREATE TABLE rr_wks (
       id	   SERIAL PRIMARY KEY,
       server	   INT4 NOT NULL,
       
-      wks	   TEXT[],
+      /* wks	   TEXT[], */
       comment	   TEXT
 );
 
@@ -208,7 +210,7 @@ CREATE TABLE rr_mx (
        id	   SERIAL PRIMARY KEY,
        zone	   INT4 NOT NULL,
 
-       mx	   TEXT[],
+       /* mx	   TEXT[], */
        comment	   TEXT
 );
 

@@ -35,6 +35,7 @@ sub process_zonefile($$$$) {
     $fline=$_;
     #s/;.*$//o;
     next if /^\s*$/;
+    next if /^#/;
     #print "line: $_\n";
 
     if (/^\$ORIGIN\s+(\S+)(\s|$)/) {
