@@ -1,6 +1,7 @@
 $Id$
 
 0.7.1beta
+	- linking to "pages" inside Sauron now works (without frames)
 	- A host can now be a member of one of more "subgroups" in addition
 	  to one (main)group.
 	- Database connection interface changed, new configuration

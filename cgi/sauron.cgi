@@ -456,7 +456,7 @@ sub logout() {
 
 sub login_form($$) {
   my($msg,$c)=@_;
-  my($host);
+  my($host,$arg);
 
   $host='localhost???';
   $host=$1 if (self_url =~ /https?\:\/\/([^\/]+)\//);
@@ -475,9 +475,14 @@ sub login_form($$) {
                    td(password_field(-name=>'login_pwd',-maxlength=>'30')),
               "</TABLE>",
         hidden(-name=>'login',-default=>'yes'),
-        submit(-name=>'submit',-value=>'Login'),end_form,
+        submit(-name=>'submit',-value=>'Login'),
         p,"<br><br>You need to have cookies enabled for this site...",
-        "<br></CENTER></TD></TR></TABLE>",end_html();
+        "<br></CENTER></TD></TR></TABLE>";
+
+  # save arguments (allows linking to "pages" in Sauron)
+  foreach $arg (param()) { print hidden($arg,param($arg)); }
+
+  print end_form,end_html();
 
   $state{'mode'}='1';
   $state{'auth'}='no';
@@ -488,7 +493,7 @@ sub login_form($$) {
 
 sub login_auth() {
   my($u,$p);
-  my(%user,%h,$ticks,$pwd_chk);
+  my(%user,%h,$ticks,$pwd_chk,$arg,$arg_str);
 
   $ticks=time();
   $state{'auth'}='no';
@@ -547,6 +552,11 @@ sub login_auth() {
 	    unless(get_zone($state{'zoneid'},\%h));
 	}
 
+	foreach $arg (param()) {
+	  next if ($arg =~ /^(login_name|login_pwd|login|submit)$/);
+	  $arg_str .= hidden($arg,param($arg));
+	}
+
 	print "<TABLE border=0 cellspacing=0 bgcolor=\"#efefff\" " .
 	      " width=\"70%\">",
 	      "<TR bgcolor=\"#002d5f\">",
@@ -559,12 +569,12 @@ sub login_auth() {
 	      "<font color=\"white\">$SERVER_ID &nbsp; </font></td>",
 	      "</TR><TR><TD colspan=3><CENTER>\n";
 	print h1("Login ok!"),p,"<TABLE><TR><TD>",
-	    startform(-method=>'POST',-action=>$s_url),
-	    submit(-name=>'submit',-value=>'No Frames'),end_form,
-	    "</TD><TD> ",
-	    startform(-method=>'POST',-action=>"$s_url/frames"),
-	    submit(-name=>'submit',-value=>'Frames'),end_form,
-	    "</TD></TR></TABLE>";
+	      startform(-method=>'POST',-action=>$s_url),$arg_str,
+	      submit(-name=>'submit',-value=>'No Frames'),end_form,
+	      "</TD><TD> ",
+	      startform(-method=>'POST',-action=>"$s_url/frames"),$arg_str,
+	      submit(-name=>'submit',-value=>'Frames'),end_form,
+	      "</TD></TR></TABLE>";
 
 	# warn about expiring account
 	if ( ($user{expiration} > 0) &&

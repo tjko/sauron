@@ -30,8 +30,6 @@ sauron.cgi:
 	- allow user to list her previous sessions (similar to
           "last" command-line command)
         - more detailed logging (especially  host add/edit/delete)
-	- allow linking of pages "inside" Sauron (redirect user to
-          the page in original url after successfull authentication)
           
 
 browser.cgi:
