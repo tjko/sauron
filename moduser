@@ -27,7 +27,7 @@ $mdate = time;
 
 %addmodes=('server'=>1,'zone'=>2,'net'=>3,'host'=>4,'ipmask'=>5,
 	   'level'=>6,'elimit'=>7,'defdept'=>8,'tmplmask'=>9,
-	   'grpmask'=>10,'delmask'=>11);
+	   'grpmask'=>10,'delmask'=>11,'rhf'=>12);
 
 %masktypes=(4=>'IP',9=>'Tempalate',10=>'Group',11=>'Delete');
 
@@ -145,6 +145,14 @@ sub list_privs($$) {
     printf "%-6s %-8s %-25s %s\n",$d[$i][1],"DelMask",$d[$i][0],
       "([Host] Delete mask)";
   }
+
+  db_query("SELECT a.rule,a.id,a.rref  FROM user_rights a " .
+	   "WHERE a.rtype=12 AND a.ref=$id AND a.type=$utype ORDER BY id",\@d);
+  for $i (0..$#d) {
+    $d[$i][0] =~ s/\s+$//;
+    printf "%-6s %-8s %-25s %s\n",$d[$i][1],"RHF",$d[$i][0],
+      ($d[$i][2] ? 'optional' : 'required');
+  }
 }
 
 ##############################################
@@ -189,6 +197,7 @@ if ($opt_help || ($opt_user eq '' &&  $opt_list eq '')) {
         "   --add=\"tmplmask,<mask>\"               add Template-mask\n",
         "   --add=\"grpmask,<mask>\"                add Group-mask\n",
         "   --add=\"delmask,<mask>\"                add (Host)Delete-mask\n",
+        "   --add=\"rhf,<field>=0|1\"               add RequiredHostField-setting\n",
         "   --del=<id>                            delete rule by id\n",
         "   --delall                              delete all rules\n",
         "\n";
@@ -433,9 +442,10 @@ if (defined $opt_add) {
     print "Record types ",
       "1=server,2=zone,3=net,4=hostmask,5=IP-mask,6=priv.level,7=elimit,\n",
       "\t     8=defdept,9=Template-mask,10=Group-mask,11=Delete-mask\n",
+      "\t     12=ReqHostField\n",
       "Record type: ";
     chomp($type = <STDIN>);
-    unless ($type >= 1 && $type <=11) { print "invalid type!\n"; goto add_i; }
+    unless ($type >= 1 && $type <=12) { print "invalid type!\n"; goto add_i; }
     if ($type==1 || $type==2 || $type==3) {
       print "Enter server name: ";
       chomp($tmp = <STDIN>);
@@ -517,6 +527,21 @@ if (defined $opt_add) {
       $mode=$tmp;
       $ref=-1;
     }
+    elsif ($type==12) {
+      print "Enter field name (huser,dept,location,info,ether,asset_id,model,serial,misc): ";
+      chomp($tmp = <STDIN>);
+      $tmp =~ s/\s+|\s+$//g;
+      unless ($tmp =~ /^(huser|dept|location|info|ether|asset_id|model|serial|misc)$/) {
+	print "Invalid field name\n"; goto add_i;
+      }
+      $mode=$tmp;
+      print "Enter field mode (0=required,1=optional): ";
+      chomp($tmp = <STDIN>);
+      unless ($tmp =~ /^(1|0)$/) {
+	print "Invalid mode\n"; goto add_i;
+      }
+      $ref=$tmp;
+    }
 
     $mode=db_encode_str($mode);
     $res=db_exec("INSERT INTO user_rights (type,ref,rtype,rref,rule) " .
@@ -526,7 +551,7 @@ if (defined $opt_add) {
   }
 
   fatal("invalid parameter '$opt_add' for add option!")
-    unless ($opt_add =~ /^(server|zone|net|host|ipmask|level|elimit|defdept|tmplmask|grpmask|delmask),([^,\s]+)(,(R|RW|RWX))?$/);
+    unless ($opt_add =~ /^(server|zone|net|host|ipmask|level|elimit|defdept|tmplmask|grpmask|delmask|rhf),([^,\s]+)(,(R|RW|RWX))?$/);
   $type=$addmodes{$1};
   $tmp=$2;
   $mode=$4;
@@ -591,6 +616,14 @@ if (defined $opt_add) {
     fatal("invalid default department '$tmp'") unless (length($tmp) > 0);
     $mode=$tmp;
     $ref=-1;
+  }
+  elsif ($type==12) {
+    $tmp =~ s/^\s+|\s+$//g;
+    fatal("invalid field and/or mode '$tmp'")
+      unless ($tmp =~ /^(huser|dept|location|info|ether|asset_id|model|serial|misc)\=(1|0)$/);
+    $mode=$1;
+    $ref=$2;
+    print "add: $mode,$ref\n";
   }
 
   $mode=db_encode_str($mode);

@@ -1,6 +1,15 @@
 $Id$
 
 0.6.2beta
+	- new user privileges:
+	  - templatemask & groupmask for granting userss access to 
+	    greate & modify templates/groups with names matching to a 
+	    regular expression
+	  - deletemask for granting users privilige to only remove hosts 
+	    that match a regular expression
+	  - reqhostfield for fine tuning what fields in host add/edit
+	    forms are mandatory and which are optional
+	- new command: update-hosts to update hosts info from a CSV file
 	- custom zone file entries can be specified for each master
 	  zone, these lines will appear "as is" at the end of generated 
 	  zone file

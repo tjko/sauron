@@ -32,6 +32,258 @@ load_config();
 %yes_no_enum = (D=>'Default',Y=>'Yes', N=>'No');
 %boolean_enum = (f=>'No',t=>'Yes');
 
+
+@menulist = (
+	  ['Hosts','menu=hosts',0],
+	  ['Zones','menu=zones',0],
+	  ['Nets','menu=nets',0],
+	  ['Templates','menu=templates',0],
+	  ['Groups','menu=groups',0],
+	  ['Servers','menu=servers',0],
+	  ['Login','menu=login',0],
+	  ['About','menu=about',0],
+	 );
+
+%menus = (
+	  'servers'=>\&servers_menu,
+	  'zones'=>\&zones_menu,
+	  'login'=>\&login_menu,
+	  'hosts'=>\&hosts_menu,
+	  'about'=>\&about_menu,
+	  'nets'=>\&nets_menu,
+	  'templates'=>\&templates_menu,
+	  'groups'=>\&groups_menu
+);
+
+%menuhash=(
+	    'servers'=>[
+			['Show Current',''],
+			['Select','sub=select'],
+			[],
+			['Add','sub=add'],
+			['Delete','sub=del'],
+			['Edit','sub=edit']
+		       ],
+	    'zones'=>[
+		      ['Show Current',''],
+		      ['Show pending','sub=pending'],
+		      [],
+		      ['Select','sub=select'],
+		      [],
+		      ['Add','sub=add'],
+		      ['Copy','sub=Copy'],
+		      ['Delete','sub=Delete'],
+		      ['Edit','sub=Edit'],
+		      [],
+		      ['Add Default Zones','sub=AddDefaults']
+		     ],
+	    'nets'=>[
+		     ['Networks',''],
+		     ['Add net','sub=addnet'],
+		     ['Add subnet','sub=addsub'],
+		     [],
+		     ['VLANs','sub=vlans'],
+		     ['Add vlan','sub=addvlan']
+		    ],
+	    'templates'=>[
+			  ['Show MX','sub=mx'],
+			  ['Show WKS','sub=wks'],
+			  ['Show Prn Class','sub=pc'],
+			  ['Show HINFO','sub=hinfo'],
+			  [],
+			  ['Add MX','sub=addmx'],
+			  ['Add WKS','sub=addwks'],
+			  ['Add Prn Class','sub=addpc'],
+			  ['Add HINFO','sub=addhinfo']
+			 ],
+	    'groups'=>[
+		       ['Groups',''],
+		       [],
+		       ['Add','sub=add']
+		      ],
+	    'hosts'=>[
+		      ['Search',''],
+		      ['Last Search','sub=browse&lastsearch=1'],
+		      [],
+		      ['Add host','sub=add&type=1'],
+		      [],
+		      ['Add alias','sub=add&type=4'],
+		      [],
+		      ['Add MX entry','sub=add&type=3'],
+		      ['Add delegation','sub=add&type=2'],
+		      ['Add glue rec.','sub=add&type=6'],
+		      ['Add DHCP entry','sub=add&type=9'],
+		      ['Add printer','sub=add&type=5'],
+		      ['Add SRV rec.','sub=add&type=8'],
+		      [],
+		      ['Add reservation','sub=add&type=101']
+		     ],
+	    'login'=>[
+		      ['User Info',''],
+		      ['Who','sub=who'],
+		      ['News (motd)','sub=motd'],
+		      [],
+		      ['Login','sub=login'],
+		      ['Logout','sub=logout'],
+		      [],
+		      ['Change password','sub=passwd'],
+		      ['Edit settings','sub=edit'],
+		      ['Save defaults','sub=save'],
+		      ['Frames OFF','FRAMEOFF','frames'],
+		      ['Frames ON','FRAMEON','noframes'],
+		      [],
+		      ['Lastlog','sub=lastlog','root'],
+		      ['Session Info','sub=session','root'],
+		      ['Add news msg','sub=addmotd','root']
+		     ],
+	    'about'=>[
+		      ['About',''],
+		      ['Copyright','sub=copyright'],
+		      ['License','sub=copying']
+		     ]
+);
+
+
+sub make_cookie($);
+sub login_form($$);
+sub login_auth();
+sub load_state($);
+sub logout();
+sub hosts_menu();
+sub top_menu($);
+sub left_menu($);
+sub frame_set();
+sub frame_set2();
+sub frame_1();
+sub frame_2();
+
+
+#####################################################################
+
+$frame_mode=0;
+$pathinfo = path_info();
+$script_name = script_name();
+($script_path = $script_name) =~ s/[^\/]+$//;
+$s_url = script_name();
+$selfurl = $s_url . $pathinfo;
+$menu=param('menu');
+#$menu='login' unless ($menu);
+$remote_addr = $ENV{'REMOTE_ADDR'};
+$remote_host = remote_host();
+
+html_error("Invalid log path (LOG_DIR)") unless (-d $LOG_DIR);
+html_error("Cannot write to log file")
+  if (logmsg(($debug_mode ? "debug":"test"),"CGI access from $remote_addr")
+      < 0);
+html_error("No database connection defined (DB_CONNECT)") unless ($DB_CONNECT);
+html_error("Cannot connect to database") unless (db_connect2($DB_CONNECT));
+html_error("Database format mismatch!")
+  if (sauron_db_version() ne get_db_version());
+html_error("CGI interface disabled: $res") if (($res=cgi_disabled()));
+
+unless (is_cidr($remote_addr)) {
+  logmsg("notice","Warning: www server does not set standard CGI " .
+	          "environment variable: REMOTE_ADDR!!! ($remote_addr)");
+  $remote_addr = '0.0.0.0';
+}
+
+($scookie = cookie(-name=>"sauron-$SERVER_ID")) =~ s/[^A-Fa-f0-9]//g;
+if ($scookie) {
+  unless (load_state($scookie)) {
+    logmsg("notice","invalid cookie ($scookie) supplied by $remote_addr");
+    undef $scookie;
+  }
+}
+
+unless ($scookie) {
+  logmsg("notice","new connection from: $remote_addr");
+  $new_cookie=make_cookie($script_path);
+  print header(-cookie=>$new_cookie,-charset=>$SAURON_CHARSET,
+	       -target=>'_top',-expires=>'now'),
+        start_html(-title=>"Sauron Login",-BGCOLOR=>'white');
+  login_form("Welcome",$ncookie);
+}
+
+if ($state{'mode'} eq '1' && param('login') eq 'yes') {
+  logmsg("debug","login authentication: $remote_addr");
+  print header(-charset=>$SAURON_CHARSET,-target=>'_top',-expires=>'now'),
+        start_html(-title=>"Sauron Login",-BGCOLOR=>'white');
+  login_auth();
+}
+
+if ($state{'auth'} ne 'yes' || $pathinfo eq '/login') {
+  logmsg("notice","reconnect from: $remote_addr");
+  update_lastlog($state{uid},$state{sid},4,$remote_addr,$remote_host);
+  print header(-charset=>$SAURON_CHARSET,-target=>'_top',-expires=>'now'),
+        start_html(-title=>"Sauron Login",-BGCOLOR=>'white');
+  login_form("Welcome (again)",$scookie);
+}
+
+if ((time() - $state{'last'}) > $SAURON_USER_TIMEOUT) {
+  logmsg("notice","connection timed out for $remote_addr " .
+	 $state{'user'});
+  update_lastlog($state{uid},$state{sid},3,$remote_addr,$remote_host);
+  print header(-charset=>$SAURON_CHARSET,-target=>'_top',-expires=>'now'),
+        start_html(-title=>"Sauron Login",-BGCOLOR=>'white');
+  login_form("Your session timed out. Login again",$scookie);
+}
+
+unless ($SAURON_NO_REMOTE_ADDR_AUTH) {
+  if ($remote_addr ne $state{'addr'}) {
+    logmsg("notice",
+	   "cookie for '$state{user}' reseived from wrong host: " .
+	   $remote_addr . " (expecting it from: $state{addr})");
+    html_error("Unauthorized Access denied!");
+  }
+}
+
+
+$server=$state{'server'};
+$serverid=$state{'serverid'};
+$zone=$state{'zone'};
+$zoneid=$state{'zoneid'};
+
+unless ($menu) {
+  $menu='hosts';
+  $menu='zones' unless ($zoneid > 0);
+  $menu='servers' unless ($serverid > 0);
+}
+
+
+if ($pathinfo ne '') {
+  $frame_mode=1 if ($pathinfo =~ /^\/frame/);
+  logout() if ($pathinfo eq '/logout');
+  frame_set() if ($pathinfo eq '/frames');
+  frame_set2() if ($pathinfo eq '/frames2');
+  frame_1() if ($pathinfo eq '/frame1');
+  frame_2() if ($pathinfo =~ /^\/frame2/);
+}
+
+
+cgi_util_set_zoneid($zoneid);
+cgi_util_set_serverid($serverid);
+set_muser($state{user});
+$bgcolor='black';
+$bgcolor='white' if ($frame_mode);
+
+unless ($state{superuser} eq 'yes') {
+  html_error("cannot get permissions!")
+    if (get_permissions($state{uid},$state{gid},\%perms));
+  foreach $rhf_key (keys %{$perms{rhf}}) {
+    $SAURON_RHF{$rhf_key}=$perms{rhf}->{$rhf_key};
+  }
+} else {
+  $perms{alevel}=999 if ($state{superuser});
+}
+
+if (param('csv')) {
+  print header(-type=>'text/csv',-target=>'_new',-attachment=>'results.csv');
+  hosts_menu();
+  exit(0);
+}
+
+####################################################################
+
 %server_form = (
  data=>[
   {ftype=>0, name=>'Server' },
@@ -937,253 +1189,7 @@ load_config();
  ]
 );
 
-
-@menulist = (
-	  ['Hosts','menu=hosts',0],
-	  ['Zones','menu=zones',0],
-	  ['Nets','menu=nets',0],
-	  ['Templates','menu=templates',0],
-	  ['Groups','menu=groups',0],
-	  ['Servers','menu=servers',0],
-	  ['Login','menu=login',0],
-	  ['About','menu=about',0],
-	 );
-
-%menus = (
-	  'servers'=>\&servers_menu,
-	  'zones'=>\&zones_menu,
-	  'login'=>\&login_menu,
-	  'hosts'=>\&hosts_menu,
-	  'about'=>\&about_menu,
-	  'nets'=>\&nets_menu,
-	  'templates'=>\&templates_menu,
-	  'groups'=>\&groups_menu
-);
-
-%menuhash=(
-	    'servers'=>[
-			['Show Current',''],
-			['Select','sub=select'],
-			[],
-			['Add','sub=add'],
-			['Delete','sub=del'],
-			['Edit','sub=edit']
-		       ],
-	    'zones'=>[
-		      ['Show Current',''],
-		      ['Show pending','sub=pending'],
-		      [],
-		      ['Select','sub=select'],
-		      [],
-		      ['Add','sub=add'],
-		      ['Copy','sub=Copy'],
-		      ['Delete','sub=Delete'],
-		      ['Edit','sub=Edit'],
-		      [],
-		      ['Add Default Zones','sub=AddDefaults']
-		     ],
-	    'nets'=>[
-		     ['Networks',''],
-		     ['Add net','sub=addnet'],
-		     ['Add subnet','sub=addsub'],
-		     [],
-		     ['VLANs','sub=vlans'],
-		     ['Add vlan','sub=addvlan']
-		    ],
-	    'templates'=>[
-			  ['Show MX','sub=mx'],
-			  ['Show WKS','sub=wks'],
-			  ['Show Prn Class','sub=pc'],
-			  ['Show HINFO','sub=hinfo'],
-			  [],
-			  ['Add MX','sub=addmx'],
-			  ['Add WKS','sub=addwks'],
-			  ['Add Prn Class','sub=addpc'],
-			  ['Add HINFO','sub=addhinfo']
-			 ],
-	    'groups'=>[
-		       ['Groups',''],
-		       [],
-		       ['Add','sub=add']
-		      ],
-	    'hosts'=>[
-		      ['Search',''],
-		      ['Last Search','sub=browse&lastsearch=1'],
-		      [],
-		      ['Add host','sub=add&type=1'],
-		      [],
-		      ['Add alias','sub=add&type=4'],
-		      [],
-		      ['Add MX entry','sub=add&type=3'],
-		      ['Add delegation','sub=add&type=2'],
-		      ['Add glue rec.','sub=add&type=6'],
-		      ['Add DHCP entry','sub=add&type=9'],
-		      ['Add printer','sub=add&type=5'],
-		      ['Add SRV rec.','sub=add&type=8'],
-		      [],
-		      ['Add reservation','sub=add&type=101']
-		     ],
-	    'login'=>[
-		      ['User Info',''],
-		      ['Who','sub=who'],
-		      ['News (motd)','sub=motd'],
-		      [],
-		      ['Login','sub=login'],
-		      ['Logout','sub=logout'],
-		      [],
-		      ['Change password','sub=passwd'],
-		      ['Edit settings','sub=edit'],
-		      ['Save defaults','sub=save'],
-		      ['Frames OFF','FRAMEOFF','frames'],
-		      ['Frames ON','FRAMEON','noframes'],
-		      [],
-		      ['Lastlog','sub=lastlog','root'],
-		      ['Session Info','sub=session','root'],
-		      ['Add news msg','sub=addmotd','root']
-		     ],
-	    'about'=>[
-		      ['About',''],
-		      ['Copyright','sub=copyright'],
-		      ['License','sub=copying']
-		     ]
-);
-
-
-sub make_cookie($);
-sub login_form($$);
-sub login_auth();
-sub load_state($);
-sub logout();
-sub hosts_menu();
-sub top_menu($);
-sub left_menu($);
-sub frame_set();
-sub frame_set2();
-sub frame_1();
-sub frame_2();
-
-
-#####################################################################
-
-$frame_mode=0;
-$pathinfo = path_info();
-$script_name = script_name();
-($script_path = $script_name) =~ s/[^\/]+$//;
-$s_url = script_name();
-$selfurl = $s_url . $pathinfo;
-$menu=param('menu');
-#$menu='login' unless ($menu);
-$remote_addr = $ENV{'REMOTE_ADDR'};
-$remote_host = remote_host();
-
-html_error("Invalid log path (LOG_DIR)") unless (-d $LOG_DIR);
-html_error("Cannot write to log file")
-  if (logmsg(($debug_mode ? "debug":"test"),"CGI access from $remote_addr")
-      < 0);
-html_error("No database connection defined (DB_CONNECT)") unless ($DB_CONNECT);
-html_error("Cannot connect to database") unless (db_connect2($DB_CONNECT));
-html_error("Database format mismatch!")
-  if (sauron_db_version() ne get_db_version());
-html_error("CGI interface disabled: $res") if (($res=cgi_disabled()));
-
-unless (is_cidr($remote_addr)) {
-  logmsg("notice","Warning: www server does not set standard CGI " .
-	          "environment variable: REMOTE_ADDR!!! ($remote_addr)");
-  $remote_addr = '0.0.0.0';
-}
-
-($scookie = cookie(-name=>"sauron-$SERVER_ID")) =~ s/[^A-Fa-f0-9]//g;
-if ($scookie) {
-  unless (load_state($scookie)) {
-    logmsg("notice","invalid cookie ($scookie) supplied by $remote_addr");
-    undef $scookie;
-  }
-}
-
-unless ($scookie) {
-  logmsg("notice","new connection from: $remote_addr");
-  $new_cookie=make_cookie($script_path);
-  print header(-cookie=>$new_cookie,-charset=>$SAURON_CHARSET,
-	       -target=>'_top',-expires=>'now'),
-        start_html(-title=>"Sauron Login",-BGCOLOR=>'white');
-  login_form("Welcome",$ncookie);
-}
-
-if ($state{'mode'} eq '1' && param('login') eq 'yes') {
-  logmsg("debug","login authentication: $remote_addr");
-  print header(-charset=>$SAURON_CHARSET,-target=>'_top',-expires=>'now'),
-        start_html(-title=>"Sauron Login",-BGCOLOR=>'white');
-  login_auth();
-}
-
-if ($state{'auth'} ne 'yes' || $pathinfo eq '/login') {
-  logmsg("notice","reconnect from: $remote_addr");
-  update_lastlog($state{uid},$state{sid},4,$remote_addr,$remote_host);
-  print header(-charset=>$SAURON_CHARSET,-target=>'_top',-expires=>'now'),
-        start_html(-title=>"Sauron Login",-BGCOLOR=>'white');
-  login_form("Welcome (again)",$scookie);
-}
-
-if ((time() - $state{'last'}) > $SAURON_USER_TIMEOUT) {
-  logmsg("notice","connection timed out for $remote_addr " .
-	 $state{'user'});
-  update_lastlog($state{uid},$state{sid},3,$remote_addr,$remote_host);
-  print header(-charset=>$SAURON_CHARSET,-target=>'_top',-expires=>'now'),
-        start_html(-title=>"Sauron Login",-BGCOLOR=>'white');
-  login_form("Your session timed out. Login again",$scookie);
-}
-
-unless ($SAURON_NO_REMOTE_ADDR_AUTH) {
-  if ($remote_addr ne $state{'addr'}) {
-    logmsg("notice",
-	   "cookie for '$state{user}' reseived from wrong host: " .
-	   $remote_addr . " (expecting it from: $state{addr})");
-    html_error("Unauthorized Access denied!");
-  }
-}
-
-
-$server=$state{'server'};
-$serverid=$state{'serverid'};
-$zone=$state{'zone'};
-$zoneid=$state{'zoneid'};
-
-unless ($menu) {
-  $menu='hosts';
-  $menu='zones' unless ($zoneid > 0);
-  $menu='servers' unless ($serverid > 0);
-}
-
-
-if ($pathinfo ne '') {
-  $frame_mode=1 if ($pathinfo =~ /^\/frame/);
-  logout() if ($pathinfo eq '/logout');
-  frame_set() if ($pathinfo eq '/frames');
-  frame_set2() if ($pathinfo eq '/frames2');
-  frame_1() if ($pathinfo eq '/frame1');
-  frame_2() if ($pathinfo =~ /^\/frame2/);
-}
-
-
-cgi_util_set_zoneid($zoneid);
-cgi_util_set_serverid($serverid);
-set_muser($state{user});
-$bgcolor='black';
-$bgcolor='white' if ($frame_mode);
-
-unless ($state{superuser} eq 'yes') {
-  html_error("cannot get permissions!")
-    if (get_permissions($state{uid},$state{gid},\%perms));
-} else {
-  $perms{alevel}=999 if ($state{superuser});
-}
-
-if (param('csv')) {
-  print header(-type=>'text/csv',-target=>'_new',-attachment=>'results.csv');
-  hosts_menu();
-  exit(0);
-}
-
+########################################################################
 
 print header(-charset=>$SAURON_CHARSET,-expires=>'now');
 if ($SAURON_DTD_HACK) {
@@ -3451,6 +3457,12 @@ sub login_menu() {
     foreach $s (@{$perms{grpmask}}) {
       print "<TR bgcolor=\"#dddddd\">",td("Group-mask"),td("$s"),
 	     td("(Group modify mask)"),"</TR>";
+    }
+
+    # RHF
+    foreach $s (sort keys %{$perms{rhf}}) {
+      print "<TR bgcolor=\"#dddddd\">",td("ReqHostField"),td("$s"),
+	    td(($perms{rhf}->{$s} ? 'Optional':'Required')),"</TR>";
     }
 
     # alevel permissions

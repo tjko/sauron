@@ -962,3 +962,81 @@
 
 </section>
 
+<section id="update-hosts-cmd">
+<title>update-hosts</>
+<para>
+  Utility for updating host entries from a generic CSV file.
+  Input file must contain at least IP-numbers or domain names
+  field that is used to find matching hosts from Sauron. 
+  Column ordering of the input file is free and columns to use
+  can be specified using command-line options.
+</para>
+<cmdsynopsis>
+  <command>update-hosts</>
+  <arg>--help</>
+  <arg><replaceable>OPTIONS</></>
+  <arg choice=req><replaceable>servername</></>
+  <arg choice=req><replaceable>zonename</></>
+  <arg choice=plain><replaceable>file</></>
+</cmdsynopsis>
+<informaltable frame=all>
+  <tgroup cols=2>
+  <thead><row><entry>option</><entry>description</></row></thead>
+  <tbody>
+  <row><entry><option>--domain=<replaceable>n</></></>
+       <entry>column <replaceable>n</> contains domain names</>
+  </row>
+  <row><entry><option>--ip=<replaceable>n</></></>
+       <entry>column <replaceable>n</> contains IP addresses</>
+  </row>
+  <row><entry><option>--ether=<replaceable>n</></></>
+       <entry>column <replaceable>n</> contains Ethernet (MAC) addresses</>
+  </row>
+  <row><entry><option>--hinfo=<replaceable>n</></></>
+       <entry>column <replaceable>n</> contains HINFO data 
+       (like <quote>PC UNIX-LINUX</>)</>
+  </row>
+  <row><entry><option>--dept=<replaceable>n</></></>
+       <entry>column <replaceable>n</> contains Department info</>
+  </row>
+  <row><entry><option>--room=<replaceable>n</></></>
+       <entry>column <replaceable>n</> contains Location info</>
+  </row>
+  <row><entry><option>--user=<replaceable>n</></></>
+       <entry>column <replaceable>n</> contains User info</>
+  </row>
+  <row><entry><option>--info=<replaceable>n</></></>
+       <entry>column <replaceable>n</> contains [Extra] Info data</>
+  </row>
+
+  <row><entry><option>--origin=<replaceable>origin</></></>
+       <entry>origin for domain names in input file</>
+  </row>
+  <row><entry><option>--filter=<replaceable>n</>,<replaceable>regexp</></></>
+       <entry>select only lines where data in column <replaceable>n</>
+        matches the regular expression</>
+  </row>
+  <row><entry><option>--setdept=<replaceable>department</></></>
+       <entry>default value for department field</>
+  </row>
+  <row><entry><option>--setgrp=<replaceable>groupname</></></>
+       <entry>default group for hosts</>
+  </row>
+  <row><entry><option>--setmx=<replaceable>templatename</></></>
+       <entry>default MX-template for hosts</>
+  </row>
+
+  <row><entry><option>--commit</></>
+       <entry>Commit changes (without this no changes is made to database).</>
+  </row>
+  </tbody>
+  </tgroup>
+</informaltable>
+<para>
+  If both options <option>--ip</> and <option>--domain</> are used
+  then host name is also updated if host can be found from Sauron
+  only by it's IP-address.
+</para>
+
+</section>
+
