@@ -131,10 +131,14 @@ error("invalid directory configuration")
   {ftype=>0, name=>'Browse hosts' },
   {ftype=>3, tag=>'type', name=>'Record type', type=>'enum',
    enum=>\%host_types},
+  {ftype=>3, tag=>'order', name=>'Sort order', type=>'enum',
+   enum=>{1=>'by hostname',2=>'by IP'}},
   {ftype=>3, tag=>'net', name=>'Subnet', type=>'list', listkeys=>'nets_k', 
    list=>'nets'},
-  {ftype=>1, tag=>'domain', name=>'Domain pattern (regexp)', type=>'text', len=>40,
-   empty=>1}
+  {ftype=>1, tag=>'cidr', name=>'CIDR (block)', type=>'cidr',
+   len=>20, empty=>1},
+  {ftype=>1, tag=>'domain', name=>'Domain pattern (regexp)', type=>'text',
+   len=>40, empty=>1}
  ],
  bgcolor=>'#eeeebf',
  border=>'0',		
@@ -461,48 +465,109 @@ sub hosts_menu() {
     print p,'edit...';
   }
   elsif ($sub eq 'browse') {
+    %bdata=(domain=>'',net=>'ANY',nets=>\%nethash,nets_k=>\@netkeys,
+	    type=>1,order=>2);
+    if (form_check_form('bh',\%bdata,\%browse_hosts_form)) {
+      print p,'<FONT color="red">Invalid parameters.</FONT>';
+      goto browse_hosts;
+    }
+
     undef $typerule;
+    $limit=param('bh_psize');
+    $page=param('bh_page');
+    $offset=$page*$limit;
+
     $type=param('bh_type');
     if (param('bh_type') > 0) {
       $typerule=" AND a.type=".param('bh_type')." ";
+    } else {
+      $typerule2=" AND (a.type=1 OR a.type=6) ";
     }
     undef $netrule; 
     if (param('bh_net') ne 'ANY') {
       $netrule=" AND b.ip << '" . param('bh_net') . "' ";
     }
+    if (param('bh_cidr')) {
+      $netrule=" AND b.ip <<= '" . param('bh_cidr') . "' ";
+    }
     undef $domainrule;
     if (param('bh_domain') ne '') {
       $domainrule=" AND a.domain ~ '".param('bh_domain')."' "; 
     }
+    if (param('bh_order') == 1) { $sorder='5,1';  }
+    else { $sorder='1,5'; }
+
+    if (param('bh_cidr') || param('bh_net') ne 'ANY') {
+      $type=1;
+    }
 
     undef @q;
     $fields="a.id,a.type,a.domain,a.ether,a.info";
-    $sql1="SELECT b.ip,$fields FROM hosts a,rr_a b " .
-	  "WHERE a.zone=$zoneid AND b.host=a.id AND a.type=1 " .
+    $sql1="SELECT b.ip,'',$fields FROM hosts a,rr_a b " .
+	  "WHERE a.zone=$zoneid AND b.host=a.id $typerule $typerule2 " .
 	  " $netrule $domainrule ";
-    $sql2="SELECT '0.0.0.0',$fields FROM hosts a " .
-          "WHERE a.zone=$zoneid AND type!=1 $typerule $domainrule ";
+    $sql2="SELECT '0.0.0.0'::cidr,'',$fields FROM hosts a " .
+          "WHERE a.zone=$zoneid AND (a.type!=1 AND a.type!=6 AND a.type!=4) " .
+	  " $typerule $domainrule ";
+    $sql3="SELECT '0.0.0.0'::cidr,b.domain,$fields FROM hosts a,hosts b " .
+          "WHERE a.zone=$zoneid AND a.alias=b.id AND a.type=4 " .
+	  " $domainrule ";
+    $sql4="SELECT '0.0.0.0'::cidr,a.cname_txt,$fields FROM hosts a  " .
+          "WHERE a.zone=$zoneid AND a.alias=-1 AND a.type=4 " .
+	  " $domainrule ";
 
-    if ($type == 1) { $sql="$sql1 ORDER BY 4;"; }
-    elsif ($type == 0) { $sql="$sql1 UNION $sql2 ORDER BY 4;"; } 
-    else { $sql="$sql2 ORDER BY 4;"; }
+    if ($type == 1 || $type == 6) { 
+      $sql="$sql1 ORDER BY $sorder"; 
+    } elsif ($type == 4) { 
+      $sql="$sql3 UNION $sql4 ORDER BY $sorder"; 
+    } elsif ($type == 0) { 
+      $sql="$sql1 UNION $sql2 UNION $sql3 UNION $sql4 ORDER BY $sorder"; 
+    } 
+    else { $sql="$sql2 ORDER BY $sorder"; }
+    $sql.=" LIMIT $limit OFFSET $offset;";
     #print p,$sql;
     db_query($sql,\@q);
-    #print p,"Found " . scalar @q . " matching records:",br;
-    print "<TABLE cellpadding=1 BGCOLOR=\"#eeeeff\">",
-          Tr,"<TD colspan=5 bgcolor=#aaaaff><B>Zone:</B> $zone</TD>",
-          Tr,"<TD colspan=5 bgcolor=#aaaaff>Matches found: " . scalar @q .
-	    "</TD>",
-          "<TR bgcolor=#aaaaff>",th(['Hostname','IP','Type','Ether','Info']);
+    $count=scalar @q;
+    print "<TABLE width=\"100%\" cellpadding=1 BGCOLOR=\"#eeeeff\">",
+          Tr,"<TD colspan=5 bgcolor=#aadaff><B>Zone:</B> $zone</TD>",
+          Tr,"<TD align=right colspan=5 bgcolor=#aadaff>Page: " .
+	      ($page+1)."</TD>",
+          Tr,Tr,
+          "<TR bgcolor=#aaaaff>",th(['Hostname','Type','IP','Ether','Info']);
     for $i (0..$#q) {
+      $type=$q[$i][3];
       ($ip=$q[$i][0]) =~ s/\/\d{1,2}$//g;
-
-      print Tr,td([$q[$i][3],$ip,$q[$i][2],"<PRE>$q[$i][4]</PRE>",$q[$i][5]]);
+      $ip="(".add_origin($q[$i][1],$zone).")" if ($type==4);
+      $ip='N/A' if ($ip eq '0.0.0.0');
+      $ether=$q[$i][5];
+      $ether='N/A' unless($ether);
+      $hostname=add_origin($q[$i][4],$zone);
+      print Tr,td([$hostname,$host_types{$q[$i][3]},$ip,
+		   "<PRE>$ether</PRE>",$q[$i][6]]);
       last if ($i > 50);
     }
-    print "</TABLE>";
+    print "</TABLE><BR><CENTER>[";
+
+    $params="bh_type=".param('bh_type')."&bh_order=".param('bh_order').
+            "&bh_net=".param('bh_net')."&bh_cidr=".param('bh_cidr').
+	    "&bh_domain=".param('bh_domain')."&bh_psize=".param('bh_psize');
+    
+    if ($page > 0) {
+      $npage=$page-1;;
+      print "<A HREF=\"$selfurl?menu=hosts&sub=browse&bh_page=$npage&".
+	      "$params\">prev</A>";
+    } else { print "prev"; }
+    print "] [";
+    if ($count >= $limit) {
+      $npage=$page+1;
+      print "<A HREF=\"$selfurl?menu=hosts&sub=browse&bh_page=$npage&".
+	      "$params\">next</A>";
+    } else { print "next"; }
+    
+    print "]</CENTER><BR>";
   }
   else {
+  browse_hosts:
     #$nethash=get_nets($serverid);
     $nets=get_net_list($serverid,1);
     undef %nethash; undef @netkeys;
@@ -513,9 +578,11 @@ sub hosts_menu() {
       $nethash{$$nets[$i][0]}="$$nets[$i][0] - $$nets[$i][2]";
       push @netkeys, $$nets[$i][0];
     }
-    %bdata=(domain=>'',net=>'ANY',nets=>\%nethash,nets_k=>\@netkeys,type=>1);
+    %bdata=(domain=>'',net=>'ANY',nets=>\%nethash,nets_k=>\@netkeys,
+	    type=>1,order=>2);
     print startform(-method=>'POST',-action=>$selfurl),
-          hidden('menu','hosts'),hidden('sub','browse');
+          hidden('menu','hosts'),hidden('sub','browse'),
+          hidden('bh_page','0'),hidden('bh_psize','50');
     form_magic('bh',\%bdata,\%browse_hosts_form);
     print submit(-name=>'bh_submit',-value=>'Search'),end_form;
   }
@@ -836,6 +903,8 @@ sub form_check_field($$$) {
 
   unless ($empty == 1) {
     return 'Empty field not allowed!' if ($value =~ /^\s*$/);
+  } else {
+    return '' if ($value =~ /^\s*$/);
   }
 
 
@@ -936,6 +1005,7 @@ sub form_check_form($$$) {
       }
     }
     elsif ($type == 3) {
+      next if ($rec->{type} eq 'list');
       return 1 unless (${$rec->{enum}}{param($p)});
       $data->{$tag}=param($p);
     }
@@ -1070,7 +1140,7 @@ sub form_magic($$$) {
       } elsif ($rec->{type} eq 'list') {
 	$enum=$data->{$rec->{list}};
 	if ($rec->{listkeys}) {
-	  $values=$data->{$rec->{listkeys}}; print p,"foo1";
+	  $values=$data->{$rec->{listkeys}}; 
 	} else {
 	  $values=[sort keys %{$enum}];
 	}
