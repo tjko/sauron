@@ -7,7 +7,6 @@
 #
 require 5;
 use Getopt::Long;
-use Term::ReadKey;
 use Net::Netmask;
 use Sauron::DB;
 use Sauron::Util;
@@ -182,8 +181,7 @@ if ($opt_delete || $opt_rename || $opt_move || $opt_setgroup ||
     $opt_setedate) {
   if ($opt_commit) {
     print "Are you sure you want to make changes to database? [y/N]? ";
-    $answer = ReadLine 0;
-    chomp $answer;
+    chomp ($answer = <STDIN>);
     exit unless ($answer eq 'y' || $answer eq 'Y');
   }
 }

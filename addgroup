@@ -7,7 +7,6 @@
 #
 require 5;
 use Getopt::Long;
-use Term::ReadKey;
 use Sauron::DB;
 use Sauron::Util;
 
@@ -41,18 +40,15 @@ db_connect($DB_CONNECT);
 
 unless ($opt_group) {
   print "Enter group name: ";
-  $opt_group = lc(ReadLine 0);
-  chomp $opt_group;
+  chomp ($opt_group = lc(<STDIN>));
   $i=1;
 }
 fatal("Invalid groupname '$opt_group'!") 
   unless ($opt_group =~ /^[a-z0-9_\-]+$/);
 
-
 unless ($opt_name) {
   print "Enter group description: ";
-  $opt_name = ReadLine 0;
-  chomp $opt_name;
+  chomp ($opt_name = <STDIN>);
   $i=1;
 }
 
@@ -62,8 +58,7 @@ if ($i) { # ask confirmation only in interactive session...
   "\t Description: $opt_name\n",
   "Add this group [y/n]?";
 
-  $t=ReadLine 0;
-  chomp $t;
+  chomp ($t = <STDIN>);
   unless ($t eq 'y' || $t eq 'Y') {
     print "Group not added!\n";
     exit(1);

@@ -7,7 +7,6 @@
 #
 require 5;
 use Getopt::Long;
-use Term::ReadKey;
 use Sauron::DB;
 use Sauron::Util;
 use Sauron::BackEnd;
@@ -51,7 +50,7 @@ printf "%-9s %5s %-15s %14s - %s\n",
 print "-" x 78 . "\n";
 
 for $j (0..($count-1)) {
-  printf "$j %-9s %5d %-15s %14s - %s\n",
+  printf "%-9s %5d %-15s %14s - %s\n",
         $q[$j][0],$q[$j][1],$q[$j][2],$q[$j][3],$q[$j][4];
 }
 

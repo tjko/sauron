@@ -7,7 +7,6 @@
 #
 require 5;
 use Getopt::Long;
-use Term::ReadKey;
 use Sauron::DB;
 use Sauron::Util;
 use Sauron::BackEnd;
@@ -208,11 +207,7 @@ if ($modgroup) {
   if (defined $opt_passwd) {
     unless ($opt_passwd) {
       print "Enter password: ";
-      ReadMode 'noecho';
-      $opt_passwd = ReadLine 0;
-      print "\n";
-      ReadMode 'normal';
-      chomp $opt_passwd;
+      chomp ($opt_passwd = <STDIN>);
     }
 
     $salt=int(rand(900000)+100000);
@@ -312,11 +307,11 @@ if (defined $opt_add) {
   unless ($opt_add) {
   add_i:
     print "Record type [1=server,2=zone,3=net,4=hostmask,5=IP-mask,6=priv.level,7=elimit,8=defdept]: ";
-    $type = ReadLine 0; chomp $type;
+    chomp($type = <STDIN>);
     unless ($type >= 1 && $type <=8) { print "invalid type!\n"; goto add_i; }
     if ($type==1 || $type==2 || $type==3) {
       print "Enter server name: ";
-      $tmp = ReadLine 0; chomp $tmp;
+      chomp($tmp = <STDIN>);
       undef @d;
       db_query("SELECT id,name FROM servers WHERE name='$tmp';",\@d);
       if (@d < 1) { print "cannot find server!\n"; goto add_i; }
@@ -330,7 +325,7 @@ if (defined $opt_add) {
     }
     if ($type==2){
       print "Enter zone name: ";
-      $tmp = ReadLine 0; chomp $tmp;
+      chomp($tmp = <STDIN>);
       undef @d;
       db_query("SELECT id,name FROM zones " .
 	       "WHERE server=$serverid AND name='$tmp';",\@d);
@@ -341,7 +336,7 @@ if (defined $opt_add) {
     }
     elsif ($type==3) {
       print "Enter net (CIDR): ";
-      $tmp = ReadLine 0; chomp $tmp;
+      chomp($tmp = <STDIN>);
       unless (is_cidr($tmp)) { print "Invalid CIDR!"; goto add_i; }
       undef @d;
       db_query("SELECT id,name FROM nets " .
@@ -354,13 +349,13 @@ if (defined $opt_add) {
     }
     elsif ($type==4) {
       print "Enter hostname mask (regexp): ";
-      $tmp = ReadLine 0; chomp $tmp;
+      chomp($tmp = <STDIN>);
       $mode=$tmp;
       $ref=-1;
     }
     elsif ($type==5) {
       print "Enter IP mask (eg 192.162.1-2.*, 192.162.1-2.10-254): ";
-      $tmp = ReadLine 0; chomp $tmp;
+      chomp($tmp = <STDIN>);
       unless (check_ipmask($tmp,'')==1) {
 	  print "invalid IP-mask!\n"; goto add_i;
       }
@@ -369,7 +364,7 @@ if (defined $opt_add) {
     }
     elsif ($type==6) {
       print "Enter privilege level (0-999): ";
-      $tmp = ReadLine 0; chomp $tmp;
+      chomp($tmp = <STDIN>);
       unless (($tmp =~ /^\d+$/) && ($tmp < 999)) {
 	  print "invalid level\n"; goto add_i;
       }
@@ -378,7 +373,7 @@ if (defined $opt_add) {
     }
     elsif ($type==7) {
       print "Enter host expiration limit (0-n days): ";
-      $tmp = ReadLine 0; chomp $tmp;
+      chomp($tmp = <STDIN>);
       unless (($tmp =~ /^\d+$/) && ($tmp >= 0)) {
 	print "invalid expiration limit\n"; goto add_i;
       }
@@ -387,7 +382,7 @@ if (defined $opt_add) {
     }
     elsif ($type==8) {
       print "Enter default department (string): ";
-      $tmp = ReadLine 0; chomp $tmp;
+      chomp($tmp = <STDIN>);
       $tmp =~ s/^\s+|\s+$//g;
       unless (length($tmp) >= 1) {
 	print "invalid default department\n"; goto add_i;
@@ -516,8 +511,7 @@ sub ask_mode($n) {
   foreach $i (keys %modehash) { print "$i=$modehash{$i} "; }
   print "]: ";
 
-  $t = ReadLine 0;
-  chomp $t;
+  chomp($t = <STDIN>);
   $mode=$modehash{$t};
 
   return $mode;

@@ -7,7 +7,6 @@
 #
 require 5;
 use Getopt::Long;
-use Term::ReadKey;
 use Net::Netmask;
 use Sauron::DB;
 use Sauron::Util;
