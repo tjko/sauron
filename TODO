@@ -5,14 +5,16 @@ general:
 	  from text files in standard zonefile format...
 	- IPv6 support
         - add database format version check in db_connect{,2}
+	- add DBI support
+	
 
 import:
 	- real parser for both imports
 
-
 sauron:
 	- more sanity checks
-	- use tmp files
+	- printcap generation
+
 
 sauron.cgi:
 	- fix timeout problem with huge zone/server deletes...(faster server :)
@@ -22,7 +24,9 @@ sauron.cgi:
 	- templates for adding hosts
 	- advertise "Save settings" feature if user doesn't have any
           default settings	
-
+	- sort VLANs in alphabetical order in drop-down boxes
+	- add support to do ping sweeps for subnets (using nmap)
+	- module support for easily extending user interface
 
 browser.cgi:
 	- optional user authentication support
