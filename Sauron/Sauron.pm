@@ -30,6 +30,12 @@ sub set_defaults() {
   $main::SAURON_BGCOLOR = 'white';
   $main::SAURON_FGCOLOR = 'black';
   $main::SAURON_AUTH_PROG = '';
+  $main::SAURON_DHCP_CHK_PROG = '';
+  $main::SAURON_DHCP_CHK_ARGS = '-q -t -cf';
+  $main::SAURON_NAMED_CHK_PROG = '';
+  $main::SAURON_NAMED_CHK_ARGS = '';
+  $main::SAURON_ZONE_CHK_PROG = '';
+  $main::SAURON_ZONE_CHK_ARGS = '-q';
 
   $main::SAURON_RHF{huser}    = 0; # User
   $main::SAURON_RHF{dept}     = 0; # Dept.
