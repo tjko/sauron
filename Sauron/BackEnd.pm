@@ -2442,8 +2442,8 @@ sub get_net_by_cidr($$) {
 }
 
 
-sub get_net_list($$) {
-  my ($serverid,$subnets) = @_;
+sub get_net_list($$$) {
+  my ($serverid,$subnets,$alevel) = @_;
   my (@q,$list,$i);
 
   if ($subnets) {
@@ -2453,11 +2453,17 @@ sub get_net_list($$) {
     $subnets='';
   }
 
+  if ($alevel > 0) {
+    $alevel=" AND alevel <= $alevel ";
+  } else {
+    $alevel='';
+  }
+
   $list=[];
   return $list unless ($serverid >= 0);
 
   db_query("SELECT net,id,name FROM nets " .
-	   "WHERE server=$serverid $subnets ORDER BY net",\@q);
+	   "WHERE server=$serverid $subnets $alevel ORDER BY net",\@q);
 
   for $i (0..$#q) {
     push @{$list}, [ $q[$i][0], $q[$i][1], $q[$i][2] ];

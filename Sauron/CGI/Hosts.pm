@@ -389,7 +389,7 @@ sub make_net_list($$$$$$) {
 
   $pcheck=0 if (keys %{$perms->{net}} < 1);
 
-  $nets=get_net_list($id,1);
+  $nets=get_net_list($id,1,$perms->{alevel});
   undef %{$h}; undef @{$l};
 
   if ($flag > 0) {
