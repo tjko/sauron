@@ -24,6 +24,7 @@ sauron.cgi:
 	- add quick search like in browser.cgi
 	- option to "download" search results in CSV format
 	- remove confirm from logout
+	- delete: log ip & mac also history
 
 
 browser.cgi:
