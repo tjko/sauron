@@ -142,10 +142,15 @@ sub form_check_form($$$) {
     #print "<br>check $p,$type";
 
     if ($type == 1) {
+      $val=param($p);
+      if ($rec->{type} eq 'mac') {
+	$val="\U$val";
+	$val =~ s/[\s:-]//g;
+      }
       #print "<br>check $p ",param($p);
-      return 1 if (form_check_field($rec,param($p),0) ne '');
+      return 1 if (form_check_field($rec,$val,0) ne '');
       #print p,"$p changed! '",$data->{$tag},"' '",param($p),"'\n" if ($data->{$tag} ne param($p));
-      $data->{$tag}=param($p);
+      $data->{$tag}=$val;
     }
     elsif ($type == 101) {
       $tmp=param($p);

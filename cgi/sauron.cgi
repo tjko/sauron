@@ -234,7 +234,7 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>1, tag=>'hinfo_sw', name=>'HINFO software', type=>'hinfo', len=>20,
    empty=>1, iff=>['type','1']},
   {ftype=>1, tag=>'ether', name=>'Ethernet address', type=>'mac', len=>12,
-   iff=>['type','[19]'], empty=>1},
+   conv=>'U', iff=>['type','[19]'], empty=>1},
   {ftype=>4, tag=>'card_info', name=>'Card manufacturer', 
    iff=>['type','[19]']},
   {ftype=>1, tag=>'ether_alias_info', name=>'Ethernet alias', no_empty=>1,
@@ -312,7 +312,7 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>1, tag=>'hinfo_sw', name=>'HINFO software', type=>'hinfo', len=>20,
    empty=>1, iff=>['type','1']},
   {ftype=>1, tag=>'ether', name=>'Ethernet address', type=>'mac', len=>12,
-   iff=>['type','[19]'], iff2=>['ether_alias_info',''], empty=>0},
+   conv=>'U', iff=>['type','[19]'], iff2=>['ether_alias_info',''], empty=>0},
   {ftype=>4, tag=>'ether_alias_info', name=>'Ethernet alias', 
    iff=>['type','1']}, 
 
@@ -377,7 +377,7 @@ do "$PROG_DIR/cgi_util.pl";
    sql=>"SELECT hinfo FROM hinfo_templates WHERE type=1 ORDER BY pri,hinfo;",
    lastempty=>1, empty=>1, iff=>['type','1']},
   {ftype=>1, tag=>'ether', name=>'Ethernet address', type=>'mac', len=>12,
-   iff=>['type','[19]'], empty=>1},
+   conv=>'U', iff=>['type','[19]'], empty=>1},
   {ftype=>1, tag=>'model', name=>'Model', type=>'text', len=>30, empty=>1, 
    iff=>['type','1']},
   {ftype=>1, tag=>'serial', name=>'Serial no.', type=>'text', len=>20,
@@ -432,7 +432,7 @@ do "$PROG_DIR/cgi_util.pl";
    sql=>"SELECT hinfo FROM hinfo_templates WHERE type=1 ORDER BY pri,hinfo;",
    lastempty=>0, empty=>0, iff=>['type','1']},
   {ftype=>1, tag=>'ether', name=>'Ethernet address', type=>'mac', len=>12,
-   iff=>['type','[19]'], empty=>0},
+   conv=>'U', iff=>['type','[19]'], empty=>0},
   {ftype=>1, tag=>'model', name=>'Model', type=>'text', len=>30, empty=>1, 
    iff=>['type','1']},
   {ftype=>1, tag=>'serial', name=>'Serial no.', type=>'text', len=>20,
@@ -1519,7 +1519,7 @@ sub hosts_menu() {
   elsif ($sub eq 'add') {
     return if (check_perms('zone','RW'));
     $type=param('type');
-    return if (($type!=1) && check_perms('superuser',''));
+    return if (($type!=1) && check_perms('zone','RWX'));
     $newhostform = (check_perms('zone','RWX',1) ? \%restricted_new_host_form :
 		    \%new_host_form);
     unless ($host_types{$type}) {
@@ -2754,6 +2754,7 @@ sub login_form($$) {
   print p,"You should have cookies enabled for this site...",end_html();
   $state{'mode'}='1';
   $state{'auth'}='no';
+  $state{'superuser'}='no';
   save_state($c);
   exit;
 }
