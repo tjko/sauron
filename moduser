@@ -60,10 +60,8 @@ if ($opt_help || ($opt_user eq '' &&  $opt_listusers eq '')) {
         "   --add=\"zone,<zonename>,<mode>\"        add zone (mode=R|RW|RWS)\n",
         "   --add=\"net,<net>,<mode>\"              add net (mode=RW|RWS)\n",
         "   --add=\"host,<reg exp>\"                add hostname mask\n\n",
-        "   --del=\"<type>,<name|net|mask>\"        delete right\n",
-        "                                         (type=server|zone|net|host)\n",
-        "   --delall                              delete all rights\n",
-#        "   --list                                list all rights\n",
+        "   --del=<id>                            delete rule by id\n",
+        "   --delall                              delete all rules\n",
         "\n";
   exit(0);
 }
@@ -193,8 +191,8 @@ if ($modgroup) {
 
 unless (defined $opt_add || defined $opt_del || defined $opt_delall) {
   print 
-    "Type     Ref.                      Mode\n",
-    "-------- ------------------------- --------------------------------\n";
+    "ID     Type     Ref.                      Mode\n",
+    "------ -------- ------------------------- --------------------------------\n";
 
   print "[User priviliges]\n" if ($utype == 2);
   list_privs($id,$utype);
@@ -299,45 +297,13 @@ if (defined $opt_add) {
 }
 elsif (defined $opt_del) {
   fatal("invalid parameter to del option!")
-    unless ($opt_del =~ /^(server|zone|net|host),([^,\s]+)$/);
-  $type=$addmodes{$1};
-  $tmp=$2;
-  print "del $type,$tmp\n";
-  if ($type eq 1) {
-    undef @d;
-    db_query("SELECT a.id FROM user_rights a, servers b " .
-       "WHERE a.type=$utype AND a.ref=$id " . 
-       " AND a.rtype=1 AND a.rref=b.id AND b.name='$tmp';",\@d);
-    fatal("cannot find record (server) '$tmp'") if (@d < 1);
-    $ref=$d[0][0];
-  }
-  elsif ($type eq 2) {
-    undef @d;
-    db_query("SELECT a.id FROM user_rights a, zones b " .
-	"WHERE a.type=$utype AND a.ref=$id " .
-	" AND a.rtype=2 AND a.rref=b.id AND b.name='$tmp';",\@d);
-    fatal("cannot find record (zone) '$tmp'") if (@d < 1);
-    $ref=$d[0][0];
-  }
-  elsif ($type eq 3) {
-    undef @d;
-    db_query("SELECT a.id FROM user_rights a, nets b " .
-     "WHERE a.type=$utype AND a.ref=$id " .
-     " AND a.rtype=3 AND a.rref=b.id AND b.net='$tmp';",\@d);
-    fatal("cannot find net '$tmp'") if (@d < 1);
-    $ref=$d[0][0];
-  }
-  elsif ($type eq 4) {
-    undef @d;
-    $tmp=~s/\\/\\\\/g;
-    db_query("SELECT id FROM user_rights " .
-             "WHERE type=$utype AND ref=$id AND rtype=4 AND rule='$tmp';",\@d);
-    fatal("cannot find hostnamemask '$tmp'") if (@d < 1);
-    $ref=$d[0][0];
-  }
+    unless ($opt_del =~ /^(\d+)$/);
+  $tmp=$1;
 
-  $res=db_exec("DELETE FROM user_rights WHERE id=$ref;");
-  fatal("cannot delete record (id=$ref) from user_rights!") if ($res <0);
+  $res=db_exec("DELETE FROM user_rights " .
+	       "WHERE type=$utype AND ref=$id AND id=$tmp;");
+  print "res=$res\n";
+  fatal("cannot delete record (id=$tmp) from user_rights!") if ($res <0);
   print "User right record succesfully deleted.\n";
   exit;
 }
@@ -381,38 +347,43 @@ sub list_privs($$) {
   my($i,@d);
 
   undef @d;
-  db_query("SELECT a.rule,b.name FROM user_rights a, servers b " .
+  db_query("SELECT a.rule,b.name,a.id FROM user_rights a, servers b " .
 	   "WHERE a.rtype=1 AND a.rref=b.id AND a.ref=$id AND a.type=$utype;",
 	   \@d);
   #print "Server records:\n";
   for $i (0..$#d) { 
-    printf "%-8s %-25s %s\n","server",$d[$i][1],$d[$i][0];
+    $d[$i][0] =~ s/\s+$//;
+    printf "%-6s %-8s %-25s %s\n",$d[$i][2],"server",$d[$i][1],$d[$i][0];
   }
 
   undef @d;
-  db_query("SELECT a.rule,b.name FROM user_rights a, zones b " .
+  db_query("SELECT a.rule,b.name,a.id FROM user_rights a, zones b " .
 	   "WHERE a.rtype=2 AND a.rref=b.id AND a.ref=$id AND a.type=$utype;",
 	   \@d);
   #print "Zone   records:\n";
   for $i (0..$#d) { 
-    printf "%-8s %-25s %s\n","zone",$d[$i][1],$d[$i][0];
+    $d[$i][0] =~ s/\s+$//;
+    printf "%-6s %-8s %-25s %s\n",$d[$i][2],"zone",$d[$i][1],$d[$i][0];
   }
 
   undef @d;
-  db_query("SELECT a.rule,b.net FROM user_rights a, nets b " .
+  db_query("SELECT a.rule,b.net,a.id FROM user_rights a, nets b " .
 	   "WHERE a.rtype=3 AND a.rref=b.id AND a.ref=$id AND a.type=$utype;",
 	   \@d);
   #print "Net    records:\n";
   for $i (0..$#d) { 
-    printf "%-8s %-25s %s\n","net",$d[$i][1],$d[$i][0];
+    $d[$i][0] =~ s/\s+$//;
+    printf "%-6s %-8s %-25s %s\n",$d[$i][2],"net",$d[$i][1],$d[$i][0];
   }
 
   undef @d;
-  db_query("SELECT a.rule  FROM user_rights a " .
-	   "WHERE a.type=4 AND a.ref=$id AND a.type=$utype;",\@d);
+  db_query("SELECT a.rule,a.id  FROM user_rights a " .
+	   "WHERE a.rtype=4 AND a.ref=$id AND a.type=$utype;",\@d);
   #print "hostnamemask    records:\n";
   for $i (0..$#d) { 
-    printf "%-8s %-25s %s\n","hostname",$d[$i][0],"(hostnamemask)";
+    $d[$i][0] =~ s/\s+$//;
+    printf "%-6s %-8s %-25s %s\n",$d[$i][1],"hostname",$d[$i][0],
+      "(hostname constraint)";
   }
 
 }
