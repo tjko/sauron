@@ -1,0 +1,267 @@
+<table frame=all id="edit-server-dialog">
+<title>Edit Server Dialog</>
+<tgroup cols=3>
+<thead>
+<row><entry>Field</><entry>Description</><entry>Example</></>
+</thead>
+<tbody>
+        <row><entry>Server Name</>
+             <entry>Short name of the server (this handle can contain
+                    only letters, numbers, and hyphens)</>
+             <entry>ns1</>
+        </row>
+        <row><entry>Hostname</><entry>Domainname of the server (FQDN)</>
+             <entry>ns1.middle.earth.</>
+        </row>
+        <row><entry>IP address</><entry>IP address of the server</>
+             <entry>192.168.1.1</>
+        </row>
+        <row><entry>Output mode</>
+             <entry>Option for selecting wheter to generate 
+                    full <filename>named.conf</> or <filename>named.zones</>
+                    file that contains only zones (to be included in your
+                    static <filename>named.conf</>).</>
+              <entry><quote>Generate full named.conf</></>
+        </row>
+        <row><entry>Comments</>
+             <entry>Optional field reserved for comments</>
+             <entry></>
+        </row>
+        <row><entry>Hostmaster</>
+             <entry>Default hostmaster email address for all zones in the
+                    server (replace <quote>@</> in the email address 
+                    with <quote>.</>)</>
+             <entry>hostmaster.middle.earth.</>
+        </row>
+        <row><entry>Refresh</>
+             <entry>Zone SOA record default <quote>refresh</> value</>
+             <entry>43200</>
+        </row>
+        <row><entry>Retry</>
+             <entry>Zone SOA record default <quote>retry</> value</>
+             <entry>3600</>
+        </row>
+        <row><entry>Expire</>
+             <entry>Zone SOA record default <quote>expire</> value</>
+             <entry>2419200</>
+        </row>
+        <row><entry>Minimum (negative caching TTL)</>
+             <entry>Zone SOA record default <quote>minimum</> value</>
+             <entry>86400</>
+        </row>
+        <row><entry>Default TTL</>
+             <entry>Default TTL for records in zones for this server</>
+             <entry>86400</>
+        </row>
+        <row><entry>Default zone TXT</>
+             <entry>TXT records that get automatically included for
+                    each zone in this server</>
+             <entry></>
+        </row>
+
+        <row><entry>Configuration directory</>
+             <entry>Base directory for BIND configuration files</>
+             <entry><filename class=directory>/var/named</></>
+        </row>
+        <row><entry>Primary zone-file path</>
+             <entry>Pathname relative to configuration directory for
+                    storing master zone files</>
+             <entry></>
+        </row>
+        <row><entry>Slave zone-file path</>
+             <entry>Pathname relative to configuration directory for
+                    storing slave zone files</>
+             <entry>NS2/</>
+        </row>
+        <row><entry>Root-server file</>
+             <entry>filename for root server (zone) file.</>
+             <entry>named.ca</>
+        </row>
+        <row><entry>pid-file path</>
+             <entry>pathname for pid-file (BIND option)</>
+             <entry></>
+        </row>
+        <row><entry>dump-file path</>
+             <entry>pathname for dump-file (BIND option)</>
+             <entry></>
+        </row>
+        <row><entry>statistics-file path</>
+             <entry>pathname for statistics-file (BIND option)</>
+             <entry></>
+        </row>
+        <row><entry>memstatistics-file path</>
+             <entry>pathname for memstatistics-file (BIND option)</>
+             <entry></>
+        </row>
+        <row><entry>named-xfer path</>
+             <entry>pathname for named-xfer (BIND option)</>
+             <entry></>
+        </row>
+
+        <row><entry>Forward (mode)</>
+             <entry>BIND forward setting; default, only, first</>
+             <entry>default</>
+        </row>
+        <row><entry>Forwarders</>
+             <entry>BIND forwarders setting (list of 
+                    server IPs to forward queries to)</>
+             <entry></>
+        </row>
+        <row><entry>Transfer source IP</>
+             <entry>Source IP address for zone transfers
+                    (for multi-homed hosts)</>
+             <entry></>
+        </row>
+        <row><entry>Query source IP</>
+             <entry>Source IP address for DNS queries sent by server
+                    (for multi-homed hosts)</>
+             <entry></>
+        </row>
+        <row><entry>Query source port</>
+             <entry>Source port for DNS queries sent by server</>
+             <entry></>
+        </row>
+        <row><entry>Listen on port</>
+             <entry>Port that the server listens for DNS queries
+                    (allows setting non-standard port)</>
+             <entry></>
+        </row>
+        <row><entry>Listen-on</>
+             <entry>BIND listen-on setting; list of IPs (interfaces)
+                    server should listen for queries</>
+             <entry></>
+        </row>
+
+        <row><entry>Allow-transfer</>
+             <entry>BIND allow-transfer setting; list of CIDRs
+                    from where to allow zone transfers.</>
+             <entry></>
+        </row>
+        <row><entry>Allow-query</>
+             <entry>BIND allow-query setting; list of CIDRs
+                    from where to allow DNS queries.</>
+             <entry></>
+        </row>
+        <row><entry>Allow-recursion</>
+             <entry>BIND allow-recursion setting; list of CIDRs
+                    from where to allow recusive DNS queries
+                    (causes recursion to be disabled from anywhere else).</>
+             <entry></>
+        </row>
+        <row><entry>Blackhole</>
+             <entry>BIND blackhole setting; list of CIDRs
+                    from where any requests are to be ignored by 
+                    the server.</>
+             <entry></>
+        </row>
+
+        <row><entry>Do not generate HINFO records</>
+             <entry>Controls whether to omit HINFO records from the
+                    generated zone files or not.</>
+             <entry>No</>
+        </row>
+        <row><entry>Do not generate WKS records</>
+             <entry>Controls whether to omit WKS records from the
+                    generated zone files or not.</>
+             <entry>No</>
+        </row>
+        <row><entry>Notify</>
+             <entry>BIND notify setting; default, yes, no</>
+             <entry>Default</>
+        </row>
+        <row><entry>Auth-nxdomain</>
+             <entry>BIND auth-nxdomain setting; default, yes, no</>
+             <entry>Default</>
+        </row>
+        <row><entry>Recursion</>
+             <entry>BIND recursion setting; default, yes, no</>
+             <entry>Default</>
+        </row>
+        <row><entry>Dialup mode</>
+             <entry>BIND dialup setting; default, yes, no</>
+             <entry>Default</>
+        </row>
+        <row><entry>Allow multiple CNAMEs</>
+             <entry>BIND multiple_cnames setting; default, yes, no</>
+             <entry>Default</>
+        </row>
+        <row><entry>RFC2308 Type 1 mode</>
+             <entry>BIND rfc2308_type1 setting; default, yes, no</>
+             <entry>Default</>
+        </row>
+        <row><entry>Check-names (Masters)</>
+             <entry>BIND check-names master setting; 
+                    default, fail, ignore, fail</>
+             <entry>Default</>
+        </row>
+        <row><entry>Check-names (Slaves)</>
+             <entry>BIND check-names slave setting; 
+                    default, fail, ignore, fail</>
+             <entry>Default</>
+        </row>
+        <row><entry>Check-names (Responses)</>
+             <entry>BIND check-names response setting; 
+                    default, fail, ignore, fail</>
+             <entry>Default</>
+        </row>
+        <row><entry>Version string</>
+             <entry>If this is set then this string is that BIND 
+                    will report as it's version 
+                    (instead of the real version)</>
+             <entry></>
+        </row>
+        <row><entry>Logging options</>
+             <entry>List of BIND logging options (these are placed
+                    inside <quote>logging</> section in 
+                    <filename>named.conf</>)</>
+             <entry></>
+        </row>
+
+        <row><entry>auto-domainnames</>
+             <entry>Controls wheter to automatically generate correct
+                    <quote>domain-name</> option for each host in
+                    <filename>dhcpd.conf</>.</>
+             <entry>No</>
+        </row>
+        <row><entry>Global DHCP Settings</>
+             <entry>List of global DHCP settings. These lines are include
+                    in the global scope of <filename>dhcpd.conf</>.
+                    Any valid global DHCP option can be used here (lines
+                    should not end with <quote>;</>).</>
+             <entry></>
+        </row>
+
+        <row><entry>Enable failover protocol</>
+             <entry>Controls wheter DHCP failover protocol is enabled.</>
+             <entry>No</>
+        </row>
+        <row><entry>Port number</>
+             <entry>Port to be used by DHCP failover protocol</>
+             <entry>519</>
+        </row>
+        <row><entry>Max Response Delay</>
+             <entry>Max Response Delay for DHCP failover protocol</>
+             <entry>60</>
+        </row>
+        <row><entry>Max Unacked Updates</>
+             <entry>Max Unacked Updates for DHCP failover protocol</>
+             <entry>10</>
+        </row>
+        <row><entry>MCLT</>
+             <entry>Maximum Client Lead Time (MCLT) 
+                    for DHCP failover protocol</>
+             <entry>3600</>
+        </row>
+        <row><entry>Split</>
+             <entry>Split for DHCP failover protocol</>
+             <entry>128</>
+        </row>
+        <row><entry>Load balance max</>
+             <entry>Load balance max (seconds) for DHCP failover protocol</>
+             <entry>3</>
+        </row>
+
+</tbody>
+</tgroup>
+</table>
+
