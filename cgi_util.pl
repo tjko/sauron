@@ -96,6 +96,8 @@ sub form_check_field($$$) {
     if ($type eq 'priority') {
       return 'priority (0..n) required!' unless ($t >= 0);
     }
+  } elsif ($type eq 'port') {
+    return 'port number required!' unless ($value > 0 && $value < 65535);
   } elsif ($type eq 'bool') {
     return 'boolean value required!' unless ($value =~ /^(t|f)$/);
   } elsif ($type eq 'mac') {

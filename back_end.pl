@@ -365,7 +365,7 @@ sub get_server_list() {
 
 sub get_server($$) {
   my ($id,$rec) = @_;
-  my ($res);
+  my ($res,@q);
 
   $res = get_record("servers",
             "name,directory,no_roots,named_ca,zones_only,pid_file,dump_file," .
@@ -373,13 +373,28 @@ sub get_server($$) {
 		    "listen_on_port,checknames_m,checknames_s,checknames_r," .
 		    "nnotify,recursion,ttl,refresh,retry,expire,minimum," .
 		    "pzone_path,szone_path,hostname,hostmaster,comment," .
-		    "dhcp_flags,named_flags," .
+		    "dhcp_flags,named_flags,domain,masterserver,version," .
+		    "memstats_file,transfer_source,forward,dialup," .
+		    "fake_iquery,fetch_glue,has_old_clients,multiple_cnames," .
+		    "rfc2308_type1,use_id_pool,treat_cr_space,also_notify," .
+		    "df_port,df_max_delay,df_max_uupdates,df_mclt,df_split,".
+		    "df_loadbalmax,".
 		    "cdate,cuser,mdate,muser",
 		    $id,$rec,"id");
   return -1 if ($res < 0);
 
   get_array_field("cidr_entries",3,"id,ip,comment","IP,Comments",
 		  "type=1 AND ref=$id ORDER BY ip",$rec,'allow_transfer');
+  get_array_field("cidr_entries",3,"id,ip,comment","IP,Comments",
+		  "type=7 AND ref=$id ORDER BY ip",$rec,'allow_query');
+  get_array_field("cidr_entries",3,"id,ip,comment","IP,Comments",
+		  "type=8 AND ref=$id ORDER BY ip",$rec,'allow_recursion');
+  get_array_field("cidr_entries",3,"id,ip,comment","IP,Comments",
+		  "type=9 AND ref=$id ORDER BY ip",$rec,'blackhole');
+  get_array_field("cidr_entries",3,"id,ip,comment","IP,Comments",
+		  "type=10 AND ref=$id ORDER BY ip",$rec,'listen_on');
+  get_array_field("cidr_entries",3,"id,ip,comment","IP,Comments",
+		  "type=11 AND ref=$id ORDER BY ip",$rec,'forwarders');
   get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comments",
 		  "type=1 AND ref=$id ORDER BY dhcp",$rec,'dhcp');
   get_array_field("txt_entries",3,"id,txt,comment","TXT,Comments",
@@ -391,6 +406,14 @@ sub get_server($$) {
 		     localtime($rec->{mdate}).' by '.$rec->{muser} : '');
 
   $rec->{dhcp_flags_ad}=($rec->{dhcp_flags} & 0x01 ? 1 : 0);
+  $rec->{dhcp_flags_fo}=($rec->{dhcp_flags} & 0x02 ? 1 : 0);
+
+  if ($rec->{masterserver} > 0) {
+    db_query("SELECT name FROM servers WHERE id=$rec->{masterserver}",\@q);
+    $rec->{server_type}="Slave for $q[0][0] (id=$rec->{masterserver})";
+  } else {
+    $rec->{server_type}='Master';
+  }
 
   return 0;
 }
@@ -406,12 +429,15 @@ sub update_server($) {
   delete $rec->{cdate};
   delete $rec->{cuser};
   delete $rec->{dhcp_flags};
+  delete $rec->{server_type};
   $rec->{mdate}=time;
   $rec->{muser}=$muser;
 
   $rec->{dhcp_flags}=0;
   $rec->{dhcp_flags}|=0x01 if ($rec->{dhcp_flags_ad});
+  $rec->{dhcp_flags}|=0x02 if ($rec->{dhcp_flags_fo});
   delete $rec->{dhcp_flags_ad};
+  delete $rec->{dhcp_flags_fo};
 
   db_begin();
   $r=update_record('servers',$rec);
@@ -426,6 +452,21 @@ sub update_server($) {
   $r=update_array_field("txt_entries",3,"txt,comment,type,ref",
 			'txt',$rec,"3,$id");
   if ($r < 0) { db_rollback(); return -14; }
+  $r=update_array_field("cidr_entries",3,"ip,comment,type,ref",
+			 'allow_query',$rec,"7,$id");
+  if ($r < 0) { db_rollback(); return -15; }
+  $r=update_array_field("cidr_entries",3,"ip,comment,type,ref",
+			 'allow_recursion',$rec,"8,$id");
+  if ($r < 0) { db_rollback(); return -16; }
+  $r=update_array_field("cidr_entries",3,"ip,comment,type,ref",
+			 'blackhole',$rec,"9,$id");
+  if ($r < 0) { db_rollback(); return -17; }
+  $r=update_array_field("cidr_entries",3,"ip,comment,type,ref",
+			 'listen_on',$rec,"10,$id");
+  if ($r < 0) { db_rollback(); return -18; }
+  $r=update_array_field("cidr_entries",3,"ip,comment,type,ref",
+			 'forwarders',$rec,"11,$id");
+  if ($r < 0) { db_rollback(); return -19; }
 
   return db_commit();
 }
@@ -447,7 +488,9 @@ sub delete_server($) {
   db_begin();
 
   # cidr_entries 
-  $res=db_exec("DELETE FROM cidr_entries WHERE type=1 AND ref=$id;");
+  $res=db_exec("DELETE FROM cidr_entries " .
+	       "WHERE (type=1 OR type=7 OR type=8 OR type=9 OR type=10 " .
+	       " OR type=11) AND ref=$id;");
   if ($res < 0) { db_rollback(); return -1; }
 
   $res=db_exec("DELETE FROM cidr_entries WHERE id IN ( " .

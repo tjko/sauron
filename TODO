@@ -10,16 +10,15 @@ general:
 	- add DHCP v3 support to update-dhcp-info
 	- more named.conf option support:
 		- logging
-		- allow-query
-		- allow-recursion
-		- blackhole
+
+		- allow-query +
+		- allow-recursion +
+		- blackhole +
 		- statistic-interval
-		- version
-		- recursion
-		- forwarders
-		- query-source
-		- listen-on
-		
+		- recursion +
+		- forwarders +
+		- listen-on +
+
 
 import:
 	- fix import(s) to work with new table layout

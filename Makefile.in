@@ -121,7 +121,8 @@ drop_tables:
 
 make_tables: 
 	@echo "Creating tables..."
-	$(RUNSQL) $(SQL_TABLES) sql/copy_tables.sql sql/misc.sql
+	$(RUNSQL) $(SQL_TABLES) sql/copy_tables.sql \
+				sql/misc.sql sql/DEFAULTS.sql
 
 init_tables:
 	@echo "Inserting ether infos..."
