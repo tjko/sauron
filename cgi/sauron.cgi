@@ -593,7 +593,7 @@ if (param('csv')) {
   {ftype=>1, tag=>'location', name=>'Location', type=>'text', len=>30,
    empty=>1, iff=>['type','1']},
   {ftype=>1, tag=>'info', name=>'[Extra] Info', type=>'text', len=>50,
-   empty=>1, iff=>['type','(1|101)']},
+   empty=>1},
 
   {ftype=>0, name=>'Equipment info', iff=>['type','1|101']},
   {ftype=>101, tag=>'hinfo_hw', name=>'HINFO hardware', type=>'hinfo', len=>25,
@@ -624,7 +624,7 @@ if (param('csv')) {
   {ftype=>7, tag=>'wks', name=>'WKS template', iff=>['type','1']},
 
   {ftype=>0, name=>'Host specific',iff=>['type','[12]']},
-  {ftype=>2, tag=>'ns_l', name=>'Name servers (NS)', type=>['text','text'],
+  {ftype=>2, tag=>'ns_l', name=>'Name servers (NS)', type=>['domain','text'],
    fields=>2, 
    len=>[30,20], empty=>[0,1], elabels=>['NS','comment'], iff=>['type','2']},
   {ftype=>2, tag=>'wks_l', name=>'WKS', no_empty=>1,
@@ -682,7 +682,7 @@ if (param('csv')) {
   {ftype=>1, tag=>'location', name=>'Location', type=>'text', len=>30,
    empty=>$SAURON_RHF{location}, iff=>['type','1']},
   {ftype=>1, tag=>'info', name=>'[Extra] Info', type=>'text', len=>50,
-   empty=>$SAURON_RHF{info}, iff=>['type','(1|101)']},
+   empty=>$SAURON_RHF{info}},
 
   {ftype=>0, name=>'Equipment info', iff=>['type','1|101']},
   {ftype=>101, tag=>'hinfo_hw', name=>'HINFO hardware', type=>'hinfo', len=>25,
@@ -747,7 +747,7 @@ if (param('csv')) {
   {ftype=>2, tag=>'mx_l', name=>'Mail exchanges (MX)',
    type=>['priority','mx','text'], fields=>3, len=>[5,30,20], empty=>[0,0,1],
    elabels=>['Priority','MX','comment'], iff=>['type','3']},
-  {ftype=>2, tag=>'ns_l', name=>'Name servers (NS)', type=>['text','text'],
+  {ftype=>2, tag=>'ns_l', name=>'Name servers (NS)', type=>['domain','text'],
    fields=>2,
    len=>[30,20], empty=>[0,1], elabels=>['NS','comment'], iff=>['type','2']},
   {ftype=>2, tag=>'printer_l', name=>'PRINTER entries', 
