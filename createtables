@@ -53,6 +53,7 @@ do "$config_file" || die("cannot load config: $config_file");
 
 ##############################################
 
+fatal("DB_CONNECT not defined in configuration!") unless ($DB_CONNECT);
 db_connect($DB_CONNECT);
 
 print "Create initial tables for sauron [y/n]? ";
