@@ -1145,7 +1145,8 @@ sub make_dhcp() {
   print DHCPFILE "# groups\n\n";
 
   undef @groups;
-  db_query("SELECT id,name FROM groups WHERE server=$serverid AND type=1 " .
+  db_query("SELECT id,name FROM groups WHERE server=$serverid AND " .
+	   "(type=1 OR type=3) " .
 	   "ORDER BY name;",\@groups);
   if (@groups < 1) {
     error("no groups found for this server");
