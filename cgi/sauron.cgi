@@ -190,7 +190,7 @@ do "$PROG_DIR/cgi_util.pl";
    type=>['text','text'], fields=>2,
    len=>[40,20], empty=>[0,1], elabels=>['DHCP','comment'], iff=>['type','M']},
 
-  {ftype=>0, name=>'Record info', no_edit=>0},
+  {ftype=>0, name=>'Record info', no_edit=>1},
   {ftype=>4, name=>'Record created', tag=>'cdate_str', no_edit=>1},
   {ftype=>4, name=>'Last modified', tag=>'mdate_str', no_edit=>1},
   {ftype=>4, name=>'Pending host record changes', tag=>'pending_info', 
@@ -568,8 +568,6 @@ do "$PROG_DIR/cgi_util.pl";
  ]
 );
 
-
-
 %net_form=(
  data=>[
   {ftype=>0, name=>'Net'},
@@ -599,7 +597,7 @@ do "$PROG_DIR/cgi_util.pl";
    type=>['text','text'], fields=>2,
    len=>[40,20], empty=>[0,1], elabels=>['DHCP','comment']},
 
-  {ftype=>0, name=>'Record info', no_edit=>0},
+  {ftype=>0, name=>'Record info', no_edit=>1},
   {ftype=>4, name=>'Record created', tag=>'cdate_str', no_edit=>1},
   {ftype=>4, name=>'Last modified', tag=>'mdate_str', no_edit=>1}
  ],
@@ -612,13 +610,13 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>0, name=>'VLAN (Layer-2 Network / Shared Network)'},
   {ftype=>1, tag=>'name', name=>'Name', type=>'texthandle',
    len=>32, conv=>'L', empty=>0},
-  {ftype=>4, tag=>'id', name=>'ID', no_edit=>1},
+  {ftype=>4, tag=>'id', name=>'ID', no_edit=>0},
   {ftype=>1, tag=>'description', name=>'Description', type=>'text',
    len=>60, empty=>1},
   {ftype=>1, tag=>'comment', name=>'Comments', type=>'text',
    len=>60, empty=>1},
 
-  {ftype=>0, name=>'Record info', no_edit=>0},
+  {ftype=>0, name=>'Record info', no_edit=>1},
   {ftype=>4, name=>'Record created', tag=>'cdate_str', no_edit=>1},
   {ftype=>4, name=>'Last modified', tag=>'mdate_str', no_edit=>1}
  ]
@@ -689,9 +687,9 @@ do "$PROG_DIR/cgi_util.pl";
    type=>['text','text'], fields=>2,
    len=>[40,20], empty=>[0,1], elabels=>['DHCP','comment']},
   {ftype=>2, tag=>'printer', name=>'PRINTER entries', 
-   type=>['text','text'], fields=>2,
-   len=>[40,20], empty=>[0,1], elabels=>['PRINTER','comment']},
-  {ftype=>0, name=>'Record info', no_edit=>0},
+   type=>['text','text'], fields=>2, len=>[40,20], empty=>[0,1], 
+   elabels=>['PRINTER','comment'], iff=>['type','[1]']},
+  {ftype=>0, name=>'Record info', no_edit=>1},
   {ftype=>4, name=>'Record created', tag=>'cdate_str', no_edit=>1},
   {ftype=>4, name=>'Last modified', tag=>'mdate_str', no_edit=>1}
  ]
@@ -741,7 +739,7 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>2, tag=>'mx_l', name=>'Mail exchanges (MX)', 
    type=>['priority','mx','text'], fields=>3, len=>[5,30,20], 
    empty=>[0,0,1],elabels=>['Priority','MX','comment']},
-  {ftype=>0, name=>'Record info', no_edit=>0},
+  {ftype=>0, name=>'Record info', no_edit=>1},
   {ftype=>4, name=>'Record created', tag=>'cdate_str', no_edit=>1},
   {ftype=>4, name=>'Last modified', tag=>'mdate_str', no_edit=>1}
  ]
@@ -758,7 +756,7 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>2, tag=>'wks_l', name=>'WKS', 
    type=>['text','text','text'], fields=>3, len=>[10,30,10], empty=>[0,1,1], 
    elabels=>['Protocol','Services','comment']},
-  {ftype=>0, name=>'Record info', no_edit=>0},
+  {ftype=>0, name=>'Record info', no_edit=>1},
   {ftype=>4, name=>'Record created', tag=>'cdate_str', no_edit=>1},
   {ftype=>4, name=>'Last modified', tag=>'mdate_str', no_edit=>1}
  ]
@@ -774,7 +772,7 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>2, tag=>'printer_l', name=>'PRINTER', 
    type=>['text','text'], fields=>2, len=>[60,10], empty=>[0,1],
    elabels=>['Printer','comment']},
-  {ftype=>0, name=>'Record info', no_edit=>0},
+  {ftype=>0, name=>'Record info', no_edit=>1},
   {ftype=>4, name=>'Record created', tag=>'cdate_str', no_edit=>1},
   {ftype=>4, name=>'Last modified', tag=>'mdate_str', no_edit=>1}
  ]
@@ -797,7 +795,7 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>3, tag=>'type', name=>'Type', type=>'enum',
    enum=>{0=>'Hardware',1=>'Software'}},
   {ftype=>1, tag=>'pri', name=>'Priority', type=>'priority',len=>4, empty=>0},
-  {ftype=>0, name=>'Record info', no_edit=>0},
+  {ftype=>0, name=>'Record info', no_edit=>1},
   {ftype=>4, name=>'Record created', tag=>'cdate_str', no_edit=>1},
   {ftype=>4, name=>'Last modified', tag=>'mdate_str', no_edit=>1}
  ]
@@ -1683,13 +1681,13 @@ sub hosts_menu() {
     }
 
     print "<TABLE width=\"99%\" cellspacing=0 cellpadding=1 border=0 " .
-          "BGCOLOR=\"aaaaff\">",
+          "BGCOLOR=\"ffffff\">",
           "<TR><TD><B>Zone:</B> $zone</TD>",
           "<TD align=right>Page: ".($page+1)."</TD></TR></TABLE>";
 
     $sorturl="$selfurl?menu=hosts&sub=browse&lastsearch=1";
     print 
-      "<TABLE width=\"99%\" cellspacing=0 cellpadding=1 BGCOLOR=\"#eeeeff\">",
+      "<TABLE width=\"99%\" border=0 cellspacing=1 cellpadding=1 BGCOLOR=\"#eeeeff\">",
       Tr,Tr,
       "<TR bgcolor=#aaaaff>",
       th(['#',
@@ -1705,6 +1703,7 @@ sub hosts_menu() {
       $ip="(".add_origin($q[$i][1],$zone).")" if ($type==4);
       $ip='N/A' if ($ip eq '0.0.0.0');
       $ether=$q[$i][5];
+      # $ether =~  s/^(..)(..)(..)(..)(..)(..)$/\1:\2:\3:\4:\5:\6/;
       $ether='N/A' unless($ether);
       #$hostname=add_origin($q[$i][4],$zone);
       $hostname="<A HREF=\"$selfurl?menu=hosts&h_id=$q[$i][2]\">".
@@ -2033,7 +2032,7 @@ sub groups_menu() {
     return;
   }
 
-  print "<TABLE width=\"100%\" cellspacing=\"1\" border=\"0\">",
+  print "<TABLE width=\"99%\" cellspacing=\"1\" border=\"0\">",
         "<TR bgcolor=\"#aaaaff\">",
         th("Name"),th("Type"),th("Comment"),th("Lvl"),"</TR>";
 
@@ -2081,8 +2080,8 @@ sub nets_menu() {
 	  return if (check_perms('superuser',''));
 	  $res=edit_magic('vlan','VLAN','vlans',\%vlan_form,
 			  \&get_vlan,\&update_vlan,$v_id);
-	  goto browse_vlans if ($res == -1);
-	  return unless ($res > 0);
+	  #goto browse_vlans if ($res == -1);
+	  return unless ($res == 2);
 	  get_vlan($v_id,\%vlan);
       }
       elsif ($sub eq 'Delete') {
@@ -2110,7 +2109,8 @@ sub nets_menu() {
       db_query("SELECT id,name,description,comment FROM vlans " .
 	       "WHERE server=$serverid ORDER BY name;",\@q);
       print h3("VLANs");
-      print "<TABLE cellspacing=2 border=0><TR bgcolor=\"#aaaaff\">",
+      print "<TABLE width=\"99%\" cellspacing=2 border=0>",
+	    "<TR bgcolor=\"#aaaaff\">",
             "<TH>Name</TH>",th("Description"),th("Comments"),"</TR>";
       for $i (0..$#q) {
 	  print "<TR bgcolor=\"#eeeeee\">",
@@ -2292,7 +2292,7 @@ sub nets_menu() {
     $novlans=0;
   }
 
-  print "<TABLE cellspacing=1 border=0><TR bgcolor=\"#aaaaff\">",
+  print "<TABLE width=\"99%\" cellspacing=1 border=0><TR bgcolor=\"#aaaaff\">",
         "<TH>Net</TH>",th("NetName"),th("Description"),th("Type"),
         th("DHCP"),($novlans?'':th("VLAN")),th("Lvl"),"</TR>";
 
@@ -2355,7 +2355,7 @@ sub templates_menu() {
     }
 
     print h3("MX templates for zone: $zone"),
-          "<TABLE width=\"100%\" cellspacing=\"1\" border=\"0\">",
+          "<TABLE width=\"99%\" cellspacing=\"1\" border=\"0\">",
 	  "<TR bgcolor=\"#aaaaff\">",
           th("Name"),th("Comment"),th("Lvl"),"</TR>";
 
@@ -2380,7 +2380,7 @@ sub templates_menu() {
     }
 
     print h3("WKS templates for server: $server"),
-          "<TABLE width=\"100%\" cellspacing=\"1\" border=\"0\">",
+          "<TABLE width=\"99%\" cellspacing=\"1\" border=\"0\">",
 	  "<TR bgcolor=\"#aaaaff\">",
           th("Name"),th("Comment"),th("Lvl"),"</TR>";
 
@@ -2405,7 +2405,7 @@ sub templates_menu() {
     }
 
     print h3("PRINTER Classes (global)"),
-          "<TABLE width=\"100%\" cellspacing=\"1\" border=\"0\">",
+          "<TABLE width=\"99%\" cellspacing=\"1\" border=\"0\">",
 	  "<TR bgcolor=\"#aaaaff\">",
           th("Name"),th("Comment"),"</TR>";
 
@@ -2430,7 +2430,7 @@ sub templates_menu() {
     }
 
     print h3("HINFO templates (global)"),
-          "<TABLE width=\"100%\" cellspacing=\"1\" border=\"0\">",
+          "<TABLE width=\"99%\" cellspacing=\"1\" border=\"0\">",
 	  "<TR bgcolor=\"#aaaaff\">",
           th("Type"),th("HINFO"),th("Priority"),"</TR>";
 

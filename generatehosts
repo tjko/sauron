@@ -1,0 +1,190 @@
+#!/usr/bin/perl
+#
+# generatehosts - utility to add host records
+#
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2001.
+# $Id$
+#
+require 5;
+use Getopt::Long;
+use Term::ReadKey;
+use Net::Netmask;
+
+my ($PG_DIR,$PG_NAME) = ($0 =~ /^(.*\/)(.*)$/);
+$0 = $PG_NAME;
+
+if (-r "/etc/sauron/config") {
+  $config_file="/etc/sauron/config";
+} elsif (-r "/usr/local/etc/sauron/config") {
+  $config_file="/usr/local/etc/sauron/config"; 
+} else {
+  die("cannot find config file in /etc/sauron or /usr/local/etc/sauron");
+}
+
+do "$config_file" || die("cannot load config: $config_file");
+do "$PROG_DIR/util_zone.pl";
+do "$PROG_DIR/util.pl";
+do "$PROG_DIR/db.pl";
+do "$PROG_DIR/back_end.pl";
+
+$mdate = time;
+$user = (getpwuid($<))[0];
+
+sub fatal($) {
+  my ($msg) = @_;
+  print STDERR "$0: $msg\n";
+  exit(1);
+}
+
+##############################################
+
+set_muser($user);
+
+$result = GetOptions("help|h","name=s","commit","noreverse","seqstart=s",
+		     "outofzone","verbose","group=s","info=s");
+
+if ($opt_help || @ARGV < 5) {
+  print "syntax: $0 <server> <zone> <hostname> <starting-IP> <count>\n\n",
+        "options:\n",
+	"\t--noreverse\t\tdo not add reverse records\n",
+	"\t--outofzone\t\tallow out of zone records\n",
+	"\t--verbose\t\tproduce more verbose output\n",
+	"\t--seqstart=<n>\t\tstart sequence numbering from n\n",
+	"\t--group=<name>\t\tassign new hosts to given group\n",
+	"\t--info=<user>:<dept>:<location>:<extra>\n\n",
+	"\t--commit\t\tcommit changes (w/o this no changes are made)\n",
+	"\ntags:\n",
+	"\t:IP1:\t\tfirst octet of current IP-number\n",
+	"\t:IP2:\t\tsecond octet of current IP-number\n",
+	"\t:IP3:\t\tthird octet of current IP-number\n",
+	"\t:IP4:\t\tfourth octet of current IP-number\n",
+	"\t:N:\t\tsequence number\n",
+	"\n";
+  exit(0);
+}
+
+db_connect();
+
+$server=$ARGV[0];
+$zone=$ARGV[1];
+$hostname=$ARGV[2];
+$startip=$ARGV[3];
+$count=$ARGV[4];
+$gid=-1;
+$seq_start=0;
+
+if ($opt_seqstart) {
+  $seq_start = $opt_seqstart;
+  fatal("invalid parameter to 'seq-start'") unless ($seq_start =~ /^\d+$/);
+}
+
+$serverid=get_server_id($server);
+fatal("cannot find server '$server'") unless ($serverid > 0);
+
+$zoneid=get_zone_id($zone,$serverid);
+fatal("cannot find zone '$zone'") unless ($zoneid > 0);
+
+if ($opt_group) {
+  fatal("cannot find group '$opt_group'") 
+    if (($gid=get_group_by_name($serverid,$opt_group)) < 0);
+}
+
+if ($opt_info) {
+  @infof = split(/:/,$opt_info);
+  fatal("invalid paremeters for info option ") if (@infof > 4);
+}
+
+fatal("invalid 'count' parameter: $count") unless ($count > 0);
+fatal("invalid 'hostname' parameter: '$hostname'") 
+	  unless ($hostname =~ /^\S+$/);
+fatal("invalid 'starting-IP' parameter: $startip") unless (is_cidr($startip));
+
+$sip = ip2int($startip);
+$eip = int($sip + $count -1);
+
+
+$origin=$zone;
+$origin.="." unless ($zone =~ /\.$/);
+
+print "IP range: ".int2ip($sip)." - ".int2ip($eip)."\n" if ($opt_verbose);
+
+
+db_begin();
+db_ignore_begin_and_commit(1);
+
+foreach $i (0..$count-1) {
+  $ip=int2ip($sip+$i);
+  $domain=tag_expand($hostname);
+  $host=remove_origin($domain,$origin);
+  print "$host : $ip\n";
+
+  undef @q;
+  db_query("SELECT id FROM hosts WHERE zone=$zoneid AND domain = '$host';",
+	   \@q);
+  if (($id=$q[0][0]) > 0) {
+    fatal("host: $host already exists!");
+  }
+
+  undef %host;
+  $host{domain}=$host;
+  $host{type}=1;
+  $host{zone}=$zoneid;
+  $host{grp}=$gid;
+  $host{ip}=[[$ip,'t',($opt_noreverse ? 'f' : 't')]];
+  $host{huser}=tag_expand($infof[0]) if ($infof[0]);
+  $host{dept}=tag_expand($infof[1]) if($infof[1]);
+  $host{location}=tag_expand($infof[2]) if($infof[2]);
+  $host{info}=tag_expand($infof[3]) if($infof[3]);
+
+  $id=add_host(\%host);
+  fatal("cannot insert host_record! $id") unless ($id > 0);
+
+}
+
+
+
+db_ignore_begin_and_commit(0);
+
+if ($opt_commit) {
+  fatal("cannot commit changes to database") if (db_commit() < 0);
+} else {
+  db_rollback();
+  print "NO CHANGES MADE!\n";
+}
+
+exit;
+
+
+sub tag_expand($) {
+  my($str) = @_;
+  my($i2,$i3,$i4,$ip1,$ip2,$ip3,$ip4);
+
+  return '' if ($str =~ /^\s*$/);
+
+  $i1=$i+$seq_start;
+  $i2=sprintf("%02d",$i1);
+  $i3=sprintf("%03d",$i1);
+  $i4=sprintf("%04d",$i1);
+
+  if ($ip =~ /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/) {
+    $ip1=sprintf("%03d",$1);
+    $ip2=sprintf("%03d",$2);
+    $ip3=sprintf("%03d",$3);
+    $ip4=sprintf("%03d",$4);
+    $str=~ s/:IP1:/$ip1/g;
+    $str=~ s/:IP2:/$ip2/g;
+    $str=~ s/:IP3:/$ip3/g;
+    $str=~ s/:IP4:/$ip4/g;
+  }
+
+  $str =~ s/:N:/$i/g;
+  $str =~ s/:N2:/$i2/g;
+  $str =~ s/:N3:/$i3/g;
+  $str =~ s/:N4:/$i4/g;
+  return $str;
+}
+
+
+
+# eof :-)
+

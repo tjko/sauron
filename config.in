@@ -24,6 +24,8 @@ $USER_TIMEOUT = 3600;
 
 $PLEVEL_VLANS = 5;  # required priv.level to see vlan info in web interface
 
+# uncomment to enable compatibilty hack for DHCP v2.0 ...
+# $SAURON_DCHP2_MODE = 1;
 
 #########################################################################
 # misc
