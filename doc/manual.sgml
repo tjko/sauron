@@ -9,6 +9,7 @@
 <!ENTITY form-new-zone SYSTEM "form-new-zone.sgml">
 <!ENTITY form-edit-zone SYSTEM "form-edit-zone.sgml">
 <!ENTITY form-new-host SYSTEM "form-new-host.sgml">
+<!ENTITY form-edit-host SYSTEM "form-edit-host.sgml">
 <!ENTITY form-search-hosts SYSTEM "form-search-hosts.sgml">
 <!ENTITY form-edit-net SYSTEM "form-edit-net.sgml">
 ]>
@@ -1463,7 +1464,7 @@ ID     Type     Ref.                      Mode
 
 
     <section id="zones-menu">
-    <title>Zones</>
+    <title>Zones Menu</>
     <para>
       <guimenu>Zones</guimenu> menu contains commands for creating and
       modifying zones for administrator. For normal user it only
@@ -1560,11 +1561,18 @@ ID     Type     Ref.                      Mode
 
 
     <section id="hosts-menu">
-    <title>Hosts</>
+    <title>Hosts Menu</>
     <para>
       <guimenu>Hosts</> menu contains commands for creating and modifying
       hosts. In addition, this menu provides the search commands for
       searching hosts within a zone.
+    </para>
+    <para>
+      Most of the host specific commands are not in the <guimenu>Hosts</>
+      menu itself, but are displayed as buttons when user views a host record.
+      Some of these buttons such as <guibutton>Edit</> or 
+      <guibutton>Delete</> are only available when user has priviliges to
+      make modifications to hosts in that zone.
     </para>
       <section><title>Search</>
       <para>
@@ -1598,13 +1606,65 @@ ID     Type     Ref.                      Mode
       </para>
       </section>
 
+      <section><title>Edit (button)</>
+      <para>
+        <guibutton>Edit</> button is used to modify existing host.
+        This button can only be used by normal user if she has necessary
+        priviliges to make modifications to the host.
+        See <xref linkend="edit-host-dialog"> for description of the
+        fields used in this dialog.
+        
+        &form-edit-host;
+      </para>
+      </section>
+
+      <section><title>Delete (button)</>
+      <para>
+        <guibutton>Delete</> button is used to delete a host.
+        This button can only be used by normal user if she has necessary
+        priviliges to make modifications to the host. If a host
+        has dynamic aliases that point to it those aliases are
+        also automatically removed when the host is deleted.
+      </para>
+      </section>
+ 
+      <section><title>Copy (button)</>
+      <para>
+        <guibutton>Copy</> button can be used to <quote>copy</>
+        a host easily. This button will take the information from the
+        current host and use this information to pre-fill 
+        <guimenuitem>Add host</> command dialog. If hostname contains
+        number it is incremented, otherwis hostname is appended by
+        number two.
+      </para>
+      </section>
+
+      <section><title>Move (button)</>
+      <para>
+        <guibutton>Move</> button is used to move a host into a new
+        subnet. After selecting new subnet for this host, next
+        available IP address within the auto assign address range of that
+        network is suggested as new IP address for the host. 
+        This button can only be used by normal user if she has necessary
+        priviliges to make modifications to the host.
+      </para>
+      </section>
+
+      <section><title>Alias (button)</>
+      <para>
+        <guibutton>Alias</> button is used to add a dynamic
+        (CNAME or A record) alias for a host.
+        This button can only be used by normal user if she has necessary
+        priviliges to make modifications to the host.
+      </para>
+      </section>
+
       <section><title>Add alias</>
       <para>
         <guimenuitem>Add alias</> command is used to add a static
         (CNAME) alias. This command is meant for adding static
         <quote>out-of-zone</> aliases only. Normally aliases should
-        be added using <guibutton>Alias</> button from 
-        <guimenuitem>Host Display Dialog</> which will create a dynamic
+        be added using <guibutton>Alias</> button which will create a dynamic
         alias for that host.
 
         This command is available for administrator and users with
@@ -1673,10 +1733,50 @@ ID     Type     Ref.                      Mode
       </para>
       </section>
 
+      <section><title>Network Settings (button)</>
+      <para>
+        <guibutton>Network Settings</> button displays network
+        settings for selected host. This will include IP address,
+        netmask, network address, broadcast address, and
+        default gateway for the host.
+      </para>
+      </section>
+
+      <section><title>History (button)</>
+      <para>
+        <guibutton>History</> button displays history of this host
+        record. This will include information like when the record
+        was created, and when it was modified and by whom.
+        This option is available for users who by default have authorization
+        level of 1 or higher (this can be controlled via variable
+        <varname>ALEVEL_HISTORY</> in configuration file).
+      </para>
+      </section>
+
+      <section><title>Ping (button)</>
+      <para>
+        <guibutton>Ping</> button allows user to run <quote>ping</>
+        command against the selected host.
+        This option is only available when it is explictly enabled
+        in configuration file and user has at least the required
+        authorization level.
+      </para>
+      </section>
+
+      <section><title>Traceroute (button)</>
+      <para>
+        <guibutton>Traceroute</> button allows user to 
+        run <quote>traceroute</> command against the selected host.
+        This option is only available when it is explictly enabled
+        in configuration file and user has at least the required
+        authorization level.
+      </para>
+      </section>
+
     </section>
 
     <section id="templates-menu">
-    <title>Templates</>
+    <title>Templates Menu</>
     <para>
       <guimenu>Templates</> menu contains commans for creating and modifying
       teamplates. Only <quote>show</> commands under this menu are available
@@ -1750,7 +1850,7 @@ ID     Type     Ref.                      Mode
     </section>
 
     <section id="groups-menu">
-    <title>Groups</>
+    <title>Groups Menu</>
     <para>
       <guimenu>Groups</> menu contains commans for creating and modifying
       (host) groups. Normal users can only list and view group details,
@@ -1822,7 +1922,7 @@ ID     Type     Ref.                      Mode
     </section>
 
     <section id="nets-menu">
-    <title>Nets</>
+    <title>Nets Menu</>
     <para>
       <guimenu>Nets</> menu contains commands for managing networks and
       <acronym>VLANs</> (Layer-2 networks). Normal user can only see
@@ -1911,10 +2011,119 @@ ID     Type     Ref.                      Mode
     </section>
 
     <section id="login-menu">
-    <title>Login</>
+    <title>Login Menu</>
     <para>
-      FIXME  
+      <guimenu>Login</> menu contains miscellaneous commands that
+      are mainly provide user web interface specific information
+      and settings.
     </para>
+     
+      <section><title>User Info</>
+      <para> 
+        <guimenuitem>User Info</> command displays general information
+        about current user's account and user priviliges (permissions).
+        See <xref linkend="privilige-table"> for description about 
+        user priviliges.
+      </para>
+      </section>
+
+      <section><title>Who</>
+      <para> 
+        <guimenuitem>Who</> command displays list of currently 
+        logged on users. This list includes username, user's full
+        name, host where user coming from, when user logged in, and
+        how long user has been idle.
+      </para>
+      </section>
+
+      <section><title>News (motd)</>
+      <para> 
+        <guimenuitem>News (motd)</> command displays all
+        system news (or message of day) messages. When users login
+        they will see latest three news messages automatically.
+      </para>
+      </section>
+
+      <section><title>Login</>
+      <para> 
+        <guimenuitem>Login</> command allows user to login
+        again using different user account.
+      </para>
+      </section>
+
+      <section><title>Logout</>
+      <para> 
+        <guimenuitem>Login</> command allows user to logout
+        from the system. Thiss will also try to erase session cookie
+        from user's browser by issuing new cookie <quote>dummy</> cookie
+        with expiration time set to <quote>now</>.
+      </para>
+      </section>
+
+      <section><title>Change password</>
+      <para> 
+        <guimenuitem>Change password</> command allows user to
+        change her own password. Password change dialog will prompt
+        for user's current password and new password twice to reduce
+        risk of typing mistakes in new password.
+      </para>
+      </section>
+
+      <section><title>Edit settings</>
+      <para> 
+        <guimenuitem>Edit settings</> command allows user to
+        change her email address and toggle automatic email notifications
+        on or off. Automatic email notifications are sent to user's
+        email address when user's changes come to effect (new DNS
+        configuration is generated using <filename>sauron</> command
+        with <option>--mail</> option).
+      </para>
+      </section>
+
+      <section><title>Save settings</>
+      <para> 
+        <guimenuitem>Save settings</> command save user's current
+        server and zone selection. When user logs on next time, server
+        and zone selections are recalled and user will be in 
+        <guimenu>Hosts</> menu by default.
+      </para>
+      </section>
+
+      <section><title>Frames ON/OFF</>
+      <para> 
+        <guimenuitem>Frames ON/OFF</> command allows user to
+        toggle between frames and non-frames operation mode
+        of the web interface. It should be noted that the non-frames
+        mode of the web interface is currently faster and better tested.
+      </para>
+      </section>
+
+      <section><title>Lastlog</>
+      <para> 
+        <guimenuitem>Lastlog</> command displays list or resent
+        user sessions (with links to session infos). 
+        This command is only available for administrator.
+      </para>
+      </section>
+
+      <section><title>Session Info</>
+      <para> 
+        <guimenuitem>Session Info</> command allows administrator
+        to browse log information about user sessions by session id
+        (SID). Log information contains information about
+        what changes user has made to hosts.
+        This command is only available for administrator.
+      </para>
+      </section>
+
+      <section><title>Add news msg</>
+      <para> 
+        <guimenuitem>Add news msg</> command allows administrator
+        to add news system news messages that are displayed when
+        to users when they log in.
+      </para>
+      </section>
+
     </section>
 
   </chapter>
