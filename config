@@ -9,6 +9,7 @@ $CGI_STATE_PATH = "/home/tjko/work/sauron/cgi/state";
 
 $DB_CONNECT = "dbname=sauron user=tjko password=kala";
 
+$USER_TIMEOUT = 3600;
 
 
 $LOOPBACK_NET = "127.0.0.0/24";

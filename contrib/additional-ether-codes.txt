@@ -2,7 +2,7 @@ List of additional NIC vendor codes (those not yet in "Ethernet.txt").
 
 $Revision$
 $Date$
-$Authro: $
+$Author$
 $Id$
 
 

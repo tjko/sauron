@@ -214,10 +214,10 @@ unless ($scookie) {
   $new_cookie=make_cookie();
   print header(-cookie=>$new_cookie,-target=>'_top'),
         start_html(-title=>"Sauron Login",-BGCOLOR=>'white');
-  login_form("Welcome",$ncookie);
+  login_form("Welcome (1)",$ncookie);
 }
 
-if ($state{'mode'} eq 'auth' && param('login') eq 'yes') {
+if ($state{'mode'} eq '1' && param('login') eq 'yes') {
   print header(-target=>'_top'),
         start_html(-title=>"Sauron Login",-BGCOLOR=>'white');
   login_auth(); 
@@ -226,7 +226,13 @@ if ($state{'mode'} eq 'auth' && param('login') eq 'yes') {
 if ($state{'auth'} ne 'yes' || $pathinfo eq '/login') {
   print header(-target=>'_top'),
         start_html(-title=>"Sauron Login",-BGCOLOR=>'white');
-  login_form("Welcome",$scookie);
+  login_form("Welcome (2)",$scookie);
+}
+
+if ((time() - $state{'last'}) > $USER_TIMEOUT) {
+  print header(-target=>'_top'),
+        start_html(-title=>"Sauron Login",-BGCOLOR=>'white');
+  login_form("Your session timed out. Login again",$scookie);
 }
 
 error("Unauthorized Access denied!") 
@@ -519,6 +525,7 @@ sub hosts_menu() {
 	$res=-1;
 	if ($res < 0) {
 	  print "<FONT color=\"red\">",h1("Zone record update failed!"),
+	        p,"result code=$res",
 	        "</FONT>";
 	} else {
 	  print h2("Zone record succefully updated:");
@@ -743,7 +750,7 @@ sub login_form($$) {
 
   #print "</TABLE>\n" unless($frame_mode);
   print p,hr,"You should have cookies enabled for this site...",end_html();
-  $state{'mode'}='auth';
+  $state{'mode'}='1';
   $state{'auth'}='no';
   save_state($c);
   exit;      
@@ -754,7 +761,7 @@ sub login_auth() {
   my(%user,$ctx,$salt,$pass,$digest);
   
   $state{'auth'}='no';
-  delete $state{'mode'};
+  $state{'mode'}='0';
   $u=param('login_name');
   $p=param('login_pwd');
   $p=~s/\ \t\n//g;
@@ -773,6 +780,8 @@ sub login_auth() {
 	if ($digest eq $user{'password'}) {
 	  $state{'auth'}='yes';
 	  $state{'user'}=$u;
+	  $state{'uid'}=$user{'id'};
+	  $state{'login'}=time();
 	  print p,h1("Login ok!"),p,
 	        "Come in... <a href=\"$s_url/frames\">frames version</a> ",
 	        "or <a href=\"$s_url\">table version</a>";
@@ -936,7 +945,7 @@ sub make_cookie() {
   
   undef %state;
   $state{'auth'}='no';
-  $state{'host'}=remote_host();
+  #$state{'host'}=remote_host();
   $state{'addr'}=$ENV{'REMOTE_ADDR'};
   save_state($val);
   $ncookie=$val;
@@ -945,37 +954,78 @@ sub make_cookie() {
 
 sub save_state($id) {
   my($id)=@_;
+  my(@q,$res,$s_auth,$s_addr,$other,$s_mode);
 
-  open(STATEFILE,">$CGI_STATE_PATH/$id") || error2("cannot save state $id");
-  if (keys(%state) > 0) {
-    foreach $key (keys %state) {
-      print STATEFILE "$key=" . $state{$key} ."\n";
-    }
-  } else {
-      print STATEFILE "auth=no\n";
+  undef @q;
+  db_query("SELECT uid FROM utmp WHERE cookie='$id';",\@q);
+  unless (@q > 0) {
+    db_exec("INSERT INTO utmp (uid,cookie,auth) VALUES(-1,'$id',false);");
   }
-  close(STATEFILE);
+  
+  $s_auth='false';
+  $s_auth='true' if ($state{'auth'} eq 'yes');
+  $s_mode=0;
+  $s_mode=$state{'mode'} if ($state{'mode'});
+  $s_addr=$state{'addr'};
+  $other='';
+  if ($state{'uid'}) { $other.=", uid=".$state{'uid'}." ";  }
+  if ($state{'serverid'}) {
+    $other.=", serverid=".$state{'serverid'}." ";
+    $other.=", server='".$state{'server'}."' ";
+  }
+  if ($state{'zoneid'}) {
+    $other.=", zoneid=".$state{'zoneid'}." ";
+    $other.=", zone='".$state{'zone'}."' ";
+  }
+  if ($state{'user'}) { $other.=", uname='".$state{'user'}."' "; }
+  if ($state{'login'}) { $other.=", login=".$state{'login'}." "; }
+
+  $res=db_exec("UPDATE utmp SET auth=$s_auth, addr='$s_addr', mode=$s_mode " .
+	       " $other " .
+	       "WHERE cookie='$id';");
+
+  error("cannot save stat '$id'") if ($res < 0);
 }
 
 
 sub load_state($) {
   my($id)=@_;
+  my(@q);
+
   undef %state;
   $state{'auth'}='no';
-  open(STATEFILE,"$CGI_STATE_PATH/$id") || return 0;
-  while (<STATEFILE>) {
-    next if /^\#/;
-    next unless /^\s*(\S+)\s*\=\s*(\S+)\s*$/;
-    $state{$1}=$2;
+
+  undef @q;
+  db_query("SELECT uid,addr,auth,mode,serverid,server,zoneid,zone," .
+	   "uname,last " .
+	   "FROM utmp WHERE cookie='$id';",\@q);
+  if (@q > 0) {
+    $state{'uid'}=$q[0][0];
+    $state{'addr'}=$q[0][1];
+    $state{'auth'}='yes' if ($q[0][2] eq 't');
+    $state{'mode'}=$q[0][3];
+    if ($q[0][4] > 0) {
+      $state{'serverid'}=$q[0][4];
+      $state{'server'}=$q[0][5];
+    }
+    if ($q[0][6] > 0) {
+      $state{'zoneid'}=$q[0][6];
+      $state{'zone'}=$q[0][7];
+    }
+    $state{'user'}=$q[0][8] if ($q[0][8] ne '');
+    $state{'last'}=$q[0][9];
+
+    db_exec("UPDATE utmp SET last=" . time() . " WHERE cookie='$id';");
+    return 1;
   }
-  close(STATEFILE);
-  return 1;
+
+  return 0;
 }
 
 sub remove_state($) {
   my($id) = @_;
 
-  unlink("$CGI_STATE_PATH/$id");
+  db_exec("DELETE FROM utmp WHERE cookie='$id';");
   undef %state;
 }
 

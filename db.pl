@@ -1,6 +1,8 @@
 # db.pl  -- database interface routines
 
+use Time::Local;
 use Pg;
+
 #use strict;
 
 sub sql_print_result($) {
@@ -188,5 +190,16 @@ sub db_timestamp_str() {
   return $s;
 }
 
+sub db_timestr_time($) {
+  my($timestr)=@_;
+
+  if ($timestr =~ 
+      /^\s*(\d{2,4})-(\d\d)-(\d\d)\s+(\d{1,2}):(\d{1,2}):(\d{1,2})(\+(\d{1,2}))?\s*$/ ) {
+
+	return timelocal($6,$5,$4,$3,$2-1,$1-1900);
+      }
+
+   return 0;
+}
 
 # eof
