@@ -6,6 +6,7 @@ package Sauron::DB;
 require Exporter;
 use Time::Local;
 use DBI;
+use Sauron::Util;
 use strict;
 use vars qw($VERSION @ISA @EXPORT);
 
@@ -63,7 +64,7 @@ sub db_connect2($) {
 
   $dbh = DBI->connect($DB_CONNECT,$user,$password);
   unless ($dbh) {
-    error("db_connect() failed: ",$DBI::errstr);
+    error("db_connect() failed: " . $DBI::errstr);
     return 0;
   }
 
