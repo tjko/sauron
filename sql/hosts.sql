@@ -10,7 +10,7 @@
 /** This table contains host entries for a zone. **/
 
 CREATE TABLE hosts (
-       id	   SERIAL,  /* unique ID */
+       id	   SERIAL PRIMARY KEY,  /* unique ID */
        zone	   INT4 NOT NULL, /* ptr to a zone table record
 					-->zones.id */
        type	   INT4 DEFAULT 0, /* host type: 
@@ -62,6 +62,7 @@ CREATE TABLE hosts (
 			       
        comment	   TEXT,       /* comment */
 
-       CONSTRAINT  hosts_key PRIMARY KEY (domain,zone)
+       CONSTRAINT  hostname_key UNIQUE (domain,zone),
+       CONSTRAINT  ether_key UNIQUE(ether,zone)
 ) INHERITS(common_fields);
 

@@ -2,7 +2,7 @@
 #
 # moduser - utility to modify user rights
 #
-# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000.
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000,2001.
 # $Id$
 #
 require 5;
@@ -29,7 +29,7 @@ $fooname=($modgroup ? 'groupname' : 'username');
 
 
 $user = (getpwuid($<))[0];
-$mdate = db_timestamp_str();
+$mdate = time;
 
 %addmodes=('server'=>1,'zone'=>2,'net'=>3,'host'=>4);
 
@@ -174,7 +174,8 @@ if ($modgroup) {
 
 
   undef @q;
-  db_query("SELECT u.id,u.name,u.superuser,u.comment,u.password,u.gid " .
+  db_query("SELECT u.id,u.name,u.superuser,u.comment,u.password,u.gid, " .
+	   " u.cdate,u.cuser,u.mdate,u.muser " .
 	   "FROM users u " .
 	   "WHERE u.username='$opt_user';",\@q);
   fatal("Cannot find user '$opt_user' from users table!") if (@q < 1);
@@ -182,6 +183,10 @@ if ($modgroup) {
   $status=($pwd=~/^LOCKED/?"LOCKED!":"valid");
   $status="Invalid password" unless $pwd =~ /^(LOCKED|MD5)/;
 
+  $cdate_str=localtime($q[0][6]);
+  $cuser_str=$q[0][7];
+  $mdate_str=localtime($q[0][8]);
+  $muser_str=$q[0][9];
   $gid=$q[0][5];
   $gidname='<none>';
   if ($gid > 0) {
@@ -190,11 +195,13 @@ if ($modgroup) {
     $gidname=$q[0][0] if (@q > 0);
   }
 
-  print "\n Username: $opt_user (id=$id)\n",
-        " Longname: $q[0][1]\n",
-        "superuser: " ,($q[0][2] eq 't' ? 'Yes':'No'), "\n",
-        "    group: $gidname (gid=$gid)\n",
-	"   status: $status\n\n";
+  print "\n        Username: $opt_user (id=$id)\n",
+        "        longname: $q[0][1]\n",
+        "       superuser: " ,($q[0][2] eq 't' ? 'Yes':'No'), "\n",
+        "           group: $gidname (gid=$gid)\n",
+	"          status: $status\n",
+	" account created: $cdate_str by $cuser_str\n",
+	"   last modified: $mdate_str by $muser_str\n\n";
 }
 
 
