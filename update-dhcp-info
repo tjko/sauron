@@ -76,9 +76,9 @@ if ($file =~ /\.gz$/) {
 }
 
 while (<FILE>) {
-  next unless /^(\S+)\s+(\d+)\s+(\d+):(\d+):(\d+)\s+(\S+)\s+dhcpd:\s(.*)$/;
+  next unless /^(\S+)\s+(\d+)\s+(\d+):(\d+):(\d+)\s+(\S+)\s+dhcpd:(\s+\[.+?\])?\s(.*)$/;
 
-  $m=$months{$1}; $d=$2; $hour=$3; $min=$4; $sec=$5; $host=$6; $rest=$7;
+  $m=$months{$1}; $d=$2; $hour=$3; $min=$4; $sec=$5; $host=$6; $rest=$8;
   $t=timelocal($sec,$min,$hour,$d,$m,$year);
   $first_date = $t unless (defined $first_date);
   $first_host = $host unless (defined $first_host);
