@@ -4,6 +4,7 @@
 # $Id$
 #
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>, 2000.
+# All Rights Reserved.
 #
 use CGI qw/:standard *table/;
 use CGI::Carp 'fatalsToBrowser'; # debug stuff
@@ -59,8 +60,8 @@ error("invalid directory configuration")
    type=>['cidr','text'], len=>[20,30], empty=>[0,1], 
    elabels=>['IP','comment']},
   {ftype=>0, name=>'DHCP'},
-  {ftype=>2, tag=>'dhcp', name=>'Global DHCP', type=>'text', fields=>2,
-   len=>[35,20], empty=>[0,1],elabels=>['dhcptab line','comment']} 
+  {ftype=>2, tag=>'dhcp', name=>'Global DHCP', type=>['text','text'], 
+   fields=>2, len=>[35,20], empty=>[0,1],elabels=>['dhcptab line','comment']} 
  ],
  bgcolor=>'#00ffff',
  border=>'0',		
@@ -126,7 +127,8 @@ if ($pathinfo ne '') {
 
 print header,
       start_html(-title=>"Sauron $VER",-BGCOLOR=>'white'),
-      "\n\n<!-- Copyright (c) Timo Kokkonen <tjko\@iki.fi>  2000. -->\n\n";
+      "\n\n<!-- Sauron $VER -->\n",
+      "\n<!-- Copyright (c) Timo Kokkonen <tjko\@iki.fi>  2000. -->\n\n";
 
 unless ($frame_mode) {
   top_menu(0);
@@ -196,6 +198,26 @@ sub servers() {
       goto select_server;
     }
 
+    if (param('srv_submit') ne '') {
+      get_server($serverid,\%serv);
+      unless (form_check_form('srv',\%serv,\%server_form)) {
+	$res=update_server(\%serv);
+	if ($res < 0) {
+	  print "<FONT color=\"red\">",h1("Server record update failed!"),
+	        "</FONT>";
+	  print p,"server update result code=$res";
+	} else {
+	  print h2("Server record succesfully updated:");
+	}
+	get_server($serverid,\%serv);
+	display_form(\%serv,\%server_form);
+	return;
+      }
+      print "<FONT color=\"red\">",
+            h2('Invalid data in form!'),
+            "</FONT>";
+    }
+
     unless (param('srv_re_edit') eq '1') {
       get_server($serverid,\%serv);
     }
@@ -226,9 +248,7 @@ sub servers() {
 	$state{'serverid'}=$serverid;
 	save_state($scookie);
       }
-      
-      display_form(\%serv,\%server_form);
-
+      display_form(\%serv,\%server_form); # display server record 
     }
     else {
      select_server:
@@ -613,7 +633,7 @@ sub make_cookie() {
   $state{'addr'}=$ENV{'REMOTE_ADDR'};
   save_state($val);
   $ncookie=$val;
-  return cookie(-name=>'sauron',-expires=>'+1h',-value=>$val,-path=>$s_url);
+  return cookie(-name=>'sauron',-expires=>'+1d',-value=>$val,-path=>$s_url);
 }
 
 sub save_state($id) {
@@ -687,9 +707,127 @@ sub form_array($$) {
   
 }
 
+
+#####################################################################
+# form_check_field($field,$value,$n) 
+#
+# checks if given field in form contains valid data
+#
+sub form_check_field($$$) {
+  my($field,$value,$n) = @_;
+  my($type,$empty);
+  
+  if ($n > 0) { 
+    $empty=${$field->{empty}}[$n-1]; 
+    $type=${$field->{type}}[$n-1];
+  }
+  else { 
+    $empty=$field->{empty}; 
+    $type=$field->{type};
+  }
+
+  unless ($empty == 1) {
+    return 'Empty field not allowed!' if ($value =~ /^\s*$/);
+  }
+
+
+  if ($type eq 'fqdn') {
+    return 'FQDN required!' 
+      unless (valid_domainname($value) && $value=~/\.$/);
+  } elsif ($type eq 'path') {
+    return 'valid pathname required!'
+      unless ($value =~ /^(|\S+\/)$/);
+  } elsif ($type eq 'cidr') {
+    return 'valid CIDR (IP) required!' unless (is_cidr($value));
+  } elsif ($type eq 'text') {
+    return '';
+  } else {
+    return "unknown typecheck for form_check_field: $type !";
+  }
+
+  return '';
+}
+
+
+#####################################################################
+# form_check_form($prefix,$data,$form)
+# 
+# checks if form contains valid data and updates 'data' hash 
+#
+sub form_check_form($$$) {
+  my($prefix,$data,$form) = @_;
+  my($formdata,$i,$j,$k,$type,$p,$p2,$tag,$list,$id,$ind,$f,$new);
+
+  $formdata=$form->{data};
+  for $i (0..$#{$formdata}) {
+    $rec=$$formdata[$i];
+    $type=$rec->{ftype};
+    $tag=$rec->{tag};
+    $p=$prefix."_".$tag;
+
+    if ($type == 1) {
+      return 1 if (form_check_field($rec,param($p),0) ne '');
+      #print p,"$p changed!" if ($data->{$tag} ne param($p));
+      $data->{$tag}=param($p);
+    } elsif  ($type == 2) {
+      $f=$rec->{fields};
+      $a=param($p."_count");
+      $a=0 if (!$a || $a < 0);
+      for $j (1..$a) {
+	next if (param($p."_".$j."_del") eq 'on'); # skip if 'delete' checked
+	for $k (1..$f) {
+	  return 1 
+	    if (form_check_field($rec,param($p."_".$j."_".$k),$k) ne '');
+	}
+      }
+
+      # if we get this far, check what records we need to add/update/delete
+      $list=$data->{$tag};
+      for $j (1..$a) {
+	$p2=$p."_".$j;
+	$id=param($p2."_id");
+	if ($id) {
+	  $ind=-1;
+	  for $k (0..$#{$list}) {
+	    if ($$list[$k][0] eq $id) { $ind=$k; last; }
+	  }
+	} else { $ind=-1; }
+	#print p,"foo $p2 id=$id ind=$ind";
+
+	if (param($p2."_del") eq 'on') {
+	  if ($ind >= 0) {
+	    $$list[$ind][$f+1]=-1;
+	    #print p,"$p2 delete record";
+	  }
+	} else {
+	  if ($ind < 0) {
+	    #print p,"$p2 add new record";
+	    $new=[];
+	    $$new[$f+1]=2;
+	    for $k (1..$f) { $$new[$k]=param($p2."_".$k); }
+	    push @{$list}, $new;
+	  } else {
+	    for $k (1..$f) {
+	      if (param($p2."_".$k) ne $$list[$ind][$k]) {
+		$$list[$ind][$f+1]=1;
+		$$list[$ind][$k]=param($p2."_".$k);
+		#print p,"$p2 modified record (field $k)";
+	      }
+	    }
+	  }
+	}
+      }
+
+    }
+  }
+
+  return 0;
+}
+
+
 sub form_magic($$$) {
   my($prefix,$data,$form) = @_;
-  my($i,$j,$k,$n,$key,$rec,$a,$formdata,$h_bg);
+  my($i,$j,$k,$n,$key,$rec,$a,$formdata,$h_bg,$e_str,$p1,$p2);
 
   $formdata=$form->{data};
   if ($form->{heading_bg}) { $h_bg=$form->{heading_bg}; }
@@ -704,7 +842,8 @@ sub form_magic($$$) {
       }
       elsif ($rec->{ftype} == 2) {
 	$a=$data->{$rec->{tag}};
-	for $j (0..$#{$a}) {
+	for $j (1..$#{$a}) {
+	  param($prefix."_".$rec->{tag}."_".$j."_id",$$a[$j][0]);
 	  for $k (1..$rec->{fields}) {
 	    param($prefix."_".$rec->{tag}."_".$j."_".$k,$$a[$j][$k]);
 	  }
@@ -729,37 +868,44 @@ sub form_magic($$$) {
 
   for $i (0..$#{$formdata}) {
     $rec=$$formdata[$i];
+    $p1=$prefix."_".$rec->{tag};
+
     if ($rec->{ftype} == 0) {
       print "<TR><TH COLSPAN=2 ALIGN=\"left\" BGCOLOR=\"$h_bg\">",
              $rec->{name},"</TH>\n";
     } elsif ($rec->{ftype} == 1) {
-      print Tr,td($rec->{name}),
-            td(textfield(-name=>$prefix."_".$rec->{tag},-size=>$rec->{len},
-			 -value=>param($prefix."_".$rec->{tag}))),"\n";
+      print Tr,td($rec->{name}),"<TD>",
+            textfield(-name=>$p1,-size=>$rec->{len},-value=>param($p1));
+
+      print "<FONT size=-1 color=\"red\"><BR> ",
+            form_check_field($rec,param($p1),0),
+            "</FONT></TD>";
     } elsif ($rec->{ftype} == 2) {
       print Tr,td($rec->{name}),"<TD><TABLE>",Tr;
-      $a=param($prefix."_".$rec->{tag}."_count");
-      if (param($prefix."_".$rec->{tag}."_add") ne '') {
+      $a=param($p1."_count");
+      if (param($p1."_add") ne '') {
 	$a=$a+1;
-	param($prefix."_".$rec->{tag}."_count",$a);
+	param($p1."_count",$a);
       }
       $a=0 if (!$a || $a < 0);
       #if ($a > 50) { $a = 50; }
-      print hidden(-name=>$prefix."_".$rec->{tag}."_count",-value=>$a);
+      print hidden(-name=>$p1."_count",-value=>$a);
       for $k (1..$rec->{fields}) { 
 	print "<TD>",${$rec->{elabels}}[$k-1],"</TD>"; 
       }
       for $j (1..$a) {
-	print Tr;
+	$p2=$p1."_".$j;
+	print Tr,hidden(-name=>$p2."_id",param($p2."_id"));
 	for $k (1..$rec->{fields}) {
-	  $n=$prefix."_".$rec->{tag}."_".$j."_".$k;
-	  print td(textfield(-name=>$n,-size=>${$rec->{len}}[$k-1],
-		   -value=>param($n)));
-
+	  $n=$p2."_".$k;
+	  print "<TD>",textfield(-name=>$n,-size=>${$rec->{len}}[$k-1],
+	                         -value=>param($n));
+	  print "<FONT size=-1 color=\"red\"><BR>",
+              form_check_field($rec,param($n),$k),
+              "</FONT></TD>";
         }
         print td(checkbox(-label=>' Delete',
-	             -name=>$prefix."_".$rec->{tag}."_".$j."_del",
-		     -checked=>param($prefix." ".$rec->{tag}."_".$j."_del") ));
+	             -name=>$p2."_del",-checked=>param($p2."_del") ));
       }
       print Tr,Tr,Tr,Tr;
       $j=$a+1;

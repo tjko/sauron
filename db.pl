@@ -108,9 +108,12 @@ sub db_begin() {
   return db_exec("BEGIN;");
 }
 
-
 sub db_commit() {
   return db_exec("COMMIT;");
+}
+
+sub db_rollback() {
+  return db_exec("ROLLBACK;");
 }
 
 

@@ -54,37 +54,97 @@ sub get_record($$$$$) {
   return 0;
 }
 
+sub get_array_field($$$$$$$) {
+  my($table,$count,$fields,$desc,$rule,$rec,$keyname) = @_;
+  my(@list,$l,$i);
 
+  db_query("SELECT $fields FROM $table WHERE $rule;",\@list);
+  $l=[];
+  push @{$l}, [split(",",$desc)];
+  for $i (0..$#list) {
+    $list[$i][$count]=0;
+    push @{$l}, $list[$i];
+  }
+
+  $$rec{$keyname}=$l;
+}
+
+sub update_array_field($$$$$$) {
+  my($table,$count,$fields,$keyname,$rec,$vals) = @_;
+  my($list,$i,$j,$m,$str,$id,$flag,@f);
+  
+  return -128 unless ($table);
+  return -1 unless (ref($rec) eq 'HASH');
+  return -2 unless ($$rec{'id'} > 0);
+  $list=$$rec{$keyname};
+  return -3 unless ($list);
+  @f=split(",",$fields);
+
+  for $i (1..$#{$list}) {
+    $m=$$list[$i][$count];
+    $id=$$list[$i][0];
+    if ($m == -1) { # delete record
+      $str="DELETE FROM $table WHERE id=$id;";
+      print "<P>delete record $id $str";
+      return -5 if (db_exec($str) < 0);
+    } 
+    elsif ($m == 1) { # update record
+      $flag=0;
+      $str="UPDATE $table SET ";
+      for $j(1..($count-1)) {
+	$str.=", " if ($flag);
+	$str.="$f[$j-1]=". db_encode_str($$list[$i][$j]);
+	$flag=1 if (!$flag);
+      }
+      $str.=" WHERE id=$id;";
+      print "<P>update record $id $str";
+      return -6 if (db_exec($str) < 0);
+    } 
+    elsif ($m == 2) { # add record
+      $flag=0;
+      $str="INSERT INTO $table ($fields) VALUES(";
+      for $j(1..($count-1)) {
+	$str.=", " if ($flag);
+	$str.=db_encode_str($$list[$i][$j]);
+	$flag=1 if (!$flag);
+      }
+      $str.=",$vals);";
+      print "<P>add record $id $str";
+      return -7 if (db_exec($str) < 0);
+    }
+  }
+
+  return 0;
+}
+		       
 
 sub update_record($$) {
   my ($table,$rec) = @_;
   my ($key,$sqlstr,$id,$flag,$r);
   
   return -128 unless ($table);
-  return -1 unless (ref($rec) eq 'HASH');
-  return -2 unless ($$rec{'id'} > 0);
+  return -129 unless (ref($rec) eq 'HASH');
+  return -130 unless ($$rec{'id'} > 0);
 
   $id=$$rec{'id'};
   $sqlstr="UPDATE $table SET ";
 
   foreach $key (keys %{$rec}) {
     next if ($key eq 'id');
+    next if (ref($$rec{$key}) eq 'ARRAY');
 
     $sqlstr.="," if ($flag);
-    if (ref($$rec{$key}) eq 'ARRAY') {
-      $sqlstr.="$key=" . db_encode_list_str($$rec{$key});
-    } else {
-      $sqlstr.="$key=" . db_encode_str($$rec{$key});
-    }
+    $sqlstr.="$key=" . db_encode_str($$rec{$key});
    
     $flag=1 if (! $flag);
   }
 
   $sqlstr.=" WHERE id=$id;";
-  #print "sql=$sqlstr\n";
+  #print "<p>sql=$sqlstr\n";
 
   return db_exec($sqlstr);
 }
+
 
 
 ############################################################################
@@ -116,19 +176,6 @@ sub get_server_list() {
 }
 
 
-sub get_array_field($$$$$$$) {
-  my($table,$count,$fields,$desc,$rule,$rec,$keyname) = @_;
-  my(@list,$l,$i);
-
-  db_query("SELECT $fields FROM $table WHERE $rule;",\@list);
-  $l=[];
-  push @{$l}, [split(",",$desc)];
-  for $i (0..$#list) {
-    push @{$l}, $list[$i];
-  }
-
-  $$rec{$keyname}=$l;
-}
 	       
 sub get_server($$) {
   my ($id,$rec) = @_;
@@ -154,7 +201,20 @@ sub get_server($$) {
 
 sub update_server($) {
   my($rec) = @_;
-  return update_record('servers',$rec);
+  my($r,$id);
+
+  db_begin();
+  $r=update_record('servers',$rec);
+  if ($r < 0) { db_rollback(); return $r; }
+  $id=$rec->{id};
+  $r=update_array_field("cidr_entries",3,"ip,comment,type,ref",
+			 'allow_transfer',$rec,"1,$id");
+  if ($r < 0) { db_rollback(); return -12; }
+  $r=update_array_field("dhcp_entries",3,"dhcp,comment,type,ref",'dhcp',$rec,
+		        "1,$id");
+  if ($r < 0) { db_rollback(); return -13; }
+
+  return db_commit();
 }
 
 
