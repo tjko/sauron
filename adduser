@@ -136,7 +136,7 @@ $user{expiration}=$opt_expiration;
 fatal("Cannot add user to users table: " . db_errormsg())
   if (add_user(\%user) < 0);
 
-print "User $opt_user added succesfully.\n";
+print "User $opt_user added successfully.\n";
 print "Remember to give user some rights with moduser command.\n"
 	  if (($opt_superuser ne 'true') and ($gid < 1));
 
