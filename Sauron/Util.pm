@@ -35,6 +35,7 @@ $VERSION = '$Id$ ';
 	     check_ipmask
 	     dhcpether
 	     run_command
+	     run_command_quiet
 	     print_csv
 	    );
 
@@ -457,14 +458,21 @@ sub dhcpether($) {
 
 
 # custom "system" command with timeout option
-sub run_command($$$)
+sub run_command_internal($$$$)
 {
-  my ($cmd,$args,$timeout) = @_;
+  my ($cmd,$args,$timeout,$quiet) = @_;
   my ($err,$pid);
   my $stat = 0;
 
   return -1 unless ($cmd && -x $cmd);
   return -2 unless ($timeout > 0);
+
+  if ($quiet) {
+    open(OLDOUT,">&STDOUT");
+    open(OLDERR,">&STDERR");
+    open(STDOUT,"> /dev/null");
+    open(STDERR,">&STDOUT");
+  }
 
   if ($pid = fork()) {
     # parent...
@@ -478,8 +486,29 @@ sub run_command($$$)
     exec($cmd,@{$args});
   }
 
+  if ($quiet) {
+    close(STDOUT);
+    close(STDERR);
+    open(STDOUT,">&OLDOUT");
+    open(STDERR,">&OLDERR");
+    close(OLDOUT);
+    close(OLDERR);
+  }
+
   $err = 14 if ($stat);
   return $err;
+}
+
+sub run_command($$$)
+{
+  my ($cmd,$args,$timeout) = @_;
+  return run_command_internal($cmd,$args,$timeout,0);
+}
+
+sub run_command_quiet($$$)
+{
+  my ($cmd,$args,$timeout) = @_;
+  return run_command_internal($cmd,$args,$timeout,1);
 }
 
 
