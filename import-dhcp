@@ -12,20 +12,9 @@ use Sauron::DB;
 use Sauron::Util;
 use Sauron::UtilDhcp;
 use Sauron::BackEnd;
+use Sauron::Sauron;
 
-my ($PG_DIR,$PG_NAME) = ($0 =~ /^(.*\/)(.*)$/);
-$0 = $PG_NAME;
-
-if (-r "/etc/sauron/config") {
-  $config_file="/etc/sauron/config";
-} elsif (-r "/usr/local/etc/sauron/config") {
-  $config_file="/usr/local/etc/sauron/config";
-} else {
-  die("cannot find config file in /etc/sauron or /usr/local/etc/sauron");
-}
-
-do "$config_file" || die("cannot load config: $config_file");
-
+load_config();
 
 ##############################
 
