@@ -13,8 +13,9 @@ CREATE TABLE vlans (
 					-->servers.id */
 
        name	   TEXT NOT NULL CHECK(name <> ''), /* name of vlan */
-       description TEXT, /* long name */
-       comment	   TEXT, /* comments */
+       vlanno	   INT,   /* vlan number (ID) */
+       description TEXT,  /* long name */
+       comment	   TEXT,  /* comments */
 
        CONSTRAINT  vlans_key PRIMARY KEY (name,server)
 ) INHERITS(common_fields);

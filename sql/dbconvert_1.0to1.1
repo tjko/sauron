@@ -24,6 +24,9 @@ ALTER TABLE lastlog RENAME COLUMN host2 TO host;
 /* utmp */
 ALTER TABLE utmp DROP COLUMN gid;
 
+/* vlan */
+ALTER TABLE vlans ADD COLUMN vlanno INT;
+
 \i vmps.sql
 
 UPDATE settings SET value='1.1' where key='dbversion';
