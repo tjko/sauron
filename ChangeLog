@@ -1,6 +1,9 @@
 $Id$
 	
 0.50
+	- search results sorting a'la browser.cgi
+	- hide "VLAN" info from normal users (now, configuration variable
+          PLEVEL_VLANS defines required priv.level to see "VLAN" info)
 	- added privilege level & IP-mask access controls
 	- added privilege levels to {wks,mx}-templates, groups and nets
 	  tables

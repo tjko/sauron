@@ -6,11 +6,9 @@ general:
 	  number of host entries, and to import interactively hosts
 	  from text files in standard zonefile format...
 	- IPv6 support
-	- new access control methods:
-		- privilege levels
-		- IP-masks
 
 import:
+	- fix import(s) to work with new table layout
 	- remove unneccessary (?) quoting (\"...) from dhcp (and other) records
 	- add allow-query/allow-transfer/also-notify support for zones
 	- real parser for both imports
@@ -26,8 +24,8 @@ sauron.cgi:
 	- add search by dhcp_date field...
 	- add quick search like in browser.cgi
         - add "show hosts" button to network entry display
-	- hide "VLAN" info from normal users
 	- display conflicting domainname/MAC when host update/insert fails
+	- option to "download" search results in CSV format
 	
 
 browser.cgi:

@@ -927,6 +927,19 @@ set_muser($state{user});
 $bgcolor='black';
 $bgcolor='white' if ($frame_mode);
 
+unless ($state{superuser} eq 'yes') {
+  error("cannot get permissions!")
+    if (get_permissions($state{uid},$state{gid},\%perms));
+} else {
+  $perms{plevel}=999 if ($state{superuser});
+}
+
+if (param('csv')) {
+  print header(-type=>'text/csv',-target=>'_new');
+  hosts_menu();
+  exit(0);
+}
+
 print header(-type=>'text/html; charset=iso-8859-1'),
       start_html(-title=>"Sauron $VER",-BGCOLOR=>$bgcolor,
 		 -meta=>{'keywords'=>'GNU Sauron DNS DHCP tool'}),
@@ -947,12 +960,6 @@ unless ($frame_mode) {
   #print "<TABLE width=100%><TR bgcolor=\"#ffffff\"><TD>";
 }
 
-unless ($state{superuser} eq 'yes') {
-  error("cannot get permissions!")
-    if (get_permissions($state{uid},$state{gid},\%perms));
-} else {
-  $perms{plevel}=999 if ($state{superuser});
-}
 
 print "<br>" unless ($frame_mode);
 
@@ -1554,7 +1561,7 @@ sub hosts_menu() {
     elsif (param('lastsearch')) {
       if ($state{searchopts} =~ /^(\d+),(\d+),(\d+),(\d+),(\S*),(\S*)$/) {
 	param('bh_type',$1);
-	param('bh_order',$2);
+	param('bh_order',$2) unless (param('bh_order'));
 	param('bh_size',$3);
 	param('bh_stype',$4);
 	param('bh_net',$5) if ($5);
@@ -1592,6 +1599,8 @@ sub hosts_menu() {
       $domainrule=" AND a.domain ~* " . db_encode_str($tmp) . " "; 
     }
     if (param('bh_order') == 1) { $sorder='5,1';  }
+    elsif (param('bh_order') == 3) { $sorder='6,1'; }
+    elsif (param('bh_order') == 4) { $sorder='7,8,1'; }
     else { $sorder='1,5'; }
 
     #if (param('bh_cidr') || param('bh_net') ne 'ANY') {
@@ -1616,6 +1625,8 @@ sub hosts_menu() {
 
     undef @q;
     $fields="a.id,a.type,a.domain,a.ether,a.info,a.huser,a.dept,a.location";
+    $fields.=",a.cdate,a.mdate,a.dhcp_date" if (param('csv'));
+            
     $sql1="SELECT b.ip,'',$fields FROM hosts a,a_entries b " .
 	  "WHERE a.zone=$zoneid AND b.host=a.id $typerule $typerule2 " .
 	  " $netrule $domainrule $extrarule ";
@@ -1644,7 +1655,22 @@ sub hosts_menu() {
     if ($count < 1) {
       alert2("No matching records found.");
       goto browse_hosts;
-    } elsif ($count == 1) {
+    }
+
+    if (param('csv')) {
+      $csv_format =
+	  '"%s","%s","%s","%s","%s","%s","%s","%s","%s","%s","%s"'."\n";
+      printf $csv_format,'Domain','Type','IP','Ether','User','Dept.',
+	                 'Location','Info','cdate','edate','dhcpdate';
+      for $i (0..$#q) {
+	printf $csv_format,$q[$i][4],$host_types{$q[$i][3]},$q[$i][0],
+	                   $q[$i][5],$q[$i][7],$q[$i][8],$q[$i][9],
+			   $q[$i][6],$q[$i][10],$q[$i][11],$q[$i][12];
+      }
+      return;
+    }
+
+    if ($count == 1) {
       param('h_id',$q[0][2]);
       goto show_host_record;
     }
@@ -1654,9 +1680,18 @@ sub hosts_menu() {
           "<TR><TD><B>Zone:</B> $zone</TD>",
           "<TD align=right>Page: ".($page+1)."</TD></TR></TABLE>";
 
-    print "<TABLE width=\"99%\" cellspacing=0 cellpadding=1 BGCOLOR=\"#eeeeff\">",
-          Tr,Tr,
-          "<TR bgcolor=#aaaaff>",th(['#','Hostname','Type','IP','Ether','Info']);
+    $sorturl="$selfurl?menu=hosts&sub=browse&lastsearch=1";
+    print 
+      "<TABLE width=\"99%\" cellspacing=0 cellpadding=1 BGCOLOR=\"#eeeeff\">",
+      Tr,Tr,
+      "<TR bgcolor=#aaaaff>",
+      th(['#',
+	  "<a href=\"$sorturl&bh_order=1\">Hostname</a>",
+	  'Type',
+	  "<a href=\"$sorturl&bh_order=2\">IP</a>",
+	  "<a href=\"$sorturl&bh_order=3\">Ether</a>",
+	  "<a href=\"$sorturl&bh_order=4\">Info</a>"]);
+
     for $i (0..$#q) {
       $type=$q[$i][3];
       ($ip=$q[$i][0]) =~ s/\/\d{1,2}$//g;
@@ -1676,7 +1711,7 @@ sub hosts_menu() {
       $trcolor='#ffffcc' if ($i % 2 == 0);
       print "<TR bgcolor=\"$trcolor\">",
 	    "<TD><FONT size=-1>".($i+1).".</FONT></TD>",
-	    td([$hostname,$host_types{$q[$i][3]},$ip,
+	    td([$hostname,"<FONT size=-1>$host_types{$q[$i][3]}</FONT>",$ip,
 	       "<PRE>$ether&nbsp;</PRE>",
 	       "<FONT size=-1>".$info."&nbsp;</FONT>"]),"</TR>";
 
@@ -1700,7 +1735,10 @@ sub hosts_menu() {
 	      "$params\">next</A>";
     } else { print "next"; }
 
-    print "]</CENTER><BR>";
+    print "]</CENTER><BR>",
+          "<div align=right><font size=-1>",
+          "<a name=\"foo.csv\" href=\"$sorturl&csv=1\">Download results in CSV format</a>",
+          " &nbsp;</font></div>";
     return;
   }
   elsif ($sub eq 'add') {
