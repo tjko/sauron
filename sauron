@@ -909,7 +909,7 @@ sub make_bind() {
 	  $ttl=$q[$i][2];
 	  $ttl='' unless ($ttl > 0);
 	  $alias=$q[$i][1];
-	  $alias="$alias.$origin" unless ($alias =~ /\.$/);
+	  $alias="$alias.$origin" unless ($alias =~ /(^\@|\.)$/);
 	  printf ZONEFILE $ZFORMAT, $domain,$ttl,$class,'CNAME',$alias;
 	}
       }
