@@ -164,7 +164,7 @@ $help_str = ( @{$$BROWSER_HELP{$key}} == 2 ?
 $show_max=($BROWSER_MAX > 0 ? $BROWSER_MAX : 100);
 
 ($min,$hour,$mday,$mon,$year) = (localtime(time))[1, 2, 3, 4, 5];
-$timestamp = sprintf "%d.%d.%d %02d:%02d",$mday,$mon,$year+1900,$hour,$min;
+$timestamp = sprintf "%d.%d.%d %02d:%02d",$mday,$mon+1,$year+1900,$hour,$min;
 
 
 print "<TABLE width=\"100%\" cellpadding=3 cellspacing=0 border=0 ",
