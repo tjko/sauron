@@ -2269,6 +2269,17 @@ sub hosts_menu() {
     }
     elsif (param('addhost_submit')) {
       unless (($res=form_check_form('addhost',\%data,$newhostform))) {
+	if ($data{net} ne 'MANUAL' && not is_cidr($data{ip})) {
+	  $tmpnet=new Net::Netmask($data{net});
+	  $ip=auto_address($serverid,$tmpnet->desc());
+	  unless (is_cidr($ip)) {
+	    logmsg("notice","auto_address($serverid,$data{net}) failed!");
+	    alert1("Cannot get free IP: $ip");
+	    return;
+	  }
+	  $data{ip}=$ip;
+	}
+
 	if ($data{net} eq 'MANUAL' && not is_cidr($data{ip})) {
 	  alert1("IP number must be specified if using Manual IP!");
 	} elsif ($u_id=domain_in_use($zoneid,$data{domain})) {
@@ -2280,24 +2291,12 @@ sub hosts_menu() {
 	} elsif (check_perms('host',$data{domain},1)) {
 	  alert1("Invalid hostname: does not conform your restrictions");
 	} elsif (is_cidr($data{ip}) && check_perms('ip',$data{ip},1)) {
-	  alert1("Invalid IP number: outside allowed range(s)");
+	  alert1("Invalid IP number: outside allowed range(s): $data{ip}");
 	} else {
 	  print h2("Add");
 	  if ($data{type} == 1 || $data{type} == 101) {
-	    if ($data{ip} && $data{net} eq 'MANUAL') {
-	      $ip=$data{ip};
-	      delete $data{ip};
-	      $data{ip}=[[0,$ip,'t','t','']];
-	    } else {
-	      $tmpnet=new Net::Netmask($data{net});
-	      $ip=auto_address($serverid,$tmpnet->desc());
-	      unless (is_cidr($ip)) {
-		logmsg("notice","auto_address($serverid,$data{net}) failed!");
-		alert1("Cannot get IP: $ip");
-		return;
-	      }
-	      $data{ip}=[[0,$ip,'t','t','']];
-	    }
+	    $ip=$data{ip}; delete $data{ip};
+	    $data{ip}=[[0,$ip,'t','t','']];
 	  } elsif ($data{type} == 6) {
 	    $ip=$data{glue}; delete $data{glue};
 	    $data{ip}=[[0,$ip,'t','t','']];
