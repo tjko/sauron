@@ -28,6 +28,7 @@ require Exporter;
 	     check_ipmask
 	     dhcpether
 	     run_command
+	     print_csv
 	    );
 
 
@@ -408,6 +409,24 @@ sub run_command($$$)
   return $err;
 }
 
+
+sub print_csv($)
+{
+  my($lst) = @_;
+  my($i,$val,$line);
+
+  for $i (0..$#{$lst}) {
+    $val = $$lst[$i];
+    if ($val =~ /\s|,/) {
+      $val =~ s/\"/""/g;
+      $val = "\"$val\"";
+    }
+    $line .= "," if ($line);
+    $line .= $val;
+  }
+
+  return $line;
+}
 
 1;
 # eof
