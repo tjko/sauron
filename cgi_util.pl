@@ -19,6 +19,22 @@ sub cgi_util_set_serverid($) {
   $CGI_UTIL_serverid = $id;
 }
 
+
+sub valid_safe_string($$) {
+    my($str,$maxlen) = @_;
+    my($i,$c);
+
+    return 0 if (($maxlen > 0) && (length($str) > $maxlen));
+
+    for $i (1..length($str)) {
+        $c = ord(substr($str,$i-1,1));
+        return 0 if ($c < 32);
+        return 0 if ($c >= 254);
+    }
+
+    return 1;
+}
+
 #####################################################################
 # form_check_field($field,$value,$n) 
 #
@@ -51,6 +67,9 @@ sub form_check_field($$$) {
       return 'FQDN required!'
 	unless (valid_domainname($value) && $value=~/\.$/);
     }
+  } elsif ($type eq 'zonename') {
+    return 'valid zone name required!' 
+      unless (valid_domainname_check($value,1));
   } elsif ($type eq 'path') {
     return 'valid pathname required!'
       unless ($value =~ /^(|\S+\/)$/);

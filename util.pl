@@ -7,8 +7,8 @@ use Digest::MD5;
 #use strict;
 
 # returns nonzero in case given domainname is valid
-sub valid_domainname($) {
-  my($domain)= @_;
+sub valid_domainname_check($$) {
+  my($domain,$mode)= @_;
   my($dom);
 
   $dom="\L$domain";
@@ -18,15 +18,29 @@ sub valid_domainname($) {
     return 1;
   }
   
-  if ($dom =~ /([^a-z0-9\-\.])/) {
-    #warn("invalid character '$1' in domainname: '$domain'");
-    return 0;
-  }
+  if ($mode == 1) {
+    if ($dom =~ /([^a-z0-9\-\._])/) {
+      #warn("invalid character '$1' in domainname: '$domain'");
+      return 0;
+    }
 
-  unless ($dom =~ /^[a-z]/) {
-    #warn("domainname starts with invalid character: '$domain'");
-    return 0;
+    unless ($dom =~ /^[a-z_]/) {
+      #warn("domainname starts with invalid character: '$domain'");
+      return 0;
+    }
+  } 
+  else {
+    if ($dom =~ /([^a-z0-9\-\.])/) {
+      #warn("invalid character '$1' in domainname: '$domain'");
+      return 0;
+    }
+
+    unless ($dom =~ /^[a-z]/) {
+      #warn("domainname starts with invalid character: '$domain'");
+      return 0;
+    }
   }
+  
 
   if ($dom =~ /([^a-z0-9])\./) {
     #warn("invalid character '$1' before dot in domainname: '$domain'");
@@ -35,6 +49,14 @@ sub valid_domainname($) {
 
   return 1;
 }
+
+sub valid_domainname($) {
+  my($domain) = @_;
+
+  return valid_domainname_check($domain,0);
+}
+
+
 
 # check if parameter contains a valid CIDR...returns 0 if not.
 sub is_cidr($) {

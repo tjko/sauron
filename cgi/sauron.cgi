@@ -40,6 +40,7 @@ do "$PROG_DIR/cgi_util.pl";
 
 %check_names_enum = (D=>'Default',W=>'Warn',F=>'Fail',I=>'Ignore');
 %yes_no_enum = (D=>'Default',Y=>'Yes', N=>'No');
+%boolean_enum = (f=>'No',t=>'Yes');
 
 %server_form = (
  data=>[
@@ -116,7 +117,8 @@ do "$PROG_DIR/cgi_util.pl";
 %new_zone_form=(
  data=>[
   {ftype=>0, name=>'New zone'},
-  {ftype=>1, tag=>'name', name=>'Zone name', type=>'domain',len=>40, empty=>0},
+  {ftype=>1, tag=>'name', name=>'Zone name', type=>'zonename',
+   len=>60, empty=>0},
   {ftype=>3, tag=>'type', name=>'Type', type=>'enum', conv=>'U',
    enum=>{M=>'Master', S=>'Slave', H=>'Hint', F=>'Forward'}},
   {ftype=>3, tag=>'reverse', name=>'Reverse', type=>'enum',  conv=>'L',
@@ -127,7 +129,7 @@ do "$PROG_DIR/cgi_util.pl";
 %zone_form = (
  data=>[
   {ftype=>0, name=>'Zone' },
-  {ftype=>1, tag=>'name', name=>'Zone name', type=>'domain', len=>50},
+  {ftype=>1, tag=>'name', name=>'Zone name', type=>'zonename', len=>60},
   {ftype=>4, tag=>'reversenet', name=>'Reverse net', iff=>['reverse','t']},
   {ftype=>4, tag=>'id', name=>'Zone ID'},
   {ftype=>1, tag=>'comment', name=>'Comments', type=>'text', len=>60,
@@ -136,6 +138,8 @@ do "$PROG_DIR/cgi_util.pl";
    enum=>{M=>'Master', S=>'Slave', H=>'Hint', F=>'Forward'}},
   {ftype=>4, tag=>'reverse', name=>'Reverse', type=>'enum', 
    enum=>{f=>'No',t=>'Yes'}, iff=>['type','M']},
+  {ftype=>3, tag=>'dummy', name=>'"Dummy" zone', type=>'enum',
+   enum=>\%boolean_enum, iff=>['type','M'] },
   {ftype=>3, tag=>'class', name=>'Class', type=>'enum', conv=>'L',
    enum=>{in=>'IN (internet)',hs=>'HS',hesiod=>'HESIOD',chaos=>'CHAOS'}},
   {ftype=>2, tag=>'masters', name=>'Masters', type=>['cidr','text'], fields=>2,

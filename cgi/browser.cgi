@@ -124,7 +124,8 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>0, name=>'Record info', no_edit=>0},
   {ftype=>4, name=>'Record created', tag=>'cdate_str', no_edit=>1},
   {ftype=>4, name=>'Last modified', tag=>'mdate_str', no_edit=>1}
- ]
+ ],
+ tbl_bgcolor => '#ccccff'
 );
 
 
@@ -209,7 +210,7 @@ print startform(-method=>'POST',-action=>$selfurl),
       end_form,"</TD></TR>",
       "</TABLE>\n";
 
-if (($id=param('id')) > 0) {
+if (($id=int(param('id'))) > 0) {
   display_host($id);
 } else {
   do_search();
@@ -243,6 +244,10 @@ sub do_search() {
   $type=param('type');
   $mask=param('mask');
 
+  unless (valid_safe_string($type,255) and valid_safe_string($mask,255)) {
+    alert2("Invalid input!");
+    return;
+  }
   if ($mask =~ /^\s*$/) {
     #alert2("Nothing to search for!");
     return;
@@ -338,7 +343,10 @@ sub do_search() {
   $url=self_url();
   $url =~ s/&sort=\d//g;
 
-  print "<TABLE width=\"100%\" cellspacing=2 border=0>\n",
+  print "<TABLE width=\"100%\" cellspacing=1 cellpadding=1 border=0>",
+        "<TR><TD height=2></TD></TR></TABLE>";
+  print "<TABLE width=\"100%\" cellspacing=1 cellpadding=1 border=0 " .
+        "  bgcolor=\"#ccccff\">\n",
         "<TR bgcolor=\"aaaaee\">",th("#"),
 	th("<a href=\"$url&sort=1\">Domain</a>"),
 	th("<a href=\"$url&sort=2\">IP (or alias)</a>"),
@@ -362,6 +370,7 @@ sub do_search() {
       $info.=", " if ($info && $q[$i][9]);
       $info.=$q[$i][9];
       $info="&nbsp;" unless ($info);
+      $info=substr($info,0,80) if (length($info) > 80);
     } else {
       $ip=$q[$i][4];
       $ether=($type==4 ? '(Alias)' : '(AREC alias)');
@@ -369,10 +378,11 @@ sub do_search() {
     }
 
     print "<TR bgcolor=\"$color\">",td(($i+1)."."),
-          td($name),td($ip),td($ether),td($info),
+          td($name),td($ip),td($ether),td('<font size=-1>'.$info.'</font>'),
           "</TR>\n";
   }
-  print "<TR bgcolor=\"#aaaaee\"><TD colspan=5>&nbsp;</TD></TR></TABLE>\n";
+  #print "<TR bgcolor=\"#aaaaee\"><TD colspan=5>&nbsp;</TD></TR>";
+  print "</TABLE>\n";
 
   print "<p>Only first $show_max records of " . @q .
         " matching records displayed." if (@q > $show_max);
