@@ -44,9 +44,9 @@ $failover_peer_name = 'foobar';
 sub clean_up() {
   my(@q,$i,$count,$t);
 
-  print "Cleaning up database...\n",
-        "(removing hosts that have been expired more than ",
-	"$SAURON_REMOVE_EXPIRED_DELAY days)\n";
+  print "Cleaning up database...\n";
+  print "(removing hosts that have been expired more than ",
+	"$SAURON_REMOVE_EXPIRED_DELAY days)\n" if ($opt_verbose);
 
   fatal("SAURON_RMEOVE_EXPIRED_DELAY not defined!")
     unless ($SAURON_REMOVE_EXPIRED_DELAY > 0);
@@ -750,7 +750,7 @@ sub make_bind() {
 	    next;
 	  }
 	  if (($q[$i][10] > 0) && ($q[$i][10] < $time_now_ticks)) {
-	    error("Skipping expired host: $q[$i][0]");
+	    error("Skipping expired host: $q[$i][0]") if ($opt_verbose);
 	    next;
 	  }
 	  $ip=$q[$i][1];
@@ -952,11 +952,31 @@ sub make_bind() {
 
     print ZONEFILE ";\n;\n; eof\n";
     close(ZONEFILE);
+
+    # validate zone file if --check specified
+    if ($opt_check && $SAURON_ZONE_CHK_PROG) {
+      print "Validating zonefile $zfile...\n" if ($opt_verbose);
+      fatal("cannot run SAURON_ZONE_CHK_PROG: $SAURON_ZONE_CHK_PROG")
+	unless (-x $SAURON_ZONE_CHK_PROG);
+
+      $res = system($SAURON_ZONE_CHK_PROG,$SAURON_ZONE_CHK_ARGS,$zfile);
+      fatal("$zfile validity check failed ($res)") if ($res);
+    }
   }
 
   print BINDFILE "\n\n// eof\n";
   close(BINDFILE);
 
+
+  # validate named.conf if --check specified
+  if ($opt_check && $SAURON_NAMED_CHK_PROG && (not $zones_only)) {
+    print "Validating named.conf...\n" if ($opt_verbose);
+    fatal("cannot run SAURON_NAMED_CHK_PROG: $SAURON_NAMED_CHK_PROG")
+      unless (-x $SAURON_NAMED_CHK_PROG);
+
+    $res = system($SAURON_NAMED_CHK_PROG,$SAURON_NAMED_CHK_ARGS,"named.conf");
+    fatal("named.conf validity check failed ($res)") if ($res);
+  }
 
   # mail notification to users...
   mail_notifications() if ($mailnotify_mode);
@@ -1374,6 +1394,16 @@ sub make_dhcp() {
 
   print DHCPFILE "\n# eof\n";
   close(DHCPFILE);
+
+  # if --check specified, validate dhcpd.conf
+  if ($opt_check && $SAURON_DHCP_CHK_PROG) {
+    print "Validating dhcpd.conf...\n" if ($opt_verbose);
+    fatal("cannot run SAURON_DHCP_CHK_PROG: $SAURON_DHCP_CHK_PROG")
+      unless (-x $SAURON_DHCP_CHK_PROG);
+
+    $res = system($SAURON_DHCP_CHK_PROG,$SAURON_DHCP_CHK_ARGS,"dhcpd.conf");
+    fatal("dhcpd.conf validity check failed ($res)") if ($res);
+  }
 }
 
 
@@ -1412,7 +1442,7 @@ sub print_subnets() {
       $router =~ s/\/\d{1,2}\s*$//g;
       print DHCPFILE "\t\toption routers $router;\n";
     } else {
-      print "no router interface found for subnet: $snet $nmask\n";
+      error("no router interface found for subnet: $snet $nmask");
     }
 
     undef @qqq;
@@ -1506,7 +1536,8 @@ sub make_printcap() {
 $VER = sauron_version();
 
 $result=GetOptions("help|h","all|a","bind|b","dhcp|d","printer|p","mail",
-		   "updateserial","noupdateserial","verbose","dhcp2","clean");
+		   "updateserial","noupdateserial","verbose","dhcp2","clean",
+		   "check");
 
 if ($opt_help || @ARGV < 1 || $result < 1) {
     print "syntax: $0 [--help] [options] <servername> [<target directory>]\n";
@@ -1517,6 +1548,8 @@ if ($opt_help || @ARGV < 1 || $result < 1) {
       "\t--clean          cleanup expired records and vacuum database\n",
       "\t--printer        generate PRINTER (lpd) configuration files\n\n",
       "\t--updateserial   force serial update on master zones\n\n",
+      "\t--check          check validity of generated dhcp.conf,named.conf,\n",
+      "\t                 and zone files\n",
       "\t--dhcp2          enable DHCPv2 compatibilty mode\n\n",
       "\t--mail           enable email notification sending\n\n";
     print "" if ($opt_help);
@@ -1531,6 +1564,7 @@ $opt_printer=($opt_printer ? 1 : 0);
 $opt_dhcp2=($opt_dhcp2 ? 1 : 0);
 $opt_updateserial=($opt_updateserial ? 1 : 0);
 $opt_noupdateserial=($opt_noupdateserial ? 1 : 0);
+$opt_check=($opt_check ? 1 : 0);
 
 $dhcp_conf=1 if ($opt_dhcp || $opt_all);
 $bind_conf=1 if ($opt_bind || $opt_all);
@@ -1554,8 +1588,8 @@ fatal("target directory does not exists ($targetdir)") if (! -d $targetdir);
 fatal("no permissions to target directory!") 
 	unless (-r $targetdir && -x $targetdir && -w $targetdir);
 
-print "server name: $servername\n";
-print "target directory: $targetdir\n";
+print "server name: $servername\n",
+      "target directory: $targetdir\n" if ($opt_verbose);
 
 print "DHCP v2 compatibility mode enabled\n" if ($dhcp2_mode);
 chdir($targetdir) || fatal("Cannot change to directory '$targetdir'!");
