@@ -1415,7 +1415,7 @@ sub hosts_menu() {
     }
 
     undef @q;
-    $fields="a.id,a.type,a.domain,a.ether,a.info";
+    $fields="a.id,a.type,a.domain,a.ether,a.info,a.huser,a.dept,a.location";
     $sql1="SELECT b.ip,'',$fields FROM hosts a,a_entries b " .
 	  "WHERE a.zone=$zoneid AND b.host=a.id $typerule $typerule2 " .
 	  " $netrule $domainrule $extrarule ";
@@ -1467,13 +1467,18 @@ sub hosts_menu() {
       #$hostname=add_origin($q[$i][4],$zone);
       $hostname="<A HREF=\"$selfurl?menu=hosts&h_id=$q[$i][2]\">".
 	        "$q[$i][4]</A>";
+      $info=$q[$i][6];
+      if ($q[$i][7]) { 	$info.=", " if($info); 	$info.=$q[$i][7]; }
+      if ($q[$i][8]) { 	$info.=", " if($info); 	$info.=$q[$i][8]; }
+      if ($q[$i][9]) { 	$info.=", " if($info); 	$info.=$q[$i][9]; }
+
       $trcolor='#eeeeee';
       $trcolor='#ffffcc' if ($i % 2 == 0);
       print "<TR bgcolor=\"$trcolor\">",
 	    "<TD><FONT size=-1>".($i+1).".</FONT></TD>",
 	    td([$hostname,$host_types{$q[$i][3]},$ip,
 	       "<PRE>$ether&nbsp;</PRE>",
-	       "<FONT size=-1>".$q[$i][6]."&nbsp;</FONT>"]),"</TR>";
+	       "<FONT size=-1>".$info."&nbsp;</FONT>"]),"</TR>";
 
     }
     print "</TABLE><BR><CENTER>[";

@@ -42,7 +42,7 @@ sub auto_address($$) {
   return 'Invalid net'  unless (is_cidr($net));
 
   db_query("SELECT net,range_start,range_end FROM nets " .
-	   "WHERE server=$serverid AND net = '$net'::cidr;",\@q);
+	   "WHERE server=$serverid AND net = '$net';",\@q);
   return "No auto address range defined for this net: $net ($q[0][0],$q[0][1],$q[0][2]) "
     unless (is_cidr($q[0][1]) && is_cidr($q[0][2]));
   $s=ip2int($q[0][1]);
