@@ -360,15 +360,17 @@ sub pwd_external_check($$$) {
 
 # print error message and exit program
 sub fatal($) {
-  my ($msg) = @_;
-  print STDERR "$0: $msg\n";
+  my($msg) = @_;
+  my($prog) = $0 =~ /^.*\/(.*)$/;
+  print STDERR "$prog: $msg\n";
   exit(1);
 }
 
 # print error message
 sub error($) {
-  my ($msg) = @_;
-  print STDERR "$0: $msg\n";
+  my($msg) = @_;
+  my($prog) = $0 =~ /^.*\/(.*)$/;
+  print STDERR "$prog: $msg\n";
 }
 
 # show hash in HTML format
