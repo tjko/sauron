@@ -40,13 +40,63 @@ ns.south		IN	A	10.12.100.10
 
 
 
-
 ns1			IN	A	10.10.100.10
 			IN	HINFO	SUN-ULTRA UNIX-SOLARIS
 			IN	WKS	10.10.100.10 tcp telnet finger
-			IN	MX	mail1
-			IN	MX	mail2
+			IN	MX	10 mail1
+			IN	MX	10 mail2
 			IN	TXT	"primary DNS server"
+
+
+ns2			IN	A	10.10.101.10
+			IN	HINFO	SUN-ULTRA UNIX-SOLARIS
+			IN	WKS	10.10.101.10 tcp telnet finger
+			IN	MX	10 mail1
+			IN	MX	10 mail2
+			IN	TXT	"secondary DNS server"
+
+
+
+mail1			IN	A	10.10.100.20
+			IN	HINFO	PC UNIX-LINUX
+			IN	MX	10 mail1
+			IN	WKS	10.10.100.20 tcp smtp
+
+
+mail2			IN	A	10.10.101.20
+			IN	HINFO	PC UNIX-LINUX
+			IN	MX	10 mail1
+			IN	WKS	10.10.100.21 tcp smtp
+
+
+
+www			IN	CNAME	server-1
+
+smtp			IN	A	mail1
+			IN	A	mail2
+
+
+
+server-1		IN	A	10.10.100.50
+server-2		IN	A	10.10.100.51
+server-3		IN	A	10.10.100.52
+nfs			IN	CNAME	server-2
+			
+
+ws1			IN	A	10.10.100.100
+ws2			IN	A	10.10.100.101
+ws3			IN	A	10.10.100.102
+ws4			IN	A	10.10.100.103
+ws5			IN	A	10.10.100.104
+ws6			IN	A	10.10.100.105
+ws7			IN	A	10.10.100.106
+ws8			IN	A	10.10.100.107
+
+terminal1		IN	A	10.10.30.101
+terminal2		IN	A	10.10.30.102
+terminal3		IN	A	10.10.30.103
+terminal4		IN	A	10.10.30.104
+terminal5		IN	A	10.10.30.105
 
 
 ; eof
