@@ -261,8 +261,8 @@ if ($pathinfo ne '') {
 }
 
 
-cgi_util_set_zoneid($zoneid);
-cgi_util_set_serverid($serverid);
+cgi_util_set_zone($zoneid,$zone);
+cgi_util_set_server($serverid,$server);
 set_muser($state{user});
 $bgcolor='black';
 $bgcolor='white' if ($frame_mode);

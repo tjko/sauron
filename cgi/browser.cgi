@@ -155,8 +155,8 @@ html_error2("Invalid configuration: cannot find server") unless ($serverid>0);
 $zoneid=get_zone_id($zone,$serverid);
 html_error2("Invalid configuration: cannot find zone") unless ($zoneid>0);
 
-cgi_util_set_zoneid($zoneid);
-cgi_util_set_serverid($serverid);
+cgi_util_set_zone($zoneid,$zone);
+cgi_util_set_server($serverid,$server);
 
 $help_str = ( @{$$BROWSER_HELP{$key}} == 2 ?
 	  "<a href=\"$$BROWSER_HELP{$key}[1]\">$$BROWSER_HELP{$key}[0]</a>" :

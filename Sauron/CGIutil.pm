@@ -17,8 +17,8 @@ $VERSION = '$Id$ ';
 
 @ISA = qw(Exporter); # Inherit from Exporter
 @EXPORT = qw(
-	     cgi_util_set_zoneid
-	     cgi_util_set_serverid
+	     cgi_util_set_zone
+	     cgi_util_set_server
 	     valid_safe_string
 
 	     form_check_field
@@ -37,16 +37,19 @@ $VERSION = '$Id$ ';
 	    );
 
 
-my($CGI_UTIL_zoneid,$CGI_UTIL_serverid);
+my($CGI_UTIL_zoneid,$CGI_UTIL_zone);
+my($CGI_UTIL_serverid,$CGI_UTIL_server);
 
-sub cgi_util_set_zoneid($) {
-  my ($id) = @_;
+sub cgi_util_set_zone($$) {
+  my ($id,$name) = @_;
   $CGI_UTIL_zoneid = $id;
+  $CGI_UTIL_zone = $name;
 }
 
-sub cgi_util_set_serverid($) {
-  my ($id) = @_;
+sub cgi_util_set_server($$) {
+  my ($id,$name) = @_;
   $CGI_UTIL_serverid = $id;
+  $CGI_UTIL_server = $name;
 }
 
 
@@ -65,8 +68,31 @@ sub valid_safe_string($$) {
     return 1;
 }
 
+sub chr_check_field($$$) {
+  my($field,$val,$groups) = @_;
+  my($i,$g,$rec,@grp);
+
+  return '' unless ($val);
+  @grp = split(',',$$groups);
+  return '' unless (defined($main::SAURON_CHR));
+  if ($main::SAURON_CHR->{$CGI_UTIL_server}) {
+    $rec = $main::SAURON_CHR->{$CGI_UTIL_server}->{$field};
+    return '' unless ($rec);
+    for $i (0..$#{$rec}) {
+      foreach $g (@grp) {
+	if ($g =~ /$$rec[$i][0]/) {
+	  return ($$rec[$i][2] ? $$rec[$i][2] :
+		  "Invalid value for this field ($$rec[$i][1])")
+	    unless ($val =~ /$$rec[$i][1]/);
+	}
+      }
+    }
+  }
+  return '';
+}
+
 #####################################################################
-# form_check_field($field,$value,$n) 
+# form_check_field($field,$value,$n)
 #
 # checks if given field (in a form) contains valid data
 #
@@ -223,7 +249,7 @@ sub form_check_form($$$) {
     if ($type == 1) {
       if ($rec->{type} eq 'mac') {
 	$val="\U$val";
-	$val =~ s/[\s:-]//g;
+	$val =~ s/[\s:\-\.]//g;
       } elsif ($rec->{type} eq 'textarea') {
 	#$val =~ s/\r//g;
 	#$val =~ s/\n/\\n/g;
@@ -231,6 +257,10 @@ sub form_check_form($$$) {
       }
       #print "<br>check $p ",param($p);
       return 1 if (form_check_field($rec,$val,0) ne '');
+      if ($rec->{chr} == 1) {
+	return 1 if (chr_check_field($rec->{tag},$val,$form->{chr_group})
+		     ne '');
+      }
       #print p,"$p changed! '",$data->{$tag},"' '",param($p),"'\n" if ($data->{$tag} ne param($p));
       if ($rec->{type} eq 'expiration') {
         if ($val =~ /^\+(\d+)d/) {
@@ -484,9 +514,14 @@ sub form_magic($$$) {
 	$def_info='empty' if ($def_info eq '');
 	print "<FONT size=-1 color=\"blue\"> ($def_info = default)</FONT>";
       }
-      print "<FONT size=-1 color=\"red\"><BR> ",
-            form_check_field($rec,param($p1),0),
-            "</FONT></TD>";
+      print "<FONT size=-1 color=\"red\"><BR> " .
+            form_check_field($rec,param($p1),0) . "</FONT>";
+      if ($rec->{chr} == 1) {
+	print "<FONT size=-1 color=\"red\">" .
+	      chr_check_field($rec->{tag},param($p1),$form->{chr_group}) .
+	      "</FONT>";
+      }
+      print "</TD>";
     } elsif ($rec->{ftype} == 2) {
       print td($rec->{name}),"<TD><TABLE><TR>";
       $a=param($p1."_count");
