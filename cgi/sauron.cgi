@@ -12,6 +12,7 @@ use Digest::MD5;
 $CGI::DISABLE_UPLOADS =1; # no uploads
 $CGI::POST_MAX = 100000; # max 100k posts
 
+$debug_mode = 1;
 
 if (-f "/etc/sauron/config") { 
   $conf_dir='/etc/sauron'; 
@@ -90,7 +91,8 @@ if ($pathinfo ne '') {
 
 
 print header,
-      start_html(-title=>"Sauron $VER",-BGCOLOR=>'white');
+      start_html(-title=>"Sauron $VER",-BGCOLOR=>'white'),
+      "\n\n<!-- Copyright (c) Timo Kokkonen <tjko\@iki.fi>  2000. -->\n\n";
 
 unless ($frame_mode) {
   top_menu(0);
@@ -112,23 +114,28 @@ else {
 }
 
 
-print "<hr><FONT size=-1><p>script name: " . script_name() ." $formmode\n";
-print "<p>extra path: " . path_info() ."<br>framemode=$frame_mode\n";
-print "<p>cookie='$scookie'\n";
-print "<p>s_url='$s_url' '$selfurl'<hr>\n";
-print "<p>url()=" . url();
-print "<p>self_url()=" . self_url();
-@names = param();
-foreach $var (@names) {
-  print "$var = '" . param($var) . "'<br>\n";
-}
+if ($debug_mode) {
+  print "<hr><FONT size=-1><p>script name: " . script_name() ." $formmode\n";
+  print "<br>extra path: " . path_info() ."<br>framemode=$frame_mode\n",
+         "<br>cookie='$scookie'\n",
+        "<br>s_url='$s_url' '$selfurl'\n",
+        "<br>url()=" . url(),
+        "<p>self_url()=" . self_url(),
+        "<p>";
+  @names = param();
+  foreach $var (@names) {
+    print "$var = '" . param($var) . "'<br>\n";
+  }
 
-print "<hr>state vars<p>\n";
-foreach $key (keys %state) {
-  print " $key=" . $state{$key} . "<br>";
+  print "<hr>state vars<p>\n";
+  foreach $key (keys %state) {
+    print " $key=" . $state{$key} . "<br>";
+  }
+  print "<hr><p>\n";
 }
-print "<p>\n";
-print "</TABLE>\n" unless ($frame_mode);
+ 
+print "</TABLE> <!-- end of page -->\n" unless ($frame_mode);
+print "<p><hr>Sauron";
 print end_html();
 
 exit;
@@ -169,13 +176,13 @@ sub servers() {
             startform(-method=>'POST',-action=>$selfurl),
             hidden('menu','servers'),hidden('sub','edit'),
             hidden('server_re_edit',1),
-            "<TABLE border=0 width=100%>",
+            "\n<TABLE border=1>",
             Tr,td(["Server name",
-		textfield(-name=>'srv_name',-value=>param('srv_name'))]),
+                  textfield(-name=>'srv_name',-value=>param('srv_name'))]),
             Tr,td(["Comments",
-		textfield(-name=>'srv_comment',-size=>'60',
-			  -value=>param('srv_comment'))]),
-            Tr,Tr,
+		   textfield(-name=>'srv_comment',-size=>'60',
+			    -value=>param('srv_comment'))]),
+            Tr,
             Tr,td(["Hostmaster",
 		textfield(-name=>'srv_hostmaster',-size=>'30',
 			  -value=>param('srv_hostmaster'))]),
@@ -191,11 +198,11 @@ sub servers() {
             Tr,td(["Root-server file",
 		textfield(-name=>'srv_namedca',-size=>'30',
 			  -value=>param('srv_namedca'))]),
-            Tr,td,"Allow transfer",td;
+            Tr,"<TD>Allow transfer</TD><TD>";
     form_array('srv_allow_transfer',20);
-    print   Tr,td,"Global DHCP",td;
+    print   "</TD>",Tr,"<TD>Global DHCP</TD><TD>";
     form_array('srv_dhcp',60);
-    print "</TABLE>",
+    print "</TD></TABLE>",
           submit,end_form;
     
   }
@@ -477,17 +484,14 @@ sub login_auth() {
     print p,h1("Username or password empty!");
   } else {
     unless (get_user($u,\%user)) {
-      ($salt=$user{'password'}) =~ s/\:.*$//g;
-      if ($user{'password'} =~ /^(\S+)\:(\S+)$/) {
+      $salt='';
+      if ($user{'password'} =~ /^MD5:(\S+)\:(\S+)$/) {
 	$salt=$1; 
-	$pass=$2;
       }
       #print p,h1("user ok<br>" . $user{'password'});
       if ($salt ne '') {
-	$ctx=new Digest::MD5;
-	$ctx->add("$salt:$p\n");
-	$digest=$ctx->hexdigest;
-	if ($digest eq $pass) {
+	$digest=pwd_crypt($p,$salt);
+	if ($digest eq $user{'password'}) {
 	  $state{'auth'}='yes';
 	  $state{'user'}=$u;
 	  print p,h1("Login ok!"),p,
@@ -519,7 +523,8 @@ sub top_menu($) {
   print "<TD>mode=$mode<TD>foo<TD>foo<TD>";
   print '<TR align="left" valign="bottom">';
   print "<TD><A HREF=\"$s_url?menu=servers\">servers</A>" .
-        "<TD><A HREF=\"$s_url?menu=zones\">zones</A><TD>foo2";
+        "<TD><A HREF=\"$s_url?menu=zones\">zones</A>" . 
+	"<TD><A HREF=\"$s_url?menu=login\">login</A>";
   print "</TABLE>";
 }
 
