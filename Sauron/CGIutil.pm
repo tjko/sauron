@@ -856,6 +856,7 @@ sub display_form($$) {
     } elsif ($rec->{ftype} == 8) {
       $a=$data->{$rec->{tag}};
       $url=$form->{$rec->{tag}."_url"};
+      next unless (defined $a);
       next unless (@{$a}>1);
       print td($rec->{name}),"<TD><TABLE><TR>";
       #for $k (1..$rec->{fields}) { print "<TH>",$$a[0][$k-1],"</TH>";  }
