@@ -289,8 +289,8 @@ sub make_bind() {
     $class=~s/\s+$//g;
     $TTL=$server{'ttl'};
     $TTL=$zone{'ttl'} if ($zone{ttl} > 0);
-    $ttl=$TTL;
-    $ttl='' unless ($ttl > 0);
+    $ttl='';
+
     $serial=new_serial($zone{'serial'});
     fatal("Cannot update zone $zonename serial!")
       if (update_zone({id=>$zoneid,serial=>$serial}));
@@ -301,8 +301,8 @@ sub make_bind() {
 	  "$zonename") if ($hostmaster eq '');
     fatal("server hostname not defined!") if ($hostname eq '');
 
-    print ZONEFILE "; default TTL for this zone:\n",
-                   '$TTL ' . $TTL . "\n;\n";
+    print ZONEFILE '$TTL ' . "$TTL\t; default TTL for this zone\n;\n";
+    print ZONEFILE '$ORIGIN ' . "$zonename.\n;\n";
 
     print ZONEFILE "@\t$ttl\t$class\tSOA\t$hostname $hostmaster (\n";
     print ZONEFILE "\t\t\t\t\t$serial\t; serial number\n" .
@@ -314,39 +314,48 @@ sub make_bind() {
     undef @q;
     db_query("SELECT ns FROM ns_entries WHERE type=1 AND ref=$zoneid;",\@q);
     foreach $ns (@q) {
-      print ZONEFILE "\t\t$class\tNS\t$$ns[0]\n";
+      #print ZONEFILE "\t\t$class\tNS\t$$ns[0]\n";
+      printf ZONEFILE $ZFORMAT, '',$ttl,$class,'NS',$$ns[0];
     }
     if ($rev eq 'f') {
       print ZONEFILE ";\n; zone mail exchanges\n;\n";
       undef @q;
       db_query("SELECT mx FROM mx_entries WHERE type=1 AND ref=$zoneid;",\@q);
       foreach $mx (@q) {
-	print ZONEFILE "\t\t$class\tMX\t$$mx[0]\n";
+	#print ZONEFILE "\t\t$class\tMX\t$$mx[0]\n";
+	printf ZONEFILE $ZFORMAT, '',$ttl,$class,'MX',$$mx[0];
       }
       print ZONEFILE ";\n; contact info\n;\n";
       undef @q;
       db_query("SELECT txt FROM txt_entries WHERE type=3 AND ref=$serverid;",
 	       \@q);
       foreach $txt (@q) {
-	print ZONEFILE "\t\t$class\tTXT\t\"$$txt[0]\"\n";
+	#print ZONEFILE "\t\t$class\tTXT\t\"$$txt[0]\"\n";
+	printf ZONEFILE $ZFORMAT, '',$ttl,$class,'TXT',$$txt[0];
       }
       undef @q;
       db_query("SELECT txt FROM txt_entries WHERE type=1 AND ref=$zoneid;",
 	       \@q);
       foreach $txt (@q) {
-	print ZONEFILE "\t\t$class\tTXT\t\"$$txt[0]\"\n";
+	#print ZONEFILE "\t\t$class\tTXT\t\"$$txt[0]\"\n";
+	printf ZONEFILE $ZFORMAT, '',$ttl,$class,'TXT',$$txt[0];
       }
 
       # zone A records
       undef @q;
-      db_query("SELECT ip FROM hosts,rr_a,zones " .
+      db_query("SELECT ip,ttl FROM hosts,rr_a,zones " .
 	       "WHERE hosts.zone=zones.id AND rr_a.host=hosts.id AND " .
 	       "zones.id=$zoneid AND domain='\@';",\@q);
       if (@q > 0) {
 	print ZONEFILE ";\n; zone A record(s)\n;\n";
 	for $i (0 .. $#q) {
-	  $net = new Net::Netmask($q[$i][0]);
-	  print ZONEFILE "\t\t$class\tA\t" . $net->base() . "\n";
+	  #$net = new Net::Netmask($q[$i][0]);
+	  $ip=$q[$i][0];
+	  $ip =~ s/\/32$//;
+	  $ttl=$q[$i][1];
+	  $ttl='' unless ($ttl > 0);
+	  #print ZONEFILE "\t\t$class\tA\t" . $net->base() . "\n";
+	  printf ZONEFILE $ZFORMAT, '',$ttl,$class,'A',$ip;
 	}
       }
 
@@ -355,7 +364,7 @@ sub make_bind() {
 
     # delegated zones
     undef @q;
-    db_query("SELECT a.domain,c.ns FROM hosts a,zones b,ns_entries c " .
+    db_query("SELECT a.domain,c.ns,a.ttl FROM hosts a,zones b,ns_entries c " .
 	     "WHERE c.ref=a.id AND a.zone=b.id AND c.type=2 AND a.type=2 " .
 	     "AND b.id=$zoneid " .
 	     "ORDER BY a.domain;",\@q);
@@ -364,10 +373,12 @@ sub make_bind() {
       $domain='';
       for $i (0 .. $#q) {
 	print ZONEFILE ";\n" if (($domain ne '') && ($domain ne $q[$i][0]));
-	print ZONEFILE "$q[$i][0]" if ($domain ne $q[$i][0]);
+	$val = ($domain ne $q[$i][0] ? $q[$i][0] : '');
 	$domain=$q[$i][0];
 	$ns=$q[$i][1];
-	print ZONEFILE "\t\t$class\tNS\t" . $ns . "\n";
+	$ttl=$q[$i][2];
+	$ttl='' unless ($ttl > 0);
+	printf ZONEFILE $ZFORMAT, $val,$ttl,$class,'NS',$ns;
       }
 	print ZONEFILE ";\n";
     }
@@ -399,7 +410,6 @@ sub make_bind() {
 	  } else {
 	    $rdomain .= ".$rzone_name." unless ($rdomain =~ /\.$/);
 	  }
-	  #print ZONEFILE "$rip\t$ttl\t$class\tPTR\t$rdomain\n";
 	  printf ZONEFILE $ZFORMAT, $rip,$ttl,$class,'PTR',$rdomain;
 	}
       }
@@ -421,7 +431,6 @@ sub make_bind() {
 	  $ip =~ s/\/\d{1,2}$//g;
 	  $ttl=$q[$i][2];
 	  $ttl='' unless ($ttl > 0);
-	  #print ZONEFILE "$domain\t\t$class\tA\t$ip\n";
 	  printf ZONEFILE $ZFORMAT, $domain,$ttl,$class,'A',$ip;
 	}
       }

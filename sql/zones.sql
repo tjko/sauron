@@ -23,22 +23,16 @@ CREATE TABLE zones ( /* zone table; contains zones */
        name	   TEXT NOT NULL CHECK (name <> ''),
        hostmaster  TEXT,
        serial	   CHAR(10) DEFAULT '1999123001',
-       refresh	   INT4 DEFAULT -1,
-       retry	   INT4 DEFAULT -1,
-       expire	   INT4 DEFAULT -1,
-       minimum	   INT4 DEFAULT -1,
-       ttl	   INT4 DEFAULT -1,
+       refresh	   INT4,
+       retry	   INT4,
+       expire	   INT4,
+       minimum	   INT4,
+       ttl	   INT4,
+       zone_ttl	   INT4,
        comment	   TEXT,
 
        reversenet  CIDR,
        parent	   INT4 DEFAULT -1,
-
-       /* allow_update (cidr_entries) */
-       /* masters (cidr_entries) */
-       /* ns (ns_entries) */
-       /* mx (mx_entries) */
-       /* txt (txt_entries) */
-       /* dhcp (dhcp_entries) */
 
        CONSTRAINT  zones_key PRIMARY KEY (name,server)
 ) INHERITS(pokemon);

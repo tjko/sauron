@@ -15,15 +15,15 @@ CREATE TABLE hosts (
   				      6=glue record, 7=alias (arec) */
        
        domain	   TEXT NOT NULL CHECK(domain <> ''),
-       ttl	   INT4 DEFAULT -1,
+       ttl	   INT4,          /* TTL for host records, default if NULL */
        class	   CHAR(2) DEFAULT 'IN',
        
        grp	   INT4 DEFAULT -1,  /* ptr to group */
        alias	   INT4 DEFAULT -1,  /* ptr to another rr record */
-       cname_txt   TEXT,
-       hinfo_hw	   TEXT,
-       hinfo_sw	   TEXT,
-       loc	   TEXT,
+       cname_txt   TEXT,	     /* CNAME value for out-of-zone alias */
+       hinfo_hw	   TEXT,	     /* HINFO hardware */
+       hinfo_sw	   TEXT,	     /* HINFO software */
+       loc	   TEXT,            
        wks	   INT4 DEFAULT -1, /* ptr to rr_wks table entry */
        mx	   INT4 DEFAULT -1, /* ptr to rr_mx table entry */
        rp_mbox	   TEXT DEFAULT '.',

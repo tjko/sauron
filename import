@@ -77,7 +77,7 @@ while (<NAMEDCONF>) {
 	$ref = [];
 	$masters{$1} = $ref;
 	next;
-    }			      
+    }
 
     s/\s+/\ /g;
     next if /^\s*$/;
@@ -86,16 +86,15 @@ while (<NAMEDCONF>) {
 	#print "end '$block[$#block]'\n";
 	pop @block;
 	next;
-    }			       
-	 
+    }
 
    $cur = $block[$#block];
    $prev = "";
-   $prev = $block[$#block -1] if ($#block > 0);			       
+   $prev = $block[$#block -1] if ($#block > 0);		
 
    $line=$_;
    $line =~ s/(^\s+|;\s*$)//g;			
-		       
+		
    if ($cur =~ "options")  {
        if ( /directory\s+\"(.*?)\"\s*;/ ) {
 	   $directory=$1; 
@@ -293,7 +292,7 @@ for ($i=0; $i <= $#zones; $i+=1) {
   #handle master zones
   undef %zonedata;
   if (! -f $files{$zones[$i]} ) { # check for dummy zones (such as AD zones :)
-    print "cannot find: '$files{$zones[$i]}' marking as dummy zone!!!\n"; 
+    print "cannot find: '$files{$zones[$i]}' marking as dummy zone!!!\n";
     $sqlstr="UPDATE zones SET dummy=true WHERE id=$zoneid;";
     die("cannot update zone record id=$zoneid!") if (db_exec($sqlstr)<0);
     next;
@@ -302,7 +301,7 @@ for ($i=0; $i <= $#zones; $i+=1) {
   print " found " . keys(%zonedata) . " domainames in zone\n";
   $rec = $zonedata{$origin};
   die ("No SOA record found in zone $zone! ($origin)") if (! $rec);
-  
+
   $ttl=$rec->{TTL};
   $class=$rec->{CLASS};
   @soa = split ' ',$rec->{SOA};
@@ -357,18 +356,14 @@ for ($i=0; $i <= $#zones; $i+=1) {
     #db_begin();
     foreach $host (keys %zonedata) {
       $rec = $zonedata{$host};
-      next if ($rec->{CNAME} eq '' && @{$rec->{NS}}<1);
+      next unless (@{$rec->{NS}}>0);
 
       $host2=remove_origin($host,$origin);
-      $cname="'$rec->{CNAME}'";
-      $cname='NULL' if ($cname eq '');
-      $hosttype=0;
-      $hosttype=2 unless ($nslist eq '');
+      $hosttype=2;
 
       $sqlstr = "INSERT INTO hosts " .
-	"(cuser,muser,zone,type,domain,class,cname_txt) " .
-	"VALUES(" .
-	"'$user','$user',$zoneid,$hosttype,'$host2','$class',$cname);";
+	"(cuser,muser,zone,type,domain,class) " .
+	"VALUES('$user','$user',$zoneid,$hosttype,'$host2','$class');";
 
       $res = db_exec($sqlstr);
       die("cannot insert (reverse) host record '$host'") if ($res < 0);
@@ -377,13 +372,13 @@ for ($i=0; $i <= $#zones; $i+=1) {
 		     "AND domain='$host2';");
       die("unexpected error: cannot get host record id!") if ($res != 1);
       $tmpid=db_getvalue(0,0);
-      
+
       foreach $rtmp (@{$rec->{NS}}) {
 	$sqlstr="INSERT INTO ns_entries (type,ref,ns) ".
 	  "VALUES(2,$tmpid,'$rtmp');";
 	die("cannot insert NS record id=$tmpid!") if (db_exec($sqlstr)<0);
       }
-      
+
       print STDERR "@";
     }
     #die("Cannot commit (reverse) host record inserts!") if (db_commit()<0);
