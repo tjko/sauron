@@ -41,7 +41,7 @@ mandir = $(prefix)/man
 
 RUNSQL = $(srcdir)/runsql
 
-SGMLTOOLS = sgmltools
+SGMLTOOLS = /usr/bin/sgmltools
 
 CC        = @CC@ 
 XCPPFLAGS = @CPPFLAGS@
@@ -166,9 +166,14 @@ docs:
 	$(srcdir)/contrib/htmldoc-sql --docbook --title "Sauron: SQL table descriptions" $(SQL_TABLES) > doc/tables.sgml
 	if [ -x $(SGMLTOOLS) ]; then \
 		cd doc; \
-		$(SGMLTOOLS) -b ps manual.sgml; \
 		$(SGMLTOOLS) -b html manual.sgml; \
+		$(PERL) -p -i -e 's@\.eps"@\.png"@;' manual/*.html; \
+		cp overview.png relations.png manual/; \
+		$(LN_S) sauron-manual.html manual/index.html; \
+		$(SGMLTOOLS) -b dvi manual.sgml; \
+		dvips -t letter -o manual.ps manual.dvi; \
 	fi
+
 
 grant_full:
 	perl -e 'while (<>) { s/:user:/tjko/g; print; }' init/full-privileges.sql | psql sauron
