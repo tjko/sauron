@@ -12,16 +12,14 @@ import:
 sauron:
 	- more sanity checks
 	- use tmp files
-	- support for automatic validity checks for dhcpd.conf and 
-	  named.conf & zone files (if dhcpd,named-checkconf,named-checkzone
-	  are in path)
-	  
 
 sauron.cgi:
 	- fix timeout problem with huge zone/server deletes...(faster server :)
 	- add search by dhcp_date field...
 	- add quick search like in browser.cgi
 	- remove confirm from logout
+	- templates for adding hosts
+	
 
 
 browser.cgi:

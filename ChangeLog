@@ -1,6 +1,12 @@
 $Id$
 
 0.5.1
+	- sauron: new --check option to automatically validating
+	  generated named.conf/zones & dhcpd.conf files
+	- new configuration options:
+		SAURON_DHCP_CHK_{PROG,ARGS}
+		SAURON_NAMED_CHK_{PROG,ARGS}
+		SAURON_ZONE_CHK_{PROG,ARGS}
 	- configuration changes: ICON_PATH --> SAURON_ICON_PATH,
 	  REMOVE_EXPIRED_DELAY --> SAURON_REMOVE_EXPIRED_DELAY,
           USER_TIMEOUT --> SAURON_USER_TIMEOUT
