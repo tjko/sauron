@@ -6,7 +6,6 @@
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>, 2000,2001.
 # All Rights Reserved.
 #
-use Sys::Syslog;
 use CGI qw/:standard *table -no_xhtml/;
 use CGI::Carp 'fatalsToBrowser'; # debug stuff
 use Digest::MD5;
@@ -1080,6 +1079,8 @@ db_connect2($DB_CONNECT) ||
   html_error("Cannot estabilish connection with database");
 html_error("CGI interface disabled: $res") if (($res=cgi_disabled()));
 html_error("Invalid log path") unless (-d $LOG_DIR);
+html_error("Database format mismatch!")
+  if (sauron_db_version() ne get_db_version());
 
 $frame_mode=0;
 $pathinfo = path_info();
@@ -1176,7 +1177,7 @@ unless ($state{superuser} eq 'yes') {
 }
 
 if (param('csv')) {
-  print header(-type=>'text/csv',-target=>'_new',-'x-filename'=>'foo.csv');
+  print header(-type=>'text/csv',-target=>'_new',-attachment=>'results.csv');
   hosts_menu();
   exit(0);
 }
@@ -1428,11 +1429,11 @@ sub zones_menu() {
     }
     if (param('copy_confirm')) {
       unless ($res=form_check_form('copy',\%data,\%copy_zone_form)) {
-	$|=1 if ($frame_mode);
+	$|=1; # if ($frame_mode);
 	print p,"Copying zone...please wait few minutes (or hours :)";
 	$res=copy_zone($zoneid,$serverid,$data{name},1);
 	if ($res < 0) {
-	  print '<FONT color="red">',h2('Zone copy failed (result=$res!'),
+	  print '<FONT color="red">',h2("Zone copy failed! ($res)"),
 	        '</FONT>';
 	} else {
 	  print h2("Zone successfully copied (id=$res).");
@@ -1862,6 +1863,7 @@ sub hosts_menu() {
     goto show_host_record unless ($id > 0);
     print "History for host record: $id ($host{domain}):<br>";
     get_history_host($id,\@q);
+    unshift @q, [$host{cdate},'CREATE','record created',$host{cuser}];
     display_list(['Date','Action','Info','By'],\@q,0);
   }
   elsif ($sub eq 'browse') {
@@ -2748,7 +2750,7 @@ sub templates_menu() {
   $pc_id=param('pc_id');
   $hinfo_id=param('hinfo_id');
 
-  if ($sub eq 'mx' || $sub eq '') {
+  if ($sub eq 'mx') {
     db_query("SELECT name,comment,alevel,id FROM mx_templates " .
 	     "WHERE zone=$zoneid ORDER BY name;",\@q);
     print h3("MX templates for zone: $zone");
@@ -3484,14 +3486,12 @@ sub login_form($$) {
   $host=$1 if (self_url =~ /https?\:\/\/([^\/]+)\//);
 
   print "<FONT color=\"blue\">";
-  print "<CENTER><TABLE width=\"65%\" cellspacing=0 border=0>",
-        "<TR valign=\"bottom\" bgcolor=\"#002d5f\">",
-        "<TD width=\"80\"><IMG src=\"$ICON_PATH/logo.png\" width=\"80\" height=\"70\" ",
-	" alt=\"\"></TD>",
+  print "<CENTER><TABLE width=\"50%\" cellspacing=0 border=0>",
+        "<TR bgcolor=\"#002d5f\">",
         "<TD><FONT color=\"white\"> &nbsp; Sauron",
         "</FONT></TD><TD align=\"right\"><FONT color=\"white\">",
 	"$host &nbsp;</FONT></TD></FONT>",
-	"<TR><TD colspan=3 bgcolor=\"#efefff\">";
+	"<TR><TD colspan=2 bgcolor=\"#efefff\">";
 
   print start_form(-target=>'_top'),"<BR><CENTER>",h2($msg),p,"<TABLE>",
         Tr,td("Login:"),td(textfield(-name=>'login_name',-maxlength=>'8')),
@@ -3653,7 +3653,7 @@ sub top_menu($) {
       "Zones</FONT></A> | ",
     "<A HREF=\"$s_url?menu=nets\"><FONT color=\"#ffffff\">",
       "Nets</FONT></A> | ",
-    "<A HREF=\"$s_url?menu=templates\"><FONT color=\"#ffffff\">",
+    "<A HREF=\"$s_url?menu=templates&sub=mx\"><FONT color=\"#ffffff\">",
       "Templates</FONT></A> | ",
     "<A HREF=\"$s_url?menu=groups\"><FONT color=\"#ffffff\">",
       "Groups</FONT></A> | ",
