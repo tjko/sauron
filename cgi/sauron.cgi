@@ -2059,56 +2059,23 @@ sub hosts_menu() {
 	alert1("Access denied.");
 	return;
       }
-      unless (-d $SAURON_NMAP_TMPDIR && -w $SAURON_NMAP_TMPDIR) {
-	logmsg("notice","SAURON_NMAP_TMPDIR misconfigured");
-	alert2("Ping Sweep not configured!");
-	return;
+
+      undef @pingiplist;
+      for $i (0..$#q) {
+	next unless ($q[$i][3] == 1);
+	($ip=$q[$i][0]) =~ s/\/\d{1,2}$//g;
+	push @pingiplist, $ip;
       }
-      $nmap_file = "$SAURON_NMAP_TMPDIR/nmap-$$.input";
-      $nmap_log = "$SAURON_NMAP_TMPDIR/nmap-$$.log";
 
       print h3("Please wait...Running Ping sweep.");
-      logmsg("notice","running nmap (ping sweep): $state{user}");
 
-      if (open(FILE,">$nmap_file")) {
-	for $i (0..$#q) {
-	  next unless ($q[$i][3] == 1);
-	  ($ip=$q[$i][0]) =~ s/\/\d{1,2}$//g;
-	  print FILE "$ip\n";
-	}
-	close(FILE);
-
-	$SAURON_NMAP_ARGS = '-n -sP' unless ($SAURON_NMAP_ARGS);
-	$r = run_command_quiet($SAURON_NMAP_PROG,
-			 [split(/\s+/,$SAURON_NMAP_ARGS),
-			  '-oG',$nmap_log,'-iL',$nmap_file],
-			 $SAURON_NMAP_TIMEOUT);
-	
-	unlink($nmap_file);
-	unless ($r == 0) {
-	  if (($r & 255) == 14) { alert2("Nmap timed out!") }
-	  else { alert1("Ping sweep failed!"); }
-	  return;
-	}
-
-	if (open(FILE,"$nmap_log")) {
-	  while (<FILE>) {
-	    next if (/^#/);
-	    next unless
-		     (/^\s*Host:\s+(\d+\.\d+\.\d+\.\d+)\s.*(Status:\s+(\S+))/);
-	    $nmaphash{$1}=$3;
-	  }
-	  close(FILE);
-	  unlink($nmap_log);
-	  $pingsweep=1;
-	} else {
-	  alert2("cannot read nmap output!");
-	  return;
-	}
+      $r = run_ping_sweep(\@pingiplist,\%nmaphash,$state{user});
+      if ($r < 0) {
+	alert2("Ping Sweep not configured!");
+      } elsif ($r == 1) {
+	alert2("Ping Sweep timed out!");
       } else {
-	logmsg("notice","cannot write tmp file for nmap: $nmap_file");
-	alert2("Cannot write tmp file for nmap");
-	return;
+	$pingsweep=1;
       }
     }
 
@@ -2189,8 +2156,8 @@ sub hosts_menu() {
 	!check_perms('level',$ALEVEL_NMAP,1)) {
 
       print startform(-method=>'POST',-action=>$selfurl),
-	hidden('menu','hosts'),hidden('sub','browse'),
-	  hidden('lastsearch','1'),hidden('pingsweep','1');
+	    hidden('menu','hosts'),hidden('sub','browse'),
+	    hidden('lastsearch','1'),hidden('pingsweep','1');
       print submit(-name=>'foobar',-value=>'Ping Sweep');
       print end_form;
     }
@@ -2756,6 +2723,50 @@ sub nets_menu() {
     print "</TD></TR></TABLE>";
     return;
   }
+  elsif ($sub eq 'Ping Sweep') {
+    if (get_net($id,\%net)) {
+      print h2("Cannot get net record (id=$id)!");
+      return;
+    }
+    print h3("Ping Sweep for $net{net}...");
+    undef @pingiplist;
+    push @pingiplist, $net{net};
+    $r = run_ping_sweep(\@pingiplist,\%nmaphash,$state{user});
+    if ($r < 0) {
+      alert2("Ping Sweep not configured!");
+    } elsif ($r == 1) {
+      alert2("Ping Sweep timed out!");
+    } else {
+      db_query("SELECT h.id,h.domain,a.ip,h.huser,h.dept,h.location,h.info " .
+               "FROM zones z,hosts h,a_entries a " .
+	       "WHERE z.server=$serverid AND h.zone=z.id AND a.host=h.id " .
+	       " AND a.ip << '$net{net}' ORDER BY a.ip",\@q);
+      undef %netmap;
+      for $i (0..$#q) { $netmap{$q[$i][2]}=$q[$i]; }
+      @iplist = net_ip_list($net{net});
+      for $i (0..$#iplist) {
+	$ip=$iplist[$i];
+	next unless ($nmaphash{$ip} || $netmap{$ip});
+	$hid=$netmap{$ip}->[0];
+	if ($nmaphash{$ip} =~ /^Up/) {
+	  $status="<font color=\"green\">UP</font>";
+	} else {
+	  $status="<font color=\"red\">DOWN $nmaphash{$ip}</font>";
+	}
+	$domain=$netmap{$ip}->[1];
+	$domain="UNKNOWN" unless ($domain);
+	$domain="<a href=\"$selfurl?menu=hosts&h_id=$hid\">".$domain."</a>" 
+	  if ($hid > 0);
+	$info = "<font size=-1>" .
+	        join_strings(', ',(@{$netmap{$ip}})[6,3,4,5]) . "</font>";
+	push @pingsweep, [$status,$ip,$domain,$info];
+      }
+      display_list(['Status','IP','Domain','Info'],
+		   \@pingsweep,0);
+      print p,br;
+    }
+    return;
+  }
 
  show_net_record:
   if ($id > 0) {
@@ -2774,8 +2785,10 @@ sub nets_menu() {
     print submit(-name=>'sub',-value=>'Edit'), "  ",
           submit(-name=>'sub',-value=>'Delete'), " &nbsp;&nbsp;&nbsp; "
 	    unless (check_perms('superuser','',1));
-    print submit(-name=>'sub',-value=>'Net Info'),
-          hidden('net_id',$id),end_form,"</TD><TD>";
+    print submit(-name=>'sub',-value=>'Net Info')," ";
+    print submit(-name=>'sub',-value=>'Ping Sweep')
+            unless (check_perms('level',$ALEVEL_NMAP,1));
+    print hidden('net_id',$id),end_form,"</TD><TD>";
     param('menu','hosts');
     param('sub','browse');
     print startform(-method=>'GET',-action=>$selfurl),
@@ -4175,6 +4188,61 @@ sub add_default_zones($$) {
   }
 
 }			
+
+
+sub run_ping_sweep($$$)
+{
+  my($iplist,$resulthash,$user) = @_;
+  my($i,$r,$ip);
+  my($nmap_file,$nmap_log);
+
+  unless (-d $SAURON_NMAP_TMPDIR && -w $SAURON_NMAP_TMPDIR) {
+    logmsg("notice","SAURON_NMAP_TMPDIR misconfigured");
+    return -1;
+  }
+  $nmap_file = "$SAURON_NMAP_TMPDIR/nmap-$$.input";
+  $nmap_log = "$SAURON_NMAP_TMPDIR/nmap-$$.log";
+
+  # print h3("Please wait...Running Ping sweep.");
+  logmsg("notice","running nmap (ping sweep): $user");
+
+  unless (open(FILE,">$nmap_file")) {
+    logmsg("notice","cannot write tmp file for nmap: $nmap_file");
+    return -2;
+  }
+  for $i (0..$#{$iplist}) {
+    $ip=$$iplist[$i];
+    next unless (is_cidr($ip));
+    print FILE "$ip\n";
+  }
+  close(FILE);
+
+  $SAURON_NMAP_ARGS = '-n -sP' unless ($SAURON_NMAP_ARGS);
+  $r = run_command_quiet($SAURON_NMAP_PROG,
+			 [split(/\s+/,$SAURON_NMAP_ARGS),
+			 '-oG',$nmap_log,'-iL',$nmap_file],
+			 $SAURON_NMAP_TIMEOUT);
+  unlink($nmap_file);
+  unless ($r == 0) {
+    return 1 if (($r & 255) == 14);
+    return -3;
+  }
+
+  unless (open(FILE,"$nmap_log")) {
+    logmsg("notice","failed to read nmap output file: $nmap_log");
+    return -4;
+  }
+
+  while (<FILE>) {
+    next if (/^\#/);
+    next unless (/^\s*Host:\s+(\d+\.\d+\.\d+\.\d+)\s.*(Status:\s+(\S+))/);
+    $nmaphash{$1}=$3;
+  }
+  close(FILE);
+  unlink($nmap_log);
+
+  return 0;
+}
 
 # eof
 
