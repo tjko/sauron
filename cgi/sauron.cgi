@@ -3925,7 +3925,7 @@ sub load_state($) {
 sub remove_state($) {
   my($id) = @_;
 
-  db_exec("DELETE FROM utmp WHERE cookie='$id';") if ($id > 0);
+  db_exec("DELETE FROM utmp WHERE cookie='$id';") if ($id);
   undef %state;
 }
 
