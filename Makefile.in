@@ -113,10 +113,10 @@ OBJS =
 	$(CC) $(CFLAGS) $(OPTIONS) -c -o $*.o $<
 
 
-all:	$(PKGNAME) 
+all:	docs
 
-$(PKGNAME):  $(BINARIES)
-	@echo "All done"
+#$(PKGNAME):  $(BINARIES)
+#	@echo "All done"
 
 #parse-hosts-rows:  parse-hosts-rows.c
 #	$(CC) $(CFLAGS) -o parse-hosts-rows parse-hosts-rows.c $(LDFLAGS) $(LIBS) 
@@ -154,9 +154,11 @@ docs:
 	cd $(srcdir)
 	$(srcdir)/contrib/htmldoc-sql --title "Sauron: SQL table descriptions" $(SQL_TABLES) > doc/tables.html
 	$(srcdir)/contrib/htmldoc-sql --docbook --title "Sauron: SQL table descriptions" $(SQL_TABLES) > doc/tables.sgml
-	cd doc
-	(cd doc; $(SGMLTOOLS) -b ps manual.sgml)
-	(cd doc; $(SGMLTOOLS) -b html manual.sgml)
+	if [ -x $(SGMLTOOLS) ]; then \
+		cd doc; \
+		$(SGMLTOOLS) -b ps manual.sgml; \
+		$(SGMLTOOLS) -b html manual.sgml; \
+	fi
 
 grant_full:
 	perl -e 'while (<>) { s/:user:/tjko/g; print; }' init/full-privileges.sql | psql sauron
