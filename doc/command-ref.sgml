@@ -115,10 +115,16 @@
 <cmdsynopsis>
   <command>check-pending</>
   <arg>--help</>
+  <arg>--cmd=<replaceable>command</></>
+  <arg>--dir=<replaceable>directory</></>
   <arg choice=req><replaceable>servername</></>
   <arg choice=req><replaceable>emailaddress</></>
 </cmdsynopsis>
 <para>
+  Optionally this command can be used to run a command if there
+  is pending hosts for given server by using <option>--cmd</> option
+  (and optionally <option>--dir</> option to specify directory where to run
+  this command).
   To use this program <varname>SAURON_MAILER</> (and related settings)
   have to be configured in Sauron configuration file.
 </para>
@@ -564,6 +570,15 @@
   <row><entry><option>--add=def_dept,<replaceable>string</></></>
        <entry>Add default department for adding hosts.</>
   </row>
+  <row><entry><option>--add=tmplmask,<replaceable>mask</></></>
+       <entry>Add (MX) Template add/edit privilege for matching templates.</>
+  </row>
+  <row><entry><option>--add=grpmask,<replaceable>mask</></></>
+       <entry>Add Group add/edit privilege for matching groups.</>
+  </row>
+  <row><entry><option>--add=delmask,<replaceable>mask</></></>
+       <entry>Add Host delete privilege for matching hosts.</>
+  </row>
 
   <row><entry><option>--del=<replaceable>id</></></>
        <entry>Delete privilege by it's ID number.</>
@@ -733,6 +748,15 @@
   </row>
   <row><entry><option>--add=def_dept,<replaceable>string</></></>
        <entry>Add default department for adding hosts.</>
+  </row>
+  <row><entry><option>--add=tmplmask,<replaceable>mask</></></>
+       <entry>Add (MX) Template add/edit privilege for matching templates.</>
+  </row>
+  <row><entry><option>--add=grpmask,<replaceable>mask</></></>
+       <entry>Add Group add/edit privilege for matching groups.</>
+  </row>
+  <row><entry><option>--add=delmask,<replaceable>mask</></></>
+       <entry>Add Host delete privilege for matching hosts.</>
   </row>
 
   <row><entry><option>--del=<replaceable>id</></></>

@@ -31,7 +31,7 @@
         </affiliation>
       </author>
     </authorgroup>
-    <pubdate>2003-03-05</>
+    <pubdate>2003-03-25</>
 
     <copyright>
       <year>2003</>
@@ -1220,6 +1220,28 @@ User pippin added successfully.
            <entry></>
            <entry>Default Department field value for new hosts.</>
            <entry>Department Name</>
+        </row>
+        <row>
+           <entry>Template mask</>
+           <entry></>
+           <entry>Grants user permission to add/modify (MX) templates that
+                  have name matching any of users Template mask rules.</>
+           <entry>regular expression (for example: ^math)</>
+        </row>
+        <row>
+           <entry>Group mask</>
+           <entry></>
+           <entry>Grants user permission to add/modify groups that
+                  have name matching any of users group mask rules.</>
+           <entry>regular expression (for example: ^foo)</>
+        </row>
+        <row>
+           <entry>Delete (host) mask</>
+           <entry></>
+           <entry>In addition to Hotname mask rules these can be
+                  used to grant user permission to only remove
+                  hosts matching any of these rules.</>
+           <entry>regular expression (for example: ^\.sales$)</>
         </row>
       </tbody>
       </tgroup>
