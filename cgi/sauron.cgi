@@ -1571,7 +1571,8 @@ sub zones_menu() {
     $comment=$$list[$i][4].'&nbsp;';
 
     if ($SAURON_PRIVILEGE_MODE==1) {
-      next unless ($perms{zone}->{$id} =~ /R/);
+      next unless ( $perms{zone}->{$id} =~ /R/ ||
+		    !check_perms('superuser','',1) );
     }
 
     print "<TR bgcolor=\"$color\">",td([
