@@ -5,6 +5,7 @@
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000.
 # $Id$
 #
+use strict;
 
 sub new_serial($) {
   my ($serial) = @_;

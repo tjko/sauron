@@ -4,6 +4,7 @@
 # $Id$
 #
 use Digest::MD5;
+use strict;
 
 # returns nonzero in case given domainname is valid
 sub valid_domainname($) {

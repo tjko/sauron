@@ -8,6 +8,7 @@ REQUIREMENTS
 	- Perl 5 or better
 		- Net::Netmask module
 		- Digest::MD5 module
+		- Term::ReadKey module
 	- PostgresSQL (or add support to your favorite db yourself :)
 		- Pg perl module
 

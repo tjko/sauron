@@ -8,9 +8,9 @@
 #
 require 5;
 use Getopt::Long;
+use strict;
 
-
-($PG_DIR,$PG_NAME) = ($0 =~ /^(.*\/)(.*)$/);
+my ($PG_DIR,$PG_NAME) = ($0 =~ /^(.*\/)(.*)$/);
 $0 = $PG_NAME;
 
 do "$PG_DIR/config" || die("cannot load config");
@@ -20,6 +20,11 @@ do "$PG_DIR/db.pl";
 
 ###################################################################
 
+my(
+   $opt_help,$opt_force,
+   $result,$file,$c,
+   $code,$info,%ethers,$icount,$ea,$res,$ucount
+  );
 
 $result = GetOptions("help|h","force|f");
 

@@ -8,8 +8,9 @@
 require 5;
 use Getopt::Long;
 use Term::ReadKey;
+use strict;
 
-($PG_DIR,$PG_NAME) = ($0 =~ /^(.*\/)(.*)$/);
+my ($PG_DIR,$PG_NAME) = ($0 =~ /^(.*\/)(.*)$/);
 $0 = $PG_NAME;
 
 do "$PG_DIR/config" || die("cannot load config");
@@ -21,6 +22,15 @@ sub fatal($) {
   print STDERR "$0: $msg\n";
   exit(1);
 }
+
+my(
+   $opt_user,$opt_help,$opt_listusers,$opt_name,$opt_passwd,$opt_lock,
+   $opt_unlock,$opt_list,$opt_superuser,$opt_del,$opt_delall,$opt_add,
+   $opt_edit,
+   $id,$pwd,$res,$superuser,$salt,$status,$type,$mode,$ref,
+   $user,$mdate,$result,%addmodes,
+   $tmp,$i,@d,@q
+  );
 
 $user = (getpwuid($<))[0];
 $mdate = db_timestamp_str();

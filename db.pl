@@ -1,12 +1,12 @@
 # db.pl  -- database interface routines
 
 use Pg;
-
+#use strict;
 
 sub sql_print_result($) {
   my($res)=@_;
   
-  %t = ( 0, 'PGRES_EMPTY_QUERY', 
+  my %t = ( 0, 'PGRES_EMPTY_QUERY', 
 	 1, 'PGRES_COMMAND_OK',
 	 2, 'PGRES_TUPLES_OK',
 	 3, 'PGRES_COPY_OUT',

@@ -17,3 +17,5 @@ $LOOPBACK_ZONE = "loopback.";
 
 $SAURON_BGCOLOR="white";
 $SAURON_FGCOLOR="black";
+
+# eof
