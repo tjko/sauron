@@ -230,7 +230,7 @@ sub do_search() {
   }
   return if ($mask =~ /^\s*$/);
   if ($mask =~ /^[\*\?]$/) {
-    print "Invalid regular expression<br>";
+    alert2("Invalid regular expression");
     return;
   }
 
@@ -320,7 +320,12 @@ sub do_search() {
   #print "<p>sql '$sql'";
   db_query($sql,\@q);
   if (db_errormsg()) {
-      print db_errormsg() ."<br>";
+      my $errmsg = db_errormsg();
+      if ($errmsg =~ /invalid regular expression/) {
+	  alert2("Invalid regular expression");
+      } else {
+	  print "SQL error: " . db_errormsg() ."<br>";
+      }
       return;
   }
   $count = @q;
