@@ -349,7 +349,8 @@ do "$PROG_DIR/cgi_util.pl";
  data=>[
   {ftype=>0, name=>'New record' },
   {ftype=>4, tag=>'type', name=>'Type', type=>'enum', enum=>\%host_types},
-  {ftype=>1, tag=>'domain', name=>'Hostname', type=>'domain', len=>40},
+  {ftype=>1, tag=>'domain', name=>'Hostname', type=>'domain', len=>40,
+   conv=>'L'},
   {ftype=>1, tag=>'cname_txt', name=>'Alias for', type=>'fqdn', len=>60,
    iff=>['type','4']},
   {ftype=>3, tag=>'net', name=>'Subnet', type=>'enum',
@@ -403,7 +404,8 @@ do "$PROG_DIR/cgi_util.pl";
  data=>[
   {ftype=>0, name=>'New record (restricted)' },
   {ftype=>4, tag=>'type', name=>'Type', type=>'enum', enum=>\%host_types},
-  {ftype=>1, tag=>'domain', name=>'Hostname', type=>'domain', len=>40},
+  {ftype=>1, tag=>'domain', name=>'Hostname', type=>'domain', len=>40,
+   conv=>'L'},
   {ftype=>1, tag=>'cname_txt', name=>'Alias for', type=>'fqdn', len=>60,
    iff=>['type','4']},
   {ftype=>3, tag=>'net', name=>'Subnet', type=>'enum',
