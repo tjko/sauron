@@ -1,6 +1,8 @@
 $Id$
 
 0.7.1beta
+	- sauron.cgi script split into several modules
+	  that are loaded only when needed
 	- added support for Apache (external) authentication
 	
 0.7.0

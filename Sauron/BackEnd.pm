@@ -128,6 +128,10 @@ $VERSION = '$Id$ ';
 
 	     get_history_host
 	     get_history_session
+
+	     save_state
+	     load_state
+	     remove_state
 	    );
 
 
@@ -3009,6 +3013,103 @@ sub get_history_session($$)
 
   return 0;
 }
+
+
+sub save_state($$) {
+  my($id,$state)=@_;
+  my(@q,$res,$s_auth,$s_addr,$other,$s_mode,$s_superuser);
+
+  undef @q;
+  db_query("SELECT uid,cookie FROM utmp WHERE cookie='$id';",\@q);
+  unless (@q > 0) {
+      if (db_exec("INSERT INTO utmp (uid,cookie,auth) " .
+		  "VALUES(-1,'$id',false);") < 0) {
+	return -1;
+      }
+  }
+
+  $s_superuser = ($state->{'superuser'} eq 'yes' ? 'true' : 'false');
+  $s_auth=($state->{'auth'} eq 'yes' ? 'true' : 'false');
+  $s_mode=($state->{'mode'} ? $state->{'mode'} : 0);
+
+  $other='';
+  if ($state->{'addr'}) { $other.=", addr='".$state->{'addr'}."' ";  }
+  if ($state->{'uid'}) { $other.=", uid=".$state->{'uid'}." ";  }
+  if ($state->{'sid'}) { $other.=", sid=".$state->{'sid'}." ";  }
+  if ($state->{'serverid'}) {
+    $other.=", serverid=".$state->{'serverid'}." ";
+    $other.=", server='".$state->{'server'}."' ";
+  }
+  if ($state->{'zoneid'}) {
+    $other.=", zoneid=".$state->{'zoneid'}." ";
+    $other.=", zone='".$state->{'zone'}."' ";
+  }
+  if ($state->{'user'}) { $other.=", uname='".$state->{'user'}."' "; }
+  if ($state->{'login'}) { $other.=", login=".$state->{'login'}." "; }
+  $other.=", searchopts=". db_encode_str($state->{'searchopts'}) . " ";
+  $other.=", searchdomain=". db_encode_str($state->{'searchdomain'}) . " ";
+  $other.=", searchpattern=". db_encode_str($state->{'searchpattern'}) . " ";
+
+  $res=db_exec("UPDATE utmp SET auth=$s_auth, mode=$s_mode " .
+	       ", superuser=$s_superuser $other " .
+	       "WHERE cookie='$id';");
+
+  return ($res < 0 ? -2 : 1);
+}
+
+
+sub load_state($$) {
+  my($id,$state)=@_;
+  my(@q);
+
+  undef %{$state};
+  $state->{'auth'}='no';
+  $state->{'cookie'}=$id;
+
+  db_query("SELECT uid,addr,auth,mode,serverid,server,zoneid,zone," .
+	   " uname,last,login,searchopts,searchdomain,searchpattern," .
+           " superuser,sid " .
+           "FROM utmp WHERE cookie='$id'",\@q);
+
+  if (@q > 0) {
+    $state->{'uid'}=$q[0][0];
+    $state->{'addr'}=$q[0][1];
+    $state->{'addr'} =~ s/\/32\s*$//;
+    $state->{'auth'}='yes' if ($q[0][2] eq 't' || $q[0][2] == 1);
+    $state->{'mode'}=$q[0][3];
+    if ($q[0][4] > 0) {
+      $state->{'serverid'}=$q[0][4];
+      $state->{'server'}=$q[0][5];
+    }
+    if ($q[0][6] > 0) {
+      $state->{'zoneid'}=$q[0][6];
+      $state->{'zone'}=$q[0][7];
+    }
+    $state->{'user'}=$q[0][8] if ($q[0][8] ne '');
+    $state->{'last'}=$q[0][9];
+    $state->{'login'}=$q[0][10];
+    $state->{'searchopts'}=$q[0][11];
+    $state->{'searchdomain'}=$q[0][12];
+    $state->{'searchpattern'}=$q[0][13];
+    $state->{'superuser'}='yes' if ($q[0][14] eq 't' || $q[0][14] == 1);
+    $state->{'sid'}=$q[0][15];
+
+    db_exec("UPDATE utmp SET last=" . time() . " WHERE cookie='$id';");
+    return 1;
+  }
+
+  return 0;
+}
+
+
+sub remove_state($) {
+  my($id) = @_;
+
+  return -1 unless ($id);
+  return -2 if (db_exec("DELETE FROM utmp WHERE cookie='$id'") < 0);
+  return 1;
+}
+
 
 1;
 # eof

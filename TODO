@@ -27,7 +27,6 @@ sauron.cgi:
 	- advertise "Save settings" feature if user doesn't have any
           default settings	
 	- module support for easily extending user interface
-	- support for external (Apache) authentication
 	
 
 browser.cgi:

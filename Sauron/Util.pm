@@ -592,6 +592,7 @@ sub join_strings {
   return $s;
 }
 
+
 sub new_serial($) {
   my ($serial) = @_;
   my ($sec,$min,$hour,$day,$mon,$year,$s);
@@ -610,6 +611,7 @@ sub new_serial($) {
 
   return $s;
 }
+
 
 
 1;

@@ -97,6 +97,8 @@ MODULES = Sauron/Util.pm Sauron/BackEnd.pm Sauron/CGIutil.pm \
 	  Sauron/UtilZone.pm Sauron/Sauron.pm Sauron/UtilDhcp.pm \
 	  Sauron/DB-Pg.pm Sauron/DB-DBI.pm
 
+CGIMODULES = Utils.pm Servers.pm Groups.pm Templates.pm Nets.pm \
+	     Login.pm Zones.pm Hosts.pm
 
 CONTRIB_FILES = contrib/additional-ether-codes.txt \
 		contrib/Ethernet.txt \
@@ -221,6 +223,9 @@ install: make_dirs
 	@for f in $(MODULES); do \
 		$(INSTALL) -m 644 $$f $(INSTALL_ROOT)/$(bindir)/Sauron; \
 	done
+	@for f in $(CGIMODULES); do \
+		$(INSTALL) -m 644 Sauron/CGI/$$f $(INSTALL_ROOT)/$(bindir)/Sauron/CGI; \
+	done
 	@for f in $(SQL_TABLES) $(SQL_MISC); do \
 		$(INSTALL) -m 644 $$f $(INSTALL_ROOT)/$(bindir)/sql; \
 	done
@@ -248,6 +253,7 @@ make_dirs:
 	$(INSTALL) -m 755 -d $(INSTALL_ROOT)/$(bindir)/backups
 	$(INSTALL) -m 755 -d $(INSTALL_ROOT)/$(bindir)/cgi
 	$(INSTALL) -m 755 -d $(INSTALL_ROOT)/$(bindir)/Sauron
+	$(INSTALL) -m 755 -d $(INSTALL_ROOT)/$(bindir)/Sauron/CGI
 	$(INSTALL) -m 755 -d $(INSTALL_ROOT)/$(bindir)/sql
 	$(INSTALL) -m 755 -d $(INSTALL_ROOT)/$(bindir)/logs
 	$(INSTALL) -m 755 -d $(INSTALL_ROOT)/$(bindir)/contrib
