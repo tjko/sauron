@@ -63,6 +63,10 @@ if ($namedf =~ /(^.*\/)/) {
 undef %data;
 process_dhcpdconf($dhcpdf,\%data);
 
+foreach $key (sort keys %{$data{host}}) {
+  print "$key\n";
+}
+
 
 exit;
 
