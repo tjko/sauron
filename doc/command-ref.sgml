@@ -43,7 +43,7 @@
               to given regular expression.</>
   </row>
   <row><entry><option>--newonly</></>
-       <entry>Add only hosts that do not allready exist in Sauron database.</>
+       <entry>Add only hosts that do not already exist in Sauron database.</>
   </row>
   <row><entry><option>--noreverse</></>
        <entry>Do not add reverse records.</>
@@ -336,7 +336,7 @@
        <entry>Zone for 'orphan' PTR record hosts.</>
   </row>
   <row><entry><option>--notransaction</></>
-       <entry>Do not use transactions when udpating database (potentially
+       <entry>Do not use transactions when updating database (potentially
               dangerous, but speeds up things).</>
   </row>
   <row><entry><option>--dir=&lt;directory&gt;</></>
@@ -405,7 +405,7 @@
 <section id="import-ethers-cmd">
 <title>import-ethers</>
 <para>
-  Utility for assing OUI (Ethernet card manufacturer) information into
+  Utility for assigning OUI (Ethernet card manufacturer) information into
   global table <filename>ether_info</>. This table enables Sauron to 
   recognize and display Network card (NIC) manufacturer information.
 </para>
@@ -418,7 +418,7 @@
 <para>
   This program currently understands OUI information in old 
   <filename>Ethernet.txt</> format and in the IEEE's OUI list format
-  (<filename>oui.txt</>). Normally this utility only adds new OUI's
+  (<filename>oui.txt</>). Normally this utility only adds new OUIs
   into database, but using <option>--force</> option allows updating
   all OUIs.
 </para>
@@ -472,10 +472,10 @@
 <section id="modgroup-cmd">
 <title>modgroup</>
 <para>
-   This is utility for modifying user groups. This utlity can also be
+   This is utility for modifying user groups. This utility can also be
    used to list all user groups. User groups can be assigned all the
-   same priviliges as a user, but assigning priviliges to groups and
-   then users make privilige management more manageable with large
+   same privileges as a user, but assigning privileges to groups and
+   then users make privilege management more manageable with large
    number of users.  See also <xref linkend="priviliges-sec">.
 </para>
 <cmdsynopsis>
@@ -492,13 +492,13 @@
        <entry>List all groups and exit.</>
   </row>
   <row><entry><option>--add</></>
-       <entry>Add interactively priviliges to given group.</>
+       <entry>Add interactively privileges to given group.</>
   </row>
   <row><entry><option>--add=server,<replaceable>servername,mode</></></>
-       <entry>Add server privilige (mode=R|RW|RWX).</>
+       <entry>Add server privilege (mode=R|RW|RWX).</>
   </row>
   <row><entry><option>--add=zone,<replaceable>servername:zonename,mode</></></>
-       <entry>Add zone privilige (mode=R|RW|RWX).</>
+       <entry>Add zone privilege (mode=R|RW|RWX).</>
   </row>
   <row><entry><option>--add=net,<replaceable>servername:net</></></>
        <entry>Add net (IP-range) restriction.</>
@@ -510,7 +510,7 @@
        <entry>Add IP-mask restriction.</>
   </row>
   <row><entry><option>--add=level,<replaceable>level</></></>
-       <entry>Add privilige level.</>
+       <entry>Add privilege level.</>
   </row>
   <row><entry><option>--add=elimit,<replaceable>days</></></>
        <entry>Add host expiration limit.</>
@@ -520,17 +520,17 @@
   </row>
 
   <row><entry><option>--del=<replaceable>id</></></>
-       <entry>Delete privilige by it's ID number.</>
+       <entry>Delete privilege by it's ID number.</>
   </row>
   <row><entry><option>--delall</></>
-       <entry>Delete all priviliges.</>
+       <entry>Delete all privileges.</>
   </row>
   </tbody>
   </tgroup>
 </informaltable>
 <para>
   This program can be used to list all available groups by specifying
-  only <option>--list</>. Priviliges can be added either interactively
+  only <option>--list</>. Privileges can be added either interactively
   by specifying short form of <option>--add</> or non-interactively 
   by using long form.
 </para>
@@ -568,7 +568,7 @@
               (available types: host, cname, arc, srv).</>
   </row>
   <row><entry><option>--ether=<replaceable>regexp</></></>
-       <entry>Select only hosts with matchin Ethernet (MAC) address.</>
+       <entry>Select only hosts with matching Ethernet (MAC) address.</>
   </row>
   <row><entry><option>--etherempty</></>
        <entry>Select only hosts without Ethernet (MAC) address.</>
@@ -610,11 +610,11 @@
 <section id="moduser-cmd">
 <title>moduser</>
 <para>
-   This is utility for modifying user accounts. This utlity can also be
+   This is utility for modifying user accounts. This utility can also be
    used to list all users. This utility can also be used to modify
-   user account priviliges, but it's recommended to use user groups rather
-   than assignign priviliges directly to user accounts. For more 
-   information about user priviliges see <xref linkend="priviliges-sec">.
+   user account privileges, but it's recommended to use user groups rather
+   than assigning privileges directly to user accounts. For more 
+   information about user privileges see <xref linkend="priviliges-sec">.
 </para>
 <cmdsynopsis>
   <command>moduser</>
@@ -636,7 +636,7 @@
        <entry>Set user comments.</>
   </row>
   <row><entry><option>--expiration=<replaceable>dd-mm-yyyy</> | NONE</></>
-       <entry>Set account epxiration date.</>
+       <entry>Set account expiration date.</>
   </row>
   <row><entry><option>--superuser=yes | no</></>
        <entry>Toggle superuser flag for user.</>
@@ -662,13 +662,13 @@
 
 
   <row><entry><option>--add</></>
-       <entry>Add interactively priviliges to given group.</>
+       <entry>Add interactively privileges to given group.</>
   </row>
   <row><entry><option>--add=server,<replaceable>servername,mode</></></>
-       <entry>Add server privilige (mode=R|RW|RWX).</>
+       <entry>Add server privilege (mode=R|RW|RWX).</>
   </row>
   <row><entry><option>--add=zone,<replaceable>servername:zonename,mode</></></>
-       <entry>Add zone privilige (mode=R|RW|RWX).</>
+       <entry>Add zone privilege (mode=R|RW|RWX).</>
   </row>
   <row><entry><option>--add=net,<replaceable>servername:net</></></>
        <entry>Add net (IP-range) restriction.</>
@@ -680,7 +680,7 @@
        <entry>Add IP-mask restriction.</>
   </row>
   <row><entry><option>--add=level,<replaceable>level</></></>
-       <entry>Add privilige level.</>
+       <entry>Add privilege level.</>
   </row>
   <row><entry><option>--add=elimit,<replaceable>days</></></>
        <entry>Add host expiration limit.</>
@@ -690,17 +690,17 @@
   </row>
 
   <row><entry><option>--del=<replaceable>id</></></>
-       <entry>Delete privilige by it's ID number.</>
+       <entry>Delete privilege by it's ID number.</>
   </row>
   <row><entry><option>--delall</></>
-       <entry>Delete all priviliges.</>
+       <entry>Delete all privileges.</>
   </row>
   </tbody>
   </tgroup>
 </informaltable>
 <para>
   This program can be used to list all users by specifying
-  only <option>--list</>. Priviliges can be added either interactively
+  only <option>--list</>. Privileges can be added either interactively
   by specifying short form of <option>--add</> or non-interactively 
   by using the long form.
 </para>
@@ -759,7 +759,7 @@
               (not yet implemented).</>
   </row>
   <row><entry><option>--clean</></>
-       <entry>Celanup expired host records from the server.
+       <entry>Cleanup expired host records from the server.
               By default host records that have been expired over 30 days
               are removed, but this can be controlled using configuration
               file option <varname>SAURON_REMOVE_EXPIRED_DELAY</>.</>
@@ -795,7 +795,7 @@
 <section id="status-cmd">
 <title>status</>
 <para>
-  Utility fo listing database connection status and the WWW user interface 
+  Utility for listing database connection status and the WWW user interface 
   status information including currently logged in users.
 </para>
 <cmdsynopsis>
@@ -814,7 +814,7 @@
        <entry>Display pending host changes for given server.</>
   </row>
   <row><entry><option>--cgi-disable=<replaceable>message</></></>
-       <entry>Disable WWW inteface and set message to be displayed
+       <entry>Disable WWW interface and set message to be displayed
               when users try to access the WWW interface.</>
   </row>
   <row><entry><option>--cgi-enable</></>
@@ -851,7 +851,7 @@
   <arg choice=plain><replaceable>logfile</></>
 </cmdsynopsis>
 <para>
-  Since normal <application>syslog</> logfiles have timestampts without
+  Since normal <application>syslog</> logfiles have timestamps without
   year information, option <option>--year</> can be used to specify the 
   year to be used if parsing logfiles from previous year. Normally 
   <command>update-dhcp-info</> assumes that the logfile is from current
