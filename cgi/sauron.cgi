@@ -17,6 +17,7 @@ $CGI::POST_MAX = 100000; # max 100k posts
 
 $SAURON_CGI_VER = ' $Revision$ $Date$ ';
 
+$PLEVEL_VLANS = 5 unless (defined($PLEVEL_VLANS));
 #$|=1;
 $debug_mode = 0;
 
@@ -202,7 +203,6 @@ do "$PROG_DIR/cgi_util.pl";
 %host_types=(0=>'Any type',1=>'Host',2=>'Delegation',3=>'Plain MX',
 	     4=>'Alias',5=>'Printer',6=>'Glue record',7=>'AREC Alias',
 	     8=>'SRV record',9=>'DHCP only');
-
 
 %host_form = (
  data=>[
@@ -948,8 +948,10 @@ unless ($frame_mode) {
 }
 
 unless ($state{superuser} eq 'yes') {
- error("cannot get permissions!")
-   if (get_permissions($state{uid},$state{gid},\%perms));
+  error("cannot get permissions!")
+    if (get_permissions($state{uid},$state{gid},\%perms));
+} else {
+  $perms{plevel}=999 if ($state{superuser});
 }
 
 print "<br>" unless ($frame_mode);
@@ -1293,6 +1295,8 @@ sub hosts_menu() {
   $host_form{alias_l_url}="$selfurl?menu=hosts&h_id=";
   $host_form{alias_a_url}="$selfurl?menu=hosts&h_id=";
   $host_form{alias_d_url}="$selfurl?menu=hosts&h_id=";
+  $host_form{plevel}=$restricted_host_form{plevel}=$perms{plevel};
+  $new_host_form{plevel}=$restricted_new_host_form{plevel}=$perms{plevel};
 
   if ($sub eq 'Delete') {
     if (get_host(param('h_id'),\%host)) {
@@ -1943,7 +1947,7 @@ sub groups_menu() {
     print p,"$q[0][0] host records use this group.",
 	      startform(-method=>'GET',-action=>$selfurl);
     if ($q[0][0] > 0) {
-      get_group_list($serverid,\%lsth,\@lst);
+      get_group_list($serverid,\%lsth,\@lst,$perms{plevel});
       print p,"Change those host records to point to: ",
 	        popup_menu(-name=>'grp_new',-values=>\@lst,
 			   -default=>-1,-labels=>\%lsth);
@@ -2012,14 +2016,11 @@ sub nets_menu() {
     print h2("Server not selected!");
     return;
   }
-
   return if (check_perms('server','R'));
-  
-
 
  show_vlan_record:
   if ($v_id > 0) {
-      return if (check_perms('superuser',''));
+      return if (check_perms('level',$PLEVEL_VLANS));
 
       if (get_vlan($v_id,\%vlan)) {
 	  alert2("Cannot get vlan record (id=$v_id)");
@@ -2027,7 +2028,7 @@ sub nets_menu() {
       }
 
       if ($sub eq 'Edit') {
-	  # return if (check_perms('superuser',''));
+	  return if (check_perms('superuser',''));
 	  $res=edit_magic('vlan','VLAN','vlans',\%vlan_form,
 			  \&get_vlan,\&update_vlan,$v_id);
 	  goto browse_vlans if ($res == -1);
@@ -2035,7 +2036,7 @@ sub nets_menu() {
 	  get_vlan($v_id,\%vlan);
       }
       elsif ($sub eq 'Delete') {
-	  # return if (check_perms('superuser',''));
+	  return if (check_perms('superuser',''));
 	  $res=delete_magic('vlan','VLAN','vlans',\%vlan_form,\&get_vlan,
 			    \&delete_vlan,$v_id);
 	  return unless ($res == 2);
@@ -2054,7 +2055,7 @@ sub nets_menu() {
 
   if ($sub eq 'vlans') {
     browse_vlans:
-      return if (check_perms('superuser',''));
+      return if (check_perms('level',$PLEVEL_VLANS));
       undef @q;
       db_query("SELECT id,name,description,comment FROM vlans " .
 	       "WHERE server=$serverid ORDER BY name;",\@q);
@@ -2209,7 +2210,7 @@ sub nets_menu() {
       print h2("Cannot get net record (id=$id)!");
       return;
     }
-    if (check_perms('superuser','',1)) {
+    if (check_perms('level',$PLEVEL_VLANS,1)) {
 	$net_form{mode}=0;
     } else {
 	get_vlan_list($serverid,\%vlan_list_hash,\@vlan_list);
@@ -2226,17 +2227,24 @@ sub nets_menu() {
   }
 
  browse_nets:
-  db_query("SELECT id,name,net,subnet,comment,no_dhcp,vlan,netname " .
+  db_query("SELECT id,name,net,subnet,comment,no_dhcp,vlan,netname,plevel " .
 	   "FROM nets " .
-	   "WHERE server=$serverid ORDER BY subnet,net;",\@q);
+	   "WHERE server=$serverid AND plevel <= $perms{plevel} " .
+	   "ORDER BY subnet,net;",\@q);
   if (@q < 1) {
     print h2("No networks found!");
     return;
   }
+  if (check_perms('level',$PLEVEL_VLANS,1)) {
+    $novlans=1;
+  } else {
+    get_vlan_list($serverid,\%vlan_list_hash,\@vlan_list);
+    $novlans=0;
+  }
 
   print "<TABLE cellspacing=2 border=0><TR bgcolor=\"#aaaaff\">",
         "<TH>Net</TH>",th("NetName"),th("Description"),th("Type"),
-        th("DHCP"),th("Comments"),"</TR>";
+        th("DHCP"),($novlans?'':th("VLAN")),th("Comments"),th("Lvl"),"</TR>";
 
   for $i (0..$#q) {
       $dhcp=($q[$i][5] eq 't' ? 'No' : 'Yes' );
@@ -2246,22 +2254,23 @@ sub nets_menu() {
 	$type='Subnet';
       } else {
 	print "<TR bgcolor=\"#ddffdd\">";
-	$type='Network';
+	$type='Net';
       }
 
-      # $vlan=($q[$i][6] > 0 ? $vlan_list_hash{$q[$i][6]} : '&nbsp;');
+      $vlan=($q[$i][6] > 0 ? $vlan_list_hash{$q[$i][6]} : '&nbsp;');
       $netname=($q[$i][7] eq '' ? '&nbsp;' : $q[$i][7]);
       $name=($q[$i][1] eq '' ? '&nbsp;' : $q[$i][1]);
       $comment=$q[$i][4];
       $comment='&nbsp;' if ($comment eq '');
       print "<td><a href=\"$selfurl?menu=nets&net_id=$q[$i][0]\">",
 	  "$q[$i][2]</a></td>",td($netname),
-          td("<FONT size=-1>$name</FONT>"),td("<FONT size=-1>$type</FONT>"),
-          td("<FONT size=-1>$dhcp</FONT>"), # td("<FONT size=-1>$vlan</FONT>"),
-	    td("<FONT size=-1>$comment</FONT>"),"</TR>";
+          td("<FONT size=-1>$name</FONT>"), td("<FONT size=-1>$type</FONT>"),
+          td("<FONT size=-1>$dhcp</FONT>"), 
+	  ($novlans?'':td("<FONT size=-1>$vlan</FONT>")),
+	  td("<FONT size=-1>$comment</FONT>"), td($q[$i][8].'&nbsp;'),"</TR>";
   }
 
-  print "</TABLE>";
+  print "</TABLE>&nbsp;";
 }
 
 
@@ -2442,7 +2451,7 @@ sub templates_menu() {
       print p,"$q[0][0] host records use this template.",
 	      startform(-method=>'GET',-action=>$selfurl);
       if ($q[0][0] > 0) {
-	get_mx_template_list($zoneid,\%lsth,\@lst);
+	get_mx_template_list($zoneid,\%lsth,\@lst,$perms{plevel});
 	print p,"Change those host records to point to: ",
 	        popup_menu(-name=>'mx_new',-values=>\@lst,
 			   -default=>-1,-labels=>\%lsth);
@@ -2488,7 +2497,7 @@ sub templates_menu() {
       print p,"$q[0][0] host records use this template.",
 	      startform(-method=>'GET',-action=>$selfurl);
       if ($q[0][0] > 0) {
-	get_wks_template_list($serverid,\%lsth,\@lst);
+	get_wks_template_list($serverid,\%lsth,\@lst,$perms{plevel});
 	print p,"Change those host records to point to: ",
 	        popup_menu(-name=>'wks_new',-values=>\@lst,
 			   -default=>-1,-labels=>\%lsth);
@@ -2860,7 +2869,6 @@ sub login_menu() {
     }
 
     # plevel permissions
-    $perms{plevel}=999 if ($state{superuser});
     print "<TR bgcolor=\"#dddddd\">",td("Level"),td($perms{plevel}),
 	     td("(general privilege level)"),"</TR>";
 
@@ -3509,6 +3517,8 @@ sub check_perms($$$) {
   }
   elsif ($type eq 'level') {
     return 0 if ($perms{plevel} >= $rule);
+    alert1("Higher privilege level required") unless($quiet);
+    return 1;
   }
   elsif ($type eq 'server') {
     return 0 if ($perms{server}->{$serverid} =~ /$rule/);

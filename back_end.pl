@@ -1341,8 +1341,8 @@ sub delete_mx_template($) {
 }
 
 
-sub get_mx_template_list($$$) {
-  my($zoneid,$rec,$lst) = @_;
+sub get_mx_template_list($$$$) {
+  my($zoneid,$rec,$lst,$plevel) = @_;
   my(@q,$i);
 
   undef @{$lst};
@@ -1350,9 +1350,10 @@ sub get_mx_template_list($$$) {
   undef %{$rec};
   $$rec{-1}='None';
   return if ($zoneid < 1);
+  $plevel=0 unless ($plevel>0);
 
   db_query("SELECT id,name FROM mx_templates " .
-	   "WHERE zone=$zoneid ORDER BY name;",\@q);
+	   "WHERE zone=$zoneid AND plevel <= $plevel ORDER BY name;",\@q);
   for $i (0..$#q) {
     push @{$lst}, $q[$i][0];
     $$rec{$q[$i][0]}=$q[$i][1];
@@ -1430,8 +1431,8 @@ sub delete_wks_template($) {
   return db_commit();
 }
 
-sub get_wks_template_list($$$) {
-  my($serverid,$rec,$lst) = @_;
+sub get_wks_template_list($$$$) {
+  my($serverid,$rec,$lst,$plevel) = @_;
   my(@q,$i);
 
   undef @{$lst};
@@ -1439,9 +1440,10 @@ sub get_wks_template_list($$$) {
   undef %{$rec};
   $$rec{-1}='None';
   return if ($serverid < 1);
+  $plevel=0 unless ($plevel > 0);
 
   db_query("SELECT id,name FROM wks_templates " .
-	   "WHERE server=$serverid ORDER BY name;",\@q);
+	   "WHERE server=$serverid AND plevel <= $plevel ORDER BY name;",\@q);
   for $i (0..$#q) {
     push @{$lst}, $q[$i][0];
     $$rec{$q[$i][0]}=$q[$i][1];
@@ -1654,8 +1656,8 @@ sub delete_group($) {
   return db_commit();
 }
 
-sub get_group_list($$$) {
-  my($serverid,$rec,$lst) = @_;
+sub get_group_list($$$$) {
+  my($serverid,$rec,$lst,$plevel) = @_;
   my(@q,$i);
 
   undef @{$lst};
@@ -1663,9 +1665,10 @@ sub get_group_list($$$) {
   undef %{$rec};
   $$rec{-1}='None';
   return if ($serverid < 1);
+  $plevel=0 unless ($plevel > 0);
 
   db_query("SELECT id,name FROM groups " .
-	   "WHERE server=$serverid ORDER BY name;",\@q);
+	   "WHERE server=$serverid AND plevel <= $plevel  ORDER BY name;",\@q);
   for $i (0..$#q) {
     push @{$lst}, $q[$i][0];
     $$rec{$q[$i][0]}=$q[$i][1];
