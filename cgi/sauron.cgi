@@ -192,7 +192,9 @@ do "$PROG_DIR/cgi_util.pl";
 
   {ftype=>0, name=>'Record info', no_edit=>0},
   {ftype=>4, name=>'Record created', tag=>'cdate_str', no_edit=>1},
-  {ftype=>4, name=>'Last modified', tag=>'mdate_str', no_edit=>1}
+  {ftype=>4, name=>'Last modified', tag=>'mdate_str', no_edit=>1},
+  {ftype=>4, name=>'Pending host record changes', tag=>'pending_info', 
+   no_edit=>1, iff=>['type','M']}
  ]
 );
 
@@ -1105,6 +1107,27 @@ sub zones_menu() {
     form_magic('copy',\%data,\%copy_zone_form);
     print submit(-name=>'copy_confirm',-value=>'Copy Zone')," ",
           submit(-name=>'copy_cancel',-value=>'Cancel'),end_form;
+    return;
+  }
+  elsif ($sub eq 'pending') {
+    print h2("Pending changes to host records:");
+
+    undef @q;
+    db_query("SELECT h.id,h.domain,h.cdate,h.mdate,h.cuser,h.muser " .
+	     "FROM hosts h, zones z " .
+	     "WHERE z.id=$zoneid AND h.zone=z.id " .
+	     " AND (h.mdate > z.serial_date OR h.cdate > z.serial_date) " .
+	     "ORDER BY h.domain;",\@q);
+    print "<TABLE width=\"98%\" bgcolor=\"#eeeebf\" cellspacing=1 border=0>",
+          "<TR bgcolor=\"#aaaaff\">",th("#"),th("Hostname"),
+	  "<TH colspan=2>Created</TH><TH colspan=2>Modified</TH></TR>";
+    for $i (0..$#q) {
+      print "<TR>",td($i."."),
+	    td("<a href=\"$selfurl?menu=hosts&h_id=$q[$i][0]\">$q[$i][1]</a>"),
+	    td("".localtime($q[$i][2])),td($q[$i][4]),
+	    td("".localtime($q[$i][3])),td($q[$i][5]),"</TR>";
+    }
+    print "</TABLE>";
     return;
   }
 
@@ -2977,14 +3000,15 @@ sub left_menu($) {
 
   if ($menu eq 'servers') {
     $url.='?menu=servers';
-    print Tr(td("<a href=\"$url\">Current</a>")),
+    print Tr(td("<a href=\"$url\">Show Current</a>")),
           Tr(td("<a href=\"$url&sub=select\">Select</a>")),
           Tr(),Tr(),Tr(td("<a href=\"$url&sub=add\">Add</a>")),
           Tr(td("<a href=\"$url&sub=del\">Delete</a>")),
           Tr(td("<a href=\"$url&sub=edit\">Edit</a>"));
   } elsif ($menu eq 'zones') {
     $url.='?menu=zones';
-    print Tr(td("<a href=\"$url\">Current</a>")),
+    print Tr(td("<a href=\"$url\">Show Current</a>")),
+          Tr(td("<a href=\"$url&sub=pending\">Show pending</a>")),
           Tr(),Tr(),Tr(td("<a href=\"$url&sub=select\">Select</a>")),
           Tr(),Tr(),Tr(td("<a href=\"$url&sub=add\">Add</a>")),
           Tr(td("<a href=\"$url&sub=Copy\">Copy</a>")),

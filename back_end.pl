@@ -602,7 +602,7 @@ sub get_zone_list($$$) {
 
 sub get_zone($$) {
   my ($id,$rec) = @_;
-  my ($res);
+  my ($res,@q);
 
   $res = get_record("zones",
 	       "server,active,dummy,type,reverse,class,name,nnotify," .
@@ -636,6 +636,11 @@ sub get_zone($$) {
   $rec->{mdate_str}=($rec->{mdate} > 0 ?
 		     localtime($rec->{mdate}).' by '.$rec->{muser} : '');
 
+  db_query("SELECT COUNT(h.id) FROM hosts h, zones z " .
+	   "WHERE z.id=$id AND h.zone=$id AND h.mdate > z.serial_date;",\@q);
+  $rec->{pending_info}=($q[0][0] > 0 ? 
+			"<FONT color=\"#ff0000\">$q[0][0]</FONT>" : 'None');
+
   return 0;
 }
 
@@ -647,6 +652,7 @@ sub update_zone($) {
   delete $rec->{mdate_str};
   delete $rec->{cdate};
   delete $rec->{cuser};
+  delete $rec->{pending_info};
   $rec->{mdate}=time;
   $rec->{muser}=$muser;
 
@@ -1048,15 +1054,22 @@ sub get_host($$) {
 		    $rec,'alias_a');
   }
 
-  $rec->{cdate_str}=($rec->{cdate} > 0 ?
-		     localtime($rec->{cdate}).' by '.$rec->{cuser} : 'UNKOWN');
+
+  db_query("SELECT z.serial_date FROM hosts h, zones z " .
+	   "WHERE h.zone=z.id AND h.id=$id;",\@q);
+
+  if ($rec->{cdate} > 0) {
+    $rec->{cdate_str}=localtime($rec->{cdate}).' by '.$rec->{cuser};
+    $rec->{cdate_str} .= "<FONT color=\"#ff0000\"> (PENDING)</FONT>"  
+      if ($q[0][0] < $rec->{cdate});
+  } else {
+    $rec->{mdate_str}='UNKNOWN';
+  }
 
   if ($rec->{mdate} > 0) {
     $rec->{mdate_str}=localtime($rec->{mdate}).' by '.$rec->{muser};
-    db_query("SELECT z.serial_date FROM hosts h, zones z " .
-	     "WHERE h.zone=z.id AND h.id=$id;",\@q);
-    $rec->{mdate_str}="<FONT color=\"#ff0000\">" . $rec->{mdate_str} .
-                      " (PENDING)</FONT>"  if ($q[0][0] < $rec->{mdate});
+    $rec->{mdate_str} .= "<FONT color=\"#ff0000\"> (PENDING)</FONT>"  
+      if ($q[0][0] < $rec->{mdate});
   } else {
     $rec->{mdate_str}='';
   }

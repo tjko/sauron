@@ -144,7 +144,7 @@ set_muser('browser');
 $bgcolor='white';
 
 print header(-type=>'text/html; charset=iso-8859-1'),
-      start_html(-title=>"Sauron $VER",-BGCOLOR=>$bgcolor,
+      start_html(-title=>"Sauron DNS Browser $VER",-BGCOLOR=>$bgcolor,
 		 -meta=>{'keywords'=>'GNU Sauron DNS DHCP tool'}),
       "\n\n<!-- Sauron DNS Browser $VER -->\n",
       "<!-- Copyright (c) Timo Kokkonen <tjko\@iki.fi>  2001. -->\n\n";
