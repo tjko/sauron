@@ -57,7 +57,7 @@ SQL_TABLES = 	sql/common.sql \
 		sql/mx_entries.sql sql/mx_templates.sql \
 		sql/nets.sql sql/ns_entries.sql \
 		sql/printer_classes.sql sql/printer_entries.sql \
-		sql/rr_a.sql sql/servers.sql sql/txt_entries.sql \
+		sql/a_entries.sql sql/servers.sql sql/txt_entries.sql \
 	        sql/user_rights.sql sql/users.sql \
 		sql/wks_entries.sql sql/wks_templates.sql \
 		sql/zones.sql sql/utmp.sql sql/hinfo_templates.sql \

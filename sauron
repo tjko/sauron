@@ -290,6 +290,10 @@ sub make_bind() {
     $TTL=$server{'ttl'};
     $TTL=$zone{'ttl'} if ($zone{ttl} > 0);
     $ttl='';
+    $ttl_refresh = ($zone{refresh} ? $zone{refresh} : $server{refresh});
+    $ttl_retry = ($zone{retry} ? $zone{retry} : $server{retry});
+    $ttl_expire = ($zone{expire} ? $zone{expire} : $server{expire});
+    $ttl_minimum = ($zone{minimum} ? $zone{minimum} : $server{minimum});
 
     $serial=new_serial($zone{'serial'});
     fatal("Cannot update zone $zonename serial!")
@@ -305,11 +309,11 @@ sub make_bind() {
     print ZONEFILE '$ORIGIN ' . "$zonename.\n;\n";
 
     print ZONEFILE "@\t$ttl\t$class\tSOA\t$hostname $hostmaster (\n";
-    print ZONEFILE "\t\t\t\t\t$serial\t; serial number\n" .
-                   "\t\t\t\t\t$zone{'refresh'}\t\t; refresh\n" .
-		   "\t\t\t\t\t$zone{'retry'}\t\t; retry\n" .
-                   "\t\t\t\t\t$zone{'expire'}\t\t; expire\n" .
-		   "\t\t\t\t\t$zone{'minimum'}\t\t; minimum\n\t\t\t\t\t)\n";
+    print ZONEFILE "\t\t\t\t\t $serial\t; serial number\n" .
+                   "\t\t\t\t\t $ttl_refresh\t\t; refresh\n" .
+		   "\t\t\t\t\t $ttl_retry\t\t; retry\n" .
+                   "\t\t\t\t\t $ttl_expire\t\t; expire\n" .
+		   "\t\t\t\t\t $ttl_minimum\t\t; minimum\n\t\t\t\t\t)\n";
     print ZONEFILE ";\n; zone nameservers\n;\n";
     undef @q;
     db_query("SELECT ns FROM ns_entries WHERE type=1 AND ref=$zoneid;",\@q);
@@ -363,6 +367,8 @@ sub make_bind() {
 
 
     # delegated zones
+    undef @cnamedelegs;
+    undef %delegnets;
     undef @q;
     db_query("SELECT a.domain,c.ns,a.ttl FROM hosts a,zones b,ns_entries c " .
 	     "WHERE c.ref=a.id AND a.zone=b.id AND c.type=2 AND a.type=2 " .
@@ -374,6 +380,19 @@ sub make_bind() {
       for $i (0 .. $#q) {
 	print ZONEFILE ";\n" if (($domain ne '') && ($domain ne $q[$i][0]));
 	$val = ($domain ne $q[$i][0] ? $q[$i][0] : '');
+	if ($rev eq 't') {
+	  if ($val =~ /^(\d+)-(\d+)\.(\S+)$/) {
+	    push @cnamedelegs, [$1,$2,$3,$val];
+	    #print ZONEFILE "; special (CNAME hack) delegation:\n";
+	  } elsif ($val) {
+	    $dnet = arpa2cidr("$val.$zonename");
+	    fatal("invalid reverse delegation '$val'")
+	      if ($dneg eq '0.0.0.0/0');
+	    print "dnet: $dnet\n";
+	    $net = new Net::Netmask($dnet);
+	    $net->storeNetblock(\%delegnets);
+	  }
+	}
 	$domain=$q[$i][0];
 	$ns=$q[$i][1];
 	$ttl=$q[$i][2];
@@ -384,9 +403,26 @@ sub make_bind() {
     }
 
 
-
     if ($rev eq 't') {
       # reverse zone
+
+      # generate CNAMEs for delegations for small nets
+      if (@cnamedelegs > 0) {
+	print ZONEFILE ";\n; CNAME maps for special delegations\n";
+	for $i (0..$#cnamedelegs) {
+	  $start=$cnamedelegs[$i][0];
+	  $end=$cnamedelegs[$i][1];
+	  $rest=$cnamedelegs[$i][2];
+	  $domain=$cnamedelegs[$i][3];
+	  print ZONEFILE ";\n; $domain:\n";
+	  for $j ($start..$end) {
+	    printf ZONEFILE $ZFORMAT, "$j.$rest",'',$class,'CNAME',
+	                              "$j.$domain.$zonename.";
+	  }
+	  print ZONEFILE ";\n";
+	}
+	print ZONEFILE ";\n";
+      }
 
       #print "reversenet " . $zone{'reversenet'} . "\n";
       $rorigin = cidr2arpa($zone{'reversenet'}) . ".";
@@ -398,8 +434,12 @@ sub make_bind() {
 	       " AND a.reverse=true AND a.ip << '$zone{reversenet}' " .
 	       "ORDER BY ip;",\@q);
       if (@q > 0) {
-	print ZONEFILE ";\n; reverse map from zone: $rzone_name\n;\n";
+	print ZONEFILE ";\n; reverse map for: $zone{reversenet}\n;\n";
 	for $i (0 .. $#q) {
+	  if (findNetblock($q[$i][0],\%delegnets)) {
+	    #print "SKIP: $q[$i][0]\n";
+	    next;
+	  }
 	  $rip=remove_origin(cidr2arpa($q[$i][0]).".",$rorigin);
 	  $rzone_name=$q[$i][3];
 	  $ttl=$q[$i][2];
@@ -419,7 +459,8 @@ sub make_bind() {
 
       # glue records needed for delgated zones
       undef @q;
-      db_query("SELECT hosts.domain,a_entries.ip,hosts.ttl FROM hosts,zones,a_entries " .
+      db_query("SELECT hosts.domain,a_entries.ip,hosts.ttl " .
+	       "FROM hosts,zones,a_entries " .
 	       "WHERE hosts.zone=zones.id AND hosts.id=a_entries.host " .
 	       "AND zones.id=$zoneid AND hosts.type=6 " .
 	       "ORDER BY hosts.domain;",\@q);

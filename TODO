@@ -7,9 +7,10 @@ import:
 	- add SRV stuff
 	- remove unneccessary (?) quoting (\"...) from dhcp (and other) records
 	- add allow-query/allow-transfer/also-notify support for zones
+	- real parser for both imports
 
 import-jyu:
-	- add AREC support
+	- add ETHER2 support
 
 sauron:
 	- better support for small reverse subnet delegations
