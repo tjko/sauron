@@ -1,7 +1,7 @@
 Sauron v.0.5.1 - DNS/DHCP Management System
 ==============
 
-NOTE! This is a development release, altough the code is believed to be
+NOTE! This is a development release, although the code is believed to be
 stable (Sauron has been in production use almost two years now).
 This release is primarily meant for developers and early adopters, 
 and does not contain much documentation yet (user's guide expected to be 
@@ -40,8 +40,8 @@ INSTALLATION
 	make docs	(optional)
 	make install
 
-  2) Create database for sauron to use in PostgreSQL
-     	(use createdb command to create the database, see postgres
+  2) Create database for Sauron to use in PostgreSQL
+     	(use createdb command to create the database, see PostgreSQL
 	 documentation for more help)
 
   3) Edit configuration files: config and config-browser
@@ -54,7 +54,7 @@ INSTALLATION
 	./createtables
 	./status		(check that everything worked)
 
-  5) Populate OUI (ethernet card manufacturer) table (optional):
+  5) Populate OUI (Ethernet card manufacturer) table (optional):
 	./import-ethers contrib/Ethernet.txt
 	./import-ethers --force contrib/additional-ether-codes.txt
 	   (NOTE! you may want to download IEEE's public list
@@ -66,7 +66,7 @@ INSTALLATION
 	  (NOTE! you should download latest version of this file
 	   from: ftp://ftp.rs.internic.net/domain/ and use it)
 
-  7) Create adminstrator account:
+  7) Create administrator account:
 	./adduser 		(remember to set superuser flag)
 
   8) Setup www interface
@@ -107,7 +107,7 @@ COMMANDS
    with moduser command).
 
  expire-hosts
-   Utility for expiring unused (no DHCP activity within given timeframe)
+   Utility for expiring unused (no DHCP activity within given time-frame)
    host entries.
 
  export-networks
@@ -122,8 +122,8 @@ COMMANDS
    new server and related zones into Sauron.
 
  import-ethers
-   Utility for adding OUI (ethernet card manufacturer) information
-   into global table. This table enable sauron to recognize and display
+   Utility for adding OUI (Ethernet card manufacturer) information
+   into global table. This table enable Sauron to recognize and display
    NIC manufacturer information for hosts.
 
  import-roots
@@ -132,7 +132,7 @@ COMMANDS
 
  last
    Unix 'last' command style utility for listing lastlog information
-   about sauron www-interface users.
+   about Sauron www-interface users.
 
  modgroup
    Modifies privileges associated with groups.
@@ -147,7 +147,7 @@ COMMANDS
    Utility for running SQL code from file into Sauron database.
 
  sauron
-   Program to for generatin named/dhcpd configuration files from Sauron 
+   Program to for generating named/dhcpd configuration files from Sauron 
    database for given server.
 
  status
