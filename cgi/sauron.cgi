@@ -49,6 +49,7 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>4, tag=>'id', name=>'Server ID'},
   {ftype=>3, tag=>'zones_only', name=>'Output mode', type=>'enum',
    conv=>'L', enum=>{t=>'Generate named.zones',f=>'Generate full named.conf'}},
+	 
   {ftype=>3, tag=>'nnotify', name=>'Notify', type=>'enum',
    conv=>'U', enum=>\%yes_no_enum},
   {ftype=>3, tag=>'recursion', name=>'Recursion', type=>'enum',
@@ -96,11 +97,13 @@ do "$PROG_DIR/cgi_util.pl";
 
   {ftype=>0, name=>'Access control'},
   {ftype=>2, tag=>'allow_transfer', name=>'Allow-transfer', fields=>2,
-   type=>['cidr','text'], len=>[20,30], empty=>[0,1], 
+   type=>['cidr','text'], len=>[20,30], empty=>[0,1],
    elabels=>['IP','comment']},
 
   {ftype=>0, name=>'DHCP'},
-  {ftype=>2, tag=>'dhcp', name=>'Global DHCP', type=>['text','text'], 
+  {ftype=>3, tag=>'dhcp_flags_ad', name=>'auto-domainnames',
+   type=>'enum', enum=>{0=>'No',1=>'Yes'}},
+  {ftype=>2, tag=>'dhcp', name=>'Global DHCP', type=>['text','text'],
    fields=>2, len=>[35,20], empty=>[0,1],elabels=>['dhcptab line','comment']},
 
   {ftype=>0, name=>'Record info', no_edit=>1},

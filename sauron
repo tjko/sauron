@@ -90,6 +90,8 @@ $serverid = get_server_id($servername);
 fatal("Cannot find server '$servername' from database.") if ($serverid < 0);
 fatal("Cannot get server record!") if (get_server($serverid,\%server));
 
+$dhcp_auto_domainnames = ($server{dhcp_flags} & 0x01 ? 1 : 0);
+
 
 $zonelist = get_zone_list($serverid);
 #$zonelist2 = get_zone_list(0);
@@ -1097,7 +1099,9 @@ sub make_dhcp() {
     }
   }
 
+
   # groups
+
   print DHCPFILE "# groups\n\n";
 
   undef @groups;
@@ -1162,6 +1166,11 @@ sub make_dhcp() {
 	      print DHCPFILE "\thost $host {\n";
 	      print DHCPFILE "\t\tfixed-address $ip;\n";
 	      print DHCPFILE "\t\thardware ethernet $ether;\n";
+	      if ($dhcp_auto_domainnames) {
+		($adomain=$host) =~ s/^[^\.]+\.//;
+		print DHCPFILE "\t\toption domain-name \"$adomain\";\n"
+		  if ($adomain);
+	      }
 
 	      $dhcplst=$dhcphosth{$dhcpid};
 	      for $l (0..$#{$dhcplst}) {
@@ -1221,6 +1230,11 @@ sub make_dhcp() {
 	  print DHCPFILE "host $host {\n";
 	  print DHCPFILE "\tfixed-address $ip;\n";
 	  print DHCPFILE "\thardware ethernet $ether;\n";
+	  if ($dhcp_auto_domainnames) {
+	    ($adomain=$host) =~ s/^[^\.]+\.//;
+	    print DHCPFILE "\toption domain-name \"$adomain\";\n"
+	      if ($adomain);
+	  }
 
 	  $dhcplst=$dhcphosth{$dhcpid};
 	  for $l (0..$#{$dhcplst}) {

@@ -373,6 +373,7 @@ sub get_server($$) {
 		    "listen_on_port,checknames_m,checknames_s,checknames_r," .
 		    "nnotify,recursion,ttl,refresh,retry,expire,minimum," .
 		    "pzone_path,szone_path,hostname,hostmaster,comment," .
+		    "dhcp_flags,named_flags," .
 		    "cdate,cuser,mdate,muser",
 		    $id,$rec,"id");
   return -1 if ($res < 0);
@@ -389,6 +390,8 @@ sub get_server($$) {
   $rec->{mdate_str}=($rec->{mdate} > 0 ?
 		     localtime($rec->{mdate}).' by '.$rec->{muser} : '');
 
+  $rec->{dhcp_flags_ad}=($rec->{dhcp_flags} & 0x01 ? 1 : 0);
+
   return 0;
 }
 
@@ -402,8 +405,13 @@ sub update_server($) {
   delete $rec->{mdate_str};
   delete $rec->{cdate};
   delete $rec->{cuser};
+  delete $rec->{dhcp_flags};
   $rec->{mdate}=time;
   $rec->{muser}=$muser;
+
+  $rec->{dhcp_flags}=0;
+  $rec->{dhcp_flags}|=0x01 if ($rec->{dhcp_flags_ad});
+  delete $rec->{dhcp_flags_ad};
 
   db_begin();
   $r=update_record('servers',$rec);

@@ -22,6 +22,9 @@ CREATE TABLE servers (
 	dhcp_mode	INT DEFAULT 1, /* DHCP subnet map creation mode:
 						0 = use VLANs,
 						1 = use networks */
+	dhcp_flags	INT DEFAULT 0, /* DHCP option flags:
+					0x01 = auto-generate domainnames */
+	named_flags	INT DEFAULT 0, /* named option flags (RESERVED) */
 
 	/* named.conf options...more to be added as needed... */
 	directory	TEXT, /* base directory for named (optional) */
