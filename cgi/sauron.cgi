@@ -209,6 +209,17 @@ do "$PROG_DIR/back_end.pl";
   {ftype=>1, tag=>'domain', name=>'Hostname', type=>'domain', len=>40},
   {ftype=>3, tag=>'net', name=>'Subnet', type=>'enum',
    enum=>\%new_host_nets,elist=>\@new_host_netsl,iff=>['type','1']},
+  {ftype=>1, tag=>'ip', 
+   name=>'IP<FONT size=-1>(only if "Manual IP" selected)</FONT>', 
+   type=>'ip', len=>15, empty=>1, iff=>['type','1']},
+  {ftype=>2, tag=>'mx_l', name=>'Mail exchanges (MX)', 
+   type=>['priority','mx','text'], fields=>3, len=>[5,30,20], 
+   empty=>[0,0,1], 
+   elabels=>['Priority','MX','comment'], iff=>['type','3']},
+  {ftype=>0, name=>'Group/Template selections', iff=>['type','[15]']},
+  {ftype=>10, tag=>'grp', name=>'Group', iff=>['type','[15]']},
+  {ftype=>6, tag=>'mx', name=>'MX template', iff=>['type','1']},
+  {ftype=>7, tag=>'wks', name=>'WKS template', iff=>['type','1']},
   {ftype=>0, name=>'Host info',iff=>['type','1']},
   {ftype=>1, tag=>'huser', name=>'User', type=>'text', len=>25, empty=>0,
    iff=>['type','1']},
@@ -225,7 +236,7 @@ do "$PROG_DIR/back_end.pl";
    sql=>"SELECT hinfo FROM hinfo_templates WHERE type=1 ORDER BY pri,hinfo;",
    iff=>['type','1']},
   {ftype=>1, tag=>'ether', name=>'Ethernet address', type=>'mac', len=>12,
-   iff=>['type','1']},
+   iff=>['type','1'], empty=>1},
   {ftype=>1, tag=>'model', name=>'Model', type=>'text', len=>30, empty=>1, 
    iff=>['type','1']},
   {ftype=>1, tag=>'serial', name=>'Serial no.', type=>'text', len=>20,
@@ -845,11 +856,11 @@ sub zones_menu() {
 #
 sub hosts_menu() {
   unless ($serverid) {
-    print h2("Server not selected!");
+    alert1("Server not selected!");
     return;
   }
   unless ($zoneid) {
-    print h2("Zone not selected!");
+    alert1("Zone not selected!");
     return;
   }
 
@@ -868,7 +879,7 @@ sub hosts_menu() {
     if ($id > 0) {
       $data{alias}=$id;
       if (get_host($id,\%host)) {
-	print h2("Cannot get host record (id=$id)!");
+	alert2("Cannot get host record (id=$id)!");
 	return;
       }
       $data{aliasname}=$host{domain};
@@ -887,18 +898,17 @@ sub hosts_menu() {
       param('h_id',param('aliasadd_alias'));
       goto show_host_record;
     }
-    print "res=$res";
     return;
   }
   elsif ($sub eq 'Move') {
     $id=param('h_id');
     if (get_host($id,\%host)) {
-      print h2("Cannot get host record (id=$id)!");
+      alert2("Cannot get host record (id=$id)!");
       return;
     }
     if ($#{$h{ip}} > 1) {
-      print h2("Host has multiple IPs!"),
-            p,"Move of hosts with multiple IPs not supported (yet)";
+      alert2("Host has multiple IPs!");
+      print  p,"Move of hosts with multiple IPs not supported (yet)";
       return;
     }
     if (param('move_cancel')) {
@@ -907,9 +917,9 @@ sub hosts_menu() {
     } elsif (param('move_confirm')) {
       if (param('move_confirm2')) {
 	if (not is_cidr(param('new_ip'))) {
-	  print '<FONT color="red">',h2('Invalid IP!'),'</FONT>';
+	  alert1('Invalid IP!');
 	} elsif (ip_in_use($serverid,param('new_ip'))) {
-	  print '<FONT color="red">',h2('IP already in use!'),'</FONT>';
+	  alert1('IP already in use!');
 	} else {
 	  $host{ip}[1][1]=param('new_ip'); 
 	  $host{ip}[1][4]=1;
@@ -917,7 +927,7 @@ sub hosts_menu() {
 	    print h2('Host moved.');
 	    goto show_host_record;
 	  } else {
-	    print '<FONT color="red">',h2('Host update failed!'),'</FONT>';
+	    alert1('Host update failed!');
 	  }
 	}
       }
@@ -979,7 +989,7 @@ sub hosts_menu() {
 	goto browse_hosts;
       }
       if (form_check_form('bh',\%bdata,\%browse_hosts_form)) {
-	print p,'<FONT color="red">Invalid parameters.</FONT>';
+	alert2("Invalid parameters.");
 	goto browse_hosts;
       }
       $state{searchopts}=param('bh_type').",".param('bh_order').",".
@@ -1123,23 +1133,63 @@ sub hosts_menu() {
   elsif ($sub eq 'add') {
     $type=param('type');
     unless ($host_types{$type}) {
-      print h2('Invalid add type!');
+      alert2('Invalid add type!');
       return;
     }
-    if (param('addhost_cancel')) {
-      print h2("$host_types{$type} record creation canceled.");
-      return;
-    }
-    print h2("Add $host_types{$type} record");
-
     if ($type == 1) {
       make_net_list($serverid,0,\%new_host_nets,\@new_host_netsl);
       $new_host_nets{MANUAL}='<Manual IP>';
       push @new_host_netsl, 'MANUAL';
+      $data{net}='MANUAL';
     }
-
-    $data{net}='MANUAL';
     $data{type}=$type;
+    $data{grp}=-1;
+    $data{mx}=-1;
+    $data{wks}=-1;
+    $data{zone}=$zoneid;
+    $data{mx_l}=[];
+
+    if (param('addhost_cancel')) {
+      print h2("$host_types{$type} record creation canceled.");
+      return;
+    }
+    elsif (param('addhost_submit')) {
+      unless (($res=form_check_form('addhost',\%data,\%new_host_form))) {
+	if ($data{net} eq 'MANUAL' && not is_cidr($data{ip})) {
+	  alert1("IP number must be specified if using Manual IP!");
+	} elsif (domain_in_use($zoneid,$data{domain})) {
+	  alert1("Domain name already in use!");
+	} elsif (is_cidr($data{ip}) && ip_in_use($serverid,$data{ip})) {
+	  alert1("IP number already in use!");
+	} else {
+	  print h2("Add");
+	  if ($data{type} == 1) {
+	    if ($data{ip} && $data{net} eq 'MANUAL') {
+	      $ip=$data{ip};
+	      delete $data{ip};
+	      $data{ip}=[[$ip,'t','t','']];
+	    } else {
+	      $ip=auto_address($serverid,$data{net});
+	      unless (is_cidr($ip)) { alert1("Cannot get IP: $ip"); return; }
+	      $data{ip}=[[$ip,'t','t','']];
+	    }
+	  }
+	  delete $data{net};
+	  #show_hash(\%data);
+	  $res=add_host(\%data);
+	  if ($res > 0) {
+	    print h2("Host added successfully");
+	    param('h_id',$res);
+	    goto show_host_record;
+	  }
+	  alert1("Cannot add host record!") if ($res < 0);
+	}
+      } else {
+	alert1("Invalid data in form! $res");
+      }
+    }
+    print h2("Add $host_types{$type} record");
+
     print startform(-method=>'POST',-action=>$selfurl),
           hidden('menu','hosts'),hidden('sub','add'),hidden('type',$type);
     form_magic('addhost',\%data,\%new_host_form);
@@ -1153,7 +1203,7 @@ sub hosts_menu() {
   show_host_record:
     $id=param('h_id');
     if (get_host($id,\%host)) {
-      print h2("Cannot get host record (id=$id)!");
+      alert2("Cannot get host record (id=$id)!");
       return;
     }
 
@@ -2562,7 +2612,7 @@ sub form_check_form($$$) {
     elsif ($type == 101) {
       $tmp=param($p);
       $tmp=param($p."_l") if ($tmp eq '');
-      return 1 if (form_check_field($rec,$tmp,0) ne '');
+      return 101 if (form_check_field($rec,$tmp,0) ne '');
       $data->{$tag}=$tmp;
     }
     elsif  ($type == 2) {
@@ -2664,7 +2714,7 @@ sub form_magic($$$) {
 	    param($p1."_".$j."_".$k,$$a[$j][$k]);
 	  }
 	}
-	param($p1."_count",$#{$a});
+	param($p1."_count",($#{$a} < 0 ? 0 : $#{$a}));
       }
       elsif ($rec->{ftype} == 0 || $rec->{ftype} == 9) {
 	# do nothing...
@@ -3072,3 +3122,17 @@ sub error2($) {
   print h1("Error: $msg"),end_html();
   exit;
 }
+
+sub alert1($) {
+  my($msg)=@_;
+  print "<H2><FONT color=\"red\">$msg</FONT></H2>";
+}
+
+sub alert2($) {
+  my($msg)=@_;
+  print "<H3><FONT color=\"red\">$msg</FONT></H3>";
+}
+
+
+# eof
+

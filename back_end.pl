@@ -73,6 +73,17 @@ sub ip_in_use($$) {
   return 0;
 }
 
+sub domain_in_use($$) {
+  my($zoneid,$domain)=@_;
+  my(@q);
+
+  return -1 unless ($zoneid > 0);
+  db_query("SELECT h.id FROM hosts h ".
+	   "WHERE h.zone=$zoneid AND domain='$domain';",\@q);
+  return 1 if ($q[0][0] > 0);
+  return 0;
+}
+
 #####################################################################
 
 sub get_record($$$$$) {
@@ -1017,9 +1028,33 @@ sub delete_host($) {
 
 sub add_host($) {
   my($rec) = @_;
+  my($res,$i,$id);
 
   return -100 unless ($rec->{zone} > 0);
-  return add_record('hosts',$rec);
+  db_begin();
+  $res=add_record('hosts',$rec);
+  if ($res < 0) { db_rollback(); return -1; }
+  $id=$res;
+
+  # IPs
+  for $i (0..$#{$rec->{ip}}) {
+    #print "<br>",$rec->{ip}[$i][0];
+    $res=db_exec("INSERT INTO rr_a (host,ip,reverse,forward) " .
+       "VALUES($id,'$rec->{ip}[$i][0]','$rec->{ip}[$i][1]'," .
+       " '$rec->{ip}[$i][2]');");
+    if ($res < 0) { db_rollback(); return -2; }
+  }
+
+  # MXs
+  for $i (0..$#{$rec->{mx_l}}) {
+    #print "<br>",$rec->{mx_l}[$i][1];
+    $res=db_exec("INSERT INTO mx_entries (type,ref,pri,mx) " .
+       "VALUES(2,$id,'$rec->{mx_l}[$i][1]','$rec->{mx_l}[$i][2]');");
+    if ($res < 0) { db_rollback(); return -3; }
+  }
+  
+  return -10 if (db_commit() < 0);
+  return $id;
 }
 
 
