@@ -56,6 +56,9 @@ do "$PROG_DIR/cgi_util.pl";
    conv=>'L', enum=>{t=>'Generate named.zones',f=>'Generate full named.conf'}},
   {ftype=>1, tag=>'comment', name=>'Comments',  type=>'text', len=>60,
    empty=>1},
+  {ftype=>3, tag=>'named_flags_isz', 
+   name=>'Include also slave zones from master',
+   type=>'enum', enum=>{0=>'No',1=>'Yes'}, iff=>['masterserver','\d+']},
 
   {ftype=>0, name=>'Defaults for zones'},
   {ftype=>1, tag=>'hostmaster', name=>'Hostmaster', type=>'fqdn', len=>30,
@@ -956,6 +959,92 @@ do "$PROG_DIR/cgi_util.pl";
 	  'groups'=>\&groups_menu
 );
 
+%menuhash=(
+	    'servers'=>[
+			['Show Current',''],
+			['Select','sub=select'],
+			[],
+			['Add','sub=add'],
+			['Delete','sub=del'],
+			['Edit','sub=edit']
+		       ],
+	    'zones'=>[
+		      ['Show Current',''],
+		      ['Show pending','sub=pending'],
+		      [],
+		      ['Select','sub=select'],
+		      [],
+		      ['Add','sub=add'],
+		      ['Copy','sub=Copy'],
+		      ['Delete','sub=Delete'],
+		      ['Edit','sub=Edit'],
+		      [],
+		      ['Add Default Zones','sub=AddDefaults']
+		     ],
+	    'nets'=>[
+		     ['Networks',''],
+		     ['Add net','sub=addnet'],
+		     ['Add subnet','sub=addsub'],
+		     [],
+		     ['VLANs','sub=vlans'],
+		     ['Add vlan','sub=addvlan']
+		    ],
+	    'templates'=>[
+			  ['Show MX','sub=mx'],
+			  ['Show WKS','sub=wks'],
+			  ['Show Prn Class','sub=pc'],
+			  ['Show HINFO','sub=hinfo'],
+			  [],
+			  ['Add MX','sub=addmx'],
+			  ['Add WKS','sub=addwks'],
+			  ['Add Prn Class','sub=addpc'],
+			  ['Add HINFO','sub=addhinfo']
+			 ],
+	    'groups'=>[
+		       ['Groups',''],
+		       [],
+		       ['Add','sub=add']
+		      ],
+	    'hosts'=>[
+		      ['Search',''],
+		      ['Last Search','sub=browse&lastsearch=1'],
+		      [],
+		      ['Add host','sub=add&type=1'],
+		      [],
+		      ['Add alias','sub=add&type=4'],
+		      [],
+		      ['Add MX entry','sub=add&type=3'],
+		      ['Add delegation','sub=add&type=2'],
+		      ['Add glue rec.','sub=add&type=6'],
+		      ['Add DHCP entry','sub=add&type=9'],
+		      ['Add printer','sub=add&type=5'],
+		      ['Add SRV rec.','sub=add&type=8']
+		     ],
+	    'login'=>[
+		      ['User Info',''],
+		      ['Who','sub=who'],
+		      ['News (motd)','sub=motd'],
+		      [],
+		      ['Login','sub=login'],
+		      ['Logout','sub=logout'],
+		      [],
+		      ['Change password','sub=passwd'],
+		      ['Edit settings','sub=edit'],
+		      ['Save defaults','sub=save'],
+		      ['Frames OFF','FRAMEOFF','frames'],
+		      ['Frames ON','FRAMEON','noframes'],
+		      [],
+		      ['Lastlog','sub=lastlog','root'],
+		      ['Session Info','sub=session','root'],
+		      ['Add news msg','sub=addmotd','root']
+		     ],
+	    'about'=>[
+		      ['About',''],
+		      ['Copyright','sub=copyright'],
+		      ['License','sub=copying']
+		     ]
+);
+
 
 sub logmsg($$) {
   my($type,$msg)=@_;
@@ -1149,7 +1238,7 @@ sub servers_menu() {
 
   if ($sub eq 'add') {
     return if (check_perms('superuser',''));
-    get_server_list($serverid,\%master_servers,\@master_serversl);
+    get_server_list(-1,\%master_servers,\@master_serversl);
     $data{masterserver}=-1;
     $res=add_magic('srvadd','Server','servers',\%new_server_form,
 		   \&add_server,\%data);
@@ -1370,6 +1459,13 @@ sub zones_menu() {
     print "</TABLE>";
     return;
   }
+  elsif ($sub eq 'AddDefaults') {
+    print h2("Adding default zones...");
+    print "<br><pre>";
+    add_default_zones($serverid,1);
+    print "</pre><br>";
+    return;
+  }
 
  display_zone:
   $zone=param('selected_zone');
@@ -1409,6 +1505,7 @@ sub zones_menu() {
     print "<TR bgcolor=$color>",td([
 	"<a href=\"$selfurl?menu=zones&selected_zone=$name\">$name</a>",
 				    $type,$rev,$comment]);
+    $zonelist{$name}=$id;
   }
   print "</TABLE><BR>";
 
@@ -1420,13 +1517,15 @@ sub zones_menu() {
     $list=get_zone_list($server{masterserver});
     for $i (0 .. $#{$list}) {
       $type=$$list[$i][2];
+      next if ($server{named_flags_isz}!=1 && $type !~ /^M/);
       next unless ($type =~ /^[MS]$/);
-      if ($type eq 'M') { $type='Master'; $color='#f0f000'; }
+      if ($type eq 'M') { $type='Slave (Master)'; $color='#eeeedf'; }
       elsif ($type eq 'S') { $type='Slave'; $color='#eeeebf'; }
       $rev=($$list[$i][3] eq 't' ? 'Yes' : 'No');
       $id=$$list[$i][1];
       $name=$$list[$i][0];
       $comment=$$list[$i][4].'&nbsp;';
+      next if ($zonelist{$name});
       print "<TR bgcolor=$color>",td([$name,$type,$rev,$comment]);
     }
     print "</TABLE><BR>";
@@ -3480,9 +3579,11 @@ sub top_menu($) {
   print "</FONT></TD></TR></TABLE>";
 }
 
+
+
 sub left_menu($) {
   my($mode)=@_;
-  my($url,$w);
+  my($url,$w,$l,$i,$name,$u,$ref,$target);
 
   $w="\"100\"";
 
@@ -3494,89 +3595,41 @@ sub left_menu($) {
          "<TR><TH><FONT color=\"#ffffff\">$menu</FONT></TH></TR>",
 	  "<TR><TD BGCOLOR=\"#eeeeee\"><FONT size=\"-1\">";
   #print "<p>mode=$mode";
-  print "<TABLE width=\"100%\" bgcolor=\"#cccccc\" cellspacing=2 border=0>";
+  print "<TABLE width=\"100%\" bgcolor=\"#cccccc\" cellpadding=1 " .
+        " cellspacing=3 border=0>";
 
-  if ($menu eq 'servers') {
-    $url.='?menu=servers';
-    print Tr(td("<a href=\"$url\">Show Current</a>")),
-          Tr(td("<a href=\"$url&sub=select\">Select</a>")),
-          Tr(),Tr(),Tr(td("<a href=\"$url&sub=add\">Add</a>")),
-          Tr(td("<a href=\"$url&sub=del\">Delete</a>")),
-          Tr(td("<a href=\"$url&sub=edit\">Edit</a>"));
-  } elsif ($menu eq 'zones') {
-    $url.='?menu=zones';
-    print Tr(td("<a href=\"$url\">Show Current</a>")),
-          Tr(td("<a href=\"$url&sub=pending\">Show pending</a>")),
-          Tr(),Tr(),Tr(td("<a href=\"$url&sub=select\">Select</a>")),
-          Tr(),Tr(),Tr(td("<a href=\"$url&sub=add\">Add</a>")),
-          Tr(td("<a href=\"$url&sub=Copy\">Copy</a>")),
-          Tr(td("<a href=\"$url&sub=Delete\">Delete</a>")),
-          Tr(td("<a href=\"$url&sub=Edit\">Edit</a>"));
-  } elsif ($menu eq 'nets') {
-    $url.='?menu=nets';
-    print Tr(td("<a href=\"$url\">Networks</a>")),
-          Tr(td("<a href=\"$url&sub=addnet\">Add net</a>")),
-          Tr(td("<a href=\"$url&sub=addsub\">Add subnet</a>")),
-          Tr(),Tr(),Tr(td("<a href=\"$url&sub=vlans\">VLANs</a>")),
-          Tr(td("<a href=\"$url&sub=addvlan\">Add vlan</a>"));
-  } elsif ($menu eq 'templates') {
-    $url.='?menu=templates';
-    print Tr(td("<a href=\"$url&sub=mx\">Show MX</a>")),
-          Tr(td("<a href=\"$url&sub=wks\">Show WKS</a><br>")),
-          Tr(td("<a href=\"$url&sub=pc\">Show Prn Class</a><br>")),
-          Tr(td("<a href=\"$url&sub=hinfo\">Show HINFO</a><br>")),
-          Tr(),Tr(),Tr(td("<a href=\"$url&sub=addmx\">Add MX</a>")),
-          Tr(td("<a href=\"$url&sub=addwks\">Add WKS</a>")),
-          Tr(td("<a href=\"$url&sub=addpc\">Add Prn Class</a>")),
-          Tr(td("<a href=\"$url&sub=addhinfo\">Add HINFO</a>"));
-  } elsif ($menu eq 'groups') {
-    $url.='?menu=groups';
-    print Tr(td("<a href=\"$url\">Groups</a>")),
-          Tr(),Tr(td("<a href=\"$url&sub=add\">Add</a>"));
-  } elsif ($menu eq 'hosts') {
-    $url.='?menu=hosts';
-    print Tr(td("<a href=\"$url\">Search</a>")),
-          Tr(td("<a href=\"$url&sub=browse&lastsearch=1\">Last Search</a>")),
-          Tr(),Tr(),Tr(td("<a href=\"$url&sub=add&type=1\">Add host</a>")),
-          Tr(),Tr(),Tr(td("<a href=\"$url&sub=add&type=4\">Add alias</a>")),
-	  Tr(td("<a href=\"$url&sub=add&type=3\">Add MX entry</a>")),
-          Tr(td("<a href=\"$url&sub=add&type=2\">Add delegation</a>")),
-          Tr(td("<a href=\"$url&sub=add&type=6\">Add glue rec.</a>")),
-          Tr(td("<a href=\"$url&sub=add&type=9\">Add DHCP entry</a>")),
-          Tr(td("<a href=\"$url&sub=add&type=5\">Add printer</a>")),
-          Tr(td("<a href=\"$url&sub=add&type=8\">Add SRV record</a>"));
-  } elsif ($menu eq 'login') {
-    $url.='?menu=login';
-    print Tr(td("<a href=\"$url\">User info</a>")),
-          Tr(td("<a href=\"$url&sub=who\">Who</a>")),
-          Tr(td("<a href=\"$url&sub=motd\">News (motd)</a>")),
-          Tr(),Tr(),Tr(td("<a href=\"$url&sub=login\">Login</a>")),
-          Tr(td("<a href=\"$url&sub=logout\">Logout</a>")),
-          Tr(),Tr(),Tr(td("<a href=\"$url&sub=passwd\">Change password</a>")),
-	  Tr(td("<a href=\"$url&sub=edit\">Edit settings</a>")),
-          Tr(td("<a href=\"$url&sub=save\">Save defaults</a>"));
-    if ($frame_mode) {
-      print Tr(td("<a href=\"$script_name\" target=\"_top\">Frames OFF</a>"));
-    } else {
-      print Tr(td("<a href=\"$s_url/frames\" target=\"_top\">Frames ON</a>"));
+  $l=$menuhash{$menu};
+  $url.="?menu=$menu";
+  if (defined $l) {
+    for $i (0..$#{$l}) {
+      if ($#{$$l[$i]} < 1) {
+	print Tr({-bgcolor=>'#cccccc',-height=>5},td(''));
+	next;
+      }
+      next if ($$l[$i][2] =~ /(^|\|)root/ && $state{superuser} ne 'yes');
+      next if ($$l[$i][2] =~ /(^|\|)noframes/ && $frame_mode);
+      next if ($$l[$i][2] =~ /(^|\|)frames/ && not $frame_mode);
+      $name=$$l[$i][0];
+      $ref=$$l[$i][1];
+      $u="$url";
+      $u.="&".$ref if ($ref);
+      $target='';
+      if ($ref eq 'FRAMEOFF') {
+	$target='target="_top"';
+	$u=$script_name;
+      }
+      elsif ($ref eq 'FRAMEON') {
+	$target='target="_top"';
+	$u="$s_url/frames";
+      }
+
+      print Tr({-bgcolor=>'#bbbbbb'},td("<a href=\"$u\" $target>$name</a>"));
     }
-    if ($state{superuser} eq 'yes') {
-      print Tr(),Tr(),
-	    Tr(td("<a href=\"$url&sub=lastlog\">Lastlog</a>")),
-	    Tr(td("<a href=\"$url&sub=session\">Session info</a>")),
-	    Tr(),Tr(),
-	    Tr(td("<a href=\"$url&sub=addmotd\">Add news message</a>"));
-    }
-  } elsif ($menu eq 'about') {
-    $url.='?menu=about';
-    print Tr(td("<a href=\"$url\">About</a>")),
-          Tr(td("<a href=\"$url&sub=copyright\">Copyright</a>")),
-          Tr(td("<a href=\"$url&sub=copying\">License</a>"));
   } else {
-    print "<p><p>empty menu\n";
+    print Tr(td('empty menu'));
   }
-  print "</TABLE>";
-  print "</FONT></TR></TABLE></TD></TABLE><BR>";
+
+  print "</TABLE></FONT></TR></TABLE></TD></TABLE><BR>";
 
   print "<TABLE width=$w bgcolor=\"#002d5f\" border=\"0\" cellspacing=\"3\" " .
         "cellpadding=\"0\">", #<TR><TD><H4>Current selections</H4></TD></TR>",
@@ -3844,7 +3897,68 @@ sub restricted_add_host($) {
 
   return add_host($rec);
 }
-			
+
+
+
+sub add_default_zones($$) {
+  my($serverid,$verbose) = @_;
+
+  my($id,%zone,%host);
+
+
+  %zone=(name=>'localhost',type=>'M',reverse=>'f',server=>$serverid);
+  print "Adding zone: $zone{name}...";
+  if (($id=add_zone(\%zone)) < 0) { 
+    print "failed (zone already exists? $id)\n";
+    #print db_errormsg() , "\n";
+  } else {
+    print "OK (id=$id)\n";
+    $zone{id}=$id;
+    $zone{ns}=[[],[0,'localhost.','',2]];
+    print "update failed\n" if (update_zone(\%zone) < 0);
+
+    %host=(domain=>'@',zone=>$id,type=>1,ip=>[['127.0.0.1','t','t','']]);
+    print "host add failed\n" if (add_host(\%host) < 0);
+  }
+
+
+  %zone=(name=>'127.in-addr.arpa',type=>'M',reverse=>'t',server=>$serverid);
+  print "Adding zone: $zone{name}...";
+  if (($id=add_zone(\%zone)) < 0) { 
+    print "failed (zone already exists? $id)\n";
+    #print db_errormsg() , "\n";
+  } else {
+    print "OK (id=$id)\n";
+    $zone{id}=$id;
+    $zone{ns}=[[],[0,'localhost.','',2]];
+    print "update failed\n" if (update_zone(\%zone) < 0);
+  }
+
+  %zone=(name=>'0.in-addr.arpa',type=>'M',reverse=>'t',server=>$serverid);
+  print "Adding zone: $zone{name}...";
+  if (($id=add_zone(\%zone)) < 0) { 
+    print "failed (zone already exists? $id)\n";
+    #print db_errormsg() , "\n";
+  } else {
+    print "OK (id=$id)\n";
+    $zone{id}=$id;
+    $zone{ns}=[[],[0,'localhost.','',2]];
+    print "update failed\n" if (update_zone(\%zone) < 0);
+  }
+
+  %zone=(name=>'255.in-addr.arpa',type=>'M',reverse=>'t',server=>$serverid);
+  print "Adding zone: $zone{name}...";
+  if (($id=add_zone(\%zone)) < 0) { 
+    print "failed (zone already exists? $id)\n";
+    #print db_errormsg() , "\n";
+  } else {
+    print "OK (id=$id)\n";
+    $zone{id}=$id;
+    $zone{ns}=[[],[0,'localhost.','',2]];
+    print "update failed\n" if (update_zone(\%zone) < 0);
+  }
+
+}			
 
 # eof
 

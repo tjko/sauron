@@ -237,7 +237,7 @@ sub update_array_field($$$$$$) {
       $str.=" WHERE id=$id;";
       #print "<BR>DEBUG: update record $id $str";
       return -6 if (db_exec($str) < 0);
-    } 
+    }
     elsif ($m == 2) { # add record
       $flag=0;
       $str="INSERT INTO $table ($fields) VALUES(";
@@ -429,6 +429,7 @@ sub get_server($$) {
   $rec->{dhcp_flags_ad}=($rec->{dhcp_flags} & 0x01 ? 1 : 0);
   $rec->{dhcp_flags_fo}=($rec->{dhcp_flags} & 0x02 ? 1 : 0);
   $rec->{named_flags_ac}=($rec->{named_flags} & 0x01 ? 1 : 0);
+  $rec->{named_flags_isz}=($rec->{named_flags} & 0x02 ? 1 : 0);
 
   if ($rec->{masterserver} > 0) {
     db_query("SELECT name FROM servers WHERE id=$rec->{masterserver}",\@q);
@@ -462,7 +463,9 @@ sub update_server($) {
   delete $rec->{dhcp_flags_fo};
   $rec->{named_flags}=0;
   $rec->{named_flags}|=0x01 if ($rec->{named_flags_ac});
+  $rec->{named_flags}|=0x02 if ($rec->{named_flags_isz});
   delete $rec->{named_flags_ac};
+  delete $rec->{named_flags_isz};
 
   db_begin();
   $r=update_record('servers',$rec);
