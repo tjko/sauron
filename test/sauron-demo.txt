@@ -1,0 +1,24 @@
+
+sauron-demo.dump file contains dump of sample Sauron database.
+This database contains a sample database which demonstrates some features
+of Sauron.
+
+To try out sauron with this demo databse, you need to first create a
+database for sauron (ie. "sauron-demo") and then load this dump with 
+psql command. This can be done as follows:
+
+  # createdb sauron-demo
+  # psql sauron-demo -f sauron-demo.dump
+
+(you also need to set DB_CONNECT variable in config file to connect to this
+ this database)
+
+This demo database has three user accounts already setup:
+
+     account     password    
+     -------	 --------
+     admin	 admin			sample administrator user
+     user1	 user1			sample user with minimal rights
+     user2	 user2			sample user with more rights
+
+

@@ -1,18 +1,27 @@
 Sauron v.0.5.0 - DNS/DHCP Management System
 ==============
 
-$Date$
+NOTE! This release is the first public release, and is primarily meant for 
+developers and does not contain much documentation yet (user's guide
+expected to be included in 0.6.0). 
+
 
 REQUIREMENTS
 	- BIND v8 or later [9.2.x or newer recommended]
 	- ISC dhcpd v2 or later [3.x or newer recommended] (optional)
 	- Perl 5 or better [at least 5.6 recommended]
 		- CGI module
+		- Pg perl module
 		- Net::Netmask module
 		- Digest::MD5 module
-	- PostgresSQL (or add support to your favorite db yourself :)
-		- Pg perl module
+	- PostgresSQL [7.2 or newer recommended] 
+	  (or add support to your favorite db yourself :)
 	- www-server (Apache or any other www-server with CGI support)
+
+DOWNLOAD
+	Sauron and related files are available from:
+	 WWW: http://sauron.jyu.fi/
+	 FTP: ftp://ftp.jyu.fi/pub/sauron/
 
 
 TESTED PLATFORMS
@@ -68,7 +77,8 @@ INSTALLATION
 
   9) now you can use the web interface to create a server and zones, or
      you can import existing named/dhcpd configurations using
-     import/iport-dhcp utilities
+     import/iport-dhcp utilities. Or you can try out the demo database
+     that can be found under test/ directory in source tree.
 
 
 
@@ -149,12 +159,13 @@ COMMANDS
 
 
 
-
-
 SUGGESTED READING
 	RFC: 952,953,974,1032,1034,1035,1123,1912
 
 
+
 --
-Timo <tjko@iki.fi>
+Timo <tjko@iki.fi>			        $Date$
+
+
 
