@@ -757,7 +757,37 @@ sub print_wks_template($) {
 
 
 ########################################################################
+# display_dialog($msg,$dataq,$form,$hidden,$selfurl)
+#
+# displays standard OK/Cancel dialog using given form
+#
+sub display_dialog($$$$$) {
+  my($msg,$data,$form,$hidden,$self_url) = @_;
+  my(@f,$i);
 
+  if (param('dialog_cancel')) {
+    return -1;
+  }
+  elsif (param('dialog_ok')) {
+    unless (form_check_form('DIALOG',$data,$form)) {
+      return 1;
+    }
+    alert2("Invalid data in form!");
+  }
+
+  print h2($msg);
+  print start_form(-method=>'POST',-action=>$self_url);
+  @f=split(',',$hidden);
+  for $i (0..$#f) { print hidden($f[$i]); }
+  form_magic('DIALOG',$data,$form);
+  print submit(-name=>'dialog_ok',-value=>'OK'),
+        submit(-name=>'dialog_cancel',-value=>'Cancel'), 
+	end_form();
+  return 0;
+}
+
+
+########################################################################
 
 sub alert1($) {
   my($msg)=@_;
@@ -772,7 +802,7 @@ sub alert2($) {
 
 sub error($) {
   my($msg)=@_;
-  print header(),start_html("sauron: error"),h1("Error: $msg"),end_html();
+  print header(),start_html("CGI: error"),h1("Error: $msg"),end_html();
   exit;
 }
 
