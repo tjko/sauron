@@ -276,7 +276,7 @@ db_begin();
 db_ignore_begin_and_commit(1);
 
 for $i (0..$#data) {
-  $id=-1;
+  $id=-1; $id1=-1; $id2=-1;
   $id1=get_host_id($zoneid,$data[$i][0]) if ($opt_domain);
   $id2=get_host_id_by_ip($serverid,$zoneid,$data[$i][1]) if ($opt_ip);
 
@@ -286,11 +286,11 @@ for $i (0..$#data) {
     next;
   }
 
-  $id=$id1;
-  $id=$id2 if ($id < 0 && $id2 > 0);
+  $id=($id1 > 0 ? $id1 : $id2);
 
   unless ($id > 0) {
-    error("cannot find host with domain or ip: $data[$i][0] ($data[$i][1])");
+    error("cannot find host by domain or ip: " .
+	  "$data[$i][0] ($id1) / $data[$i][1] ($id2)");
     next;
   }
 
@@ -301,7 +301,7 @@ for $i (0..$#data) {
   $h{mx}=$mxid if ($mxid > 0);
   $h{dept}=$opt_setdept if ($opt_setdept);
 
-  $h{domain}=$data[$i][0] unless ($id1 > 0);
+  $h{domain}=$data[$i][0] if ($data[$i][0] && $id1 < 1);
   $h{ether}=$data[$i][2] if ($data[$i][2]);
   $h{hinfo_hw}=$data[$i][3] if ($data[$i][3]);
   $h{hinfo_sw}=$data[$i][4] if ($data[$i][4]);
@@ -310,7 +310,7 @@ for $i (0..$#data) {
   $h{location}=$data[$i][7] if ($data[$i][7]);
   $h{info}=$data[$i][8] if ($data[$i][8]);
 
-  print "Updating record " .($id1<1?'UPDATENAME':' '). " id=$id ($data[$i][0]/$data[$i][1],$data[$i][2])...\n";
+  print "Updating record " .($h{domain}?'UPDATENAME':' '). " id=$id ($data[$i][0]/$data[$i][1],$data[$i][2])...\n";
   $r = update_host(\%h);
   fatal("failed to update host: id=$id ($r): ".db_lasterrormsg()) if ($r < 0);
 }
