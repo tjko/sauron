@@ -11,11 +11,10 @@
 ]>
 
 
-
 <book id="sauron-manual">
 
   <bookinfo>
-    <title>GNU/Sauron: User's Guide</>
+    <title>Sauron: User's Guide</>
     <subtitle>Version 0.5</>
     <date>$Date$</>
     <authorgroup>
@@ -39,7 +38,7 @@
   <preface>
     <title>Preface</>
     <para>
-      This manual describes the GNU/Sauron, a free DNS &amp; DHCP management
+      This manual describes the Sauron, a free DNS &amp; DHCP management
       system. 
     </para>
 
@@ -664,7 +663,7 @@ No servers found in database!
     <para>
     </para>
     <section>
-    <title>Creating User Account</title>
+    <title>Creating Administrator Account</title>
     <para>
       First step before using Sauron is to create administrator account(s).
       Administrator accounts are normal user accounts that have superuser
@@ -978,9 +977,385 @@ $SAURON_MAIL_FROM = 'postmaster@middle.earth';
   <chapter id="account-management">
   <title>Account Management</>
   <para>
-    FIXME
+    Currently user accounts and priviliges are used only by the Sauron's
+    Web Interface. A text-based interface (to be used via
+    <acronym>SSH</> or locally) is planneded and will use the same user
+    accounts and priviliges as the web interface. 
   </para>
+  <para>
+    There are two ways to assign priviliges to users either directly setting
+    priviliges to a user or assigning user to a user group and then 
+    setting priviliges to that user group. It is recommended to use user
+    groups to grant users priviliges, since when there is large number
+    of user accounts, it is much easier to modify permissions of a user
+    group than having to modify each user's permission individually.
+  </para>
+  <warning>
+  <para>
+    There is no access control when using the command-line utilities. Thus,
+    it may be necessary protect access to the sauron database (in PostgreSQL)
+    and configuration file <filename>config</> (if it contains password
+    to access the database).
+  </para>
+  </warning>
+
+  <section>
+  <title>Managing User Accounts</>
+  <para>
+    For managing user accounts there are several command-line utilities:
+    <filename>adduser</>, <filename>moduser</>, and <filename>deluser</>.
+    Following sections show how to do basic administrative tasks using
+    these utilities.
+  </para>
+    <section>
+    <title>Creating User</>
+    <para>
+      User accounts are created using <filename>adduser</> utility.
+      This utility allow adding user accounts either interactively or
+      in batch mode bys pecifying all the required information on 
+      command-line. Following example shows how to add normal user
+      account interactively (see <xref linkend="adduser-cmd"> for
+      information how to use this command in non-interactive mode).
+      To add new user into Sauron simply run <filename>adduser</> command
+      from Sauron top-level directory:
+      <screen>
+        ./adduser
+      </screen>
+      When started without any argumets (or without <option>--user</> and
+      <option>--passwd</> option), interactive mode is started. 
+      Below is an example session how to add an account:
+      <screen>
+Enter username: pippin
+Enter group name (empty for none): hobbits
+Enter user description (full name): Peregrin Took
+Enter user email address: pippin@shire.middle.earth
+Enter optional user info: 
+Enter account expiration date (dd-mm-yyyy, +&lt;n&gt;d, +&lt;n&gt;y) [none]: 
+Enter password [UtH4RCda]: 
+           Username: pippin
+              Group: hobbits (GID=1)
+           Longname: Peregrin Took
+              email: pippin@shire.middle.earth
+            comment: 
+         expiration: &lt;none&gt;
+          superuser: false
+Add this user [y/n]?y
+User pippin added succesfully.
+      </screen>
+      When creating account and not setting group for that account,
+      <filename>adduser</> will remind that some priviliges should be
+      set for the user, before account can be used. This is not the case
+      when assigning user to a group, since it's assumed that group contains
+      necessary priviliges for the account. 
+      See <xref linkend="priviliges-sec"> for more information about
+      user priviliges and how to modify them.
+    </para>
+    </section>
+
+    <section id="priviliges-sec">
+    <title>Setting Priviliges</>
+    <para>
+      Accounts must have some priviliges (except superuser/administrator
+      accounts) for them to be useful. Priviliges can be assigned directly
+      to the user account using <filename>moduser</> utility or indirectly
+      to a group using <filename>modgroup</> utlility. 
+    </para>
+    <para>
+      Typically user (or group) is assigned one or more <quote>server</> 
+      priviliges, that grant user read-only access into those server(s).
+      Then user is assigned <quote>zone</> priviliges that grant
+      user acces into all hosts inside certain zone(s). If needed, user's
+      access into all hosts inside the zone(s) user has write access can
+      be further limited by assigning restrictive priviliges to limit users 
+      access to only a subset of hosts inside the zone(s). For this there
+      are rules to limit access by hostname (regexp) or by IP number
+      (either by network/subnet or by IP-mask).
+      See <xref linkend="privilige-table"> for complete list of available
+      user/group priviliges.
+    </para>
+    <table frame=all id="privilige-table"><title>Account/Group Priviliges</>
+      <tgroup cols=4>
+      <thead>
+        <row>
+          <entry>Type</><entry>Target</><entry>Description</><entry>Value</>
+        </row>
+      </thead>
+      <tbody>
+        <row>
+           <entry>Server</>
+           <entry>server ID</>
+           <entry>Controls the access to a server and all zones inside
+                  the server.</>
+           <entry>R=read access, RW=read/write access,
+                  RWX=read/write access (with less restrictions)</>
+        </row>
+        <row>
+           <entry>Zone</>
+           <entry>zone ID</>
+           <entry>Controls the access to a zone.</>
+           <entry>R=read access, RW=read/write access, 
+                  RWX=read/write access (with less restrictions)</>
+        </row>
+        <row>
+           <entry>Net</>
+           <entry>net ID</>
+           <entry>Limits users ability to use only IP addresses
+                  within <quote>auto assign ranges</> of
+                  the networks/subnets listed by the Net rules.</>
+           <entry></>
+        </row>
+        <row>
+           <entry>IP mask</>
+           <entry></>
+           <entry>Limits users ability to use only IP addresses
+                  to those matchin the IP-mask</>
+           <entry>IP-mask (for example: 192.168.1-10.*</>
+        </row>
+        <row>
+           <entry>Hostname mask</>
+           <entry></>
+           <entry>Limits user to be able to modify only
+                  hosts with domainname matching any
+                  of Hostaname mask rules.</>
+           <entry>regular expression (for example: ^\.math$)</>
+        </row>
+        <row>
+           <entry>Authorization Level</>
+           <entry></>
+           <entry>Defines user's authorization level.
+                  This can be used to control users access
+                  into templates/groups, and also to control
+                  how much information about networks is
+                  displayed to the user.</>
+           <entry>authorizaton level (0-999, 0=default)</>
+        </row>
+        <row>
+           <entry>Host Expiration Limit</>
+           <entry></>
+           <entry>If defined, user can only create host entires
+                  that expire in n days or sooner.</> 
+           <entry>expiration limit (in days)</>
+        </row>
+        <row>
+           <entry>Default Department</>
+           <entry></>
+           <entry>Default Department field value for new hosts.</>
+           <entry>Department Name</>
+        </row>
+      </tbody>
+      </tgroup>
+    </table>
+    <para>
+      In addition to modifying the user acconut itself, <filename>moduser</>
+      utility can also be used to modify user priviliges. To add privileges
+      interactively for given account, just invoke <filename>moduser</> with
+      <option>--add</> option. For example:
+      <screen>
+      ./moduser pippin --add
+      </screen>
+      After adding priviliges to a user, <filename>moduser</> utlility can
+      be also used to display user's current priviliges by giving only
+      a username as argument. For example:
+      <screen>
+      ./moduser pippin
+      </screen>
+      This should produce output similar to below displaying account
+      details and priviliges.
+      <screen>
+           Username: pippin (id=2)
+           longname: Peregrin Took
+              email: pippin@shire.middle.earth
+               info: 
+          superuser: No
+              group: hobbits (gid=1)
+      passwd status: valid (CRYPT)
+         last login: 
+ account expiration: &lt;never&gt;
+    account created: Sat Feb 15 00:18:40 2003 by tjko    
+      last modified: &lt;never&gt;
+
+ID     Type     Ref.                      Mode
+------ -------- ------------------------- --------------------------------
+[User priviliges]
+3      hostname \.shire$                  (hostname constraint)
+
+[Group (hobbits) priviliges]
+1      server   test                      R
+2      zone     test:middle.earth         RW
+      </screen>
+    </para>	
+    </section>
+
+    <section>
+    <title>Removing User</>
+    <para>
+      User account can be removed using <filename>deluser</> utitity. This
+      utility works interactively when started without any arguments. To
+      remove user(s) non-interactively use <option>--user=&lt;username&gt;</>
+    </para>
+    <para>
+      To remove user account interactively, simply start <filename>deluser</>
+      without any arguments from Sauron top-level directory:
+      <screen>
+      ./deluser
+      </screen>
+    </para>
+    </section>
+
+    <section>
+    <title>Disabling User Temporarily</>
+    <para>
+      It is also possible to disable (lock) user accounts without actually
+      removing them, using <filename>moduser</> utility with <option>--lock</>
+      option.
+    </para>
+    <para>
+      Locking user account <quote>pippin</>, issue following command from
+      sauron top-level directory:
+      <screen>
+      ./moduser pippin --lock
+      </screen>
+    </para>
+    </section>
+
+    <section>
+    <title>Listing Users</>
+    <para>
+      To list all users in Sauron database, use <filename>moduser</> command
+      with <option>--list</> option. This will list all the users as
+      well as user's group, name, and email information. This can be done
+      from Sauron top-level directory as follows:
+      <screen>
+      ./moduser --list
+      </screen>
+    </para>
+    </section>
+  </section>
+
+  <section>
+  <title>Managin User Groups</>
+  <para>
+    User groups are meant to ease the user privilige management, by allowing
+    user priviliges to be set for a user group and then user can be assigned
+    to a desired user group. 
+    User inherits all the priviliges from the group she
+    belongs to. User can still have user specific priviliges defined, even
+    if user belongs to a group. User's actual priviliges are combination
+    of user specific and group based priviliges.
+  </para>
+    <section>
+    <title>Creating Group</>
+    <para>
+      User groups can be created using <filename>addgroup</> utility. 
+      To add a user group interactively start <filename>addgroup</> program
+      from Sauron top-level directory as follows:
+    <screen>
+      ./addgroup
+    </screen>
+       Here is example how to add a group named <quote>hobbits</>:
+    <screen>
+Enter group name: hobbits
+Enter group description: Shire Hobbits
+         Groupname: hobbits
+         Description: Shire Hobbits
+Add this group [y/n]?y
+Group hobbits added succesfully.
+    </screen>
+       After creating a new group, it should be assigned some priviliges
+       as described in <xref linkend="group-priviliges-sec">.
+    </para>
+    </section>
+
+    <section id="group-priviliges-sec">
+    <title>Setting Group Priviliges</>
+    <para>
+      User groups (like User accounts) must have some priviliges assigned
+      to them for them to be useful. Priviliges can be assigned directly
+      to the user group using <filename>modgroup</> utility.
+      Priviliges that can be set to a user group are same as the priviliges
+      for a user. For more information about priviliges see
+      <xref linkend="priviliges-sec">.
+    </para>
+    <para>
+      To add priviliges for a user group interactively, start 
+      <filename>modgroup</> utility with the <option>--add</> option.
+      This can be done as follows from the Sauron top-level directory:
+      <screen>
+      ./modgroup hobbits --add
+      </screen>
+      After adding desired priviliges to the group, <filename>modgroup</>
+      utility can also be used to display group's priviliges by starting
+      it with only the group name as argument.
+      <screen> 
+      ./modgroup hobbits
+      </screen>
+      This should produce output similar to following:
+      <screen>
+ Groupname: hobbits (id=1)
+   Comment: Shire Hobbits
+
+ID     Type     Ref.                      Mode
+------ -------- ------------------------- --------------------------------
+1      server   test                      R
+2      zone     test:middle.earth         RW
+      </screen>
+    </para>
+    </section>
+
+    <section>
+    <title>Removing Group</>
+    <para>
+      User group can be removed using <filename>delgroup</> utitity. This
+      utility works interactively when started without any arguments. To
+      remove user(s) non-interactively use <option>--group=&lt;groupname&gt;</>
+    </para>
+    <para>
+      To remove user group interactively, simply start <filename>delgroup</>
+      without any arguments from Sauron top-level directory:
+      <screen>
+      ./delgroup
+      </screen>
+    </para>
+    </section>
+  </section>
+
+  <section>
+  <title>External User Authentication</>
+  <para>
+    Normally users are authenticated against encrypted passwords stored
+    into <filename>users</> table in Sauron database. Sauron curently
+    uses by default standard Unix passwords. 
+    However, it is possible to use external authentication program for
+    user authentication. Which makes it possible to authenticate user's
+    against almost any service.
+  </para>
+  <para>
+    To enable external user authentcation, <varname>SAURON_AUTH_PROG</> in
+    variable in sauron configuration file must be set to point to external 
+    authentication script or program.
+  </para>
+  <para>
+    A sample script (<filename>kerberos-auth</>) for authenticating against 
+    a Kerberos KDC is included in the <filename class=directory>contrib/</>
+    directory. 
+  </para>
+  <para>
+    If <varname>SAURON_AUTH_PROG</> is set in the configuration file, 
+    Sauron will run the authentication program every time user is 
+    authenticated. Authentication program is expected to read one
+    line from standard input that is in following format:
+    <screen> 
+    username password
+    </screen>
+    Authentication program should then authenticate the user using the
+    given username and password, and return with exit code 0 (zero) if 
+    authentication was successfull. Otherwise non zero exit code should 
+    be used.
+  </para>
+  </section>
+
   </chapter>
+
 
   <chapter id="web-interface">
     <title>Web Interface</>
