@@ -1,6 +1,6 @@
 #!/usr/bin/perl -I/usr/local/sauron
 #
-# export-ip-list  generates VMPS configuration file (from given server)
+# export-ip-list  generates list of IPs in use for given neworks
 #
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>  2004.
 # $Id$
