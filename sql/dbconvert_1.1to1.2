@@ -15,6 +15,10 @@ UPDATE nets SET dummy=false;
 ALTER TABLE servers ADD COLUMN lastrun INT;
 ALTER TABLE servers ALTER COLUMN lastrun SET DEFAULT -1;
 
+/* hosts */
+
+ALTER TABLE hosts ADD COLUMN email TEXT;
+
 
 UPDATE settings SET value='1.2' where setting='dbversion';
 

@@ -85,6 +85,7 @@ sub set_defaults() {
   $main::SAURON_RHF{model}    = 1; # Model
   $main::SAURON_RHF{serial}   = 1; # Serial
   $main::SAURON_RHF{misc}     = 1; # Misc.
+  $main::SAURON_RHF{email}    = 1; # User Email
 
   $main::ALEVEL_VLANS = 5;
   $main::ALEVEL_RESERVATIONS = 1;

@@ -35,6 +35,7 @@ $Id$
 	   - settings: renamed column 'key' --> 'setting'
 	   - nets: new columnd 'dummy'
 	   - servers: new column 'lastrun'
+	   - hosts: new column 'email'
 	- new configuration valiablre SAURON_CHR that allows
           limiting what can be used in some host record
 	  fields (dept,location,asset_id) by server and by

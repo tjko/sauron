@@ -61,6 +61,7 @@ CREATE TABLE hosts (
        location	   TEXT,       /* Host location info */
        dept	   TEXT,       /* Department name */
        huser	   TEXT,       /* User info */
+       email       TEXT,       /* User email address */
 
        model       TEXT,       /* host model info */
        serial	   TEXT,       /* serial number */
