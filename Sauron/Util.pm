@@ -6,6 +6,7 @@
 package Sauron::Util;
 require Exporter;
 use Digest::MD5;
+use Net::Netmask;
 use strict;
 use vars qw($VERSION @ISA @EXPORT);
 
@@ -22,6 +23,7 @@ $VERSION = '$Id$ ';
 	     ip2int
 	     int2ip
 	     adjust_ip
+	     net_ip_list
 	     remove_origin
 	     add_origin
 	     pwd_crypt_md5
@@ -37,6 +39,7 @@ $VERSION = '$Id$ ';
 	     run_command
 	     run_command_quiet
 	     print_csv
+	     join_strings
 	    );
 
 
@@ -230,6 +233,21 @@ sub adjust_ip($$) {
   return '' if ($i < 0);
   $i += $step;
   return int2ip($i);
+}
+
+sub net_ip_list($) {
+  my ($cidr) = @_;
+  my (@l,$i);
+
+  if (is_cidr($cidr)) {
+    my $net = new Net::Netmask($cidr);
+    if ($net) {
+      for $i (1..$net->size()-1) {
+	push @l, $net->nth($i);
+      }
+    }
+  }
+  return @l;
 }
 
 # remove_origin($domain,$origin) - strip origin from domain
@@ -536,6 +554,22 @@ sub print_csv($$)
   }
 
   return $line;
+}
+
+
+sub join_strings {
+  my($sep,@list) = @_;
+  my($i,$s);
+
+  $s = '';
+
+  for $i (0..$#list) {
+    next unless ($list[$i]);
+    $s.=$sep if ($s);
+    $s.=$list[$i];
+  }
+
+  return $s;
 }
 
 1;
