@@ -59,15 +59,15 @@ sub expand_zonefile_path($$) {
   return $path;
 }
 
-sub expand_dhcp_macro($%) {
-    my($str,%var) = (@_);
+sub expand_dhcp_macro($$) {
+    my($str,$var) = (@_);
     my($k);
 
     if ($str =~ /\%\{\w+\}/) {
 	$str.= "\t# macro eval";
 	foreach $k (qw(domain ether fqdn host)) {
 	    if ($str =~ /\%\{($k)\}/) {
-		$str =~ s/\%\{$k\}/$dhcp_var{$k}/ge;
+		$str =~ s/\%\{$k\}/$$var{$k}/ge;
 	    }
 	}
     }		 
@@ -1521,7 +1521,7 @@ sub make_dhcp() {
 
 	      for $l (0..$#{$dhcplst}) {
 		  $$dhcplst[$l].=';' unless ($$dhcplst[$l] =~ /[;\{\}]\s*$/);
-		  print DHCPFILE "\t\t" . expand_dhcp_macro($$dhcplst[$l],%dhcp_var)."\n";
+		  print DHCPFILE "\t\t" . expand_dhcp_macro($$dhcplst[$l],\%dhcp_var)."\n";
 	      }
 	      print DHCPFILE "\t}\n";
 	    }
