@@ -1741,6 +1741,29 @@ sub delete_net($) {
 }
 
 
+############################################################################
+# news functions
+
+sub add_news($) {
+  my($rec) = @_;
+
+  $rec->{cdate}=time;
+  $rec->{cuser}=$muser;
+  return add_record('news',$rec);
+}
+
+sub get_news_list($$$) {
+  my($serverid,$count,$list) = @_;
+  my(@q);
+
+  $count=5 unless ($count > 0);
+  db_query("SELECT cdate,cuser,server,info FROM news " .
+	   "WHERE (server=-1 OR server=$serverid) " .
+	   "ORDER BY -cdate LIMIT $count;",$list);
+  return 0;
+}
+
+
 #######################################################
 
 

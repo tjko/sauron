@@ -3,7 +3,7 @@
 # 
 # Makefile for sauron
 #
-Version = 0.42
+Version = 0.50
 PKGNAME = sauron
 
 DBASE = sauron
@@ -69,7 +69,7 @@ SQL_TABLES =	sql/common.sql \
 		sql/wks_entries.sql sql/wks_templates.sql \
 		sql/utmp.sql sql/hinfo_templates.sql \
 		sql/arec_entries.sql sql/root_servers.sql \
-		sql/history.sql sql/lastlog.sql 
+		sql/history.sql sql/lastlog.sql sql/news.sql
 
 #		sql/host_info.sql \
 
@@ -102,8 +102,8 @@ parse-hosts-rows:  parse-hosts-rows.c
 	$(CC) $(CFLAGS) -o parse-hosts-rows parse-hosts-rows.c $(LDFLAGS) $(LIBS) 
 
 
-strip:
-	for i in $(PKGNAME) ; do [ -x $$i ] && $(STRIP) $$i ; done
+#strip:
+#	for i in $(PKGNAME) ; do [ -x $$i ] && $(STRIP) $$i ; done
 
 clean:
 	rm -f *~ *.o core a.out make.log \#*\# $(OBJS) $(BINARIES)

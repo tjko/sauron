@@ -220,6 +220,8 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>4, tag=>'class', name=>'Class'},
   {ftype=>1, tag=>'ttl', name=>'TTL', type=>'int', len=>10, empty=>1,
    definfo=>['','Default']},
+  {ftype=>1, tag=>'router', name=>'Router (priority)', type=>'priority', 
+   len=>10, empty=>0,definfo=>['0','No'], iff=>['type','1']},
   {ftype=>1, tag=>'huser', name=>'User', type=>'text', len=>25, empty=>1,
    iff=>['type','1']},
   {ftype=>1, tag=>'dept', name=>'Dept.', type=>'text', len=>25, empty=>1,
@@ -307,10 +309,16 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>1, tag=>'info', name=>'[Extra] Info', type=>'text', len=>50, 
    empty=>1, iff=>['type','1']},
   {ftype=>0, name=>'Equipment info', iff=>['type','1']},
-  {ftype=>1, tag=>'hinfo_hw', name=>'HINFO hardware', type=>'hinfo', len=>20,
-   empty=>1, iff=>['type','1']},
-  {ftype=>1, tag=>'hinfo_sw', name=>'HINFO software', type=>'hinfo', len=>20,
-   empty=>1, iff=>['type','1']},
+#  {ftype=>1, tag=>'hinfo_hw', name=>'HINFO hardware', type=>'hinfo', len=>20,
+#   empty=>1, iff=>['type','1']},
+#  {ftype=>1, tag=>'hinfo_sw', name=>'HINFO software', type=>'hinfo', len=>20,
+#   empty=>1, iff=>['type','1']},
+  {ftype=>101, tag=>'hinfo_hw', name=>'HINFO hardware', type=>'hinfo', len=>20,
+   sql=>"SELECT hinfo FROM hinfo_templates WHERE type=0 ORDER BY pri,hinfo;",
+   lastempty=>1, empty=>1, iff=>['type','1']},
+  {ftype=>101, tag=>'hinfo_sw', name=>'HINFO sowftware', type=>'hinfo',len=>20,
+   sql=>"SELECT hinfo FROM hinfo_templates WHERE type=1 ORDER BY pri,hinfo;",
+   lastempty=>1, empty=>1, iff=>['type','1']},
   {ftype=>1, tag=>'ether', name=>'Ethernet address', type=>'mac', len=>12,
    conv=>'U', iff=>['type','[19]'], iff2=>['ether_alias_info',''], empty=>0},
   {ftype=>4, tag=>'ether_alias_info', name=>'Ethernet alias', 
@@ -681,6 +689,19 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>0, name=>'Record info', no_edit=>0},
   {ftype=>4, name=>'Record created', tag=>'cdate_str', no_edit=>1},
   {ftype=>4, name=>'Last modified', tag=>'mdate_str', no_edit=>1}
+ ]
+);
+
+
+%new_motd_enum = (-1=>'Global');
+
+%new_motd_form=(
+ data=>[
+  {ftype=>0, name=>'Add news message'},
+  {ftype=>3, tag=>'server', name=>'Message type', type=>'enum',
+   enum=>\%new_motd_enum},
+  {ftype=>1, tag=>'info', name=>'Message', type=>'textarea', rows=>5,
+   columns=>50 }
  ]
 );
 
@@ -2518,6 +2539,35 @@ sub login_menu() {
       }
     }
   }
+  elsif ($sub eq 'motd') {
+    print h2("News & motd (message of day) messages:");
+    get_news_list($serverid,10,\@list);
+    print "<TABLE cellspacing=0 cellpadding=4  bgcolor=\"#dddddd\">";
+    print "<TR bgcolor=\"aaaaff\"><TH width=\"70%\">Message</TH>",
+          th("Date"),th("Type"),th("By"),"</TR>";
+    for $i (0..$#list) {
+      $date=localtime($list[$i][0]);
+      $type=($list[$i][2] < 0 ? 'Global' : 'Local');
+      $msg=$list[$i][3];
+      $msg =~ s/\n/<BR>/g;
+      print "<TR><TD bgcolor=\"#ddeeff\">$msg</TD>",
+		   td($date),td($type),td($list[$i][1]),"</TR>";
+    }
+    print "</TABLE>";
+  }
+  elsif ($sub eq 'addmotd') {
+    return if (check_perms('superuser',''));
+
+    $new_motd_enum{$serverid}='Local (this server only)';
+    $data{server}=-1 unless (param('motdadd_server'));
+    $res=add_magic('motdadd','News','news',\%new_motd_form,
+		   \&add_news,\%data);
+    if ($res > 0) {
+      # print "<p>$data{info}";
+    }
+
+    return;
+  }
   else {
     print h2("User info:");
     display_form(\%state,\%user_info_form);
@@ -2821,6 +2871,22 @@ sub login_auth() {
 	    startform(-method=>'POST',-action=>"$s_url/frames"),
 	    submit(-name=>'submit',-value=>'Frames'),end_form,
 	    "</TD></TR></TABLE>";
+
+	# print news/MOTD stuff
+	get_news_list($state{serverid},3,\@newslist);
+	if (@newslist > 0) {
+	  print h2("Message(s) of the day:"),"<TABLE bgcolor=\"#eeeeff\">";
+	  for $i (0..$#newslist) {
+	    $msg=$newslist[$i][3];
+	    $msg =~ s/\n/<BR>/g;
+	    $date=localtime($newslist[$i][0]);
+	    print 
+	      Tr(td($msg . "<FONT size=-1><I>" .
+                  "<BR> &nbsp; &nbsp; -- $newslist[$i][1] $date </I></FONT>"));
+	  }
+	  print "</TABLE>";
+	}
+
 	logmsg("notice","user ($u) logged in from " . $ENV{'REMOTE_ADDR'});
 	db_exec("UPDATE users SET last=$ticks WHERE id=$user{'id'};");
 	update_lastlog($state{uid},$state{sid},1,
@@ -2958,6 +3024,7 @@ sub left_menu($) {
     $url.='?menu=login';
     print Tr(td("<a href=\"$url\">User info</a>")),
           Tr(td("<a href=\"$url&sub=who\">Who</a>")),
+          Tr(td("<a href=\"$url&sub=motd\">News (motd)</a>")),
           Tr(),Tr(),Tr(td("<a href=\"$url&sub=login\">Login</a>")),
           Tr(td("<a href=\"$url&sub=logout\">Logout</a>")),
           Tr(),Tr(),Tr(td("<a href=\"$url&sub=passwd\">Change password</a>")),
@@ -2970,7 +3037,9 @@ sub left_menu($) {
     if ($state{superuser} eq 'yes') {
       print Tr(),Tr(),
 	    Tr(td("<a href=\"$url&sub=lastlog\">Lastlog</a>")),
-	    Tr(td("<a href=\"$url&sub=session\">Session info</a>"));
+	    Tr(td("<a href=\"$url&sub=session\">Session info</a>")),
+	    Tr(),Tr(),
+	    Tr(td("<a href=\"$url&sub=addmotd\">Add news message</a>"));
     }
   } elsif ($menu eq 'about') {
     $url.='?menu=about';

@@ -85,6 +85,8 @@ sub form_check_field($$$) {
   } elsif ($type eq 'hinfo') {
     return 'Valid HINFO required!'
       unless ($value =~ /^[A-Z]+([A-Z0-9-\+]+)?$/);
+  } elsif ($type eq 'textarea') {
+    return '';
   } else {
     return "unknown typecheck for form_check_field: $type !";
   }
@@ -146,6 +148,10 @@ sub form_check_form($$$) {
       if ($rec->{type} eq 'mac') {
 	$val="\U$val";
 	$val =~ s/[\s:-]//g;
+      } elsif ($rec->{type} eq 'textarea') {
+	#$val =~ s/\r//g;
+	#$val =~ s/\n/\\n/g;
+	#print "textarea:<BR><PRE>",$val,"</PRE><BR>END.";
       }
       #print "<br>check $p ",param($p);
       return 1 if (form_check_field($rec,$val,0) ne '');
@@ -341,13 +347,15 @@ sub form_magic($$$) {
     } elsif ($rec->{ftype} == 1) {
       $maxlen=$rec->{len};
       $maxlen=$rec->{maxlen} if ($rec->{maxlen} > 0);
+      print "<TR>",td($rec->{name}),"<TD>";
       if ($rec->{type} eq 'passwd') {
-	print "<TR>",td($rec->{name}),"<TD>",
-	  password_field(-name=>$p1,-size=>$rec->{len},-maxlength=>$maxlen,
-			 -value=>param($p1));
+	print password_field(-name=>$p1,-size=>$rec->{len},
+			     -maxlength=>$maxlen,-value=>param($p1));
+      } elsif ($rec->{type} eq 'textarea') {
+	print textarea(-name=>$p1,-rows=>$rec->{rows},
+		       -columns=>$rec->{columns},-value=>param($p1));
       } else {
-	print "<TR>",td($rec->{name}),"<TD>",
-	  textfield(-name=>$p1,-size=>$rec->{len},-maxlength=>$maxlen,
+	print textfield(-name=>$p1,-size=>$rec->{len},-maxlength=>$maxlen,
 		    -value=>param($p1));
       }
       if ($rec->{definfo}) {
