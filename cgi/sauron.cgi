@@ -1,8 +1,9 @@
 #!/usr/bin/perl
 #
-# Copyright (c) Timo Kokkonen <tjko@iki.fi>, 2000.
-#
+# sauron.cgi
 # $Id$
+#
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>, 2000.
 #
 use CGI qw/:standard *table/;
 use CGI::Carp 'fatalsToBrowser'; # debug stuff
@@ -39,7 +40,7 @@ $frame_mode=0;
 $pathinfo = path_info();
 $script_name = script_name();
 $s_url = script_name();
-$self_url = $s_url . $pathinfo;
+$selfurl = $s_url . $pathinfo;
 $scookie = cookie(-name=>'sauron');
 $menu=param('menu');
 $menu='login' unless ($menu);
@@ -85,7 +86,7 @@ if ($menu eq 'servers') {
   servers();
 }
 elsif ($menu eq 'zones') {
-
+  zones();
 }
 else {
   print p,"unknown menu '$menu'";
@@ -95,7 +96,9 @@ print h1("foo");
 print "<p>script name: " . script_name() ." $formmode\n";
 print "<p>extra path: " . path_info() ."<br>framemode=$frame_mode\n";
 print "<p>cookie='$scookie'\n";
-print "<p>s_url='$s_url' '$self_url'<hr>\n";
+print "<p>s_url='$s_url' '$selfurl'<hr>\n";
+print "<p>url()=" . url();
+print "<p>self_url()=" . self_url();
 @names = param();
 foreach $var (@names) {
   print "$var = '" . param($var) . "'<br>\n";
@@ -123,7 +126,54 @@ sub servers() {
     print p,"del...";
   }
   elsif ($sub eq 'edit') {
-    print p,"edit...";
+    $server=$state{'server'};
+    $serverid=$state{'serverid'};
+    if ($serverid eq '') {
+      print p,"Server not selected";
+      goto select_server;
+    }
+
+    unless (param('server_re_edit') eq '1') {
+      get_server($serverid,\%serv);
+      param('srv_name',$serv{'name'});
+      param('srv_comment',$serv{'comment'});
+      param('srv_hostmaster',$serv{'hostmaster'});
+      param('srv_hostname',$serv{'hostname'});
+      param('srv_pzone',$serv{'pzone_path'});
+      param('srv_szone',$serv{'szone_path'});
+      param('srv_namedca',$serv{'named_ca'});
+    }
+    
+    print h2("Edit server: $server"),p,
+            startform(-method=>'POST',-action=>$selfurl),
+            hidden('menu','servers'),hidden('sub','edit'),
+            hidden('server_re_edit',1),
+            "<TABLE border=0 width=100%>",
+            Tr,td(["Server name",
+		textfield(-name=>'srv_name',-value=>param('srv_name'))]),
+            Tr,td(["Comments",
+		textfield(-name=>'srv_comment',-size=>'60',
+			  -value=>param('srv_comment'))]),
+            Tr,Tr,
+            Tr,td(["Hostmaster",
+		textfield(-name=>'srv_hostmaster',-size=>'30',
+			  -value=>param('srv_hostmaster'))]),
+            Tr,td(["Hostname",
+		textfield(-name=>'srv_hostname',-size=>'30',
+			  -value=>param('srv_hostname'))]),
+            Tr,td(["Primary zone-file path",
+		textfield(-name=>'srv_pzone',-size=>'30',
+			  -value=>param('srv_pzone'))]),
+            Tr,td(["Slave zone-file path",
+		textfield(-name=>'srv_szone',-size=>'30',
+			  -value=>param('srv_szone'))]),
+            Tr,td(["Root-server file",
+		textfield(-name=>'srv_namedca',-size=>'30',
+			  -value=>param('srv_namedca'))]),
+            
+            "</TABLE>",
+            submit,end_form;
+    
   }
   else {
     $server=param('server_list');
@@ -137,12 +187,35 @@ sub servers() {
       }
       print h2("Selected server: $server"),p;
       get_server($serverid,\%serv);
-      $state{'server'}=$server;
-      $state{'serverid'}=$serverid;
-      save_state($scookie);
-      print "<TABLE border=1>",Tr,th(['Key','Value']);
-      foreach $key (keys %serv) {
-	print Tr,td([$key,$serv{$key}]);
+      if ($state{'serverid'} ne $serverid) {
+	delete $state{'zone'};
+	delete $state{'zoneid'};
+	$state{'server'}=$server;
+	$state{'serverid'}=$serverid;
+	save_state($scookie);
+      }
+      print "<TABLE BGCOLOR=#f0f000 WIDTH=\"100%\">",
+         Tr,"<TH align=left width=30% bgcolor=white>Server<TH>",
+         Tr,td(['Server name',$serv{'name'}]),
+         Tr,td(['Server ID',$serv{'id'}]),
+         Tr,td(['Comments',$serv{'comment'}]),
+         Tr,Tr,"<TH align=left width=30% bgcolor=white>BIND",
+         Tr,td(['Hostmaster',$serv{'hostmaster'}]),
+         Tr,td(['Hostname',$serv{'hostname'}]),
+         Tr,td(['Directory',$serv{'directory'}]),
+         Tr,td(['Primary zone-file path',$serv{'pzone_path'}]),
+         Tr,td(['Slave zone-file path',$serv{'szone_path'}]),
+         Tr,td(['Root-server file',$serv{'named_ca'}]),
+         Tr,td('Allow transfer'),td;
+      $at=$serv{'allow_transfer'};
+      for $i (0 .. $#{$at}) {
+	print $$at[$i] . "<br>";
+      }
+      print Tr,Tr,"<TH align=left width=30% bgcolor=white>DHCP",
+            Tr,td('Global settings'),td;
+      $dh=$serv{'dhcp'};
+      for $i (0 .. $#{$dh}) {
+	print $$dh[$i] . "<br>";
       }
       print "</TABLE>";
     }
@@ -154,12 +227,161 @@ sub servers() {
 	push @l,$$list[$i][0];
       }
       print h2("Select server:"),p,
-            startform(-method=>'POST',-action=>$self_url),
+            startform(-method=>'POST',-action=>$selfurl),
             hidden('menu','servers'),p,
             "Available servers:",p,
             scrolling_list(-width=>'100%',-name=>'server_list',
-			   -size=>'10',-values=>@l),
+			   -size=>'10',-values=>\@l),
             br,submit,end_form;
+    }
+  }
+}
+
+sub zones() {
+  $sub=param('sub');
+  $server=$state{'server'};
+  $serverid=$state{'serverid'};
+  if ($server eq '') { 
+    print h2("Server not selected!");
+    return;
+  }
+
+  if ($sub eq 'add') {
+    print p,"add...";
+  }
+  elsif ($sub eq 'del') {
+    print p,"del...";
+  }
+  elsif ($sub eq 'edit') {
+    print p,"edit...";
+  }
+  else {
+    $zone=param('selected_zone');
+    $zone=$state{'zone'} unless ($zone);
+    if ($zone && $sub ne 'select') {
+      #display selected zone info
+      $zoneid=get_zone_id($zone,$serverid);
+      if ($zoneid < 1) {
+	print h3("Cannot select zone '$zone'!"),p;
+	goto select_zone;
+      }
+      print h2("Selected zone: $zone"),p;
+      get_zone($zoneid,\%zn);
+      $state{'zone'}=$zone;
+      $state{'zoneid'}=$zoneid;
+      save_state($scookie);
+      
+      $type=$zn{'type'};
+      if ($type eq 'M') { $type='Master'; $color='#f0f000'; }
+      elsif ($type eq 'S') { $type='Slave'; $color='#a0a0f0'; }
+      $rev='No';
+      $rev='Yes' if ($zn{'reverse'} eq 't');
+
+      print "<TABLE bgcolor=$color width=\"100%\">",
+         Tr,"<TH align=left width=30% bgcolor=white>Zone<TH>",
+         Tr,td(['Zone name',$zn{'name'}]),
+         Tr,td(['Zone Id',$zn{'id'}]),
+         Tr,td(['Comments',$zn{'comment'}]),
+         Tr,td(['Type',$type]),
+         Tr,td(['Reverse',$zn{'reverse'}]),
+         Tr,
+         Tr,td(['Class',"\U$zn{'class'}"]);
+      if ($type eq 'Master') {
+	print 
+         Tr,td(['Hostmaster',$zn{'hostmaster'}]),
+         Tr,td(['Serial',$zn{'serial'}]),
+         Tr,td(['Refresh',$zn{'refresh'}]),
+         Tr,td(['Retry',$zn{'retry'}]),
+         Tr,td(['Expire',$zn{'expire'}]),
+         Tr,td(['Minimum',$zn{'minimum'}]),
+         Tr,td(['TTL',$zn{'ttl'}]),
+	 Tr,td("Name servers (NS)"),td;
+	$list=$zn{'ns'};
+	for $i (0 .. $#{$list}) {
+	  print $$list[$i],"<br>";
+	}
+	if ($rev eq 'Yes') {
+	  print Tr,td(['Reversenet',$zn{'reversenet'}]),
+	        Tr,td("Zones used to build reverse"),td;
+	  $list2=get_zone_list($serverid);
+	  $list=$zn{'reverses'};
+	  for $i (0 .. $#{$list}) {
+	    $name='N/A';
+	    for $j (0 .. $#{$list2}) {
+	      $name=$$list2[$j][0] if ($$list[$i] eq $$list2[$j][1]);
+	    }
+	    print $$list[$i]," ($name)<br>";
+	  }
+	} else {
+	  print Tr,td("Mail exchanges (MX)"),td;
+	  $list=$zn{'mx'};
+	  for $i (0 .. $#{$list}) {
+	    print $$list[$i],"<br>";
+	  }
+	  print Tr,td("Info (TXT)"),td;
+	  $list=$zn{'txt'};
+	  for $i (0 .. $#{$list}) {
+	    print $$list[$i],"<br>";
+	  }
+	  print Tr,td("DHCP"),td;
+	  $list=$zn{'dhcp'};
+	  for $i (0 .. $#{$list}) {
+	    print $$list[$i],"<br>";
+	  }
+	}
+      } else {
+	print Tr,td("Masters"),td;
+	$list=$zn{'masters'};
+	for $i (0 .. $#{$list}) {
+	  print $$list[$i],"<br>";
+	}
+      }
+      
+      #         Tr,Tr,"<TH align=left width=30% bgcolor=white>BIND",
+#         Tr,td(['Hostmaster',$serv{'hostmaster'}]),
+#         Tr,td(['Hostname',$serv{'hostname'}]),
+#         Tr,td(['Directory',$serv{'directory'}]),
+#         Tr,td(['Primary zone-file path',$serv{'pzone_path'}]),
+#         Tr,td(['Slave zone-file path',$serv{'szone_path'}]),
+#         Tr,td(['Root-server file',$serv{'named_ca'}]),
+#         Tr,td('Allow transfer'),td;
+#      $at=$serv{'allow_transfer'};
+#      for $i (0 .. $#{$at}) {
+#	print $$at[$i] . "<br>";
+#      }
+#      print Tr,Tr,"<TH align=left width=30% bgcolor=white>DHCP",
+#            Tr,td('Global settings'),td;
+#      $dh=$serv{'dhcp'};
+#      for $i (0 .. $#{$dh}) {
+#	print $$dh[$i] . "<br>";
+#      }
+
+      print "</TABLE>";
+    }
+    else {
+     select_zone:
+      #display zone selection list
+      print h2("Zones for server: $server"),
+            p,"<TABLE width=90% bgcolor=white border=0>",
+            Tr,th(['Zone','Id','Type','Reverse']);
+            
+      $list=get_zone_list($serverid);
+      for $i (0 .. $#{$list}) {
+	$type=$$list[$i][2];
+	if ($type eq 'M') { $type='Master'; $color='#f0f000'; }
+	elsif ($type eq 'S') { $type='Slave'; $color='#a0a0f0'; }
+	$rev='No';
+	$rev='Yes' if ($$list[$i][3] eq 't');
+	$id=$$list[$i][1];
+	$name=$$list[$i][0];
+	
+	print "<TR bgcolor=$color>",td([
+	  "<a href=\"$selfurl?menu=zones&selected_zone=$name\">$name</a>",
+					$id,$type,$rev]);
+      }
+      
+      print "</TABLE>";
+
     }
   }
 }
@@ -234,7 +456,8 @@ sub left_menu($) {
           "<a href=\"$url&sub=edit\">Edit server</a><br>";
   } elsif ($menu eq 'zones') {
     $url.='?menu=zones';
-    print p,"<a href=\"$url\">Select zone</a><br>",
+    print p,"<a href=\"$url\">Current zone</a><br>",
+          p,"<a href=\"$url&sub=select\">Select zone</a><br>",
           p,"<a href=\"$url&sub=add\">Add zone</a><br>",
           "<a href=\"$url&sub=del\">Delete zone</a><br>",
           "<a href=\"$url&sub=edit\">Edit zone</a><br>";

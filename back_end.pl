@@ -165,14 +165,14 @@ sub get_zone_list($$$) {
   $list=[];
   return $list unless ($serverid >= 0);
 
-  $res=db_exec("SELECT name,id FROM zones " .
+  $res=db_exec("SELECT name,id,type,reverse FROM zones " .
 	       "WHERE server=$serverid $type $reverse " .
 	       "ORDER BY type,reverse,reversenet,name;");
 
   for($i=0; $i < $res; $i++) {
     $name=db_getvalue($i,0);
     $id=db_getvalue($i,1);
-    $rec=[$name,$id];
+    $rec=[$name,$id,db_getvalue($i,2),db_getvalue($i,3)];
     push @{$list}, $rec;
   }
   return $list;
