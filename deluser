@@ -1,0 +1,79 @@
+#!/usr/bin/perl
+#
+# deluser - utility to delete users
+#
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000.
+# $Id$
+#
+require 5;
+use Getopt::Long;
+use Term::ReadKey;
+
+($PG_DIR,$PG_NAME) = ($0 =~ /^(.*\/)(.*)$/);
+$0 = $PG_NAME;
+
+do "$PG_DIR/config" || die("cannot load config");
+do "$PG_DIR/util.pl";
+do "$PG_DIR/db.pl";
+
+sub fatal($) {
+  my ($msg) = @_;
+  print STDERR "$0: $msg\n";
+  exit(1);
+}
+
+##############################################
+
+$result = GetOptions("user=s","help|h");
+
+if ($opt_help) {
+  print "syntax: $0 [--user=<username>] [--help]\n";
+  exit(0);
+}
+
+db_connect();
+
+
+unless ($opt_user) {
+  print "Enter user to be deleted: ";
+  $opt_user = ReadLine 0;
+  chomp $opt_user;
+  $i=1;
+}
+fatal("Invalid username '$opt_user'!") unless ($opt_user =~ /^\S+$/);
+
+
+undef @q;
+db_query("SELECT name,superuser,comment,id FROM users " .
+	 "WHERE username='$opt_user';",\@q);
+
+fatal("Cannot find user '$opt_user' from users table!") if (@q < 1);
+$id=$q[0][3];
+
+if ($i) { # ask confirmation only in interactive session...
+  print "\t Username: $opt_user (id=$id)\n",
+        "\t Longname: $q[0][0]\n",
+        "\tsuperuser: $q[0][1]\n";
+  print "    comment: $q[0][2]\n" if ($q[0][2] ne '');
+
+  print "Delete this user [y/n]?";
+  $t=ReadLine 0;
+  chomp $t;
+  unless ($t eq 'y' || $t eq 'Y') {
+    print "User not deleted!\n";
+    exit(1);
+  }
+}
+
+
+db_begin();
+$res=db_exec("DELETE FROM user_rights WHERE uref=$id;");
+#print "$res\n";
+$res=db_exec("DELETE FROM users WHERE id=$id;");
+#print "$res\n";
+fatal("Cannot delete user from users table!") if ($res < 0);
+fatal("commit failed!") if (db_commit() < 0);
+
+print "User $opt_user deleted succesfully.\n";
+exit;
+

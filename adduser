@@ -1,0 +1,93 @@
+#!/usr/bin/perl
+#
+# adduser - utility to create users
+#
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000.
+# $Id$
+#
+require 5;
+use Getopt::Long;
+use Term::ReadKey;
+
+($PG_DIR,$PG_NAME) = ($0 =~ /^(.*\/)(.*)$/);
+$0 = $PG_NAME;
+
+do "$PG_DIR/config" || die("cannot load config");
+do "$PG_DIR/util.pl";
+do "$PG_DIR/db.pl";
+
+sub fatal($) {
+  my ($msg) = @_;
+  print STDERR "$0: $msg\n";
+  exit(1);
+}
+
+##############################################
+
+$result = GetOptions("user=s","superuser","help|h","passwd=s","name=s");
+
+if ($opt_help) {
+  print "syntax: $0 [--user=<username>] [--superuser] [--help]\n" ,
+        "\t\t[--passwd=<password>] [--name=\"<user's full name>\"]\n";
+  exit(0);
+}
+
+db_connect();
+
+
+unless ($opt_user) {
+  print "Enter username: ";
+  $opt_user = ReadLine 0;
+  chomp $opt_user;
+  $i=1;
+}
+fatal("Invalid username '$opt_user'!") unless ($opt_user =~ /^\S+$/);
+
+unless ($opt_name) {
+  print "Enter user description (full name): ";
+  $opt_name = ReadLine 0;
+  chomp $opt_name;
+  $i=1;
+}
+
+unless ($opt_passwd) {
+  print "Enter password: ";
+  ReadMode 'noecho';
+  $opt_passwd = ReadLine 0;
+  print "\n";
+  ReadMode 'normal';
+  chomp $opt_passwd;
+  $i=1;
+}
+
+$superuser=($opt_superuser==1?"true":"false");
+$user = (getpwuid($<))[0];
+$salt=int(rand(900000)+100000);
+$pwd=pwd_crypt($opt_passwd,$salt);
+
+if ($i) { # ask confirmation only in interactive session...
+  print "\t Username: $opt_user\n",
+  "\t Longname: $opt_name\n",
+  "\tsuperuser: $superuser\n",
+  "Add this user [y/n]?";
+
+  $t=ReadLine 0;
+  chomp $t;
+  unless ($t eq 'y' || $t eq 'Y') {
+    print "User not added!\n";
+    exit(1);
+  }
+}
+
+$res=db_exec("INSERT INTO users " .
+	     "(username,password,name,superuser,muser,cuser) " .
+	     "VALUES('$opt_user','$pwd','$opt_name',$superuser," .
+	     " '$user','$user');");
+
+fatal("Cannot add user to users table! (user already exists?)") if ($res < 0);
+
+print "User $opt_user added succesfully.\n";
+print "Remember to give user some rights with moduser command.\n"
+	  if ($superuser ne 'true');
+exit;
+

@@ -47,4 +47,4 @@ DROP SEQUENCE users_id_seq;
 DROP SEQUENCE user_rights_id_seq;
 
 
-// eof
+/* eof */

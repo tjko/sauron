@@ -1,0 +1,332 @@
+#!/usr/bin/perl
+#
+# moduser - utility to modify user rights
+#
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000.
+# $Id$
+#
+require 5;
+use Getopt::Long;
+use Term::ReadKey;
+
+($PG_DIR,$PG_NAME) = ($0 =~ /^(.*\/)(.*)$/);
+$0 = $PG_NAME;
+
+do "$PG_DIR/config" || die("cannot load config");
+do "$PG_DIR/util.pl";
+do "$PG_DIR/db.pl";
+
+sub fatal($) {
+  my ($msg) = @_;
+  print STDERR "$0: $msg\n";
+  exit(1);
+}
+
+$user = (getpwuid($<))[0];
+$mdate = db_timestamp_str();
+
+%addmodes=('server'=>1,'zone'=>2,'net'=>3,'host'=>4);
+
+##############################################
+
+$result = GetOptions("help|h","list","add:s","delall","del=s","passwd:s",
+		     "name=s","superuser=s","lock","unlock","edit");
+
+$opt_user=$ARGV[0];
+
+if ($opt_help || $opt_user eq '') {
+  print "syntax: $0 <username> [--list|add|del|delall|edit]\n" ,
+        "\t\t[--name=\"<user's full name>\"] [--superuser=<yes|no>]\n",
+        "\t\t[--passwd] [--passwd=<password>] [--lock|unlock] [--help]\n\n";
+  print " Parameter descriptions: \n",
+        "   --add                                 interactive add\n",
+        "   --add=\"server,<servername>,<mode>\"    add server (mode=R|RW|RWS)\n",
+        "   --add=\"zone,<zonename>,<mode>\"        add zone (mode=R|RW|RWS)\n",
+        "   --add=\"net,<net>,<mode>\"              add net (mode=RW|RWS)\n",
+        "   --add=\"host,<reg exp>\"                add hostname mask\n\n",
+        "   --del=\"<type>,<name|net|mask>\"        delete right\n",
+        "                                         (type=server|zone|net|host)\n",
+        "   --delall                              delete all rights\n",
+        "   --list                                list all rights\n",
+        "\n";
+  exit(0);
+}
+
+db_connect();
+db_debug(1);
+
+fatal("Invalid username '$opt_user'!") unless ($opt_user =~ /^\S+$/);
+
+undef @q;
+db_query("SELECT id,name,superuser,comment,password FROM users " .
+	 "WHERE username='$opt_user';",\@q);
+fatal("Cannot find user '$opt_user' from users table!") if (@q < 1);
+
+$id=$q[0][0];
+$pwd=$q[0][4];
+
+if ($opt_name) {
+  $res=db_exec("UPDATE users SET name='$opt_name', " .
+	       " muser='$user',mdate='$mdate' WHERE id=$id;");
+  fatal("Cannot update user description!") if ($res < 0);
+  print "User description succesfully updated.\n";
+}
+
+if ($opt_superuser) {
+  if ($opt_superuser eq 'yes') { $superuser='true'; }
+  elsif ($opt_superuser eq 'no') { $superuser='false'; }
+  else { fatal("Invalid argument to option superuser!"); }
+  $res=db_exec("UPDATE users SET superuser=$superuser, " .
+	       "muser='$user',mdate='$mdate' WHERE id=$id;");
+  fatal("Cannot update user superuser status!") if ($res < 0);
+  print "User superuser status succesfully updated.\n";
+}
+
+if (defined $opt_passwd) {
+  unless ($opt_passwd) {
+    print "Enter password: ";
+    ReadMode 'noecho';
+    $opt_passwd = ReadLine 0;
+    print "\n";
+    ReadMode 'normal';
+    chomp $opt_passwd;
+  }
+
+  $salt=int(rand(900000)+100000);
+  $pwd=pwd_crypt($opt_passwd,$salt);
+  $res=db_exec("UPDATE users SET password='$pwd', " .
+	       " muser='$user',mdate='$mdate' WHERE id=$id;");
+  fatal("Cannot update user password!") if ($res < 0);
+  print "User password succesfully updated.\n";
+}
+
+if ($opt_lock) {
+  if ($pwd =~ /^LOCKED/) {  fatal("account already locked!"); }
+  $pwd="LOCKED:$pwd";
+  $res=db_exec("UPDATE users SET password='$pwd', " .
+	       " muser='$user',mdate='$mdate' WHERE id=$id;");
+  fatal("Cannot update user password!") if ($res < 0);
+  print "User account succesfully locked.\n";
+}
+
+if ($opt_unlock) {
+  unless ($pwd =~ /^LOCKED/) {  fatal("account not locked!"); }
+  $pwd =~ s/^LOCKED://g;
+  $res=db_exec("UPDATE users SET password='$pwd', " .
+	       " muser='$user',mdate='$mdate' WHERE id=$id;");
+  fatal("Cannot update user password!") if ($res < 0);
+  print "User account succesfully unlocked.\n";
+}
+
+
+undef @q;
+db_query("SELECT id,name,superuser,comment,password FROM users " .
+	 "WHERE username='$opt_user';",\@q);
+fatal("Cannot find user '$opt_user' from users table!") if (@q < 1);
+
+$status=($pwd=~/^LOCKED/?"LOCKED!":"valid");
+$status="Invalid password" unless $pwd =~ /^(LOCKED|MD5)/;
+
+print " Username: $opt_user (id=$id)\n",
+      " Longname: $q[0][1]\n",
+      "superuser: $q[0][2]\n",
+      "   status: $status\n\n";
+
+
+
+if ($opt_list) {
+  undef @d;
+  db_query("SELECT a.mode,a.comment,b.name FROM user_rights a, servers b " .
+	   "WHERE a.type=1 AND a.ref=b.id AND a.uref=$id;",\@d);
+  print "Server records:\n";
+  for $i (0..$#d) { 
+    printf "\t\t%-20s %-10s %s\n",$d[$i][2],$d[$i][0],$d[$i][1];
+  }
+
+  undef @d;
+  db_query("SELECT a.mode,a.comment,b.name FROM user_rights a, zones b " .
+	   "WHERE a.type=2 AND a.ref=b.id AND a.uref=$id;",\@d);
+  print "Zone   records:\n";
+  for $i (0..$#d) { 
+    printf "\t\t%-20s %-10s %s\n",$d[$i][2],$d[$i][0],$d[$i][1];
+  }
+
+  undef @d;
+  db_query("SELECT a.mode,a.comment,b.net FROM user_rights a, nets b " .
+	   "WHERE a.type=3 AND a.ref=b.id AND a.uref=$id;",\@d);
+  print "Net    records:\n";
+  for $i (0..$#d) { 
+    printf "\t\t%-20s %-10s %s\n",$d[$i][2],$d[$i][0],$d[$i][1];
+  }
+
+  undef @d;
+  db_query("SELECT a.mode,a.comment  FROM user_rights a " .
+	   "WHERE a.type=4 AND a.uref=$id;",\@d);
+  print "Net    records:\n";
+  for $i (0..$#d) { 
+    printf "\t\t%-20s %-10s %s\n",$d[$i][0],"(hostnamemask)",$d[$i][1];
+  }
+
+  exit;
+}
+elsif (defined $opt_add) {
+  unless ($opt_add) {
+  add_i:
+    print "Record type [1=server,2=zone,3=net,4=hostnamemask]: ";
+    $type = ReadLine 0; chomp $type;
+    unless ($type =~ /^(1|2|3|4)$/) { print "invalid type!\n"; goto add_i; }
+    if ($type==1) {
+      print "Enter server name: ";
+      $tmp = ReadLine 0; chomp $tmp;
+      undef @d;
+      db_query("SELECT id,name FROM servers WHERE name='$tmp';",\@d);
+      if (@d < 1) { print "cannot find server!\n"; goto add_i; }
+      $mode=ask_mode();
+      unless ($mode) { print "invalid mode!\n"; goto add_i; }
+      $ref=$d[0][0];
+    }
+    elsif ($type==2) {
+      print "Enter zone name: ";
+      $tmp = ReadLine 0; chomp $tmp;
+      undef @d;
+      db_query("SELECT id,name FROM zones WHERE name='$tmp';",\@d);
+      if (@d < 1) { print "cannot find zone!\n"; goto add_i; }
+      $mode=ask_mode();
+      unless ($mode) { print "invalid mode!\n"; goto add_i; }
+      $ref=$d[0][0];
+    }
+    elsif ($type==3) {
+      print "Enter net (CIDR): ";
+      $tmp = ReadLine 0; chomp $tmp;
+      unless (is_cidr($tmp)) { print "Invalid CIDR!"; goto add_i; }
+      undef @d;
+      db_query("SELECT id,name FROM nets WHERE net='$tmp';",\@d);
+      if (@d < 1) { print "cannot find net!\n"; goto add_i; }
+      $mode=ask_mode(1);
+      unless ($mode) { print "invalid mode!\n"; goto add_i; }
+      $ref=$d[0][0];
+    }
+    elsif ($type==4) {
+      print "Enter hostname mask (regexp): ";
+      $tmp = ReadLine 0; chomp $tmp;
+      $tmp =~ s/\\/\\\\/g;
+      undef @d;
+      $mode=$tmp;
+      $ref=-1;
+    }
+    
+    $res=db_exec("INSERT INTO user_rights (uref,type,ref,mode) " .
+		 "VALUES($id,$type,$ref,'$mode');");
+    fatal("cannot insert record to user_rights table!") if ($res < 0);
+    exit;
+  }
+
+  fatal("invalid parameter '$opt_add' for add option!")
+    unless ($opt_add =~ /^(server|zone|net|host),([^,\s]+)(,(R|RW|RWS))?$/);
+  $type=$addmodes{$1};
+  $tmp=$2;
+  $mode=$4;
+  if ($type eq 1) {
+    undef @d;
+    db_query("SELECT id FROM servers WHERE name='$tmp';",\@d);
+    fatal("cannot find server '$tmp'") if (@d < 1);
+    $ref=$d[0][0];
+  }
+  elsif ($type eq 2) {
+    undef @d;
+    db_query("SELECT id FROM zones WHERE name='$tmp';",\@d);
+    fatal("cannot find zone '$tmp'") if (@d < 1);
+    $ref=$d[0][0];
+  }
+  elsif ($type eq 3) {
+    undef @d;
+    db_query("SELECT id FROM nets WHERE net='$tmp';",\@d);
+    fatal("cannot find net '$tmp'") if (@d < 1);
+    $ref=$d[0][0];
+  }
+  elsif ($type eq 4) {
+    $mode=$tmp;
+    $mode=~s/\\/\\\\/g;
+    $ref=-1;
+  }
+
+  #print "$type,$ref,$mode\n";
+  $res=db_exec("INSERT INTO user_rights (uref,type,ref,mode) " .
+	       "VALUES($id,$type,$ref,'$mode');");
+  fatal("cannot insert record to user_rights table!") if ($res < 0);
+
+}
+elsif (defined $opt_del) {
+  fatal("invalid parameter to del option!")
+    unless ($opt_del =~ /^(server|zone|net|host),([^,\s]+)$/);
+  $type=$addmodes{$1};
+  $tmp=$2;
+  print "del $type,$tmp\n";
+  if ($type eq 1) {
+    undef @d;
+    db_query("SELECT a.id FROM user_rights a, servers b " .
+       "WHERE a.uref=$id AND a.type=1 AND a.ref=b.id AND b.name='$tmp';",\@d);
+    fatal("cannot find record (server) '$tmp'") if (@d < 1);
+    $ref=$d[0][0];
+  }
+  elsif ($type eq 2) {
+    undef @d;
+    db_query("SELECT a.id FROM user_rights a, zones b " .
+	"WHERE a.uref=$id AND a.type=2 AND a.ref=b.id AND b.name='$tmp';",\@d);
+    fatal("cannot find record (zone) '$tmp'") if (@d < 1);
+    $ref=$d[0][0];
+  }
+  elsif ($type eq 3) {
+    undef @d;
+    db_query("SELECT a.id FROM user_rights a, nets b " .  
+     "WHERE a.uref=$id AND a.type=3 AND a.ref=b.id AND net='$tmp';",\@d);
+    fatal("cannot find net '$tmp'") if (@d < 1);
+    $ref=$d[0][0];
+  }
+  elsif ($type eq 4) {
+    undef @d;
+    $tmp=~s/\\/\\\\/g;
+    db_query("SELECT id FROM user_rights WHERE uref=$id AND mode='$tmp';",\@d);
+    fatal("cannot find hostnamemask '$tmp'") if (@d < 1);
+    $ref=$d[0][0];
+  }
+
+  $res=db_exec("DELETE FROM user_rights WHERE id=$ref;");
+  fatal("cannot delete record (id=$ref) from user_rights!") if ($res <0);
+  print "User right record succesfully deleted.\n";
+  exit;
+}
+elsif ($opt_delall) {
+  db_begin();
+  $res=db_exec("DELETE FROM user_rights WHERE uref=$id;");
+  fatal("cannot delete all users records!") if ($res <0);
+  fatal("commit failed!") if (db_commit()<0);
+}
+elsif ($opt_edit) {
+  fatal("option not yet implemented");
+}
+
+
+exit;
+
+
+#####################3
+
+sub ask_mode($n) {
+  my($n) = @_;
+  my($mode,$t,$i);
+  my(%modehash);
+
+  if ($n==1) { %modehash=(1=>'RW',2=>'RWS'); }
+  else { %modehash=(1=>'R',2=>'RW',3=>'RWS'); }
+  print "Enter mode [";
+  foreach $i (keys %modehash) { print "$i=$modehash{$i} "; }
+  print "]: ";
+
+  $t = ReadLine 0; 
+  chomp $t;
+  $mode=$modehash{$t};
+
+  return $mode;
+}
+

@@ -6,7 +6,6 @@
 # $Id$
 #
 
-
 sub new_serial($) {
   my ($serial) = @_;
   my ($sec,$min,$hour,$day,$mon,$year,$s);
@@ -26,6 +25,7 @@ sub new_serial($) {
 
   return $s;
 }
+
 
 
 #####################################################################

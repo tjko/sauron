@@ -3,6 +3,7 @@
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000.
 # $Id$
 #
+use Digest::MD5;
 
 # returns nonzero in case given domainname is valid
 sub valid_domainname($) {
@@ -126,6 +127,17 @@ sub add_origin($$) {
   if ($domain eq '@') {  $domain=$origin; }
   elsif (! ($domain =~ /\.$/)) { $domain.=".$origin"; }
   return $domain;
+}
+
+
+# encrypts given pasword using salt... (MD5 based)
+sub pwd_crypt($$) {
+  my($password,$salt) = @_;
+  my($ctx);
+
+  $ctx=new Digest::MD5;
+  $ctx->add("$salt$password\n");
+  return "MD5:" . $salt . ":" . $ctx->hexdigest;
 }
 
 

@@ -174,3 +174,16 @@ sub db_decode_list_str($) {
 
   return $list;
 }
+
+
+sub db_timestamp_str() {
+  my($s);
+  my($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime(time);
+
+  $s = sprintf "%04d-%02d-%02d %02d:%02d:%02d",
+               1900+$year,($mon+1),$mday,$hour,$min,$sec;
+  return $s;
+}
+
+
+# eof
