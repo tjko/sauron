@@ -384,12 +384,12 @@ sub make_bind() {
       }
       undef @q; # entries without mx-templates
       db_query("SELECT h.domain,m.pri,m.mx " .
-	       "FROM hosts h,zones z,mx_entries m,rr_mx r " .
-	       "WHERE h.zone=z.id AND h.mx=r.id AND m.ref=r.id AND m.type=3 " .
-	       " AND h.type=3 AND h.mx > 0 AND z.id=$zoneid " .
+	       "FROM hosts h,zones z,mx_entries m " .
+	       "WHERE h.zone=z.id AND m.ref=h.id AND m.type=2 " .
+	       " AND h.type=3 AND h.mx=-1 AND z.id=$zoneid " .
 	       "ORDER BY h.domain,m.pri;",\@q);
       if (@q > 0) {
-	print ZONEFILE ";\n;\n; MX only domains (using MX-templates)\n;\n";
+	print ZONEFILE ";\n;\n; MX only domains\n;\n";
 	$domain='';
 	for $i (0 .. $#q) {
 	  print ZONEFILE ";\n" if ($domain ne '' && $domain ne $q[$i][0]);
@@ -406,31 +406,69 @@ sub make_bind() {
       ## wks hash
       undef %wkshash;
       undef @q;
-      db_query("SELECT hosts.domain,rr_wks.wks FROM hosts,zones,rr_wks " .
-	       "WHERE hosts.zone=zones.id AND hosts.wks=rr_wks.id " .
-	       "AND zones.id=$zoneid AND hosts.type=1 " .
-	       "ORDER BY hosts.domain;",\@q);
+      db_query("SELECT h.domain,w.proto,w.services FROM hosts h,zones z, " .
+	             "rr_wks r, wks_entries w " .
+	       "WHERE h.zone=z.id AND h.wks=r.id AND w.ref=r.id " .
+	       "AND w.type=2 AND z.id=$zoneid AND h.type=1 " .
+	       "ORDER BY h.domain, w.proto;",\@q);
       if (@q > 0) {
 	$wks_count=@q;
 	#print "found $wks_count wks entries!\n";
 	for $i (0 .. $#q) {
-	  $wkshash{$q[$i][0]}=db_decode_list_str($q[$i][1]);
+	  $rec=$wkshash{$q[$i][0]};
+	  if (!$rec) {
+	    $rec=[]; 
+	    $wkshash{$q[$i][0]}=$rec;
+	  }
+	  $proto=$q[$i][1];
+	  $proto=~s/\s+$//g;
+	  push @{$wkshash{$q[$i][0]}}, "$proto $q[$i][2]";
 	}
       }
 
+      # ADD here code for wks records beloging to host directly!!!!!!!!!!!
 
-      ## wks hash
+
+
+      ## mx hash
       undef %mxhash;
       undef @q;
-      db_query("SELECT hosts.domain,rr_mx.mx FROM hosts,zones,rr_mx " .
-	       "WHERE hosts.zone=zones.id AND hosts.mx=rr_mx.id " .
-	       "AND zones.id=$zoneid AND hosts.type=1 " .
-	       "ORDER BY hosts.domain;",\@q);
+      db_query("SELECT h.domain,m.pri,m.mx FROM hosts h,zones z,rr_mx r, " .
+	         "mx_entries m " .
+	       "WHERE h.zone=z.id AND h.mx=r.id AND m.ref=r.id AND m.type=3 " .
+	       "AND z.id=$zoneid AND h.type=1 " .
+	       "ORDER BY h.domain,m.pri,m.mx;",\@q);
       if (@q > 0) {
 	$mx_count=@q;
 	#print "found $mx_count mx entries!\n";
 	for $i (0 .. $#q) {
-	  $mxhash{$q[$i][0]}=db_decode_list_str($q[$i][1]);
+	  $rec=$mxhash{$q[$i][0]};
+	  if (!$rec) {
+	    $rec=[];
+	    $mxhash{$q[$i][0]}=$rec;
+	  }
+	  push @{$mxhash{$q[$i][0]}}, "$q[$i][1] $q[$i][2]";
+	}
+      }
+
+      # ADD here code for mx records belonging to host directly!!!!!!!!!!!
+
+      
+      ## txt hash
+      undef %txthash;
+      undef @q;
+      db_query("SELECT h.domain,t.txt FROM hosts h,zones z,txt_entries t " .
+	       "WHERE h.zone=z.id AND t.type=2 AND t.ref=h.id " .
+	       "AND h.type=1 AND z.id=$zoneid " .
+	       "ORDER BY h.domain;",\@q);
+      if (@q > 0) {
+	for $i (0 .. $#q) {
+	  $rec=$txthash{$q[$i][0]};
+	  if (!$rec) {
+	    $rec=[];
+	    $txthash{$q[$i][0]}=$rec;
+	  }
+	  push @{$txthash{$q[$i][0]}}, "$q[$i][1]";
 	}
       }
 
@@ -438,12 +476,12 @@ sub make_bind() {
       # normal host entries
       undef @q;
       undef %dnames;
-      db_query("SELECT hosts.domain,ip,hinfo_hw,hinfo_sw,txt " .
+      db_query("SELECT hosts.domain,ip,hinfo_hw,hinfo_sw " .
 	       "FROM hosts,rr_a " .
 	       "WHERE hosts.zone=zones.id AND rr_a.host=hosts.id " .
 	       "AND zones.id=$zoneid AND hosts.type=1 " .
 	       "AND rr_a.forward=true AND hosts.domain <> '\@' " .
-	       "ORDER BY rr_a.ip;",\@q);
+	       "ORDER BY rr_a.ip,hosts.domain;",\@q);
       if (@q > 0) {
 	print ZONEFILE ";\n;\n; A records\n;\n";
 	for $i (0 .. $#q) {
@@ -452,7 +490,7 @@ sub make_bind() {
 	  $ip =~ s/\/\d\d$//g;
 	  $hinfo_hw=$q[$i][2];
 	  $hinfo_sw=$q[$i][3];
-	  $txt=db_decode_list_str($q[$i][4]);
+	  $txt=$txthash{$domain};
 	  $wks=$wkshash{$domain};
 	  $mx=$mxhash{$domain};
 	  if ($dnames{$domain}) {
@@ -560,9 +598,11 @@ sub make_dhcp() {
   print DHCPFILE "#               created by $user at $time_now\n#\n";
 
   # global entries
-  $dhcp=$server{'dhcp'};
-  for $i (0 .. $#{$dhcp}) {
-    print DHCPFILE "$$dhcp[$i];\n";
+  undef @q;
+  db_query("SELECT d.dhcp FROM dhcp_entries d " .
+	   "WHERE d.type=1 AND d.ref=$serverid;",\@q);
+  for $ i (0..$#q) {
+    print DHCPFILE "$q[$i][0];\n";
   }
   print DHCPFILE "\n\n";
 

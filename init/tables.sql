@@ -48,7 +48,9 @@ CREATE TABLE zones ( // zone table; contains zones
        dummy	   BOOL DEFAULT false,
        type	   CHAR(1) NOT NULL, // (H)int, (M)aster, (S)lave, 
 				     // (F)orward, ...
-       reverse	   BOOL DEFAULT false,
+       reverse	   BOOL DEFAULT false, // true for reverse (arpa) zones
+       noreverse   BOOL DEFAULT false, // if true, zone not used in reverse
+				       // map generation
        nnotify	   BOOL DEFAULT true,
        chknames    CHAR(1) DEFAULT 'W', // (W)arn, (F)ail, (I)gnore
        class	   CHAR(2) DEFAULT 'in',
@@ -161,6 +163,32 @@ CREATE TABLE hosts (
 ) INHERITS(pokemon);
 
 
+
+// global table to store printer classes (printcap stuff)
+// these classess maybe referred to in PRINTER fields in other tables.
+CREATE TABLE printer_classes (
+       id           SERIAL PRIMARY KEY,
+       name	    TEXT UNIQUE NOT NULL CHECK(name <> ''),
+
+       printer	    TEXT[],
+       dentries     TEXT[],  
+
+       comment	    TEXT
+) INHERITS(pokemon);
+
+
+CREATE TABLE host_info (
+	id	    SERIAL PRIMARY KEY,
+        host	    INT4 NOT NULL, // ptr to hosts table
+	huser	    CHAR(30),
+	room	    CHAR(8),
+        bldg	    CHAR(10),
+	dept	    CHAR(20),
+	comment     TEXT
+) INHERITS(pokemon);
+
+
+
 // addresses (A records) for hosts, linked to a host record.
 CREATE TABLE rr_a (
       id	   SERIAL PRIMARY KEY,
@@ -195,29 +223,6 @@ CREATE TABLE rr_mx (
 
 
 
-// global table to store printer classes (printcap stuff)
-// these classess maybe referred to in PRINTER fields in other tables.
-CREATE TABLE printer_classes (
-       id           SERIAL PRIMARY KEY,
-       name	    TEXT UNIQUE NOT NULL CHECK(name <> ''),
-
-       printer	    TEXT[],
-       dentries     TEXT[],  
-
-       comment	    TEXT
-) INHERITS(pokemon);
-
-
-CREATE TABLE host_info (
-	id	    SERIAL PRIMARY KEY,
-        host	    INT4 NOT NULL, // ptr to hosts table
-	huser	    CHAR(30),
-	room	    CHAR(8),
-        bldg	    CHAR(10),
-	dept	    CHAR(20),
-	comment     TEXT
-) INHERITS(pokemon);
-
 
 CREATE TABLE cidr_entries (
 	id	    SERIAL PRIMARY KEY,
@@ -227,7 +232,7 @@ CREATE TABLE cidr_entries (
         ref	    INT4 NOT NULL, // ptr to table speciefied by type field
 	ip	    CIDR,
 	comment     TEXT
-) INHERITS(pokemon);
+);
 
 CREATE TABLE dhcp_entries (
 	id	    SERIAL PRIMARY KEY,
@@ -235,7 +240,7 @@ CREATE TABLE dhcp_entries (
         ref         INT4 NOT NULL, // ptr to table speciefied by type field
 	dhcp	    TEXT,
         comment     TEXT
-) INHERITS(pokemon);
+);
 
 CREATE TABLE printer_entries (
 	id	    SERIAL PRIMARY KEY,
@@ -243,7 +248,7 @@ CREATE TABLE printer_entries (
         ref         INT4 NOT NULL, // ptr to table speciefied by type field
 	printer	    TEXT,
         comment     TEXT
-) INHERITS(pokemon);
+);
 
 
 CREATE TABLE ns_entries (
@@ -252,7 +257,7 @@ CREATE TABLE ns_entries (
         ref         INT4 NOT NULL, // ptr to table speciefied by type field
 	ns	    TEXT,
         comment     TEXT
-) INHERITS(pokemon);
+);
 
 CREATE TABLE txt_entries (
 	id	    SERIAL PRIMARY KEY,
@@ -260,7 +265,7 @@ CREATE TABLE txt_entries (
         ref         INT4 NOT NULL ,// ptr to table speciefied by type field
 	txt	    TEXT,
         comment     TEXT
-) INHERITS(pokemon);
+);
 
 CREATE TABLE mx_entries (
 	id	    SERIAL PRIMARY KEY,
@@ -269,7 +274,7 @@ CREATE TABLE mx_entries (
         pri	    INT4 NOT NULL CHECK (pri > 0),
 	mx	    TEXT,
         comment     TEXT
-) INHERITS(pokemon);
+);
 
 CREATE TABLE wks_entries (
 	id	    SERIAL PRIMARY KEY,
@@ -278,7 +283,7 @@ CREATE TABLE wks_entries (
 	proto	    CHAR(10), // tcp,udp
 	services    TEXT,
         comment     TEXT
-) INHERITS(pokemon);
+);
 
 
 //////////////////////////////////////////////////////
