@@ -20,7 +20,7 @@
 
   <bookinfo>
     <title>Sauron</>
-    <subtitle>User's Guide</>
+    <subtitle>User Guide</>
     <date>$Date$</>
     <authorgroup>
       <author>
@@ -31,7 +31,7 @@
         </affiliation>
       </author>
     </authorgroup>
-    <pubdate>2003-02-20</>
+    <pubdate>2003-02-21</>
 
     <copyright>
       <year>2003</>
@@ -41,7 +41,7 @@
     <revhistory>
       <revision>
         <revnumber>0.5</>
-        <date>20 Feb 2003</>
+        <date>2003-02-21</>
         <authorinitials>tjko</>
         <revremark>First draft</>
       </revision>
@@ -59,8 +59,8 @@
   <preface>
     <title>Preface</>
     <para>
-      This manual is designed to address user's guestions about installing
-      and using <application>Sauron</>, a free DNS & DHCP management
+      This manual is designed to address user's questions about installing
+      and using <application>Sauron</>, free DNS & DHCP management
       software.
     </para>
     <para>
@@ -158,7 +158,7 @@
         Database is organized as follows; 
         a number of servers may be defined where each server may contain
         several zones. At server level there may be "global" definitions 
-        for DNS &  DHCP settings and a Layer-2 network map (VLAN map) 
+        for DNS &  DHCP settings and a Layer-2 network map (VLAN map),
         which is used generating necessary topology information for dhcpd. 
         Each server can have multiple (DNS) zones defined. Hosts belong to 
         a zone and may contain additional information (such as asset IDs) 
@@ -174,24 +174,24 @@
       Some of the main features of Sauron include:
       <itemizedlist>
        <listitem><para>
-        generates complete BIND (DNS) configuration file set for 
+        Generates complete BIND (DNS) configuration file set for 
         each server
        </para></listitem>
        <listitem><para>
-        generates complete dhcpd (ISC's DHCP) configuration file set for
+        Generates complete dhcpd (ISC's DHCP) configuration file set for
         each server
        </para></listitem>
        <listitem><para>
-        automatically generates DNS <quote>reverse</> zones
+        Automatically generates DNS <quote>reverse</> zones
        </para></listitem>
        <listitem><para>
-        supports smaller than class-C <quote>reverse</> zone delegations
+        Supports smaller than class-C <quote>reverse</> zone delegations
        </para></listitem>
        <listitem><para>
-        dynamic host aliases (both CNAME and A record)
+        Dynamic host aliases (both CNAME and A record)
        </para></listitem>
        <listitem><para>
-        support for dynamic DHCP address pools with access controls
+        Support for dynamic DHCP address pools with access controls
         (requires DHCP v3)
        </para></listitem>
        <listitem><para>
@@ -201,14 +201,14 @@
          MX and WKS record templates for hosts
        </para></listitem>
        <listitem><para>
-         groups; hosts may be assigned into a group that defines common
+         Groups; hosts may be assigned into a group that defines common
          attributes for it
        </para></listitem>
        <listitem><para>
-         support for most of the standard DNS RRs (resource records)
+         Support for most of the standard DNS RRs (resource records)
        </para></listitem>
        <listitem><para>
-         support for automatic validation of generated DNS and DHCP
+         Support for automatic validation of generated DNS and DHCP
          configuration file sets
        </para></listitem>
       </itemizedlist>
@@ -338,8 +338,8 @@
     <para>
     This chapter covers the general installation process for Sauron.
     This includes software installation and initial system configuration.
-    Before installing sauron make sure you have all the required programs
-    installed.
+    Make sure you have all the required programs installed, before
+    starting to install Sauron.
     </para>
 
     <section id="system-requirements">
@@ -406,7 +406,7 @@
         Sauron is currently available as a source <quote>tarball</> as well
         as a RPM package (RPM package is made for RedHat Linux systems).
         Decide which version you want to use to install Sauron from and
-        and proceed to either <xref linkend="install-tgz"> or 
+        proceed to either <xref linkend="install-tgz"> or 
         <xref linkend="install-rpm">.
       </para>
 
@@ -425,11 +425,11 @@
         
         <para>
         Next step is to install Sauron from the sources. By default
-        sauron program files will be installed under 
+        Sauron program files will be installed under 
         <filename class=directory>/usr/local/sauron</>,
         and configuration files under 
         <filename class=directory>/usr/local/etc/sauron</>. If you
-        want to install sauron under some other directories you need
+        want to install Sauron under some other directories you need
         to specify 
         <parameter class=command>--prefix</> and
         <parameter class=command>--sysconfdir</> arguments when invoking 
@@ -563,7 +563,7 @@
            is used by the web interface to generate unique cookies names,
            so you can access several different Sauron web interfaces 
            simultaneously from your browser. This identifier is also displayed
-           by the web interface, to help you to identify which Sauron web
+           by the web interface; to help you to identify which Sauron web
            interface you're currently connected to. 
          </para></listitem>
         </varlistentry>
@@ -600,8 +600,8 @@
       <section>
       <title>Initializing Database</>
       <para>
-        Before using sauron, you need to initialized the database. For this
-        there is <application>createtables</> utility, that is included
+        Before using Sauron, you need to initialized the database. For this
+        there is <application>createtables</> utility that is included
         with Sauron. To initialize the database, simply run following command
         in Sauron program directory:
         <screen>
@@ -632,7 +632,7 @@ No servers found in database!
         Sauron has several global tables that contain data that is used
         by all servers stored in a Sauron database. These tables contain
         a table (<filename>ether_info</>) that contains mappings of
-        <acronym>OUI</>'s to Manufacturers which is used to display
+        <acronym>OUI</>'s to Manufacturers that is used to display
         the manufacturers of <acronym>NICs</> based on the
         <hardware>Ethernet</> <acronym>MAC</> address.
         There is also a table (<filename>root_servers</>) that contains
@@ -689,7 +689,7 @@ No servers found in database!
       <para>
           You should use your web server configuration and/or firewall
           to limit access to <filename>sauron.cgi</> and 
-          <filename>browser.cgi</> cgi scripts only from the machines
+          <filename>browser.cgi</> CGI scripts only from the machines
           you need to access Sauron from.
       </para>
 
@@ -815,7 +815,7 @@ User admin added successfully.
       <para>
         After creating a server, it's time to add networks into 
         <guimenuitem>Networks</> table in <guimenu>Nets</> menu.
-        Generate net for each network that have been delegated for
+        Generate net for each network that has been delegated for
         your use (and you're generating <quote>reverse</> zones for).
         You should also generate subnets within these networks that
         describe your network topology. If your network is split
@@ -921,7 +921,7 @@ Adding zone: 255.in-addr.arpa...OK (id=4)
       <para>
         There is small demonstration database included with Sauron 
         distribution. This database is a dump of Sauron database that
-        contains sample server which demonstrates some features of Sauron.
+        contains sample server, which demonstrates some features of Sauron.
       </para>
       <para>
         To use this database dump you need to create a new database in 
@@ -1024,7 +1024,7 @@ $SAURON_MAIL_FROM = 'postmaster@middle.earth';
     <para>
       You can automate BIND & dhcpd configuration files generation using
       for example a simple shell script that is run periodically from
-      <application>cron</>. But you should use <option>--check</>
+      <application>cron</>. But you should use <option>--check</> option
       when doing this to make sure you always end up with valid
       configuration files.
     </para>
@@ -1035,8 +1035,8 @@ $SAURON_MAIL_FROM = 'postmaster@middle.earth';
   <chapter id="account-management">
   <title>Account Management</>
   <para>
-    Currently user accounts and privileges are used only by the Sauron's
-    Web Interface. A text-based interface (to be used via
+    Currently only the Sauron's Web Interface uses user accounts 
+    and privileges. A text-based interface (to be used via
     <acronym>SSH</> or locally) is planned and will use the same user
     accounts and privileges as the web interface. 
   </para>
@@ -1069,7 +1069,7 @@ $SAURON_MAIL_FROM = 'postmaster@middle.earth';
     <title>Creating User</>
     <para>
       User accounts are created using <filename>adduser</> utility.
-      This utility allow adding user accounts either interactively or
+      This utility allows adding user accounts either interactively or
       in batch mode by specifying all the required information on 
       command-line. Following example shows how to add normal user
       account interactively (see <xref linkend="adduser-cmd"> for
@@ -1120,7 +1120,7 @@ User pippin added successfully.
     </para>
     <para>
       Typically user (or group) is assigned one or more <quote>server</> 
-      privileges, that grant user read-only access into those server(s).
+      privileges that grant user read-only access into those server(s).
       Then user is assigned <quote>zone</> privileges that grant
       user access into all hosts inside certain zone(s). If needed, user's
       access into all hosts inside the zone(s) user has write access can
@@ -1384,7 +1384,7 @@ ID     Type     Ref.                      Mode
     into <filename>users</> table in Sauron database. Sauron currently
     uses by default standard Unix passwords. 
     However, it is possible to use external authentication program for
-    user authentication. Which makes it possible to authenticate user's
+    user authentication. Which makes it possible to authenticate users
     against almost any service.
   </para>
   <para>
@@ -1420,7 +1420,7 @@ ID     Type     Ref.                      Mode
     <para>
       Web based user interface for Sauron is implemented as 
       a single <acronym>CGI</> script (<filename>sauron.cgi</>).
-      To use this script a WWW server software that supports 
+      To use this script WWW server software that supports 
       CGI programs is needed. Currently this interface is developed
       and tested using <application>Apache</>, but it should work
       with any WWW server software, as long as it has support for CGIs.
@@ -1445,7 +1445,7 @@ ID     Type     Ref.                      Mode
     <para> 
       Sauron's web interface doesn't use JavaScript, only standard 
       <acronym>HTML</> is used. Goal is to keep the web interface
-      light weight and usable by all browsers (graphical as well as
+      lightweight and usable by all browsers (graphical as well as
       text-based). 
     </para>
     <para>
@@ -1689,8 +1689,8 @@ ID     Type     Ref.                      Mode
         a host easily. This button will take the information from the
         current host and use this information to pre-fill 
         <guimenuitem>Add host</> command dialog. If hostname contains
-        number it is incremented, otherwise hostname is appended by
-        number two.
+        number it is incremented, otherwise number two (2) is appended to
+        the end of the hostname.
       </para>
       </section>
 
@@ -1719,7 +1719,7 @@ ID     Type     Ref.                      Mode
         <guimenuitem>Add alias</> command is used to add a static
         (CNAME) alias. This command is meant for adding static
         <quote>out-of-zone</> aliases only. Normally aliases should
-        be added using <guibutton>Alias</> button which will create a dynamic
+        be added using <guibutton>Alias</> button, which will create a dynamic
         alias for that host.
 
         This command is available for administrator and users with
@@ -1783,7 +1783,7 @@ ID     Type     Ref.                      Mode
       <section><title>Add reservation</>
       <para>
         <guimenuitem>Add reservation</> command is used to add 
-        a host reservations. Host reservations can be used to reserve
+        a host reservation. Host reservations can be used to reserve
         hostnames and IP numbers for future use.
       </para>
       </section>
@@ -1908,11 +1908,11 @@ ID     Type     Ref.                      Mode
     <title>Groups Menu</>
     <para>
       <guimenu>Groups</> menu contains commands for creating and modifying
-      (host) groups. Normal users can only list and view group details,
+      (host) groups. Normal users can only list and view group details;
       all other commands are for administrator only.
     </para>
     <para>
-      Groups are used by hosts, they are used to specify common
+      Groups are used by hosts; they are used to specify common
       attributes for hosts. 
       Normal users can only use groups that have same or lover
       privilege level than the user has.
@@ -2069,8 +2069,8 @@ ID     Type     Ref.                      Mode
     <title>Login Menu</>
     <para>
       <guimenu>Login</> menu contains miscellaneous commands that
-      are mainly provide user web interface specific information
-      and settings.
+      mainly provide commands to tune user account settings, and display
+      information about the web interface itself.
     </para>
      
       <section><title>User Info</>
@@ -2188,7 +2188,7 @@ ID     Type     Ref.                      Mode
     <para>
       This chapter provides a reference for all the command-line
       utilities included with Sauron. All these utilities have
-      built-in help which can be displayed by invoking them 
+      built-in help, which can be displayed by invoking them 
       with single argument <option>--help</> (these utilities
       use GNU style long options).
     </para>
