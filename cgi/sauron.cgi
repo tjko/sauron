@@ -586,7 +586,10 @@ do "$PROG_DIR/cgi_util.pl";
    len=>[40,20], empty=>[0,1], elabels=>['DHCP','comment']},
   {ftype=>2, tag=>'printer', name=>'PRINTER entries', 
    type=>['text','text'], fields=>2,
-   len=>[40,20], empty=>[0,1], elabels=>['PRINTER','comment']}
+   len=>[40,20], empty=>[0,1], elabels=>['PRINTER','comment']},
+  {ftype=>0, name=>'Record info', no_edit=>0},
+  {ftype=>4, name=>'Record created', tag=>'cdate_str', no_edit=>1},
+  {ftype=>4, name=>'Last modified', tag=>'mdate_str', no_edit=>1}
  ]
 );
 
@@ -620,7 +623,10 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>1, tag=>'comment', name=>'Comment', type=>'text',len=>60, empty=>1},
   {ftype=>2, tag=>'mx_l', name=>'Mail exchanges (MX)', 
    type=>['priority','mx','text'], fields=>3, len=>[5,30,20], 
-   empty=>[0,0,1],elabels=>['Priority','MX','comment']}
+   empty=>[0,0,1],elabels=>['Priority','MX','comment']},
+  {ftype=>0, name=>'Record info', no_edit=>0},
+  {ftype=>4, name=>'Record created', tag=>'cdate_str', no_edit=>1},
+  {ftype=>4, name=>'Last modified', tag=>'mdate_str', no_edit=>1}
  ]
 );
 
@@ -632,7 +638,10 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>1, tag=>'comment', name=>'Comment', type=>'text',len=>60, empty=>1},
   {ftype=>2, tag=>'wks_l', name=>'WKS', 
    type=>['text','text','text'], fields=>3, len=>[10,30,10], empty=>[0,1,1], 
-   elabels=>['Protocol','Services','comment']}
+   elabels=>['Protocol','Services','comment']},
+  {ftype=>0, name=>'Record info', no_edit=>0},
+  {ftype=>4, name=>'Record created', tag=>'cdate_str', no_edit=>1},
+  {ftype=>4, name=>'Last modified', tag=>'mdate_str', no_edit=>1}
  ]
 );
 
@@ -645,7 +654,10 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>1, tag=>'comment', name=>'Comment', type=>'text',len=>60, empty=>1},
   {ftype=>2, tag=>'printer_l', name=>'PRINTER', 
    type=>['text','text'], fields=>2, len=>[60,10], empty=>[0,1],
-   elabels=>['Printer','comment']}
+   elabels=>['Printer','comment']},
+  {ftype=>0, name=>'Record info', no_edit=>0},
+  {ftype=>4, name=>'Record created', tag=>'cdate_str', no_edit=>1},
+  {ftype=>4, name=>'Last modified', tag=>'mdate_str', no_edit=>1}
  ]
 );
 
@@ -666,6 +678,9 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>3, tag=>'type', name=>'Type', type=>'enum',
    enum=>{0=>'Hardware',1=>'Software'}},
   {ftype=>1, tag=>'pri', name=>'Priority', type=>'priority',len=>4, empty=>0},
+  {ftype=>0, name=>'Record info', no_edit=>0},
+  {ftype=>4, name=>'Record created', tag=>'cdate_str', no_edit=>1},
+  {ftype=>4, name=>'Last modified', tag=>'mdate_str', no_edit=>1}
  ]
 );
 

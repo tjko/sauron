@@ -1225,17 +1225,30 @@ sub add_host($) {
 sub get_mx_template($$) {
   my ($id,$rec) = @_;
 
-  return -100 if (get_record("mx_templates","name,comment",$id,$rec,"id"));
+  return -100 if (get_record("mx_templates",
+			     "name,comment,cdate,cuser,mdate,muser",
+			     $id,$rec,"id"));
 
   get_array_field("mx_entries",4,"id,pri,mx,comment","Priority,MX,Comment",
 		  "type=3 AND ref=$id ORDER BY pri,mx",$rec,'mx_l');
-  
+
+  $rec->{cdate_str}=($rec->{cdate} > 0 ?
+		     localtime($rec->{cdate}).' by '.$rec->{cuser} : 'UNKOWN');
+  $rec->{mdate_str}=($rec->{mdate} > 0 ?
+		     localtime($rec->{mdate}).' by '.$rec->{muser} : '');
   return 0;
 }
 
 sub update_mx_template($) {
   my($rec) = @_;
   my($r,$id);
+
+  delete $rec->{mdate_str};
+  delete $rec->{cdate_str};
+  delete $rec->{cdate};
+  delete $rec->{cuser};
+  $rec->{mdate}=time;
+  $rec->{muser}=$muser;
 
   db_begin();
   $r=update_record('mx_templates',$rec);
@@ -1252,6 +1265,8 @@ sub update_mx_template($) {
 sub add_mx_template($) {
   my($rec) = @_;
 
+  $rec->{cuser}=$muser;
+  $rec->{cdate}=time;
   return add_record('mx_templates',$rec);
 }
 
@@ -1299,17 +1314,31 @@ sub get_mx_template_list($$$) {
 sub get_wks_template($$) {
   my ($id,$rec) = @_;
 
-  return -100 if (get_record("wks_templates","name,comment",$id,$rec,"id"));
+  return -100 if (get_record("wks_templates",
+			     "name,comment,cuser,cdate,muser,mdate",
+			     $id,$rec,"id"));
 
   get_array_field("wks_entries",4,"id,proto,services,comment",
 		  "Proto,Services,Comment",
 		  "type=2 AND ref=$id ORDER BY proto,services",$rec,'wks_l');
+
+  $rec->{cdate_str}=($rec->{cdate} > 0 ?
+		     localtime($rec->{cdate}).' by '.$rec->{cuser} : 'UNKOWN');
+  $rec->{mdate_str}=($rec->{mdate} > 0 ?
+		     localtime($rec->{mdate}).' by '.$rec->{muser} : '');
   return 0;
 }
 
 sub update_wks_template($) {
   my($rec) = @_;
   my($r,$id);
+
+  delete $rec->{mdate_str};
+  delete $rec->{cdate_str};
+  delete $rec->{cdate};
+  delete $rec->{cuser};
+  $rec->{mdate}=time;
+  $rec->{muser}=$muser;
 
   db_begin();
   $r=update_record('wks_templates',$rec);
@@ -1326,6 +1355,8 @@ sub update_wks_template($) {
 sub add_wks_template($) {
   my($rec) = @_;
 
+  $rec->{cuser}=$muser;
+  $rec->{cdate}=time;
   return add_record('wks_templates',$rec);
 }
 
@@ -1372,17 +1403,31 @@ sub get_wks_template_list($$$) {
 sub get_printer_class($$) {
   my ($id,$rec) = @_;
 
-  return -100 if (get_record("printer_classes","name,comment",$id,$rec,"id"));
+  return -100 if (get_record("printer_classes",
+			     "name,comment,cuser,cdate,muser,mdate",
+			     $id,$rec,"id"));
 
   get_array_field("printer_entries",3,"id,printer,comment",
 		  "Printer,Comment",
 		  "type=3 AND ref=$id ORDER BY printer",$rec,'printer_l');
+
+  $rec->{cdate_str}=($rec->{cdate} > 0 ?
+		     localtime($rec->{cdate}).' by '.$rec->{cuser} : 'UNKOWN');
+  $rec->{mdate_str}=($rec->{mdate} > 0 ?
+		     localtime($rec->{mdate}).' by '.$rec->{muser} : '');
   return 0;
 }
 
 sub update_printer_class($) {
   my($rec) = @_;
   my($r,$id);
+
+  delete $rec->{mdate_str};
+  delete $rec->{cdate_str};
+  delete $rec->{cdate};
+  delete $rec->{cuser};
+  $rec->{mdate}=time;
+  $rec->{muser}=$muser;
 
   db_begin();
   $r=update_record('printer_classes',$rec);
@@ -1399,6 +1444,8 @@ sub update_printer_class($) {
 sub add_printer_class($) {
   my($rec) = @_;
 
+  $rec->{cuser}=$muser;
+  $rec->{cdate}=time;
   return add_record('printer_classes',$rec);
 }
 
@@ -1427,14 +1474,27 @@ sub delete_printer_class($) {
 sub get_hinfo_template($$) {
   my ($id,$rec) = @_;
 
-  return -100 if (get_record("hinfo_templates","hinfo,type,pri",
+  return -100 if (get_record("hinfo_templates",
+			     "hinfo,type,pri,cdate,cuser,mdate,muser",
 			     $id,$rec,"id"));
+
+  $rec->{cdate_str}=($rec->{cdate} > 0 ?
+		     localtime($rec->{cdate}).' by '.$rec->{cuser} : 'UNKOWN');
+  $rec->{mdate_str}=($rec->{mdate} > 0 ?
+		     localtime($rec->{mdate}).' by '.$rec->{muser} : '');
   return 0;
 }
 
 sub update_hinfo_template($) {
   my($rec) = @_;
   my($r,$id);
+
+  delete $rec->{mdate_str};
+  delete $rec->{cdate_str};
+  delete $rec->{cdate};
+  delete $rec->{cuser};
+  $rec->{mdate}=time;
+  $rec->{muser}=$muser;
 
   db_begin();
   $r=update_record('hinfo_templates',$rec);
@@ -1445,6 +1505,8 @@ sub update_hinfo_template($) {
 sub add_hinfo_template($) {
   my($rec) = @_;
 
+  $rec->{cuser}=$muser;
+  $rec->{cdate}=time;
   return add_record('hinfo_templates',$rec);
 }
 
@@ -1469,19 +1531,32 @@ sub delete_hinfo_template($) {
 sub get_group($$) {
   my ($id,$rec) = @_;
 
-  return -100 if (get_record("groups","name,comment",$id,$rec,"id"));
+  return -100 if (get_record("groups",
+			     "name,comment,cdate,cuser,mdate,muser",
+			     $id,$rec,"id"));
 
   get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comments",
 		  "type=5 AND ref=$id ORDER BY dhcp",$rec,'dhcp');
   get_array_field("printer_entries",3,"id,printer,comment","PRINTER,Comments",
 		  "type=1 AND ref=$id ORDER BY printer",$rec,'printer');
 
+  $rec->{cdate_str}=($rec->{cdate} > 0 ?
+		     localtime($rec->{cdate}).' by '.$rec->{cuser} : 'UNKOWN');
+  $rec->{mdate_str}=($rec->{mdate} > 0 ?
+		     localtime($rec->{mdate}).' by '.$rec->{muser} : '');
   return 0;
 }
 
 sub update_group($) {
   my($rec) = @_;
   my($r,$id);
+
+  delete $rec->{mdate_str};
+  delete $rec->{cdate_str};
+  delete $rec->{cdate};
+  delete $rec->{cuser};
+  $rec->{mdate}=time;
+  $rec->{muser}=$muser;
 
   db_begin();
   $r=update_record('groups',$rec);
@@ -1501,6 +1576,8 @@ sub update_group($) {
 sub add_group($) {
   my($rec) = @_;
 
+  $rec->{cuser}=$muser;
+  $rec->{cdate}=time;
   return add_record('groups',$rec);
 }
 
