@@ -38,7 +38,7 @@
   <tgroup cols=2>
   <thead><row><entry>option</><entry>description</></row></thead>
   <tbody>
-  <row><entry><option>--name=&lt;regexp&gt;</></>
+  <row><entry><option>--name=<replaceable>regexp</></></>
        <entry>Host name filter. Only add hosts if domainname matches
               to given regular expression.</>
   </row>
@@ -54,13 +54,13 @@
   <row><entry><option>--verbose</></>
        <entry>Produce more verbose output.</>
   </row>
-  <row><entry><option>--group=&lt;name&gt;</></>
+  <row><entry><option>--group=<replaceable>name</></></>
        <entry>Assign new hosts into given group.</>
   </row>
-  <row><entry><option>--info=&lt;user&gt;:&lt;dept&gt;:&lt;location&gt;:&lt;info&gt;</></>
+  <row><entry><option>--info=<replaceable>user</>:<replaceable>dept</>:<replaceable>location</>:<replaceable>info</></></>
        <entry>Set info fields for all imported host to these values.</>
   </row>
-  <row><entry><option>--force=&lt;type&gt;</></>
+  <row><entry><option>--force=<replaceable>type</></></>
        <entry>Force host record in Sauron to be this type: dhcp-only</>
   </row>
   <row><entry><option>--commit</></>
@@ -182,25 +182,25 @@
   <tgroup cols=2>
   <thead><row><entry>option</><entry>description</></row></thead>
   <tbody>
-  <row><entry><option>--cidr=&lt;CIDR&gt;</></>
+  <row><entry><option>--cidr=<replaceable>CIDR</></></>
        <entry>Select only hosts within this CIDR block.</>
   </row>
-  <row><entry><option>--name=&lt;regexp&gt;</></>
+  <row><entry><option>--name=<replaceable>regexp</></></>
        <entry>Select only hostnames matching the regular expression.</>
   </row>
-  <row><entry><option>--netname=&lt;regexp&gt;</></>
+  <row><entry><option>--netname=<replaceable>regexp</></></>
        <entry>Select only hosts in the networks matching the regular 
               expression (selects only hosts within auto assign ranges in
               these networks).</>
   </row>
-  <row><entry><option>--treshold=&lt;days&gt;</></>
+  <row><entry><option>--treshold=<replaceable>days</></></>
        <entry>Expire hosts with no DHCP activity in last &lt;days&gt; days
               (default: 90 days).</>
   </row>
   <row><entry><option>--norecord</></>
        <entry>Expire only hosts wit no recorded DHCP activity.</>
   </row>
-  <row><entry><option>--edate=&lt;dd-mm-yyyy&gt;</></>
+  <row><entry><option>--edate=<replaceable>dd-mm-yyyy</></></>
        <entry>Set hosts to expire on this date (default: now).</>
   </row>
   <row><entry><option>--verbose</></>
@@ -275,13 +275,13 @@
   <row><entry><option>--verbose</></>
        <entry>Produce more verbose output.</>
   </row>
-  <row><entry><option>--seqstart=&lt;n&gt;</></>
+  <row><entry><option>--seqstart=<replaceable>n</></></>
        <entry>Start sequence numbering from n.</>
   </row>
-  <row><entry><option>--group=&lt;name&gt;</></>
+  <row><entry><option>--group=<replaceable>name</></></>
        <entry>Assign new hosts to this group.</>
   </row>
-  <row><entry><option>--info=&lt;user&gt;:&lt;dept&gt;:&lt;location&gt;:&lt;info&gt;</></>
+  <row><entry><option>--info=<replaceable>user</>:<replaceable>dept</>:<replaceable>location</>:<replaceable>info</></></>
        <entry>Set info fields for all hosts to these values.</>
   </row>
   <row><entry><option>--commit</></>
@@ -332,14 +332,14 @@
   <tgroup cols=2>
   <thead><row><entry>option</><entry>description</></row></thead>
   <tbody>
-  <row><entry><option>--orphans=&lt;zonename&gt;</></>
+  <row><entry><option>--orphans=<replaceable>zonename</></></>
        <entry>Zone for 'orphan' PTR record hosts.</>
   </row>
   <row><entry><option>--notransaction</></>
        <entry>Do not use transactions when updating database (potentially
               dangerous, but speeds up things).</>
   </row>
-  <row><entry><option>--dir=&lt;directory&gt;</></>
+  <row><entry><option>--dir=<replaceable>directory</></></>
        <entry>Directory where configuration files are located (if not in 
               the directory specified in named.conf).</>
   </row>
@@ -377,11 +377,11 @@
   <tgroup cols=2>
   <thead><row><entry>option</><entry>description</></row></thead>
   <tbody>
-  <row><entry><option>--dir=&lt;directory&gt;</></>
+  <row><entry><option>--dir=<replaceable>directory</></></>
        <entry>Directory where included files are located (if not in 
               the directory specified in dhcpd.conf).</>
   </row>
-  <row><entry><option>--chaosnet=&lt;name&gt;</></>
+  <row><entry><option>--chaosnet=<replaceable>name</></></>
        <entry>Treat this shared-network as default VLAN 
               (default is <quote>CHAOS</>).</>
   </row>
@@ -449,6 +449,51 @@
 </section>
 
 
+<section id="import-zone-cmd">
+<title>import-zone</>
+<para>
+  This a utility for importing DNS zones into existing server.
+  Zones can be read either from a zone file or fetched directly from DNS
+  using zone transfer.
+</para>
+<cmdsynopsis>
+  <command>import-zone</>
+  <arg>--help</>
+  <arg><replaceable>OPTIONS</></>
+  <arg choice=req><replaceable>servername</></>
+  <arg choice=req><replaceable>zone</></>
+  <arg><replaceable>zone file</></>
+</cmdsynopsis>
+<informaltable frame=all>
+  <tgroup cols=2>
+  <thead><row><entry>option</><entry>description</></row></thead>
+  <tbody>
+  <row><entry><option>--nameserver=<replaceable>server</></></>
+       <entry>Use this nameserver for zone transder (argument
+              must be either IP number or domainname).</>
+  </row>
+  <row><entry><option>--zone=<replaceable>name</></></>
+       <entry>Insert hosts into this parent zone, instead of generating
+              new zone.</>
+  </row>
+  <row><entry><option>--group=<replaceable>name</></></>
+       <entry>Assign new hosts into this group.</>
+  </row>
+  <row><entry><option>--verbose</></>
+       <entry>Make program to display more verbose output.</>
+  </row>
+  </tbody>
+  </tgroup>
+</informaltable>
+<para>
+  Normally <command>import-zone</> command generates a new zone in Sauron, 
+  but with <option>--zone</> option it is possible to import only the hosts 
+  from a zone into that zone's parent zone (which must already exist 
+  in Sauron).
+</para>
+</section>
+
+
 <section id="last-cmd">
 <title>last</>
 <para>
@@ -462,8 +507,9 @@
   <arg><replaceable>username</></>
 </cmdsynopsis>
 <para>
-  Option <option>-&lt;num&gt;</> can be used to limit how many entries to
-  display. To list only lastlog entries of a specific user enter that user
+  Option <option>-<replaceable>num</></> can be used to limit how many 
+  entries to display. 
+  To list only lastlog entries of a specific user enter that user
   name as the last argument.
 </para>
 </section>
