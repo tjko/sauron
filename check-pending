@@ -1,0 +1,76 @@
+#!/usr/bin/perl
+#
+# check-pending -- utility (to be run from cron) to check for pending host
+#                  changes in Sauron database
+#
+# $Id$
+#
+require 5;
+use Getopt::Long;
+
+my ($PG_DIR,$PG_NAME) = ($0 =~ /^(.*\/)(.*)$/);
+$0 = $PG_NAME;
+
+if (-r "/etc/sauron/config") {
+  $config_file="/etc/sauron/config";
+} elsif (-r "/usr/local/etc/sauron/config") {
+  $config_file="/usr/local/etc/sauron/config"; 
+} else {
+  die("cannot find config file in /etc/sauron or /usr/local/etc/sauron");
+}
+
+do "$config_file" || die("cannot load config: $config_file");
+do "$PROG_DIR/util.pl";
+
+$MAXLINES = 100;
+
+#######################################################################
+
+
+$result = GetOptions("help|h");
+if ($opt_help || @ARGV < 2) {
+    print "syntax: $0 [--help] <servername> <emailaddress>\n\n";
+    exit(1);
+}
+
+$server = shift;
+$to_address = shift;
+
+fatal("invalid email address: $to_address") 
+  unless ($to_address =~ /^\S+\@\S+$/);
+fatal("Mailer not defined in configuration!") unless ($SAURON_MAILER);
+fatal("Cannot find mailer program: $SAURON_MAILER") unless (-x $SAURON_MAILER);
+fatal("Cannot find program: $PROG_DIR/status") unless (-x "$PROG_DIR/status");
+
+
+open(PIPE,"$PROG_DIR/status --quiet --pending=$server |")
+    || fatal("status command pipe failed");
+while(<PIPE>) {
+    next if /^\s*$/;
+    push @output, $_;
+    last if (@output > $MAXLINES);
+}
+close(PIPE);
+
+push @output, "[...]\n" if (@output > $MAXLINES);
+
+if (@output > 1) {
+    open(PIPE,"| $SAURON_MAILER $SAURON_MAILER_ARGS")
+      || fatal("mail pipe failed");
+
+    print PIPE "From: Sauron <$SAURON_MAIL_FROM>\n",
+               "Subject: [sauron] pending host changes ($server)\n",
+	       "To: $to_address\n\n";
+
+
+    foreach $line (@output) {
+	print PIPE $line;
+    }
+    print PIPE "\n\n";
+    close(PIPE);
+}
+
+exit 0
+
+# eof
+
