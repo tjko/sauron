@@ -53,6 +53,7 @@ $dbversion=get_db_version();
 if ($argcount < 1 && (! $opt_quiet)) {
   print "Sauron v$VER status\n\n";
   printf "Database connection:   %s\n", ($db_ok?"OK":"ERROR");
+  exit unless ($db_ok);
   printf "Database version:      %s\t%s\n", $dbversion,
     ($dbversion < $DBVER ? "Database version too old ($DBVER required)!":'');
 }

@@ -206,6 +206,8 @@ if ($modgroup) {
   }
 
   if (defined $opt_passwd) {
+    fatal("Account currently locked!") if ($pwd =~ /^LOCKED/);
+
     unless ($opt_passwd) {
       print "Enter password: ";
       chomp ($opt_passwd = <STDIN>);
