@@ -1,5 +1,5 @@
 /* convert Sauron database format from 1.0 to 1.1 */
-
+/* (this requires PostgreSQL v7.3 or later) */
 
 /* hosts */
 
@@ -16,10 +16,10 @@ INSERT INTO user_rights (type,ref,rtype,rref) SELECT 2,id,0,gid FROM users WHERE
 ALTER TABLE users DROP COLUMN gid;
 
 /* lastlog */
-ALTER TABLE lastlog ADD COLUMN host2 TEXT;
-UPDATE lastlog SET host2=host;
-ALTER TABLE lastlog DROP COLUMN host;
-ALTER TABLE lastlog RENAME COLUMN host2 TO host;
+ALTER TABLE lastlog RENAME COLUMN host TO host2;
+ALTER TABLE lastlog ADD COLUMN host TEXT;
+UPDATE lastlog SET host=host2;
+ALTER TABLE lastlog DROP COLUMN host2;
 
 /* utmp */
 ALTER TABLE utmp DROP COLUMN gid;
