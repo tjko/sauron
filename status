@@ -75,7 +75,7 @@ $db_ok = db_connect2($DB_CONNECT);
 
 $VER=sauron_version();
 $DBVER=sauron_db_version();
-$dbversion=get_db_version();
+$dbversion=get_db_version() if ($db_ok);
 
 fatal("Missing database version (empty database?)") if ($dbversion =~ /ERROR/);
 
