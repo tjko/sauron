@@ -1106,7 +1106,7 @@ sub print_cidr_list($$$$) {
 	   "FROM cidr_entries c LEFT JOIN acls a ON c.acl=a.id " .
 	   " LEFT JOIN keys k ON c.tkey=k.id " .
 	   "WHERE c.type=$type AND c.ref=$ref " .
-	   "ORDER BY c.mode,c.id;",\@q);
+	   "ORDER BY c.id;",\@q);
 
     error(db_errormsg()) if (db_errormsg());
     if (@q > 0) {
