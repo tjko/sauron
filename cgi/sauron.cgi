@@ -16,7 +16,7 @@ $CGI::DISABLE_UPLOADS = 1; # no uploads
 $CGI::POST_MAX = 100000; # max 100k posts
 
 #$|=1;
-$debug_mode = 1;
+$debug_mode = 0;
 
 if (-f "/etc/sauron/config") {
   $conf_dir='/etc/sauron';
@@ -176,7 +176,7 @@ do "$PROG_DIR/back_end.pl";
    fields=>2, len=>[40,15], empty=>[0,1], elabels=>['CIDR','comment'],
    iff=>['type','M']},
   {ftype=>2, tag=>'also_notify', 
-   name=>'(Stealth) Servers to notify (also-notify)', type=>['ip','text'],
+   name=>'[Stealth] Servers to notify (also-notify)', type=>['ip','text'],
    fields=>2, len=>[40,15], empty=>[0,1], elabels=>['IP','comment'],
    iff=>['type','M']},
 
@@ -270,7 +270,7 @@ do "$PROG_DIR/back_end.pl";
 
 %restricted_host_form = (
  data=>[
-  {ftype=>0, name=>'Host' },
+  {ftype=>0, name=>'Host (restricted edit)' },
   {ftype=>1, tag=>'domain', name=>'Hostname', type=>'domain', len=>30},
   {ftype=>5, tag=>'ip', name=>'IP address', restricted=>1,
    iff=>['type','[16]']},
@@ -323,7 +323,59 @@ do "$PROG_DIR/back_end.pl";
   {ftype=>3, tag=>'net', name=>'Subnet', type=>'enum',
    enum=>\%new_host_nets,elist=>\@new_host_netsl,iff=>['type','1']},
   {ftype=>1, tag=>'ip', 
-   name=>'IP<FONT size=-1>(only if "Manual IP" selected)</FONT>', 
+   name=>'IP<FONT size=-1>(only if "Manual IP" selected from above)</FONT>', 
+   type=>'ip', len=>15, empty=>1, iff=>['type','1']},
+  {ftype=>1, tag=>'glue',name=>'IP',type=>'ip', len=>15, iff=>['type','6']},
+  {ftype=>2, tag=>'mx_l', name=>'Mail exchanges (MX)',
+   type=>['priority','mx','text'], fields=>3, len=>[5,30,20], empty=>[0,0,1],
+   elabels=>['Priority','MX','comment'], iff=>['type','3']},
+  {ftype=>2, tag=>'ns_l', name=>'Name servers (NS)', type=>['text','text'],
+   fields=>2,
+   len=>[30,20], empty=>[0,1], elabels=>['NS','comment'], iff=>['type','2']},
+  {ftype=>2, tag=>'printer_l', name=>'PRINTER entries', 
+   type=>['text','text'], fields=>2,len=>[40,20], empty=>[0,1], 
+   elabels=>['PRINTER','comment'], iff=>['type','5']},
+  {ftype=>0, name=>'Group/Template selections', iff=>['type','[15]']},
+  {ftype=>10, tag=>'grp', name=>'Group', iff=>['type','[15]']},
+  {ftype=>6, tag=>'mx', name=>'MX template', iff=>['type','1']},
+  {ftype=>7, tag=>'wks', name=>'WKS template', iff=>['type','1']},
+  {ftype=>0, name=>'Host info',iff=>['type','1']},
+  {ftype=>1, tag=>'huser', name=>'User', type=>'text', len=>25, empty=>1,
+   iff=>['type','1']},
+  {ftype=>1, tag=>'location', name=>'Location', type=>'text', len=>25,
+   empty=>1, iff=>['type','1']},
+  {ftype=>1, tag=>'dept', name=>'Dept.', type=>'text', len=>25, empty=>1,
+   iff=>['type','1']},
+  {ftype=>1, tag=>'info', name=>'Info', type=>'text', len=>50, empty=>1 },
+  {ftype=>0, name=>'Equipment info',iff=>['type','1']},
+  {ftype=>101, tag=>'hinfo_hw', name=>'HINFO hardware', type=>'hinfo', len=>20,
+   sql=>"SELECT hinfo FROM hinfo_templates WHERE type=0 ORDER BY pri,hinfo;",
+   lastempty=>1, empty=>1, iff=>['type','1']},
+  {ftype=>101, tag=>'hinfo_sw', name=>'HINFO sowftware', type=>'hinfo',len=>20,
+   sql=>"SELECT hinfo FROM hinfo_templates WHERE type=1 ORDER BY pri,hinfo;",
+   lastempty=>1, empty=>1, iff=>['type','1']},
+  {ftype=>1, tag=>'ether', name=>'Ethernet address', type=>'mac', len=>12,
+   iff=>['type','1'], empty=>1},
+  {ftype=>1, tag=>'model', name=>'Model', type=>'text', len=>30, empty=>1, 
+   iff=>['type','1']},
+  {ftype=>1, tag=>'serial', name=>'Serial no.', type=>'text', len=>20,
+   empty=>1, iff=>['type','1']},
+  {ftype=>1, tag=>'misc', name=>'Misc.', type=>'text', len=>40, empty=>1, 
+   iff=>['type','1']}
+ ]
+);
+
+%restricted_new_host_form = (
+ data=>[
+  {ftype=>0, name=>'New record (restricted)' },
+  {ftype=>4, tag=>'type', name=>'Type', type=>'enum', enum=>\%host_types},
+  {ftype=>1, tag=>'domain', name=>'Hostname', type=>'domain', len=>40},
+  {ftype=>1, tag=>'cname_txt', name=>'Alias for', type=>'fqdn', len=>60,
+   iff=>['type','4']},
+  {ftype=>3, tag=>'net', name=>'Subnet', type=>'enum',
+   enum=>\%new_host_nets,elist=>\@new_host_netsl,iff=>['type','1']},
+  {ftype=>1, tag=>'ip', 
+   name=>'IP<FONT size=-1>(only if "Manual IP" selected from above)</FONT>', 
    type=>'ip', len=>15, empty=>1, iff=>['type','1']},
   {ftype=>1, tag=>'glue',name=>'IP',type=>'ip', len=>15, iff=>['type','6']},
   {ftype=>2, tag=>'mx_l', name=>'Mail exchanges (MX)',
@@ -350,12 +402,12 @@ do "$PROG_DIR/back_end.pl";
   {ftype=>0, name=>'Equipment info',iff=>['type','1']},
   {ftype=>101, tag=>'hinfo_hw', name=>'HINFO hardware', type=>'hinfo', len=>20,
    sql=>"SELECT hinfo FROM hinfo_templates WHERE type=0 ORDER BY pri,hinfo;",
-   lastempty=>1, empty=>1, iff=>['type','1']},
+   lastempty=>1, empty=>0, iff=>['type','1']},
   {ftype=>101, tag=>'hinfo_sw', name=>'HINFO sowftware', type=>'hinfo',len=>20,
    sql=>"SELECT hinfo FROM hinfo_templates WHERE type=1 ORDER BY pri,hinfo;",
-   lastempty=>1, empty=>1, iff=>['type','1']},
+   lastempty=>1, empty=>0, iff=>['type','1']},
   {ftype=>1, tag=>'ether', name=>'Ethernet address', type=>'mac', len=>12,
-   iff=>['type','1'], empty=>1},
+   iff=>['type','1'], empty=>0},
   {ftype=>1, tag=>'model', name=>'Model', type=>'text', len=>30, empty=>1, 
    iff=>['type','1']},
   {ftype=>1, tag=>'serial', name=>'Serial no.', type=>'text', len=>20,
@@ -1166,7 +1218,14 @@ sub hosts_menu() {
 	  if (check_perms('ip',$host{ip}[1][1],1)) {
 	    alert2("Invalid IP number: outside allowed range(s)");
 	  } else {
-	    alert1("submit");
+	    $res=update_host(\%host);
+	    if ($res < 0) {
+	      alert1("Host record update failed! ($res)");
+	      alert2(db_lasterrormsg());
+	    } else {
+	      print h2("Host record succesfully updated.");
+	      goto show_host_record;
+	    }
 	  }
 	}
       } else {
@@ -1355,6 +1414,8 @@ sub hosts_menu() {
     return if (check_perms('zone','RW'));
     $type=param('type');
     return if (($type!=1) && check_perms('superuser',''));
+    $newhostform = (check_perms('zone','RWX',1) ? \%restricted_new_host_form :
+		    \%new_host_form);
     unless ($host_types{$type}) {
       alert2('Invalid add type!');
       return;
@@ -1364,6 +1425,7 @@ sub hosts_menu() {
       $new_host_nets{MANUAL}='<Manual IP>';
       push @new_host_netsl, 'MANUAL';
       $data{net}='MANUAL';
+      $data{net}=$new_host_netsl[0] if ($new_host_netsl[0]);
     }
     $data{type}=$type;
     $data{zone}=$zoneid;
@@ -1376,7 +1438,7 @@ sub hosts_menu() {
       return;
     }
     elsif (param('addhost_submit')) {
-      unless (($res=form_check_form('addhost',\%data,\%new_host_form))) {
+      unless (($res=form_check_form('addhost',\%data,$newhostform))) {
 	if ($data{net} eq 'MANUAL' && not is_cidr($data{ip})) {
 	  alert1("IP number must be specified if using Manual IP!");
 	} elsif (domain_in_use($zoneid,$data{domain})) {
@@ -1421,7 +1483,7 @@ sub hosts_menu() {
 
     print startform(-method=>'POST',-action=>$selfurl),
           hidden('menu','hosts'),hidden('sub','add'),hidden('type',$type);
-    form_magic('addhost',\%data,\%new_host_form);
+    form_magic('addhost',\%data,$newhostform);
     print submit(-name=>'addhost_submit',-value=>'Create'), " ",
           submit(-name=>'addhost_cancel',-value=>'Cancel'),end_form;
     return;
@@ -2308,7 +2370,8 @@ sub edit_magic($$$$$$$) {
       $res=&$update_func(\%h);
       if ($res < 0) {
 	print "<FONT color=\"red\">",h1("$name record update failed!"),
-	      "<br>result code=$res</FONT>";
+	      "<br>result code=$res",
+	      "<br>error: " . db_errormsg() ."</FONT>";
       } else {
 	print h2("$name record succefully updated");
 	#&$get_func($id,\%h);

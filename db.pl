@@ -29,6 +29,7 @@ sub sql_print_result($) {
 $db_connection_handle = 0;
 $db_last_result = 0;
 $db_debug_flag = 0;
+$db_last_error_msg = '';
 
 sub db_connect {
   $db_connection_handle = Pg::connectdb($DB_CONNECT);
@@ -60,6 +61,7 @@ sub db_exec($) {
   if ( $s != PGRES_COMMAND_OK && $s != PGRES_TUPLES_OK ) { 
     printf ("db_exec(%s) result:\n", $sqlstr) if ($db_debug_flag > 0);
     sql_print_result($db_last_result) if ($db_debug_flag > 0);
+    $db_last_error_msg=$db_connection_handle->errorMessage;
     return -1; 
   }
 
@@ -90,6 +92,10 @@ sub db_lastoid() {
 
 sub db_errormsg() {
   return $db_connection_handle->errorMessage();
+}
+
+sub db_lasterrormsg() {
+  return $db_last_error_msg;
 }
 
 sub db_debug($) {
