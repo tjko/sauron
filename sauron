@@ -63,7 +63,7 @@ sub clean_up() {
   print "(removing hosts that have been expired more than ",
 	"$SAURON_REMOVE_EXPIRED_DELAY days)\n" if ($opt_verbose);
 
-  fatal("SAURON_RMEOVE_EXPIRED_DELAY not defined!")
+  fatal("SAURON_REMOVE_EXPIRED_DELAY not defined!")
     unless ($SAURON_REMOVE_EXPIRED_DELAY > 0);
   $t=$time_now_ticks - (86400 * $SAURON_REMOVE_EXPIRED_DELAY);
 
@@ -886,8 +886,8 @@ sub make_bind() {
 	       " b.expiration " .
 	       "FROM hosts a, hosts b,zones z, arec_entries r,a_entries ae " .
 	       "WHERE z.id=$zoneid AND a.type=7 AND a.zone=z.id " .
-	       " AND r.host=a.id AND b.id=r.arec AND ae.host=b.id " .
-	       " AND ae.forward=true " .
+	       " AND r.host=a.id AND b.id=r.arec AND b.type=1 " .
+	       " AND ae.host=b.id AND ae.forward=true " .
 	       "ORDER BY a.domain;",\@q);
       error(db_errormsg()) if (db_errormsg());
       if (@q > 0) {
@@ -928,7 +928,7 @@ sub make_bind() {
       db_query("SELECT a.domain,b.domain,a.ttl,a.expiration,b.expiration " .
 	       "FROM hosts a, hosts b,zones z " .
 	       "WHERE a.zone=z.id AND z.id=$zoneid " .
-	       "AND a.type=4 AND a.alias=b.id " .
+	       "AND a.type=4 AND a.alias=b.id AND b.type=1 " .
 	       "ORDER BY a.domain;",\@q);
       error(db_errormsg()) if (db_errormsg());
       if (@q > 0) {
