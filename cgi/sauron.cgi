@@ -1383,6 +1383,10 @@ sub hosts_menu() {
 	  alert1("Domain name already in use!");
 	} elsif (is_cidr($data{ip}) && ip_in_use($serverid,$data{ip})) {
 	  alert1("IP number already in use!");
+	} elsif (check_perms('host',$data{domain},1)) {
+	  alert1("Invalid hostname: does not conform your restrictions");
+	} elsif (is_cidr($data{ip}) && check_perms('ip',$data{ip},1)) {
+	  alert1("Invalid IP number: outside allowed range(s)");
 	} else {
 	  print h2("Add");
 	  if ($data{type} == 1) {
