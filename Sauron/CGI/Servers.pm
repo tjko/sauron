@@ -266,7 +266,10 @@ sub menu_handler {
       print h3("Cannot select server!"),p;
       goto select_server;
     }
-    goto select_server if(check_perms('server','R'));
+    $state->{'serverid'}=$serverid;
+    my $pcheck = check_perms('server','R');
+    $state->{'serverid'}=-1;
+    goto select_server if ($pcheck);
     get_server($serverid,\%serv);
     $server=$serv{name};
     print h2("Selected server: $server"),p;
