@@ -3,7 +3,7 @@
 # 
 # Makefile for sauron
 #
-Version = 0.5.0
+Version = 0.5.1
 PKGNAME = sauron
 
 DBASE = sauron
@@ -90,7 +90,7 @@ PROGS = sauron addgroup adduser deluser modhosts \
 	expire-hosts createtables
 
 MODULES = Sauron/Util.pm Sauron/DB.pm Sauron/BackEnd.pm Sauron/CGIutil.pm \
-	  Sauron/UtilZone.pm
+	  Sauron/UtilZone.pm Sauron/Sauron.pm
 
 
 CONTRIB_FILES = contrib/additional-ether-codes.txt \
