@@ -1102,17 +1102,29 @@ sub print_cidr_list($$$$) {
   my($name,$type,$ref,$hdr) = @_;
   my(@q,$j,$val,$com);
 
-  db_query("SELECT ip,comment FROM cidr_entries " .
-	   "WHERE type=$type AND ref=$ref " .
-	   "ORDER BY ip;",\@q);
+  db_query("SELECT c.mode,c.ip,c.acl,c.tkey,c.op,c.comment,a.name,k.name " .
+	   "FROM cidr_entries c LEFT JOIN acls a ON c.acl=a.id " .
+	   " LEFT JOIN keys k ON c.tkey=k.id " .
+	   "WHERE c.type=$type AND c.ref=$ref " .
+	   "ORDER BY c.mode,c.id;",\@q);
 
     error(db_errormsg()) if (db_errormsg());
     if (@q > 0) {
       print BINDFILE "${hdr}${name} {\n";
       for $j (0..(@q-1)) {
-	($val=$q[$j][0]) =~ s/\/32\s*$//;
-	$com=($q[$j][1] ? "// $q[$j][1]" : "");
-	printf BINDFILE "$hdr\t%-20s %s\n","$val;",$com;
+	my ($mode,$ip,$acl,$tkey,$op,$comment,$aclname,$keyname) = @{$q[$j]};
+	  
+	$ip =~ s/\/32\s*$//;
+	$com=($comment ? "  // $comment" : "");
+	$op=($op == 1 ? '!' : ' ');
+	$val='';
+
+	if ($mode == 0 && $ip) { $val=$ip; }
+	elsif ($mode == 1 && $aclname) { $val=$aclname; }
+	elsif ($mode == 2 && $keyname) { $val="key $keyname"; }
+
+	printf BINDFILE "$hdr\t%1s %-20s %s\n",$op,"$val;",$com
+	  if ($val);
       }
       print BINDFILE "\t};\n";
     }
