@@ -1,10 +1,13 @@
 $Id$
 
 0.7.1beta
+	- VLAN names now can be in mixed-case (before only 
+	  lower-case was allowed)
 	- support for "DHCP only" entries without IP
 	  (just MAC address)
 	- sauron.cgi script split into several modules
-	  that are loaded only when needed
+	  that are loaded only when needed (should make
+	  code more manageable and maybe a even slightly faster)
 	- added support for Apache (external) authentication
 	
 0.7.0
