@@ -1870,7 +1870,22 @@ sub hosts_menu() {
     unshift @q, [$host{cdate},'CREATE','record created',$host{cuser}];
     display_list(['Date','Action','Info','By'],\@q,0);
   }
+  elsif ($sub eq '-> This Subnet') {
+    if (is_cidr(($ip=$host{ip}[1][1]))) {
+      db_query("SELECT net FROM nets " .
+	       "WHERE server=$serverid AND '$ip' << net " .
+	       "ORDER BY subnet,net",\@q);
+      if (@q > 0) {
+	param('bh_type','1'); param('bh_order','2');
+	param('bh_size','3'); param('bh_stype','0');
+	param('bh_net',$q[$#q][0]);
+	param('bh_submit','Search');
+	goto browse_hosts_jump_point;
+      }
+    }
+  }
   elsif ($sub eq 'browse') {
+  browse_hosts_jump_point:
     %bdata=(domain=>'',net=>'ANY',nets=>\%nethash,nets_k=>\@netkeys,
 	    type=>1,order=>2,stype=>0,size=>3);
     if (param('bh_submit')) {
@@ -2265,8 +2280,9 @@ sub hosts_menu() {
     print p,startform(-method=>'GET',-action=>$selfurl),
           hidden('menu','hosts'),hidden('h_id',$id);
     print "<table width=\"99%\"><tr><td align=\"left\">",
-          submit(-name=>'sub',-value=>'Refresh'),
-	  "</td><td align=\"right\">";
+          submit(-name=>'sub',-value=>'Refresh')," &nbsp; ";
+    print submit(-name=>'sub',-value=>'-> This Subnet') if ($host{type} == 1);
+    print "</td><td align=\"right\">";
     print submit(-name=>'sub',-value=>'History'), " "
       if (!check_perms('level',$ALEVEL_HISTORY,1));
     print submit(-name=>'sub',-value=>'Network Settings'), " "
