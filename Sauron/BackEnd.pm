@@ -58,6 +58,7 @@ $VERSION = '$Id$ ';
 	     delete_host
 	     add_host
 
+	     get_mx_template_by_name
 	     get_mx_template
 	     update_mx_template
 	     add_mx_template
@@ -1924,6 +1925,17 @@ sub add_host($) {
 ############################################################################
 # MX template functions
 
+sub get_mx_template_by_name($$) {
+  my($zoneid,$name)=@_;
+  my(@q);
+  return -1 unless ($zoneid > 0);
+  $name=db_encode_str($name);
+  db_query("SELECT id FROM mx_templates WHERE zone=$zoneid AND name=$name",
+	   \@q);
+  return -2 unless (@q > 0);
+  return ($q[0][0]);
+}
+
 sub get_mx_template($$) {
   my ($id,$rec) = @_;
 
@@ -2251,8 +2263,8 @@ sub get_group_by_name($$) {
   my($serverid,$name)=@_;
   my(@q);
   return -1 unless ($serverid > 0);
-  db_query("SELECT id FROM groups WHERE server=$serverid AND name='$name'",
-	   \@q);
+  $name=db_encode_str($name);
+  db_query("SELECT id FROM groups WHERE server=$serverid AND name=$name",\@q);
   return -2 unless (@q > 0);
   return ($q[0][0]);
 }
