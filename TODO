@@ -9,6 +9,8 @@ general:
         - write (command-line :) utility for easily generating large
 	  number of host entries, and to import interactively hosts
 	  from text files in standard zonefile format...
+	- hide "VLAN" info from normal users
+	- add real VLAN support (vlan table)
 
 import:
 	- remove unneccessary (?) quoting (\"...) from dhcp (and other) records
@@ -23,7 +25,8 @@ sauron:
 sauron.cgi:
 	- fix timeout problem with huge zone/server deletes...(faster server :)
 	- add search by dhcp_date field...
+	- add quick search like in browser.cgi
 
 browser.cgi:
-	- add sort by column links
+
 

@@ -1,0 +1,106 @@
+#!/usr/bin/perl
+#
+# export-networks  generates /etc/networks file (from given server)
+#
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2001.
+# $Id$
+#
+require 5;
+use Getopt::Long;
+use Time::Local;
+
+my ($PG_DIR,$PG_NAME) = ($0 =~ /^(.*\/)(.*)$/);
+$0 = $PG_NAME;
+
+if (-r "/etc/sauron/config") {
+  $config_file="/etc/sauron/config";
+} elsif (-r "/usr/local/etc/sauron/config") {
+  $config_file="/usr/local/etc/sauron/config"; 
+} else {
+  die("cannot find config file in /etc/sauron or /usr/local/etc/sauron");
+}
+
+do "$config_file" || die("cannot load config: $config_file");
+do "$PG_DIR/util.pl";
+do "$PG_DIR/db.pl";
+do "$PG_DIR/util_zone.pl";
+do "$PG_DIR/back_end.pl";
+
+
+###################################################################
+
+$user = (getpwuid($<))[0];
+$host = `hostname`;
+$host =~ s/\n//g;
+$time_now = localtime;
+
+$result = GetOptions("help|h","verbose|v","all|a");
+
+if ($opt_help || @ARGV < 1) {
+  print "syntax: $0 [--help] [--verbose] [--all] <servername>\n";
+  exit(0);
+}
+
+$verbose=1 if (defined $opt_verbose);
+$servername=$ARGV[0];
+
+db_connect();
+
+$serverid=get_server_id($servername);
+fatal("cannot find server '$servername'") unless ($serverid > 0);
+
+
+unless ($opt_all) {
+  $rule1=' AND no_dhcp=false ';
+}
+
+undef @q;
+db_query("SELECT net,name,comment " .
+	 "FROM nets " .
+	 "WHERE server=$serverid $rule1 " .
+	 "ORDER BY net",\@q);
+
+$found=@q;
+print STDERR "Found $found network(s)\n" if ($verbose);
+
+print "#\n# /etc/networks  -- automagically generated (by Sauron $VER)\n",
+      "#                   created by $user\@$host at $time_now\n",
+      "#\n# network-name                           network-number\n#\n";
+
+
+for $i (0..$#q) {
+  if ($q[$i][0] =~ /^127/) {
+    $loopback_found=1;
+    last;
+  }
+}
+
+unless ($loopback_found) {
+  $names{'loopback'}++;
+  printf "%-40s %-15s %s\n", 'loopback', '127', '';
+  print "#\n";
+}
+
+
+for $i (0..$#q) {
+  ($net=$q[$i][0]) =~ s/\/\d+\s*$//;
+  #$net =~ s/\.0//g;
+  ($name=$q[$i][1]) =~ s/\s+/_/g;;
+
+  $nname=substr($name,0,35);
+  if ($names{$nname}) {
+    print STDERR "network name collision: $name\n" if ($verbose);
+    $names{$nname}++;
+    $nname.="-$names{$nname}";
+  } else {
+    $names{$nname}++;
+  }
+  
+  printf "%-40s %-15s %s\n", $nname, $net, ($q[$i][2] ? "# $q[$i][2]" : "");
+}
+
+
+exit 0;
+
+# eof
+
