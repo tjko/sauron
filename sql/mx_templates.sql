@@ -7,11 +7,12 @@
  */
 
 CREATE TABLE mx_templates (
-       id	   SERIAL PRIMARY KEY,
-       zone	   INT4 NOT NULL,
+	id		SERIAL PRIMARY KEY,
+	zone		INT4 NOT NULL,
+	name		TEXT,
+	comment		TEXT
 
-       /* mx	   TEXT[], */
-       comment	   TEXT
+       /* mx */
 );
 
 

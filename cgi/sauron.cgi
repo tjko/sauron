@@ -1216,7 +1216,7 @@ sub form_check_form($$$) {
 sub form_magic($$$) {
   my($prefix,$data,$form) = @_;
   my($i,$j,$k,$n,$key,$rec,$a,$formdata,$h_bg,$e_str,$p1,$p2,$val,$e,$enum,
-     $values,$ip,$t);
+     $values,$ip,$t,@lst,%lsth,%tmpl_rec);
 
   $formdata=$form->{data};
   if ($form->{heading_bg}) { $h_bg=$form->{heading_bg}; }
@@ -1272,7 +1272,7 @@ sub form_magic($$$) {
 	param($p1."_count",$#{$a});
       }
       elsif ($rec->{ftype} == 6 || $rec->{ftype} == 7) {
-	
+	param($p1,$val);
       }
       else { 
 	error("internal error (form_magic):". $rec->{ftype});  
@@ -1302,16 +1302,16 @@ sub form_magic($$$) {
 
     if ($rec->{ftype} == 0) {
       print "<TR><TH COLSPAN=2 ALIGN=\"left\" BGCOLOR=\"$h_bg\">",
-             $rec->{name},"</TH>\n";
+             $rec->{name},"</TH></TR>\n";
     } elsif ($rec->{ftype} == 1) {
-      print Tr,td($rec->{name}),"<TD>",
+      print "<TR>",td($rec->{name}),"<TD>",
             textfield(-name=>$p1,-size=>$rec->{len},-value=>param($p1));
 
       print "<FONT size=-1 color=\"red\"><BR> ",
             form_check_field($rec,param($p1),0),
-            "</FONT></TD>";
+            "</FONT></TD></TR>";
     } elsif ($rec->{ftype} == 2) {
-      print Tr,td($rec->{name}),"<TD><TABLE>",Tr;
+      print "<TR>",td($rec->{name}),"<TD><TABLE><TR>";
       $a=param($p1."_count");
       if (param($p1."_add") ne '') {
 	$a=$a+1;
@@ -1323,9 +1323,10 @@ sub form_magic($$$) {
       for $k (1..$rec->{fields}) { 
 	print "<TD>",${$rec->{elabels}}[$k-1],"</TD>"; 
       }
+      print "</TR>";
       for $j (1..$a) {
 	$p2=$p1."_".$j;
-	print Tr,hidden(-name=>$p2."_id",param($p2."_id"));
+	print "<TR>",hidden(-name=>$p2."_id",param($p2."_id"));
 	for $k (1..$rec->{fields}) {
 	  $n=$p2."_".$k;
 	  print "<TD>",textfield(-name=>$n,-size=>${$rec->{len}}[$k-1],
@@ -1335,9 +1336,10 @@ sub form_magic($$$) {
               "</FONT></TD>";
         }
         print td(checkbox(-label=>' Delete',
-	             -name=>$p2."_del",-checked=>param($p2."_del") ));
+	             -name=>$p2."_del",-checked=>param($p2."_del") )),
+	       "</TR>";
       }
-      print Tr,Tr,Tr,Tr;
+      print "<TR>";
       $j=$a+1;
       for $k (1..$rec->{fields}) {
 	$n=$prefix."_".$rec->{tag}."_".$j."_".$k;
@@ -1345,7 +1347,7 @@ sub form_magic($$$) {
 		 -value=>param($n)));
       }
       print td(submit(-name=>$prefix."_".$rec->{tag}."_add",-value=>'Add'));
-      print "</TABLE></TD>\n";
+      print "</TR></TABLE></TD></TR>\n";
     } elsif ($rec->{ftype} == 3) {
       if ($rec->{type} eq 'enum') {
 	$enum=$rec->{enum};
@@ -1358,17 +1360,17 @@ sub form_magic($$$) {
 	  $values=[sort keys %{$enum}];
 	}
       }
-      print Tr,td($rec->{name}),
+      print "<TR>",td($rec->{name}),
 	    td(popup_menu(-name=>$p1,-values=>$values,
-	                  -default=>param($p1),-labels=>$enum));
+	                  -default=>param($p1),-labels=>$enum)),"</TR>";
     } elsif ($rec->{ftype} == 4) {
       $val=param($p1);
       $val=${$rec->{enum}}{$val}  if ($rec->{type} eq 'enum');
-      print Tr,td($rec->{name}),td($val),hidden($p1,param($p1));
+      print "<TR>",td($rec->{name}),td($val),hidden($p1,param($p1)),"</TR>";
     } elsif ($rec->{ftype} == 5) {
       $rec->{fields}=5;
       $rec->{type}=['ip','text','text','text'];
-      print Tr,td($rec->{name}),"<TD><TABLE>",Tr;
+      print "<TR>",td($rec->{name}),"<TD><TABLE><TR>";
       $a=param($p1."_count");
       if (param($p1."_add") ne '') {
 	$a=$a+1;
@@ -1377,11 +1379,11 @@ sub form_magic($$$) {
       $a=0 if (!$a || $a < 0);
       #if ($a > 50) { $a = 50; }
       print hidden(-name=>$p1."_count",-value=>$a);
-      print td('IP'),td('Reverse'),td('Forward'),td('Comments');
+      print td('IP'),td('Reverse'),td('Forward'),td('Comments'),"</TR>";
 
       for $j (1..$a) {
 	$p2=$p1."_".$j;
-	print Tr,hidden(-name=>$p2."_id",param($p2."_id"));
+	print "<TR>",hidden(-name=>$p2."_id",param($p2."_id"));
 
 	$n=$p2."_1";
 	print "<TD>",textfield(-name=>$n,-size=>15,-value=>param($n));
@@ -1393,16 +1395,40 @@ sub form_magic($$$) {
 	print td(checkbox(-label=>'Forward',-name=>$n,-checked=>param($n)));
 
         print td(checkbox(-label=>' Delete',
-	             -name=>$p2."_del",-checked=>param($p2."_del") ));
+	             -name=>$p2."_del",-checked=>param($p2."_del") )),
+	     "</TR>";
       }
-      print Tr,Tr,Tr,Tr;
+      #print Tr,Tr,Tr,Tr;
       $j=$a+1;
       $n=$prefix."_".$rec->{tag}."_".$j."_1";
-      print td(textfield(-name=>$n,-size=>15,-value=>param($n)));
+      print "<TR>",td(textfield(-name=>$n,-size=>15,-value=>param($n)));
       
       print td(submit(-name=>$prefix."_".$rec->{tag}."_add",-value=>'Add'));
-      print "</TABLE></TD>\n";
+      print "</TR></TABLE></TD></TR>\n";
+    } elsif ($rec->{ftype} == 6) {
+      get_mx_template_list($zoneid,\%lsth,\@lst);
+      get_mx_template(param($p1),\%tmpl_rec);
+      print "<TR>",td($rec->{name}),"<TD><TABLE WIDTH=\"99%\">\n<TR>",
+	    td(popup_menu(-name=>$p1,-values=>\@lst,
+	                  -default=>param($p1),-labels=>\%lsth),
+            submit(-name=>$prefix."_".$rec->{tag}."_update",
+		      -value=>'Update')),"</TR>\n<TR>",
+	    "<TD>";
+      print_mx_template(\%tmpl_rec);
+      print "</TD></TR></TABLE></TD></TR>";
+    } elsif ($rec->{ftype} == 7) {
+      get_wks_template_list($serverid,\%lsth,\@lst);
+      get_wks_template(param($p1),\%tmpl_rec);
+      print "<TR>",td($rec->{name}),"<TD><TABLE WIDTH=\"99%\">\n<TR>",
+	    td(popup_menu(-name=>$p1,-values=>\@lst,
+	                  -default=>param($p1),-labels=>\%lsth),
+            submit(-name=>$prefix."_".$rec->{tag}."_update",
+		      -value=>'Update')),"</TR>\n<TR>",
+	    "<TD>";
+      print_wks_template(\%tmpl_rec);
+      print "</TD></TR></TABLE></TD></TR>";
     }
+    print "\n";
   }
   print "</TABLE>";
 }
@@ -1502,7 +1528,7 @@ sub print_mx_template($) {
 
   return unless ($rec);
   print "<TABLE WIDTH=\"95%\" BGCOLOR=\"#aaff00\"><TR><TD colspan=\"2\">",
-        $rec->{comment},"</TH></TR>";
+        $rec->{name},"</TH></TR>";
   $l=$rec->{mx_l};
   for $i (1..$#{$l}) {
     print "<TR>",td($$l[$i][1]),td($$l[$i][2]),"</TR>";
@@ -1516,7 +1542,7 @@ sub print_wks_template($) {
 
   return unless ($rec);
   print "<TABLE WIDTH=\"95%\" BGCOLOR=\"#aaff00\"><TR><TD colspan=\"2\">",
-        $rec->{comment},"</TH></TR>";
+        $rec->{name},"</TD></TR>";
   $l=$rec->{wks_l};
   for $i (1..$#{$l}) {
     print "<TR>",td($$l[$i][1]),td($$l[$i][2]),"</TR>";

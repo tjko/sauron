@@ -7,10 +7,11 @@
  */
 
 CREATE TABLE wks_templates (
-      id	   SERIAL PRIMARY KEY,
-      server	   INT4 NOT NULL,
-      
-      /* wks	   TEXT[], */
-      comment	   TEXT
+	id		SERIAL PRIMARY KEY,
+	server		INT4 NOT NULL,
+	name		TEXT,
+	comment		TEXT
+
+	/* wks */
 );
 

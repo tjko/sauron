@@ -398,7 +398,7 @@ sub get_host($$) {
 sub get_mx_template($$) {
   my ($id,$rec) = @_;
 
-  return -100 if (get_record("mx_templates","comment",$id,$rec,"id"));
+  return -100 if (get_record("mx_templates","name",$id,$rec,"id"));
 
   get_array_field("mx_entries",4,"id,pri,mx,comment","Priority,MX,Comment",
 		  "type=3 AND ref=$id ORDER BY pri,mx",$rec,'mx_l');
@@ -406,6 +406,23 @@ sub get_mx_template($$) {
   return 0;
 }
 
+sub get_mx_template_list($$$) {
+  my($zoneid,$rec,$lst) = @_;
+  my(@q,$i);
+
+  undef @{$lst};
+  push @{$lst},  -1;
+  undef %{$rec};
+  $$rec{-1}='None';
+  return if ($zoneid < 1);
+
+  db_query("SELECT id,name FROM mx_templates " .
+	   "WHERE zone=$zoneid ORDER BY name;",\@q);
+  for $i (0..$#q) {
+    push @{$lst}, $q[$i][0];
+    $$rec{$q[$i][0]}=$q[$i][1];
+  }
+}
 
 ############################################################################
 # WKS template functions
@@ -413,7 +430,7 @@ sub get_mx_template($$) {
 sub get_wks_template($$) {
   my ($id,$rec) = @_;
 
-  return -100 if (get_record("wks_templates","comment",$id,$rec,"id"));
+  return -100 if (get_record("wks_templates","name",$id,$rec,"id"));
   
   get_array_field("wks_entries",4,"id,proto,services,comment",
 		  "Proto,Services,Comment",
@@ -421,7 +438,23 @@ sub get_wks_template($$) {
   return 0;
 }
 
+sub get_wks_template_list($$$) {
+  my($serverid,$rec,$lst) = @_;
+  my(@q,$i);
 
+  undef @{$lst};
+  push @{$lst},  -1;
+  undef %{$rec};
+  $$rec{-1}='None';
+  return if ($serverid < 1);
+
+  db_query("SELECT id,name FROM wks_templates " .
+	   "WHERE server=$serverid ORDER BY name;",\@q);
+  for $i (0..$#q) {
+    push @{$lst}, $q[$i][0];
+    $$rec{$q[$i][0]}=$q[$i][1];
+  }
+}
 
 
 ############################################################################
