@@ -128,9 +128,9 @@ load_config();
    conv=>'U', enum=>\%yes_no_enum},
   {ftype=>3, tag=>'dialup', name=>'Dialup mode', type=>'enum',
    conv=>'U', enum=>\%yes_no_enum},
-  {ftype=>3, tag=>'multiple_cnames', name=>'Allow multiple CNAMEs', 
+  {ftype=>3, tag=>'multiple_cnames', name=>'Allow multiple CNAMEs',
    type=>'enum',conv=>'U', enum=>\%yes_no_enum},
-  {ftype=>3, tag=>'rfc2308_type1', name=>'RFC2308 Type 1 mode', 
+  {ftype=>3, tag=>'rfc2308_type1', name=>'RFC2308 Type 1 mode',
    type=>'enum',conv=>'U', enum=>\%yes_no_enum},
   {ftype=>3, tag=>'checknames_m', name=>'Check-names (Masters)', type=>'enum',
    conv=>'U', enum=>\%check_names_enum},
@@ -144,7 +144,7 @@ load_config();
    fields=>2, len=>[50,20], maxlen=>[100,20], empty=>[0,1],
    elabels=>['logging option','comment']},
   {ftype=>2, tag=>'custom_opts', name=>'Custom (BIND) options',
-   type=>['text','text'], fields=>2, len=>[50,20], maxlen=>[100,20], 
+   type=>['text','text'], fields=>2, len=>[50,20], maxlen=>[100,20],
    empty=>[0,1], elabels=>['BIND option','comment']},
 
   {ftype=>0, name=>'DHCP Settings'},
@@ -250,14 +250,14 @@ load_config();
    empty=>1, definfo=>['','Default (from server)'], iff=>['type','M']},
   {ftype=>1, tag=>'expire', name=>'Expire', type=>'int', len=>10,
    empty=>1, definfo=>['','Default (from server)'], iff=>['type','M']},
-  {ftype=>1, tag=>'minimum', name=>'Minimum (negative caching TTL)', 
-   empty=>1, definfo=>['','Default (from server)'], type=>'int', len=>10, 
+  {ftype=>1, tag=>'minimum', name=>'Minimum (negative caching TTL)',
+   empty=>1, definfo=>['','Default (from server)'], type=>'int', len=>10,
    iff=>['type','M']},
-  {ftype=>1, tag=>'ttl', name=>'Default TTL', type=>'int', len=>10, 
+  {ftype=>1, tag=>'ttl', name=>'Default TTL', type=>'int', len=>10,
    empty=>1, definfo=>['','Default (from server)'], iff=>['type','M']},
-  {ftype=>5, tag=>'ip', name=>'IP addresses (A)', iff=>['type','M'], 
+  {ftype=>5, tag=>'ip', name=>'IP addresses (A)', iff=>['type','M'],
    iff2=>['reverse','f']},
-  {ftype=>2, tag=>'ns', name=>'Name servers (NS)', type=>['text','text'], 
+  {ftype=>2, tag=>'ns', name=>'Name servers (NS)', type=>['text','text'],
    fields=>2,
    len=>[30,20], empty=>[0,1], elabels=>['NS','comment'], iff=>['type','M']},
   {ftype=>2, tag=>'mx', name=>'Mail exchanges (MX)', 
@@ -283,8 +283,7 @@ load_config();
    name=>'[Stealth] Servers to notify (also-notify)', type=>['ip','text'],
    fields=>2, len=>[40,15], empty=>[0,1], elabels=>['IP','comment'],
    iff=>['type','M']},
-  {ftype=>2, tag=>'forwarders', 
-   name=>'Forwarders', type=>['ip','text'],
+  {ftype=>2, tag=>'forwarders',name=>'Forwarders', type=>['ip','text'],
    fields=>2, len=>[40,15], empty=>[0,1], elabels=>['IP','comment'],
    iff=>['type','F']},
 
@@ -296,7 +295,7 @@ load_config();
   {ftype=>0, name=>'Record info', no_edit=>1},
   {ftype=>4, name=>'Record created', tag=>'cdate_str', no_edit=>1},
   {ftype=>4, name=>'Last modified', tag=>'mdate_str', no_edit=>1},
-  {ftype=>4, name=>'Pending host record changes', tag=>'pending_info', 
+  {ftype=>4, name=>'Pending host record changes', tag=>'pending_info',
    no_edit=>1, iff=>['type','M']}
  ]
 );
@@ -313,8 +312,8 @@ load_config();
   {ftype=>0, name=>'Host' },
   {ftype=>1, tag=>'domain', name=>'Hostname', type=>'domain',
    conv=>'L', len=>40, iff=>['type','([^82]|101)']},
-  {ftype=>1, tag=>'domain', name=>'Hostname (delegation)', type=>'zonename', len=>40,
-   conv=>'L', iff=>['type','[2]']},
+  {ftype=>1, tag=>'domain', name=>'Hostname (delegation)', type=>'zonename',
+   len=>40,conv=>'L', iff=>['type','[2]']},
   {ftype=>1, tag=>'domain', name=>'Hostname (SRV)', type=>'srvname', len=>40,
    conv=>'L', iff=>['type','[8]']},
   {ftype=>5, tag=>'ip', name=>'IP address', iff=>['type','([169]|101)']},
@@ -350,18 +349,18 @@ load_config();
    lastempty=>1, empty=>1, iff=>['type','1']},
   {ftype=>1, tag=>'ether', name=>'Ethernet address', type=>'mac', len=>17,
    conv=>'U', iff=>['type','([19]|101)'], empty=>1},
-  {ftype=>4, tag=>'card_info', name=>'Card manufacturer', 
+  {ftype=>4, tag=>'card_info', name=>'Card manufacturer',
    iff=>['type','[19]']},
   {ftype=>1, tag=>'ether_alias_info', name=>'Ethernet alias', no_empty=>1,
    empty=>1, type=>'domain', len=>30, iff=>['type','1'] },
 
-  {ftype=>1, tag=>'asset_id', name=>'Asset ID', type=>'text', len=>20, 
+  {ftype=>1, tag=>'asset_id', name=>'Asset ID', type=>'text', len=>20,
    empty=>1, no_empty=>1, iff=>['type','1']},
-  {ftype=>1, tag=>'model', name=>'Model', type=>'text', len=>50, empty=>1, 
+  {ftype=>1, tag=>'model', name=>'Model', type=>'text', len=>50, empty=>1,
    no_empty=>1, iff=>['type','1']},
   {ftype=>1, tag=>'serial', name=>'Serial no.', type=>'text', len=>35,
    empty=>1, no_empty=>1, iff=>['type','1']},
-  {ftype=>1, tag=>'misc', name=>'Misc.', type=>'text', len=>50, empty=>1, 
+  {ftype=>1, tag=>'misc', name=>'Misc.', type=>'text', len=>50, empty=>1,
    no_empty=>1, iff=>['type','(1|101)']},
 
   {ftype=>0, name=>'Group/Template selections', iff=>['type','[15]']},
@@ -370,25 +369,25 @@ load_config();
   {ftype=>7, tag=>'wks', name=>'WKS template', iff=>['type','1']},
 
   {ftype=>0, name=>'Host specific',iff=>['type','[12]']},
-  {ftype=>2, tag=>'ns_l', name=>'Name servers (NS)', type=>['text','text'], 
+  {ftype=>2, tag=>'ns_l', name=>'Name servers (NS)', type=>['text','text'],
    fields=>2, 
    len=>[30,20], empty=>[0,1], elabels=>['NS','comment'], iff=>['type','2']},
   {ftype=>2, tag=>'wks_l', name=>'WKS', no_empty=>1,
-   type=>['text','text','text'], fields=>3, len=>[10,30,10], empty=>[0,0,1], 
+   type=>['text','text','text'], fields=>3, len=>[10,30,10], empty=>[0,0,1],
    elabels=>['Protocol','Services','comment'], iff=>['type','1']},
   {ftype=>2, tag=>'mx_l', name=>'Mail exchanges (MX)', 
-   type=>['priority','mx','text'], fields=>3, len=>[5,30,20], 
+   type=>['priority','mx','text'], fields=>3, len=>[5,30,20],
    empty=>[0,0,1], no_empty=>1,
    elabels=>['Priority','MX','comment'], iff=>['type','[13]']},
-  {ftype=>2, tag=>'txt_l', name=>'TXT', type=>['text','text'], 
+  {ftype=>2, tag=>'txt_l', name=>'TXT', type=>['text','text'],
    fields=>2, no_empty=>1,
    len=>[40,15], empty=>[0,1], elabels=>['TXT','comment'], iff=>['type','1']},
   {ftype=>2, tag=>'printer_l', name=>'PRINTER entries', no_empty=>1,
-   type=>['text','text'], fields=>2,len=>[40,20], empty=>[0,1], 
+   type=>['text','text'], fields=>2,len=>[40,20], empty=>[0,1],
    elabels=>['PRINTER','comment'], iff=>['type','[15]']},
   {ftype=>2, tag=>'dhcp_l', name=>'DHCP entries', no_empty=>1,
-   type=>['text','text'], fields=>2,len=>[50,20], maxlen=>[200,20], empty=>[0,1], 
-   elabels=>['DHCP','comment'], iff=>['type','[15]']},
+   type=>['text','text'], fields=>2,len=>[50,20], maxlen=>[200,20],
+   empty=>[0,1],elabels=>['DHCP','comment'], iff=>['type','[15]']},
 
   {ftype=>0, name=>'Aliases', no_edit=>1, iff=>['type','1']},
   {ftype=>8, tag=>'alias_l', name=>'Aliases', fields=>3, iff=>['type','1']},
@@ -1599,7 +1598,7 @@ sub hosts_menu() {
 
   if ($sub eq 'Delete') {
     return unless ($id > 0);
-    goto show_host_record if (check_perms('host',$host{domain}));
+    goto show_host_record if (check_perms('delhost',$host{domain}));
 
     $res=delete_magic('h','Host','hosts',\%host_form,\&get_host,\&delete_host,
 		      $id);
@@ -2441,12 +2440,10 @@ sub groups_menu() {
   return if (check_perms('server','R'));
 
   if ($sub eq 'add') {
-    return if (check_perms('superuser',''));
-
     $data{type}=1; $data{alevel}=0; $data{dhcp}=[]; $data{printer}=[];
     $data{server}=$serverid;
     $res=add_magic('add','Group','groups',\%group_form,
-		   \&add_group,\%data);
+		   \&restricted_add_group,\%data);
     if ($res > 0) {
       #show_hash(\%data);
       #print "<p>$res $data{name}";
@@ -2456,19 +2453,19 @@ sub groups_menu() {
     return;
   }
   elsif ($sub eq 'Edit') {
-    return if (check_perms('superuser',''));
     $res=edit_magic('grp','Group','groups',\%group_form,
-		    \&get_group,\&update_group,$id);
+		    \&restricted_get_group,
+		    \&restricted_update_group,$id);
     goto browse_groups if ($res == -1);
     goto show_group_record if ($res > 0);
     return;
   }
   elsif ($sub eq 'Delete') {
-    return if (check_perms('superuser',''));
     if (get_group($id,\%group)) {
       print h2("Cannot get group (id=$id)");
       return;
     }
+    return if (check_perms('grpmask',$group{name}));
     if (param('grp_cancel')) {
       print h2('Group not removed');
       goto show_group_record;
@@ -2523,7 +2520,7 @@ sub groups_menu() {
           hidden('menu','groups');
     print submit(-name=>'sub',-value=>'Edit'), "  ",
           submit(-name=>'sub',-value=>'Delete')
-	    unless (check_perms('superuser','',1));
+	    unless (check_perms('grpmask',$group{name},1));
     print hidden('grp_id',$id),end_form;
     return;
   }
@@ -2953,21 +2950,23 @@ sub templates_menu() {
     return;
   }
   elsif ($sub eq 'Edit') {
-    return if (check_perms('superuser',''));
-
     if ($mx_id > 0) {
       $res=edit_magic('mx','MX template','templates',\%mx_template_form,
-		      \&get_mx_template,\&update_mx_template,$mx_id);
+		      \&restricted_get_mx_template,
+		      \&restricted_update_mx_template,$mx_id);
       goto show_mxt_record if ($res > 0);
     } elsif ($wks_id > 0) {
+      return if (check_perms('superuser',''));
       $res=edit_magic('wks','WKS template','templates',\%wks_template_form,
 		      \&get_wks_template,\&update_wks_template,$wks_id);
       goto show_wkst_record if ($res > 0);
     } elsif ($pc_id > 0) {
+      return if (check_perms('superuser',''));
       $res=edit_magic('pc','PRINTER class','templates',\%printer_class_form,
 		      \&get_printer_class,\&update_printer_class,$pc_id);
       goto show_pc_record if ($res > 0);
     } elsif ($hinfo_id > 0) {
+      return if (check_perms('superuser',''));
       $res=edit_magic('hinfo','HINFO template','templates',
 		      \%hinfo_template_form,
 		      \&get_hinfo_template,\&update_hinfo_template,$hinfo_id);
@@ -2976,17 +2975,16 @@ sub templates_menu() {
     return;
   }
   elsif ($sub eq 'Delete') {
-    return if (check_perms('superuser',''));
-
     if ($mx_id > 0) {
       if (get_mx_template($mx_id,\%h)) {
 	print h2("Cannot get mx template (id=$mx_id)");
 	return;
       }
+      return if (check_perms('tmplmask',$h{name}));
       if (param('mx_cancel')) {
 	print h2('MX template not removed');
 	goto show_mxt_record;
-      } 
+      }
       elsif (param('mx_confirm')) {
 	$new_id=param('mx_new');
 	if ($new_id eq $mx_id) {
@@ -3025,6 +3023,7 @@ sub templates_menu() {
       display_form(\%h,\%mx_template_form);
 
     } elsif ($wks_id > 0) {
+      return if (check_perms('superuser',''));
       if (get_wks_template($wks_id,\%h)) {
 	print h2("Cannot get wks template (id=$wks_id)");
 	return;
@@ -3072,11 +3071,13 @@ sub templates_menu() {
 
     }
     elsif ($pc_id > 0) {
+      return if (check_perms('superuser',''));
       $res=delete_magic('pc','PRINTER class','templates',\%printer_class_form,
 			\&get_printer_class,\&delete_printer_class,$pc_id);
       goto show_pc_record if ($res==2);
     }
     elsif ($hinfo_id > 0) {
+      return if (check_perms('superuser',''));
       $res=delete_magic('hinfo','HINFO template','templates',
 			\%hinfo_template_form,\&get_hinfo_template,
 			\&delete_hinfo_template,$hinfo_id);
@@ -3086,10 +3087,9 @@ sub templates_menu() {
     return;
   }
   elsif ($sub eq 'addmx') {
-    return if (check_perms('superuser',''));
     $data{zone}=$zoneid; $data{alevel}=0; $data{mx_l}=[];
     $res=add_magic('addmx','MX template','templates',\%mx_template_form,
-		   \&add_mx_template,\%data);
+		   \&restricted_add_mx_template,\%data);
     if ($res > 0) {
       $mx_id=$res;
       goto show_mxt_record;
@@ -3140,8 +3140,8 @@ sub templates_menu() {
     print p,startform(-method=>'GET',-action=>$selfurl),
           hidden('menu','templates');
     print submit(-name=>'sub',-value=>'Edit'), "  ",
-          submit(-name=>'sub',-value=>'Delete') 
-	    unless (check_perms('superuser','',1));
+          submit(-name=>'sub',-value=>'Delete')
+	    unless (check_perms('tmplmask',$mxhash{name},1));
     print hidden('mx_id',$mx_id),end_form;
     return;
   }
@@ -3434,6 +3434,21 @@ sub login_menu() {
       print "<TR bgcolor=\"#dddddd\">",td("IP-mask"),td("$s"),
 	     td("(IP address constraint)"),"</TR>";
     }
+    # Delete-mask permissions
+    foreach $s (@{$perms{delmask}}) {
+      print "<TR bgcolor=\"#dddddd\">",td("Del-mask"),td("$s"),
+	     td("(Delete host mask)"),"</TR>";
+    }
+    # Template-mask permissions
+    foreach $s (@{$perms{tmplmask}}) {
+      print "<TR bgcolor=\"#dddddd\">",td("Template-mask"),td("$s"),
+	     td("(Template modify mask)"),"</TR>";
+    }
+    # Group-mask permissions
+    foreach $s (@{$perms{grpmask}}) {
+      print "<TR bgcolor=\"#dddddd\">",td("Group-mask"),td("$s"),
+	     td("(Group modify mask)"),"</TR>";
+    }
 
     # alevel permissions
     print "<TR bgcolor=\"#dddddd\">",td("Level"),td($perms{alevel}),
@@ -3504,9 +3519,8 @@ sub edit_magic($$$$$$$) {
     unless (($res=form_check_form($prefix,\%h,$form))) {
       $res=&$update_func(\%h);
       if ($res < 0) {
-	print "<FONT color=\"red\">",h1("$name record update failed!"),
-	      "<br>result code=$res",
-	      "<br>error: " . db_errormsg() ."</FONT>";
+	print "<FONT color=\"red\">",h1("$name record update failed! ($res)"),
+	      "</FONT>";
       } else {
 	print h2("$name record successfully updated");
 	#&$get_func($id,\%h);
@@ -3549,8 +3563,8 @@ sub add_magic($$$$$$) {
     unless (($res=form_check_form($prefix,$data,$form))) {
       $res=&$add_func($data);
       if ($res < 0) {
-	print "<FONT color=\"red\">",h1("Adding $name record failed!"),
-	      "<br>result code=$res</FONT>";
+	print "<FONT color=\"red\">",h1("Adding $name record failed! ($res)"),
+	      "</FONT>";
       } else {
 	print h3("$name record successfully added");
 	return $res;
@@ -4111,19 +4125,26 @@ sub check_perms($$$) {
 		 $perms{server}->{$serverid} =~ /$rule/);
     return 0 if ($perms{zone}->{$zoneid} =~ /$rule/);
   }
-  elsif ($type eq 'host') {
+  elsif ($type eq 'host' || $type eq 'delhost') {
     return 0  if ($perms{server}->{$serverid} =~ /RW/);
     if ($perms{zone}->{$zoneid} =~ /RW/) {
       return 0 if (@{$perms{hostname}} == 0);
 
       for $i (0..$#{$perms{hostname}}) {
 	$re=$perms{hostname}[$i];
-	#print p,"regexp='$re' '$rule'";
 	return 0 if ($rule =~ /$re/);
       }
+
+      if ($type eq 'delhost') {
+	for $i (0..$#{$perms{delmask}}) {
+	  $re=$perms{delmask}[$i];
+	  return 0 if ($rule =~ /$re/);
+	}
+      }
     }
-    return 1 if ($quiet);
-    alert1("You are not authorized to modify this host record");
+
+    alert1("You are not authorized to modify this host record")
+      unless ($quiet);
     return 1;
   }
   elsif ($type eq 'ip') {
@@ -4145,13 +4166,27 @@ sub check_perms($$$) {
 	return 0 if (check_ipmask($re,$rule));
     }
 
-    return 1 if ($quiet);
-    alert1("Invalid IP (IP is outsize allowed net(s))");
+    alert1("Invalid IP (IP is outsize allowed net(s))") unless ($quiet);
+    return 1;
+  }
+  elsif ($type eq 'tmplmask') {
+    for $i (0..$#{$perms{tmplmask}}) {
+      $re=$perms{tmplmask}[$i];
+      return 0 if ($rule =~ /$re/);
+    }
+    alert1("You are not authorized to modify this template") unless ($quiet);
+    return 1;
+  }
+  elsif ($type eq 'grpmask') {
+    for $i (0..$#{$perms{grpmask}}) {
+      $re=$perms{grpmask}[$i];
+      return 0 if ($rule =~ /$re/);
+    }
+    alert1("You are not authorized to modify this group") unless ($quiet);
     return 1;
   }
 
-  return 1 if ($quiet);
-  alert1("Access to $type denied");
+  alert1("Access to $type denied") unless ($quiet);
   return 1;
 }
 
@@ -4162,13 +4197,80 @@ sub restricted_add_host($) {
   my($rec)=@_;
 
   if (check_perms('host',$rec->{domain},1)) {
-    alert1("Invalid hostname: doest not conform your restrictions");
+    alert1("Invalid hostname: does not conform your restrictions");
     return -101;
   }
 
   return add_host($rec);
 }
 
+sub restricted_add_mx_template($) {
+  my($rec)=@_;
+
+  if (check_perms('tmplmask',$rec->{name},1)) {
+    alert1("Invalid template name: not authorized to create");
+    return -101;
+  }
+  return add_mx_template($rec);
+}
+
+sub restricted_update_mx_template($) {
+  my($rec)=@_;
+
+  if (check_perms('tmplmask',$rec->{name},1)) {
+    alert1("Invalid template name: not authorized to update");
+    return -101;
+  }
+  return update_mx_template($rec);
+}
+
+sub restricted_get_mx_template($$) {
+  my($id,$rec)=@_;
+
+  my($r);
+  $r=get_mx_template($id,$rec);
+  return $r if ($r < 0);
+
+  if (check_perms('tmplmask',$rec->{name},1)) {
+    alert1("Invalid template name: not authorized to modify");
+    return -101;
+  }
+  return $r;
+}
+
+sub restricted_add_group($) {
+  my($rec)=@_;
+
+  if (check_perms('grpmask',$rec->{name},1)) {
+    alert1("Invalid group name: not authorized to create");
+    return -101;
+  }
+  return add_group($rec);
+}
+
+sub restricted_get_group($$) {
+  my($id,$rec)=@_;
+
+  my($r);
+  $r=get_group($id,$rec);
+  return $r if ($r < 0);
+
+  if (check_perms('grpmask',$rec->{name},1)) {
+    alert1("Invalid group name: not authorized to modify");
+    return -101;
+  }
+  return $r;
+}
+
+sub restricted_update_group($) {
+  my($rec)=@_;
+
+  if (check_perms('grpmask',$rec->{name},1)) {
+    alert1("Invalid group name: not authorized to update");
+    return -101;
+  }
+  return update_group($rec);
+}
 
 
 sub add_default_zones($$) {

@@ -2672,6 +2672,9 @@ sub get_permissions($$$) {
   $rec->{net}={};
   $rec->{hostname}=[];
   $rec->{ipmask}=[];
+  $rec->{tmplmask}=[];
+  $rec->{grpmask}=[];
+  $rec->{delmask}=[];
   $rec->{alevel}=0;
 
   undef @q;
@@ -2703,6 +2706,10 @@ sub get_permissions($$$) {
     elsif ($type == 6) { $rec->{alevel}=$mode if ($rec->{alevel} < $mode); }
     elsif ($type == 7) { $rec->{elimit}=$mode; }
     elsif ($type == 8) { $rec->{defdept}=$mode; }
+    elsif ($type == 9) { push @{$rec->{tmplmask}}, $mode; }
+    elsif ($type == 10) { push @{$rec->{grpmask}}, $mode; }
+    elsif ($type == 11) { push @{$rec->{delmask}}, $mode; }
+
   }
 
   return 0;

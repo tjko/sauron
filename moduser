@@ -26,8 +26,10 @@ $user = (getpwuid($<))[0];
 $mdate = time;
 
 %addmodes=('server'=>1,'zone'=>2,'net'=>3,'host'=>4,'ipmask'=>5,
-	   'level'=>6,'elimit'=>7,'defdept'=>8);
+	   'level'=>6,'elimit'=>7,'defdept'=>8,'tmplmask'=>9,
+	   'grpmask'=>10,'delmask'=>11);
 
+%masktypes=(4=>'IP',9=>'Tempalate',10=>'Group',11=>'Delete');
 
 ############################################
 
@@ -53,85 +55,96 @@ sub list_privs($$) {
   my($id,$utype) = @_;
   my($i,@d);
 
-  undef @d;
   db_query("SELECT a.rule,b.name,a.id FROM user_rights a, servers b " .
-	   "WHERE a.rtype=1 AND a.rref=b.id AND a.ref=$id AND a.type=$utype;",
-	   \@d);
-  #print "Server records:\n";
+	   "WHERE a.rtype=1 AND a.rref=b.id AND a.ref=$id AND a.type=$utype ".
+	   "ORDER BY b.name",\@d);
   for $i (0..$#d) {
     $d[$i][0] =~ s/\s+$//;
     printf "%-6s %-8s %-25s %s\n",$d[$i][2],"server",$d[$i][1],$d[$i][0];
   }
 
-  undef @d;
-  db_query("SELECT a.rule,c.name||':'||b.name,a.id FROM user_rights a, zones b, servers c " .
-	   "WHERE a.rtype=2 AND a.rref=b.id AND b.server=c.id AND  a.ref=$id AND a.type=$utype;",
-	   \@d);
-  #print "Zone   records:\n";
-  for $i (0..$#d) { 
+  db_query("SELECT a.rule,c.name||':'||b.name,a.id " .
+	   "FROM user_rights a, zones b, servers c " .
+	   "WHERE a.rtype=2 AND a.rref=b.id AND b.server=c.id AND " .
+	   " a.ref=$id AND a.type=$utype ORDER BY b.name",\@d);
+  for $i (0..$#d) {
     $d[$i][0] =~ s/\s+$//;
     printf "%-6s %-8s %-25s %s\n",$d[$i][2],"zone",$d[$i][1],$d[$i][0];
   }
 
-  undef @d;
-  db_query("SELECT a.rule,b.net,a.id,c.name FROM user_rights a, nets b, servers c " .
-	   "WHERE a.rtype=3 AND a.rref=b.id AND b.server=c.id AND a.ref=$id AND a.type=$utype;",
-	   \@d);
-  #print "Net    records:\n" . db_errormsg();
-  for $i (0..$#d) { 
+  db_query("SELECT a.rule,b.net,a.id,c.name " .
+	   "FROM user_rights a, nets b, servers c " .
+	   "WHERE a.rtype=3 AND a.rref=b.id AND b.server=c.id " .
+           "  AND a.ref=$id AND a.type=$utype ORDER BY b.net",\@d);
+  for $i (0..$#d) {
     $d[$i][0] =~ s/\s+$//;
     printf "%-6s %-8s %-25s %s\n",$d[$i][2],"net",$d[$i][3].':'.$d[$i][1],
       '(IP constraint)';
   }
 
-  undef @d;
   db_query("SELECT a.rule,a.id  FROM user_rights a " .
-	   "WHERE a.rtype=4 AND a.ref=$id AND a.type=$utype;",\@d);
-  #print "hostnamemask    records:\n";
-  for $i (0..$#d) { 
+	   "WHERE a.rtype=4 AND a.ref=$id AND a.type=$utype ORDER BY id",\@d);
+  for $i (0..$#d) {
     $d[$i][0] =~ s/\s+$//;
     printf "%-6s %-8s %-25s %s\n",$d[$i][1],"hostname",$d[$i][0],
       "(hostname constraint)";
   }
 
-  undef @d;
   db_query("SELECT a.rule,a.id  FROM user_rights a " .
-	   "WHERE a.rtype=5 AND a.ref=$id AND a.type=$utype;",\@d);
-  #print "IP-mask    records:\n";
-  for $i (0..$#d) { 
+	   "WHERE a.rtype=5 AND a.ref=$id AND a.type=$utype ORDER BY id",\@d);
+  for $i (0..$#d) {
     $d[$i][0] =~ s/\s+$//;
     printf "%-6s %-8s %-25s %s\n",$d[$i][1],"IP-mask",$d[$i][0],
       "(IP constraint)";
   }
 
-  undef @d;
   db_query("SELECT a.rule,a.id  FROM user_rights a " .
-	   "WHERE a.rtype=6 AND a.ref=$id AND a.type=$utype;",\@d);
-  #print "priv.level    records:\n";
-  for $i (0..$#d) { 
+	   "WHERE a.rtype=6 AND a.ref=$id AND a.type=$utype ORDER BY id",\@d);
+  for $i (0..$#d) {
     $d[$i][0] =~ s/\s+$//;
     printf "%-6s %-8s %-25s %s\n",$d[$i][1],"Level",$d[$i][0],
       "(privilege level)";
   }
 
-  undef @d;
   db_query("SELECT a.rule,a.id  FROM user_rights a " .
-	   "WHERE a.rtype=7 AND a.ref=$id AND a.type=$utype;",\@d);
+	   "WHERE a.rtype=7 AND a.ref=$id AND a.type=$utype ORDER BY id",\@d);
   for $i (0..$#d) {
     $d[$i][0] =~ s/\s+$//;
     printf "%-6s %-8s %-25s %s\n",$d[$i][1],"ELimit",$d[$i][0],
       "(expiration limit)";
   }
 
-  undef @d;
   db_query("SELECT a.rule,a.id  FROM user_rights a " .
-	   "WHERE a.rtype=8 AND a.ref=$id AND a.type=$utype;",\@d);
+	   "WHERE a.rtype=8 AND a.ref=$id AND a.type=$utype ORDER BY id",\@d);
   for $i (0..$#d) {
     $d[$i][0] =~ s/\s+$//;
     printf "%-6s %-8s %-25s %s\n",$d[$i][1],"DefDept",$d[$i][0],
       "(default department string)";
   }
 
+  db_query("SELECT a.rule,a.id  FROM user_rights a " .
+	   "WHERE a.rtype=9 AND a.ref=$id AND a.type=$utype ORDER BY id",\@d);
+  for $i (0..$#d) {
+    $d[$i][0] =~ s/\s+$//;
+    printf "%-6s %-8s %-25s %s\n",$d[$i][1],"TmplMask",$d[$i][0],
+      "(Template mask)";
+  }
+
+  db_query("SELECT a.rule,a.id  FROM user_rights a " .
+	   "WHERE a.rtype=10 AND a.ref=$id AND a.type=$utype ORDER BY id",\@d);
+  for $i (0..$#d) {
+    $d[$i][0] =~ s/\s+$//;
+    printf "%-6s %-8s %-25s %s\n",$d[$i][1],"GrpMask",$d[$i][0],
+      "(Group mask)";
+  }
+
+  db_query("SELECT a.rule,a.id  FROM user_rights a " .
+	   "WHERE a.rtype=11 AND a.ref=$id AND a.type=$utype ORDER BY id",\@d);
+  for $i (0..$#d) {
+    $d[$i][0] =~ s/\s+$//;
+    printf "%-6s %-8s %-25s %s\n",$d[$i][1],"DelMask",$d[$i][0],
+      "([Host] Delete mask)";
+  }
 }
 
 ##############################################
@@ -172,7 +185,10 @@ if ($opt_help || ($opt_user eq '' &&  $opt_list eq '')) {
         "   --add=\"ipmask,<ipmask>\"               add IP-mask\n",
         "   --add=\"level,<level>\"                 add priv.level\n",
         "   --add=\"elimit,<days>\"                 add expiration limit\n",
-        "   --add=\"def_dept,<string>\"             add default dept for hosts\n\n",
+        "   --add=\"def_dept,<string>\"             add default dept for hosts\n",
+        "   --add=\"tmplmask,<mask>\"               add Template-mask\n",
+        "   --add=\"grpmask,<mask>\"                add Group-mask\n",
+        "   --add=\"delmask,<mask>\"                add (Host)Delete-mask\n",
         "   --del=<id>                            delete rule by id\n",
         "   --delall                              delete all rules\n",
         "\n";
@@ -385,7 +401,8 @@ if ($modgroup) {
 	"         last login: $last_from\n",
 	" account expiration: $edate_str\n",
 	"    account created: $cdate_str\n",
-	"      last modified: $mdate_str\n\n";
+	"      last modified: $mdate_str\n\n"
+	  unless (defined $opt_add || defined $opt_del || defined $opt_delall);
 }
 
 
@@ -393,7 +410,7 @@ if ($modgroup) {
 ########################################
 
 unless (defined $opt_add || defined $opt_del || defined $opt_delall) {
-  print 
+  print
     "ID     Type     Ref.                      Mode\n",
     "------ -------- ------------------------- --------------------------------\n";
 
@@ -407,16 +424,18 @@ unless (defined $opt_add || defined $opt_del || defined $opt_delall) {
   }
 
   exit;
-
 }
 
 
 if (defined $opt_add) {
   unless ($opt_add) {
   add_i:
-    print "Record type [1=server,2=zone,3=net,4=hostmask,5=IP-mask,6=priv.level,7=elimit,8=defdept]: ";
+    print "Record types ",
+      "1=server,2=zone,3=net,4=hostmask,5=IP-mask,6=priv.level,7=elimit,\n",
+      "\t     8=defdept,9=Template-mask,10=Group-mask,11=Delete-mask\n",
+      "Record type: ";
     chomp($type = <STDIN>);
-    unless ($type >= 1 && $type <=8) { print "invalid type!\n"; goto add_i; }
+    unless ($type >= 1 && $type <=11) { print "invalid type!\n"; goto add_i; }
     if ($type==1 || $type==2 || $type==3) {
       print "Enter server name: ";
       chomp($tmp = <STDIN>);
@@ -455,8 +474,8 @@ if (defined $opt_add) {
       unless ($mode) { print "invalid mode!\n"; goto add_i; }
       $ref=$d[0][0];
     }
-    elsif ($type==4) {
-      print "Enter hostname mask (regexp): ";
+    elsif ($type==4 || $type==9 || $type==10 || $type==11) {
+      print "Enter $masktypes{$type} mask (regexp): ";
       chomp($tmp = <STDIN>);
       $mode=$tmp;
       $ref=-1;
@@ -507,17 +526,17 @@ if (defined $opt_add) {
   }
 
   fatal("invalid parameter '$opt_add' for add option!")
-    unless ($opt_add =~ /^(server|zone|net|host|ipmask|level|elimit|defdept),([^,\s]+)(,(R|RW|RWX))?$/);
+    unless ($opt_add =~ /^(server|zone|net|host|ipmask|level|elimit|defdept|tmplmask|grpmask|delmask),([^,\s]+)(,(R|RW|RWX))?$/);
   $type=$addmodes{$1};
   $tmp=$2;
   $mode=$4;
-  if ($type eq 1) {
+  if ($type==1) {
     undef @d;
     db_query("SELECT id FROM servers WHERE name='$tmp';",\@d);
     fatal("cannot find server '$tmp'") if (@d < 1);
     $ref=$d[0][0];
   }
-  elsif ($type eq 2) {
+  elsif ($type==2) {
     if ($tmp=~/^(\S+):(\S+)$/) {
       $tmp1=$1;
       $tmp2=$2;
@@ -532,7 +551,7 @@ if (defined $opt_add) {
     fatal("cannot find zone '$tmp2'") if (@d < 1);
     $ref=$d[0][0];
   }
-  elsif ($type eq 3) {
+  elsif ($type==3) {
     if ($tmp=~/^(\S+):(\S+)$/) {
       $tmp1=$1;
       $tmp2=$2;
@@ -547,27 +566,27 @@ if (defined $opt_add) {
     fatal("cannot find net '$tmp'") if (@d < 1);
     $ref=$d[0][0];
   }
-  elsif ($type eq 4) {
+  elsif ($type==4 || $type==9 || $type==10 || $type==11) {
     $mode=$tmp;
     $ref=-1;
   }
-  elsif ($type eq 5) {
+  elsif ($type==5) {
     fatal("invalid IP-mask '$tmp'!")  unless (check_ipmask($tmp,'')==1);
     $mode=$tmp;
     $ref=-1;
   }
-  elsif ($type eq 6) {
+  elsif ($type==6) {
     fatal("invalid level '$tmp'!")
 	unless (($tmp =~ /^\d+$/) && ($tmp < 999));
     $mode=$tmp;
     $ref=-1;
   }
-  elsif ($type eq 7) {
+  elsif ($type==7) {
     fatal("invalid expiration limit '$tmp'") unless ($tmp >= 0);
     $mode=$tmp;
     $ref=-1;
   }
-  elsif ($type eq 8) {
+  elsif ($type==8) {
     $tmp =~ s/^\s+|\s+$//g;
     fatal("invalid default department '$tmp'") unless (length($tmp) > 0);
     $mode=$tmp;

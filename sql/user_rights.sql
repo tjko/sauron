@@ -14,14 +14,18 @@ CREATE TABLE user_rights (
 				-->user_groups.id
 				-->users.id */
 	rtype	INT NOT NULL, /* type:
+				0=group (membership),
 				1=server,
 				2=zone,
 				3=net,
-				4=hostnamemask
-				5=IP mask
-				6=authorization level
-				7=host expiration limit (days)
-	                        8=default for dept */
+				4=hostnamemask,
+				5=IP mask,
+				6=authorization level,
+				7=host expiration limit (days),
+	                        8=default for dept,
+				9=templatemask,
+				10=groupmask,
+                                11=deletemask (hostname) */
 	rref	INT NOT NULL, /* ptr to table specified by type field */
 	rule	CHAR(40) /* R,RW,RWS or regexp */     
 );
