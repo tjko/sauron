@@ -21,7 +21,7 @@
       </author>
     </authorgroup>
     <copyright>
-      <year>2001</>
+      <year>2003</>
       <holder>Timo Kokkonen</>
     </copyright>
     <legalnotice>
@@ -42,7 +42,7 @@
     <section id="copyright">
       <title>Copyright Notice</>
       <para>
-	Sauron is Copyright (C) 1999-2001 Timo Kokkonen and others.
+	Sauron is Copyright (C) 1999-2003 Timo Kokkonen and others.
       </para>
       <para>
 	This  program  is  free  software; you can redistribute it
@@ -75,11 +75,89 @@
   <chapter id="intro-chapter">
     <title>Introduction</>
     <para>
-      Sauron is a complete DNS and DHCP management system. Sauron is
-      designed to be easily extensible and configurable. System support
-      management of multiple DNS/DHCP servers. 
+      Sauron is a scalable system for management of DNS and DHCP services.
+      Sauron can dynamically generate complete DNS and DHCP configurations
+      from a central SQL-database. Automatic generation of DNS 
+      <quote>reverse</> zones (with support for smaller than C-class
+      reverse delegations) is supported. Sauron comes with web interface
+      and command-line interface. The web interface comes 
+      with user/group based access controls for distributed management.
     </para>
-    
+    <para>
+      Sauron was created at the Computing Center of University of Jyvaskyla.
+      It is still under development, but has been in production use since
+      early 2001, managing the campus area network (CAN) with over 10,000
+      computers.
+    </para>
+
+    <section>
+      <title>System Overview</>
+      <para>
+        Sauron is bult around sauron <quote>back-end</> that is used by the
+        command-line and web interfaces to access the data stored in a
+        SQL-database (PostgreSQL). Sauron is able to dynamically generate
+        complete DNS (ISC BIND) and DHCP (ISC DHCP) configurations based
+        on the data stored in the SQL-databse. Sauron is currently written
+        almost completely in Perl using only standard perl modules and
+        couple of additional modules from CPAN. Web interface is standalone
+        CGI script and should work with almost any www server that supports
+        CGI.
+      </para>
+      <figure><title>System Overview</title>
+	<graphic scale=75 fileref="overview.eps">
+      </figure>
+      <para>
+        
+      </para>
+      <section>
+      <title>Features</>
+      <para>
+      Some of the main features of Sauron include:
+      <itemizedlist>
+       <listitem><para>
+        generates complete BIND (DNS) configuration file set for 
+        each server
+       </para></listitem>
+       <listitem><para>
+        generates complete dhcpd (ISC's DHCP) configuration file set for
+        each server
+       </para></listitem>
+       <listitem><para>
+        automatically generates DNS <quote>reverse</> zones
+       </para></listitem>
+       <listitem><para>
+        supports smaller than class-C <quote>reverse</> zone delegations
+       </para></listitem>
+       <listitem><para>
+        dynamic host aliases (both CNAME and A record)
+       </para></listitem>
+       <listitem><para>
+        support for dynamic DHCP address pools with access controls
+        (requires DHCP v3)
+       </para></listitem>
+       <listitem><para>
+         DHCP failover support (requires DHCP v3)
+       </para></listitem>
+       <listitem><para>
+         MX and WKS record templates for hosts
+       </para></listitem>
+       <listitem><para>
+         groups; hosts may be assigned into a group that defines common
+         attributes for it
+       </para></listitem>
+       <listitem><para>
+         support for most of the standard DNS RRs (resource records)
+       </para></listitem>
+       <listitem><para>
+         support for automatic validation of generated DNS and DHCP
+         configuration file sets
+       </para></listitem>
+      </itemizedlist>
+      </para>
+      </section>
+    </section>
+
+
     <section>
       <title>Sauron Home Page</>
       <para>
@@ -93,14 +171,55 @@
     <section>
       <title>Software Distribution Sites</>
       <para>
-	FIXME
+        <simplelist type=vert columns=1>
+	  <member>
+	     <ulink url="http://sauron.jyu.fi/pub/sauron/">
+              <citetitle>http://sauron.jyu.fi/pub/sauron/</>
+             </ulink>
+          </member>
+	  <member>
+	     <ulink url="ftp://ftp.jyu.fi/pub/sauron/">
+              <citetitle>ftp://ftp.jyu.fi/pub/sauron/</>
+             </ulink>
+          </member>
+        </simplelist>
       </para>
     </section>
 
     <section>
       <title>Mailing lists</>
       <para>
-	FIXME
+         <itemizedlist>
+	  <listitem><para>
+           <email>sauron-announce@lists.jyu.fi</> - new releace
+           announcements and other ipmortant messages (moderated)
+          </para></listitem>
+	  <listitem><para>
+           <email>sauron-users@lists.jyu.fi</> - general discussion
+           and help forum
+          </para></listitem>
+	  <listitem><para>
+           <email>sauron-devel@lists.jyu.fi</> - development and
+           bug tracking
+          </para></listitem>
+         </itemizedlist>
+      </para>
+      <para>
+	 To subscribe any of these mailing lists, send  an empty e-mail to 
+         <foreignphrase>&lt;list-name&gt;</>-request@lists.jyu.fi
+         address with subject line <quote>subscribe</> 
+         (where &lt;list-name&gt; is the name of the list you want 
+         to subscribe).
+         <informalexample>
+	  <para>
+          For example, to subscribe <email>sauron-users@lists.jyu.fi</>
+          you would need to send following empty e-mail:
+          </para>
+	  <programlisting>
+           To: sauron-users-request@lists.jyu.fi
+           Subject: subscribe
+          </programlisting>
+	 </informalexample>
       </para>
     </section>
 
@@ -112,12 +231,82 @@
 	helpful to the development of Sauron:
       </para>
       <para>
-	Otto J. Mäkelä <email>om@iki.fi</>
-	Teemu Lähteenmäki <email>tola@iki.fi</>
+        <simplelist type=vert columns=1>
+	 <member>Teemu Lähteenmäki <email>tola@iki.fi</></>
+	 <member>Riku Meskanen <email>mesrik@iki.fi</></>
+	 <member>Otto J. Mäkelä <email>om@iki.fi</></>
+        </simplelist>
       </para>
     </section>
 
+  </chapter>
 
+
+  <chapter id="installation">
+    <title>Installation</>
+    <para>
+    This chapter 
+    </para>
+
+    <section id="system-requirements">
+      <title>System Requirements</>
+      <para>
+        Sauron is developed under Linux and Solaris, but is should work pretty
+        much on any *nix like OS (as long as you can get the required programs
+        on your platform). Sauron is currently written entirely in Perl (with
+        some supporting shell-scripts).
+      </para>
+
+      <section>
+        <title>Required Programs</>
+        <para>
+        Following programs are needed to run Sauron.
+        <itemizedlist>
+	  <listitem><para>
+            PostgreSQL v7.x or later (7.2.3 or newer recommended)
+          </para></listitem>
+	  <listitem><para>
+            Perl 5 or later (at least 5.6 recommended)
+            <itemizedlist>
+	      <listitem><para>CGI v2.752 or later (older versions should work fine too)</></>
+	      <listitem><para>Digest::MD5 v2.20 or later</></>
+	      <listitem><para>Net::Netmask v1.9002 or later</></>
+	      <listitem><para>Pg v1.9.0 or later (PostgreSQL interface)</></>
+	    </itemizedlist>
+          </para></listitem>
+	  <listitem><para>
+            Apache or any other www server that supports CGI
+            (for WWW interface)
+          </para></listitem>
+        </itemizedlist>
+        </para>
+      </section>
+
+      <section>
+        <title>Related Programs</>
+        <para>
+        To use DNS & DHCP configurations generated by Sauron you will 
+        also need 
+        <ulink url="http://www.isc.org/">
+          <citetitle>Internet Doftware Cosnortium</>
+        </ulink>'s DNS & DHCP programs.
+
+        <itemizedlist>
+          <listitem><para>BIND 8.2.x or later 
+           (9.2.x or newere recommended)</></>
+	  <listitem><para>DHCP v2 or later 
+           (3.x or newer strongly recommended)</></>
+        </para>
+      </section>
+
+    </section>
+
+    <section>
+      <title>Installing Sauron</>
+      <para>
+
+      </para>
+    </section>
 
   </chapter>
 
