@@ -206,14 +206,27 @@ install: make_dirs
 		$(INSTALL_ROOT)/$(etcdir)/config-browser; \
 	    $(PERL) -p -i -e 's@^\$$PROG_DIR = "/usr/local/sauron/";@\$$PROG_DIR = "$(bindir)/";@;' $(INSTALL_ROOT)/$(etcdir)/config-browser; \
 	fi
-	$(INSTALL) -m 755 $(PROGS) $(INSTALL_ROOT)/$(bindir)
-	$(INSTALL) -m 644 $(MISCFILES) $(INSTALL_ROOT)/$(bindir)
-	$(INSTALL) -m 755 $(CGIFILES) $(INSTALL_ROOT)/$(bindir)/cgi
-	$(INSTALL) -m 644 $(LOGOFILES) $(INSTALL_ROOT)/$(bindir)/icons
-	$(INSTALL) -m 644 $(MODULES) $(INSTALL_ROOT)/$(bindir)/Sauron
-	$(INSTALL) -m 644 $(SQL_TABLES) $(SQL_MISC) \
-				 $(INSTALL_ROOT)/$(bindir)/sql
-	$(INSTALL) -m 644 $(CONTRIB_FILES) $(INSTALL_ROOT)/$(bindir)/contrib
+	@for f in $(PROGS); do \
+		$(INSTALL) -m 755 $$f $(INSTALL_ROOT)/$(bindir); \
+	done
+	@for f in $(MISCFILES); do \
+		$(INSTALL) -m 644 $$f $(INSTALL_ROOT)/$(bindir); \
+	done
+	@for f in $(CGIFILES); do \
+		$(INSTALL) -m 755 $$f $(INSTALL_ROOT)/$(bindir)/cgi; \
+	done
+	@for f in $(LOGOFILES); do \
+		$(INSTALL) -m 644 $$f $(INSTALL_ROOT)/$(bindir)/icons; \
+	done
+	@for f in $(MODULES); do \
+		$(INSTALL) -m 644 $$f $(INSTALL_ROOT)/$(bindir)/Sauron; \
+	done
+	@for f in $(SQL_TABLES) $(SQL_MISC); do \
+		$(INSTALL) -m 644 $$f $(INSTALL_ROOT)/$(bindir)/sql; \
+	done
+	@for f in $(CONTRIB_FILES); do \
+		$(INSTALL) -m 644 $$f $(INSTALL_ROOT)/$(bindir)/contrib; \
+	done
 	@[ -f $(INSTALL_ROOT)/$(bindir)/modgroup ] && \
 		 rm -f $(INSTALL_ROOT)/$(bindir)/modgroup || :
 	@ln -s moduser $(INSTALL_ROOT)/$(bindir)/modgroup
