@@ -73,7 +73,8 @@ sub db_connect2($) {
 
 sub db_connect($) {
   my ($DB_CONNECT) = @_;
-  return db_connect2($DB_CONNECT);
+  exit(1) unless (db_connect2($DB_CONNECT));
+  return 1;
 }
 
 

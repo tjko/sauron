@@ -5,7 +5,7 @@ general:
 	  from text files in standard zonefile format...
 	- IPv6 support
         - add database format version check in db_connect{,2}
-	- add DBI support
+	- change database routines to be less PostgreSQL dependant
 	
 
 import:
