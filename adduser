@@ -18,6 +18,8 @@ load_config();
 $user = (getpwuid($<))[0];
 set_muser($user);
 
+$i = ($#ARGV == -1 );   # If no args, become interactive
+
 GetOptions("user=s","superuser","help|h","passwd=s","name=s",
 	   "group=s","comment=s","email=s","expiration=s");
 
@@ -44,10 +46,9 @@ fatal("Invalid username '$opt_user'!") unless ($opt_user =~ /^[a-z0-9]+$/);
 fatal("User allready exists!") unless (get_user($opt_user,\%user));
 undef %user;
 
-unless ($opt_group) {
+unless ($opt_group || ! $i) {
   print "Enter group name (empty for none): ";
   chomp($opt_group = <STDIN>);
-  $i=1;
 }
 
 if ($opt_group) {
@@ -58,28 +59,24 @@ if ($opt_group) {
 }
 
 
-unless ($opt_name) {
+unless ($opt_name || ! $i) {
   print "Enter user description (full name): ";
   chomp($opt_name = <STDIN>);
-  $i=1;
 }
 
-unless ($opt_email) {
+unless ($opt_email || ! $i) {
   print "Enter user email address: ";
   chomp($opt_email = <STDIN>);
-  $i=1;
 }
 
-unless ($opt_comment) {
+unless ($opt_comment || ! $i) {
   print "Enter optional user info: ";
   chomp($opt_comment = <STDIN>);
-  $i=1;
 }
 
-unless ($opt_expiration) {
+unless ($opt_expiration || ! $i ) {
   print "Enter account expiration date (dd-mm-yyyy, +<n>d, +<n>y) [none]: ";
   chomp($opt_expiration = <STDIN>);
-  $i=1;
 }
 if ($opt_expiration =~ /^\s*(\d{1,2})-(\d{1,2})-(\d{4})\s*$/) {
   $opt_expiration=timelocal(0,0,0,$1,$2-1,$3-1900);
