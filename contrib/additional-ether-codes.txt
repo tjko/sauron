@@ -1,0 +1,12 @@
+List of additional NIC vendor codes (those not yet in "Ethernet.txt").
+
+$Revision$
+$Date$
+$Authro: $
+$Id$
+
+
+005056	VMware Inc. (virtual adapters)
+444553	Microsoft internal (virtual PPP adapter)
+524153	Windows NT: RAS-service
+
