@@ -102,7 +102,7 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>2, tag=>'dhcp', name=>'Global DHCP', type=>['text','text'], 
    fields=>2, len=>[35,20], empty=>[0,1],elabels=>['dhcptab line','comment']},
 
-  {ftype=>0, name=>'Record info', no_edit=>0},
+  {ftype=>0, name=>'Record info', no_edit=>1},
   {ftype=>4, name=>'Record created', tag=>'cdate_str', no_edit=>1},
   {ftype=>4, name=>'Last modified', tag=>'mdate_str', no_edit=>1}
  ]
@@ -2033,7 +2033,8 @@ sub groups_menu() {
     return;
   }
 
-  print "<TABLE width=\"100%\"><TR bgcolor=\"#aaaaff\">",
+  print "<TABLE width=\"100%\" cellspacing=\"1\" border=\"0\">",
+        "<TR bgcolor=\"#aaaaff\">",
         th("Name"),th("Type"),th("Comment"),th("Lvl"),"</TR>";
 
   for $i (0..$#q) {
@@ -2291,7 +2292,7 @@ sub nets_menu() {
     $novlans=0;
   }
 
-  print "<TABLE cellspacing=2 border=0><TR bgcolor=\"#aaaaff\">",
+  print "<TABLE cellspacing=1 border=0><TR bgcolor=\"#aaaaff\">",
         "<TH>Net</TH>",th("NetName"),th("Description"),th("Type"),
         th("DHCP"),($novlans?'':th("VLAN")),th("Lvl"),"</TR>";
 
@@ -2354,7 +2355,8 @@ sub templates_menu() {
     }
 
     print h3("MX templates for zone: $zone"),
-          "<TABLE width=\"100%\"><TR bgcolor=\"#aaaaff\">",
+          "<TABLE width=\"100%\" cellspacing=\"1\" border=\"0\">",
+	  "<TR bgcolor=\"#aaaaff\">",
           th("Name"),th("Comment"),th("Lvl"),"</TR>";
 
     for $i (0..$#q) {
@@ -2378,7 +2380,8 @@ sub templates_menu() {
     }
 
     print h3("WKS templates for server: $server"),
-          "<TABLE width=\"100%\"><TR bgcolor=\"#aaaaff\">",
+          "<TABLE width=\"100%\" cellspacing=\"1\" border=\"0\">",
+	  "<TR bgcolor=\"#aaaaff\">",
           th("Name"),th("Comment"),th("Lvl"),"</TR>";
 
     for $i (0..$#q) {
@@ -2402,7 +2405,8 @@ sub templates_menu() {
     }
 
     print h3("PRINTER Classes (global)"),
-          "<TABLE width=\"100%\"><TR bgcolor=\"#aaaaff\">",
+          "<TABLE width=\"100%\" cellspacing=\"1\" border=\"0\">",
+	  "<TR bgcolor=\"#aaaaff\">",
           th("Name"),th("Comment"),"</TR>";
 
     for $i (0..$#q) {
@@ -2426,7 +2430,8 @@ sub templates_menu() {
     }
 
     print h3("HINFO templates (global)"),
-          "<TABLE width=\"100%\"><TR bgcolor=\"#aaaaff\">",
+          "<TABLE width=\"100%\" cellspacing=\"1\" border=\"0\">",
+	  "<TR bgcolor=\"#aaaaff\">",
           th("Type"),th("HINFO"),th("Priority"),"</TR>";
 
     for $i (0..$#q) {

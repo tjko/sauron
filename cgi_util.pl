@@ -358,12 +358,12 @@ sub form_magic($$$) {
 
   #generate form fields
   print hidden($prefix."_re_edit",1),"\n<TABLE ";
-  print "BGCOLOR=\"" . $form->{bgcolor} . "\" " if ($form->{bgcolor});
+  print "BGCOLOR=\"" . $form->{tbl_bgcolor} . "\" " if ($form->{tbl_bgcolor});
   print "FGCOLOR=\"" . $form->{fgcolor} . "\" " if ($form->{fgcolor});
 # netscape sekoilee muuten no-frame modessa...
 #  print "WIDTH=\"" . $form->{width} . "\" " if ($form->{width});
-  print "BORDER=\"" . $form->{border} . "\" " if ($form->{border});
-  print " cellspacing=\"0\" cellpadding=\"1\">\n";
+  print "BORDER=\"" . ($form->{border}>0?$form->{border}:0) . "\" ";
+  print " cellspacing=\"1\" cellpadding=\"1\">\n";
 
 
   for $i (0..$#{$formdata}) {
@@ -383,14 +383,17 @@ sub form_magic($$$) {
       $e=${$rec->{iff2}}[1];
       next unless ($val =~ /^($e)$/);
     }
+    next if ($rec->{no_edit});
+
+    print "<TR ".($form->{bgcolor}?" bgcolor=\"$form->{bgcolor}\" ":'').">";
 
     if ($rec->{ftype} == 0) {
-      print "<TR><TH COLSPAN=2 ALIGN=\"left\" FGCOLOR=\"$rec->{ro_color}\" BGCOLOR=\"$h_bg\">",
-             $rec->{name},"</TH></TR>\n" unless ($rec->{no_edit});
+      print "<TH COLSPAN=2 ALIGN=\"left\" FGCOLOR=\"$rec->{ro_color}\"",
+            "  BGCOLOR=\"$h_bg\">",$rec->{name},"</TH>\n";
     } elsif ($rec->{ftype} == 1) {
       $maxlen=$rec->{len};
       $maxlen=$rec->{maxlen} if ($rec->{maxlen} > 0);
-      print "<TR>",td($rec->{name}),"<TD>";
+      print td($rec->{name}),"<TD>";
       if ($rec->{type} eq 'passwd') {
 	print password_field(-name=>$p1,-size=>$rec->{len},
 			     -maxlength=>$maxlen,-value=>param($p1));
@@ -414,9 +417,9 @@ sub form_magic($$$) {
       }
       print "<FONT size=-1 color=\"red\"><BR> ",
             form_check_field($rec,param($p1),0),
-            "</FONT></TD></TR>";
+            "</FONT></TD>";
     } elsif ($rec->{ftype} == 2) {
-      print "<TR>",td($rec->{name}),"<TD><TABLE><TR>";
+      print td($rec->{name}),"<TD><TABLE><TR>";
       $a=param($p1."_count");
       if (param($p1."_add") ne '') {
 	$a=$a+1;
@@ -452,7 +455,7 @@ sub form_magic($$$) {
 		 -value=>param($n)));
       }
       print td(submit(-name=>$prefix."_".$rec->{tag}."_add",-value=>'Add'));
-      print "</TR></TABLE></TD></TR>\n";
+      print "</TR></TABLE></TD>\n";
     } elsif ($rec->{ftype} == 3) {
       if ($rec->{type} eq 'enum') {
 	$enum=$rec->{enum};
@@ -466,18 +469,18 @@ sub form_magic($$$) {
 	  $values=[sort keys %{$enum}];
 	}
       }
-      print "<TR>",td($rec->{name}),
+      print td($rec->{name}),
 	    td(popup_menu(-name=>$p1,-values=>$values,
-	                  -default=>param($p1),-labels=>$enum)),"</TR>";
+	                  -default=>param($p1),-labels=>$enum));
     } elsif ($rec->{ftype} == 4) {
       $val=param($p1);
       $val=${$rec->{enum}}{$val}  if ($rec->{type} eq 'enum');
-      print "<TR>",td($rec->{name}),"<TD><FONT color=\"$form->{ro_color}\">",
-	    "$val</FONT></TD>",hidden($p1,param($p1)),"</TR>";
+      print td($rec->{name}),"<TD><FONT color=\"$form->{ro_color}\">",
+	    "$val</FONT></TD>",hidden($p1,param($p1));
     } elsif ($rec->{ftype} == 5) {
       $rec->{fields}=5;
       $rec->{type}=['ip','text','text','text'];
-      print "<TR>",td($rec->{name}),"<TD><TABLE><TR>";
+      print td($rec->{name}),"<TD><TABLE><TR>";
       $a=param($p1."_count");
       if (param($p1."_add") ne '') {
 	$a=$a+1;
@@ -529,34 +532,34 @@ sub form_magic($$$) {
 	      "</TR>";
       }
 
-      print "</TABLE></TD></TR>\n";
+      print "</TABLE></TD>\n";
     } elsif ($rec->{ftype} == 6) {
       get_mx_template_list($CGI_UTIL_zoneid,\%lsth,\@lst,$form->{alevel});
       get_mx_template(param($p1),\%tmpl_rec);
-      print "<TR>",td($rec->{name}),"<TD><TABLE WIDTH=\"99%\">\n<TR>",
+      print td($rec->{name}),"<TD><TABLE WIDTH=\"99%\">\n<TR>",
 	    td(popup_menu(-name=>$p1,-values=>\@lst,
 	                  -default=>param($p1),-labels=>\%lsth),
             submit(-name=>$prefix."_".$rec->{tag}."_update",
 		      -value=>'Update')),"</TR>\n<TR>",
 	    "<TD>";
       print_mx_template(\%tmpl_rec);
-      print "</TD></TR></TABLE></TD></TR>";
+      print "</TD></TR></TABLE></TD>";
     } elsif ($rec->{ftype} == 7) {
       get_wks_template_list($CGI_UTIL_serverid,\%lsth,\@lst,$form->{alevel});
       get_wks_template(param($p1),\%tmpl_rec);
-      print "<TR>",td($rec->{name}),"<TD><TABLE WIDTH=\"99%\">\n<TR>",
+      print td($rec->{name}),"<TD><TABLE WIDTH=\"99%\">\n<TR>",
 	    td(popup_menu(-name=>$p1,-values=>\@lst,
 	                  -default=>param($p1),-labels=>\%lsth),
             submit(-name=>$prefix."_".$rec->{tag}."_update",
 		      -value=>'Update')),"</TR>\n<TR>",
 	    "<TD>";
       print_wks_template(\%tmpl_rec);
-      print "</TD></TR></TABLE></TD></TR>";
+      print "</TD></TR></TABLE></TD>";
     } elsif ($rec->{ftype} == 8) {
       next unless ($rec->{arec});
       # do nothing...unless editing arec aliases
 
-      print "<TR>",td($rec->{name}),"<TD><TABLE><TR>";
+      print td($rec->{name}),"<TD><TABLE><TR>";
       $a=param($p1."_count");
       if (param($p1."_add") ne '') {
 	if (($id=domain_in_use($CGI_UTIL_zoneid,
@@ -593,17 +596,17 @@ sub form_magic($$$) {
 	if ($invalid_host);
       print "</TD>",
 	td(submit(-name=>$prefix."_".$rec->{tag}."_add",-value=>'Add'));
-      print "</TR></TABLE></TD></TR>\n";
+      print "</TR></TABLE></TD>\n";
     }
     elsif ($rec->{ftype} == 9) {
       # do nothing...
     } elsif ($rec->{ftype} == 10) {
       get_group_list($CGI_UTIL_serverid,\%lsth,\@lst,$form->{alevel});
       get_group(param($p1),\%tmpl_rec);
-      print "<TR>",td($rec->{name}),"<TD>",
+      print td($rec->{name}),"<TD>",
 	    popup_menu(-name=>$p1,-values=>\@lst,
 	                  -default=>param($p1),-labels=>\%lsth),
-            "</TD></TR>";
+            "</TD>";
     }
     elsif ($rec->{ftype} == 101) {
       undef @q; undef @lst; undef %lsth;
@@ -626,7 +629,7 @@ sub form_magic($$$) {
 	param($p1,'');
       }
 
-      print "<TR>",td($rec->{name}),"<TD>",
+      print td($rec->{name}),"<TD>",
 	    popup_menu(-name=>$p1."_l",-values=>\@lst,-default=>param($p1),
 		       -labels=>\%lsth),
 	    " ",textfield(-name=>$p1,-size=>$rec->{len},-maxlength=>$maxlen,
@@ -635,12 +638,11 @@ sub form_magic($$$) {
       $tmp=param($p1);
       $tmp=param($p1."_l") if ($tmp eq '');
       print "<FONT size=-1 color=\"red\"><BR> ",
-	    form_check_field($rec,$tmp,0),
-	    "</FONT></TD></TR>";
+	    form_check_field($rec,$tmp,0),"</FONT></TD>";
     }
-    print "\n";
+    print "</TR>\n";
   }
-  print "</TABLE>";
+  print "</TABLE>\n";
 }
 
 #####################################################################
@@ -656,12 +658,15 @@ sub display_form($$) {
   form_get_defaults($form);
   $formdata=$form->{data};
 
-  print "<TABLE ";
-  print "BGCOLOR=\"" . $form->{bgcolor} . "\" " if ($form->{bgcolor});
-  print "FGCOLOR=\"" . $form->{fgcolor} . "\" " if ($form->{fgcolor});
+  print "\n<TABLE border=\"0\" cellspacing=\"0\" cellpadding=\"5\" ";
   print "WIDTH=\"" . $form->{width} . "\" " if ($form->{width});
-  print "BORDER=\"" . $form->{border} . "\" " if ($form->{border});
-  print " cellspacing=\"0\" cellpadding=\"1\">";
+  print "><TR><TD>\n";
+  print "<TABLE ";
+  print "BGCOLOR=\"" . $form->{tbl_bgcolor} . "\" " if ($form->{tbl_bgcolor});
+  print "FGCOLOR=\"" . $form->{fgcolor} . "\" " if ($form->{fgcolor});
+  #print "WIDTH=\"" . $form->{width} . "\" " if ($form->{width});
+  print "BORDER=\"" . ($form->{border}>0?$form->{border}:0) . "\" ";
+  print " width=\"100%\" cellspacing=\"1\" cellpadding=\"1\">\n";
 
   for $i (0..$#{$formdata}) {
     $rec=$$formdata[$i];
@@ -690,9 +695,11 @@ sub display_form($$) {
     $val=localtime($val) if ($rec->{type} eq 'localtime');
     $val=gmtime($val) if ($rec->{type} eq 'gmtime');
 
+    print "<TR ".($form->{bgcolor}?" bgcolor=\"$form->{bgcolor}\" ":'').">\n";
+
     if ($rec->{ftype} == 0) {
-      print "<TR><TH COLSPAN=2 ALIGN=\"left\" BGCOLOR=\"$h_bg\">",
-            $rec->{name},"</TH></TR>\n";
+      print "<TH COLSPAN=2 ALIGN=\"left\" BGCOLOR=\"$h_bg\">",
+            $rec->{name},"</TH>\n";
     } elsif ($rec->{ftype} == 1 || $rec->{ftype} == 101) {
       next if ($rec->{no_empty} && $val eq '');
 
@@ -714,12 +721,12 @@ sub display_form($$) {
       }
 
       $val='&nbsp;' if ($val eq '');
-      print "<TR><TD WIDTH=\"",$form->{nwidth},"\">",$rec->{name},"</TD><TD>",
-            "$val</TD></TR>\n";
+      print "<TD WIDTH=\"",$form->{nwidth},"\">",$rec->{name},"</TD><TD>",
+            "$val</TD>\n";
     } elsif ($rec->{ftype} == 2) {
       $a=$data->{$rec->{tag}};
       next if ($rec->{no_empty} && @{$a}<2);
-      print "<TR>",td($rec->{name}),
+      print td($rec->{name}),
 	    "<TD><TABLE width=\"100%\" bgcolor=\"#e0e0e0\">";
       for $k (1..$rec->{fields}) { 
 	#print "<TH>",$$a[0][$k-1],"</TH>";
@@ -734,16 +741,17 @@ sub display_form($$) {
 	}
 	print "</TR>";
       }
-      print "</TABLE></TD></TR>\n";
+      if (@{$a} < 2) { print "<TR><TD>&nbsp;</TD></TR>"; }
+      print "</TABLE></TD>\n";
     } elsif ($rec->{ftype} == 3) {
-      print "<TR><TD WIDTH=\"",$form->{nwidth},"\">",$rec->{name},"</TD><TD>",
-            "$val</TD></TR>\n";
+      print "<TD WIDTH=\"",$form->{nwidth},"\">",$rec->{name},"</TD><TD>",
+            "$val</TD>\n";
     } elsif ($rec->{ftype} == 4) {
       $val='&nbsp;' if ($val eq '');
-      print "<TR><TD WIDTH=\"",$form->{nwidth},"\">",$rec->{name},"</TD><TD>",
-            "<FONT color=\"$form->{ro_color}\">$val</FONT></TD></TR>\n";
+      print "<TD WIDTH=\"",$form->{nwidth},"\">",$rec->{name},"</TD><TD>",
+            "<FONT color=\"$form->{ro_color}\">$val</FONT></TD>\n";
     } elsif ($rec->{ftype} == 5) {
-      print "<TR>",td($rec->{name}),"<TD><TABLE>";
+      print td($rec->{name}),"<TD><TABLE>";
       $a=$data->{$rec->{tag}};
       for $j (1..$#{$a}) {
 	#$com=$$a[$j][4];
@@ -754,10 +762,10 @@ sub display_form($$) {
 	$ipinfo.=' (no A record)' if ($$a[$j][3] ne 't');
 	print Tr(td($ip),td($ipinfo));
       }
-      print "</TABLE></TD></TR>\n";
+      print "</TABLE></TD>\n";
     } elsif (($rec->{ftype} == 6) || ($rec->{ftype} ==7) ||
 	     ($rec->{ftype} == 10)) {
-      print "<TR>",td($rec->{name});
+      print td($rec->{name});
       if ($val > 0) { 
 	print "<TD>";
 	print_mx_template($data->{mx_rec}) if ($rec->{ftype}==6);
@@ -765,12 +773,11 @@ sub display_form($$) {
 	print $data->{grp_rec}->{name} if ($rec->{ftype}==10);
 	print "</TD>";
       } else { print td("Not selected"); }
-      print "</TR>";
     } elsif ($rec->{ftype} == 8) {
       $a=$data->{$rec->{tag}};
       $url=$form->{$rec->{tag}."_url"};
       next unless (@{$a}>1);
-      print "<TR>",td($rec->{name}),"<TD><TABLE><TR>";
+      print td($rec->{name}),"<TD><TABLE><TR>";
       #for $k (1..$rec->{fields}) { print "<TH>",$$a[0][$k-1],"</TH>";  }
       for $j (1..$#{$a}) {
 	$k=' ';
@@ -778,16 +785,17 @@ sub display_form($$) {
 	print "<TR>",td("<a href=\"$url$$a[$j][1]\">".$$a[$j][2]."</a> "),
 	          td($k),"</TR>";
       }
-      print "</TABLE></TD></TR>\n";
+      print "</TABLE></TD>\n";
     } elsif ($rec->{ftype} == 9) {
       $url=$form->{$rec->{tag}."_url"}.$data->{$rec->{idtag}};
-      print "<TR>",td($rec->{name}),td("<a href=\"$url\">$val</a>"),"</TR>";
+      print td($rec->{name}),td("<a href=\"$url\">$val</a>");
     } else {
       error("internal error (display_form)");
     }
+    print "</TR>\n";
   }
 
-  print "</TABLE>";
+  print "</TABLE></TD></TR></TABLE>\n";
 }
 
 sub print_mx_template($) {
