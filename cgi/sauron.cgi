@@ -290,6 +290,9 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>2, tag=>'printer_l', name=>'PRINTER entries', no_empty=>1,
    type=>['text','text'], fields=>2,len=>[40,20], empty=>[0,1], 
    elabels=>['PRINTER','comment'], iff=>['type','[15]']},
+  {ftype=>2, tag=>'dhcp_l', name=>'DHCP entries', no_empty=>1,
+   type=>['text','text'], fields=>2,len=>[40,20], empty=>[0,1], 
+   elabels=>['DHCP','comment'], iff=>['type','[15]']},
 
   {ftype=>0, name=>'Aliases', no_edit=>1, iff=>['type','1']},
   {ftype=>8, tag=>'alias_l', name=>'Aliases', fields=>3, iff=>['type','1']},
