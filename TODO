@@ -19,7 +19,6 @@ import:
 sauron:
 	- more sanity checks
 	- printcap generation
-	- support for hashing zone file directories 
 
 
 sauron.cgi:
@@ -31,7 +30,6 @@ sauron.cgi:
 	- advertise "Save settings" feature if user doesn't have any
           default settings	
 	- module support for easily extending user interface
-	- allow "<none>" to befault for HINFO selections
 	- "download CSV" returns only first 100 results
 
 browser.cgi:

@@ -21,7 +21,8 @@ $VERSION = '$Id$ ';
 @EXPORT = qw(
 	    );
 
-
+my $hinfo_addempty_mode = (defined($main::SAURON_HINFO_MODE) ?
+			   $main::SAURON_HINFO_MODE : 1);
 my $chr_group;
 
 my %host_form = (
@@ -60,10 +61,10 @@ my %host_form = (
   {ftype=>0, name=>'Equipment info', iff=>['type','1|101']},
   {ftype=>101, tag=>'hinfo_hw', name=>'HINFO hardware', type=>'hinfo', len=>25,
    sql=>"SELECT hinfo FROM hinfo_templates WHERE type=0 ORDER BY pri,hinfo;",
-   lastempty=>1, empty=>1, iff=>['type','1']},
+   addempty=>$hinfo_addempty_mode, empty=>1, iff=>['type','1']},
   {ftype=>101, tag=>'hinfo_sw', name=>'HINFO software', type=>'hinfo',len=>25,
    sql=>"SELECT hinfo FROM hinfo_templates WHERE type=1 ORDER BY pri,hinfo;",
-   lastempty=>1, empty=>1, iff=>['type','1']},
+   addempty=>$hinfo_addempty_mode, empty=>1, iff=>['type','1']},
   {ftype=>1, tag=>'ether', name=>'Ethernet address', type=>'mac', len=>17,
    conv=>'U', iff=>['type','([19]|101)'], empty=>1},
   {ftype=>4, tag=>'card_info', name=>'Card manufacturer',
@@ -150,10 +151,10 @@ my %restricted_host_form = (
   {ftype=>0, name=>'Equipment info', iff=>['type','1|101']},
   {ftype=>101, tag=>'hinfo_hw', name=>'HINFO hardware', type=>'hinfo', len=>25,
    sql=>"SELECT hinfo FROM hinfo_templates WHERE type=0 ORDER BY pri,hinfo;",
-   lastempty=>1, empty=>1, iff=>['type','1']},
+   addempty=>$hinfo_addempty_mode, empty=>1, iff=>['type','1']},
   {ftype=>101, tag=>'hinfo_sw', name=>'HINFO software', type=>'hinfo',len=>25,
    sql=>"SELECT hinfo FROM hinfo_templates WHERE type=1 ORDER BY pri,hinfo;",
-   lastempty=>1, empty=>1, iff=>['type','1']},
+   addempty=>$hinfo_addempty_mode, empty=>1, iff=>['type','1']},
   {ftype=>1, tag=>'ether', name=>'Ethernet address', type=>'mac', len=>17,
    conv=>'U', iff=>['type','[19]'], iff2=>['ether_alias_info',''],
    empty=>$main::SAURON_RHF{ether}},
@@ -234,10 +235,10 @@ my %new_host_form = (
   {ftype=>0, name=>'Equipment info',iff=>['type','1']},
   {ftype=>101, tag=>'hinfo_hw', name=>'HINFO hardware', type=>'hinfo', len=>20,
    sql=>"SELECT hinfo FROM hinfo_templates WHERE type=0 ORDER BY pri,hinfo;",
-   lastempty=>1, empty=>1, iff=>['type','1']},
+   addempty=>$hinfo_addempty_mode, empty=>1, iff=>['type','1']},
   {ftype=>101, tag=>'hinfo_sw', name=>'HINFO software', type=>'hinfo',len=>20,
    sql=>"SELECT hinfo FROM hinfo_templates WHERE type=1 ORDER BY pri,hinfo;",
-   lastempty=>1, empty=>1, iff=>['type','1']},
+   addempty=>$hinfo_addempty_mode, empty=>1, iff=>['type','1']},
   {ftype=>1, tag=>'ether', name=>'Ethernet address', type=>'mac', len=>17,
    conv=>'U', iff=>['type','(1|9|101)'], empty=>1},
 
@@ -304,10 +305,10 @@ my %restricted_new_host_form = (
   {ftype=>0, name=>'Equipment info',iff=>['type','1']},
   {ftype=>101, tag=>'hinfo_hw', name=>'HINFO hardware', type=>'hinfo', len=>20,
    sql=>"SELECT hinfo FROM hinfo_templates WHERE type=0 ORDER BY pri,hinfo;",
-   lastempty=>0, empty=>0, iff=>['type','1']},
+   addempty=>$hinfo_addempty_mode, empty=>0, iff=>['type','1']},
   {ftype=>101, tag=>'hinfo_sw', name=>'HINFO software', type=>'hinfo',len=>20,
    sql=>"SELECT hinfo FROM hinfo_templates WHERE type=1 ORDER BY pri,hinfo;",
-   lastempty=>0, empty=>0, iff=>['type','1']},
+   addempty=>$hinfo_addempty_mode, empty=>0, iff=>['type','1']},
   {ftype=>1, tag=>'ether', name=>'Ethernet address', type=>'mac', len=>17,
    conv=>'U', iff=>['type','[19]'], empty=>$main::SAURON_RHF{ether}},
 

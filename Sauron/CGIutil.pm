@@ -724,8 +724,12 @@ sub form_magic($$$) {
 	push @lst,$q[$i][0];
 	$lsth{$q[$i][0]}=$q[$i][0];
       }
-      if ($rec->{lastempty}) {
+      if ($rec->{addempty} > 0) {
 	push @lst,'';
+	$lsth{''}='<none>';
+      }
+      elsif ($rec->{addempty} < 0) {
+	unshift @lst,'';
 	$lsth{''}='<none>';
       }
       param($p1."_l",$lst[0]) 
@@ -737,7 +741,7 @@ sub form_magic($$$) {
       }
 
       print td($rec->{name}),"<TD>",
-	    popup_menu(-name=>$p1."_l",-values=>\@lst,-default=>param($p1),
+	    popup_menu(-name=>$p1."_l",-values=>\@lst,-default=>$lst[0],
 		       -labels=>\%lsth),
 	    " ",textfield(-name=>$p1,-size=>$rec->{len},-maxlength=>$maxlen,
 			  -value=>param($p1));

@@ -1,6 +1,13 @@
 $Id$
 
 0.7.1beta
+	- new configuration option SAURON_HINFO_MODE to set the
+	  behaviour of (host) HINFO fields when adding/editing hosts
+	  (see config.in for more info)
+	- primary and slave zone pathnames can now automatically
+	  be "hashed" by the first letter(s) of zone name, by
+	  using special tag %N in "Primary zone-file path" and/or
+	  "Slave zone-file path" fields in server settings.
 	- database format changes (1.2):
 	   - settings: renamed column 'key' --> 'setting'
 	   - nets: new columnd 'dummy'

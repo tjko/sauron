@@ -26,7 +26,7 @@ $CONF_FILE_PATH = '__CONF_FILE_PATH__';
 
 
 sub sauron_version() {
-  return "0.7.0"; # current Sauron version
+  return "0.7.1beta"; # current Sauron version
 }
 
 
@@ -71,6 +71,7 @@ sub set_defaults() {
   $main::SAURON_ZONE_CHK_PROG = '';
   $main::SAURON_ZONE_CHK_ARGS = '-q';
   $main::SAURON_NO_REMOTE_ADDR_AUTH = 0;
+  $main::SAURON_HINFO_MODE = 1;
 
   $main::SAURON_RHF{huser}    = 0; # User
   $main::SAURON_RHF{dept}     = 0; # Dept.
@@ -133,6 +134,7 @@ sub print_config() {
   print "SAURON_ZONE_CHK_PROG=",$main::SAURON_ZONE_CHK_PROG,"\n";
   print "SAURON_ZONE_CHK_ARGS=",$main::SAURON_ZONE_CHK_ARGS,"\n";
   print "SAURON_NO_REMOTE_ADDR_AUTH=",$main::SAURON_NO_REMOTE_ADDR_AUTH,"\n";
+  print "SAURON_HINFO_MODE=",$main::SAURON_HINFO_MODE,"\n";
 
   print "ALEVEL_VLANS=",$main::ALEVEL_VLANS,"\n";
   print "ALEVEL_RESERVATIONS=",$main::ALEVEL_RESERVATIONS,"\n";
