@@ -994,7 +994,7 @@ sub get_zone($$) {
 	       "server,active,dummy,type,reverse,class,name,nnotify," .
 	       "hostmaster,serial,refresh,retry,expire,minimum,ttl," .
 	       "chknames,reversenet,comment,cdate,cuser,mdate,muser," .
-	       "forward,serial_date,flags",
+	       "forward,serial_date,flags,rdate",
 	       $id,$rec,"id");
   return -1 if ($res < 0);
   fix_bools($rec,"active,dummy,reverse,noreverse");
@@ -1750,9 +1750,10 @@ sub update_host($) {
 
 sub delete_host($) {
   my($id) = @_;
-  my($res);
+  my($res,%host);
 
   return -100 unless ($id > 0);
+  return -101 if (get_host($id,\%host) < 0);
 
   db_begin();
 
@@ -1802,6 +1803,13 @@ sub delete_host($) {
 
   $res=db_exec("DELETE FROM hosts WHERE id=$id;");
   if ($res < 0) { db_rollback(); return -50; }
+
+
+  if ($host{zone} > 0) {
+    my $t=time();
+    $res=db_exec("UPDATE zones SET rdate=$t WHERE id=$host{zone}");
+    if ($res < 0) { db_rollback(); return -99; }
+  }
 
   return db_commit();
 }

@@ -32,6 +32,11 @@ ALTER TABLE groups ADD COLUMN vmps INT4;
 ALTER TABLE groups ALTER COLUMN vmps SET DEFAULT -1;
 UPDATE groups SET vmps=-1;
 
+/* zones */
+ALTER TABLE zones ADD COLUMN rdate INT4;
+ALTER TABLE zones ALTER COLUMN rdate SET DEFAULT 0;
+UPDATE zones SET rdate=0;
+
 
 \i vmps.sql
 

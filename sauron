@@ -389,16 +389,27 @@ sub make_bind() {
     $ttl_minimum = ($zone{minimum} ? $zone{minimum} : $server{minimum});
 
     undef @q;
-    db_query("SELECT MAX(h.mdate) FROM hosts h WHERE h.zone=$zoneid;",\@q);
+    db_query("SELECT MAX(h.mdate),MAX(h.cdate) " .
+             "FROM hosts h WHERE h.zone=$zoneid;",\@q);
     $hosts_mdate = ($q[0][0] > 0 ? $q[0][0] : 0);
-    undef @q;
-    db_query("SELECT MAX(h.cdate) FROM hosts h WHERE h.zone=$zoneid;",\@q);
-    $hosts_mdate = $q[0][0] if ($q[0][0] > $hosts_mdate);
+    $hosts_mdate =  $q[0][1] if ($q[0][1] > $hosts_mdate);
+    if ($rev eq 't') {
+      db_query("SELECT MAX(h.cdate),MAX(h.mdate),MAX(z.rdate) " .
+	       "FROM zones z JOIN hosts h ON h.zone=z.id " .
+	       " JOIN a_entries a ON a.host=h.id " .
+	       "WHERE z.server=$serverid AND a.ip << '$zone{reversenet}'",\@q);
+      $hosts_mdate = $q[0][0] if ($q[0][0] > $hosts_mdate);
+      $hosts_mdate = $q[0][1] if ($q[0][1] > $hosts_mdate);
+      $hosts_mdate = $q[0][2] if ($q[0][2] > $hosts_mdate);
+    }
 
     $serial=$zone{serial};
     $serial_date=($zone{serial_date} > 0 ? $zone{serial_date} : 0);
     if ( ($server{mdate} > $serial_date) ||
+	 ($server{cdate} > $serial_date) ||
 	 ($zone{mdate} > $serial_date) ||
+	 ($zone{cdate} > $serial_date) ||
+	 ($zone{rdate} > $serial_date) ||
 	 ($hosts_mdate > $serial_date) || $opt_updateserial ) {
       #print "server: $server{mdate}, zone: $zone{mdate} ",
       #	    "hosts: $hosts_mdate  - $serial_date\n";

@@ -1,6 +1,9 @@
 $Id$
 
 0.7.0beta
+	- improved code for detecting wheter zone serial should
+	  be increased or not (detects removed hosts and work
+	  with reverse zones)
 	- added initial (Cisco) VMPS support
 	   - export-vmps utility for generating VMPS configuration files
 	   - VMPS domains can now be managed via Web interface
@@ -16,6 +19,8 @@ $Id$
 	    - utmp: removed obsolete column 'gid'
 	    - new table 'vmps'
 	    - vlans: new column 'vlanno'
+	    - zones: new column 'rdate'
+	
 0.6.2
 	- fixed dates displayed (month was off by one) by last command
 	  and lastlog display in web-interface

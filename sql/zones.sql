@@ -57,6 +57,7 @@ CREATE TABLE zones (
        reversenet  CIDR,  /* contains CIDR of the reverse zone
 			    (if applicaple) */
        parent	   INT4 DEFAULT -1, /* unused */
+       rdate       INT4 DEFAULT 0,  /* last host removal date */
 
        CONSTRAINT  zones_key PRIMARY KEY (name,server)
 ) INHERITS(common_fields);
