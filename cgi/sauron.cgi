@@ -3868,7 +3868,12 @@ sub save_state($) {
   undef @q;
   db_query("SELECT uid FROM utmp WHERE cookie='$id';",\@q);
   unless (@q > 0) {
-    db_exec("INSERT INTO utmp (uid,cookie,auth) VALUES(-1,'$id',false);");
+      if (db_exec("INSERT INTO utmp (uid,cookie,auth) " .
+		  "VALUES(-1,'$id',false);") < 0) {
+	logmsg("notice","cannot create utmp entry ($id): $remote_addr : ".
+	                db_errormsg());
+	html_error("cannot create utmp entry ($id)");
+      }
   }
 
   $s_superuser = ($state{'superuser'} eq 'yes' ? 'true' : 'false');
@@ -3900,8 +3905,9 @@ sub save_state($) {
 	       "WHERE cookie='$id';");
 
   if ($res < 0) {
-    logmsg("notice","cannot save state '$id' ($state{uid},$state{user}): " .
-          db_errormsg());
+    logmsg("notice","cannot save state '$id' " .
+	            "($s_addr,$state{uid},$state{user}): " .
+                    db_errormsg());
     html_error("cannot save state '$id' ($state{uid},$state{user})");
   }
 }
