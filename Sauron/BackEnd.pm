@@ -1895,7 +1895,6 @@ sub add_host($) {
   }
 
   # subgroups
-  show_hash($rec);
   $res = add_array_field('group_entries','grp',
 			 'subgroups',$rec,'host',"$id");
   if ($res < 0) { db_rollback(); return -8; }
