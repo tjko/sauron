@@ -1,6 +1,10 @@
 $Id$
 
 0.5.1
+	- backend: add_net now adds default auto assign ranges, 
+	  update_net now also checks that auto assign is inside given net
+	- frames mode now (hopefully) works better with non-Mozilla
+	  browsers
 	- added external authentication support (sample authenticator
 	  script included in contrib for authentication against Kerberos)
 	- fixed search result CVS output	

@@ -1,6 +1,6 @@
 # Sauron::BackEnd.pm  -- Sauron back-end routines
 #
-# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000-2002.
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000-2003.
 # $Id$
 #
 package Sauron::BackEnd;
@@ -2327,7 +2327,17 @@ sub get_net($$) {
 
 sub update_net($) {
   my($rec) = @_;
-  my($r,$id);
+  my($r,$id,$net);
+
+  return -100 unless (is_cidr($rec->{net}));
+  $net = new Net::Netmask($rec->{net});
+  return -101 unless ($net);
+  if (is_cidr($rec->{range_start})) {
+    return -102 unless ($net->match($rec->{range_start}));
+  }
+  if (is_cidr($rec->{range_end})) {
+    return -102 unless ($net->match($rec->{range_end}));
+  }
 
   del_std_fields($rec);
   $rec->{type}=0;
@@ -2351,10 +2361,20 @@ sub update_net($) {
 sub add_net($) {
   my($rec) = @_;
   my($res,$id,$i);
+  my($net);
 
   db_begin();
   $rec->{cdate}=time;
   $rec->{cuser}=$muser;
+
+  return -100 unless (is_cidr($rec->{net}));
+  $net = new Net::Netmask($rec->{net});
+  return -101 unless ($net);
+  $rec->{range_start}=$net->nth(1)
+    unless (is_cidr($rec->{range_start}));
+  $rec->{range_end}=$net->nth(-2)
+    unless (is_cidr($rec->{range_end}));
+
   $res = add_record('nets',$rec);
   if ($res < 0) { db_rollback(); return -1; }
   $id=$res;
