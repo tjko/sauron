@@ -473,7 +473,7 @@ for ($i=0; $i <= $#zones; $i+=1) {
     $tmplist=db_decode_list_str("{$wks}");
     foreach $rtmp (@{$tmplist}) {
       next unless $rtmp =~ /^\s*(\S+)(\s+(\S.*))?\s*$/;
-      push @wksl, [0,$1,$3];
+      push @wksl, [0,$1,$3,''];
     }
     $res=add_wks_template({server=>$serverid,name=>"$servername:$wks_i_count",
 			   wks_l=>\@wksl});
@@ -489,7 +489,7 @@ for ($i=0; $i <= $#zones; $i+=1) {
     $tmplist=db_decode_list_str("{$mx}");
     foreach $rtmp (@{$tmplist}) {
       next unless $rtmp =~ /^\s*(\d+)\s+(\S+)\s*$/;
-      push @mxl, [0,$1,$2];
+      push @mxl, [0,$1,$2,''];
     }
     $res=add_mx_template({zone=>$zoneid,name=>"$zone:$mx_i_count",
 			  mx_l=>\@mxl});

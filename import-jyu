@@ -268,16 +268,16 @@ foreach $group (keys %grouphash) {
   undef @q1;
   foreach $rtmp (@{$rec->{DHCP}}) {
     next if ($rtmp =~ /^\s*$/);
-    push @q1, [0,$rtmp];
+    push @q1, [0,$rtmp,''];
   }
   undef @q2;
   foreach $rtmp (@{$rec->{PRINTER}}) {
     next if ($rtmp =~ /^\s*$/);
-    push @q2, [0,$rtmp];
+    push @q2, [0,$rtmp,''];
   }
 
   $res=add_group({server=>$serverid,name=>$group,type=>1,comment=>$comment,
-		  dhcp_l=>\@q1,printer_l=>\@q2});
+		  dhcp=>\@q1,printer=>\@q2});
   fatal("cannot add group '$group' ($res)") if ($res < 0);
   $groupidhash{$group}=$res;
 

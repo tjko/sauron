@@ -256,12 +256,12 @@ sub form_check_form($$$) {
       $rec->{type}=['ip','text','text'] if ($type==5);
       $rec->{empty}=[0,1,1] if ($type==5);
       $a=param($p."_count");
-      $a=0 if (!$a || $a < 0);
+      $a=0 unless ($a > 0);
       for $j (1..$a) {
 	next if ($type==8);
 	next if (param($p."_".$j."_del") eq 'on'); # skip if 'delete' checked
 	for $k (1..$f) {
-	  return 2 
+	  return 2
 	    if (form_check_field($rec,param($p."_".$j."_".$k),$k) ne '');
 	}
       }
@@ -285,7 +285,7 @@ sub form_check_form($$$) {
 	    #print p,"$p2 delete record";
 	  }
 	} else {
-	  if ($ind < 0) {
+	  unless ($ind > 0) {
 	    #print p,"$p2 add new record";
 	    $new=[];
 	    $$new[$f+1]=2;

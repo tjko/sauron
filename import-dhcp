@@ -159,10 +159,10 @@ foreach $key (sort keys %{$data{group}}) {
   foreach $line (@{$rec}) {
     next unless ($line =~ /;\s*$/);
     $line =~ s/;\s*$//;
-    push @q, [0,$line];
+    push @q, [0,$line,''];
   }
 
-  $res = add_group({server=>$serverid,name=>$key,type=>1,dhcp_l=>\@q});
+  $res = add_group({server=>$serverid,name=>$key,type=>1,dhcp=>\@q});
   fatal("cannot add GROUP ($key)") if ($res < 0);
   $groups{$key}=$res;
 }

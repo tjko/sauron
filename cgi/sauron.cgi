@@ -862,8 +862,8 @@ do "$conf_dir/config" || die("cannot load configuration!");
   {ftype=>1, tag=>'alevel', name=>'Authorization level', type=>'priority', 
    len=>3, empty=>0},
   {ftype=>1, tag=>'comment', name=>'Comment', type=>'text',len=>60, empty=>1},
-  {ftype=>2, tag=>'mx_l', name=>'Mail exchanges (MX)', 
-   type=>['priority','mx','text'], fields=>3, len=>[5,30,20], 
+  {ftype=>2, tag=>'mx_l', name=>'Mail exchanges (MX)',
+   type=>['priority','mx','text'], fields=>3, len=>[5,30,20],
    empty=>[0,0,1],elabels=>['Priority','MX','comment']},
   {ftype=>0, name=>'Record info', no_edit=>1},
   {ftype=>4, name=>'Record created', tag=>'cdate_str', no_edit=>1},
@@ -901,15 +901,6 @@ do "$conf_dir/config" || die("cannot load configuration!");
   {ftype=>0, name=>'Record info', no_edit=>1},
   {ftype=>4, name=>'Record created', tag=>'cdate_str', no_edit=>1},
   {ftype=>4, name=>'Last modified', tag=>'mdate_str', no_edit=>1}
- ]
-);
-
-%new_printer_class_form=(
- data=>[
-  {ftype=>0, name=>'New PRINTER class'},
-  {ftype=>1, tag=>'name', name=>'Name', type=>'printer_class',len=>20,
-   empty=>0},
-  {ftype=>1, tag=>'comment', name=>'Comment', type=>'text',len=>60, empty=>1}
  ]
 );
 
@@ -2213,9 +2204,9 @@ sub groups_menu() {
   if ($sub eq 'add') {
     return if (check_perms('superuser',''));
 
-    $data{type}=1;
+    $data{type}=1; $data{alevel}=0; $data{dhcp}=[]; $data{printer}=[];
     $data{server}=$serverid;
-    $res=add_magic('add','Group','groups',\%new_group_form,
+    $res=add_magic('add','Group','groups',\%group_form,
 		   \&add_group,\%data);
     if ($res > 0) {
       #show_hash(\%data);
@@ -2231,7 +2222,7 @@ sub groups_menu() {
 		    \&get_group,\&update_group,$id);
     goto browse_groups if ($res == -1);
     goto show_group_record if ($res > 0);
-    return;		    
+    return;
   }
   elsif ($sub eq 'Delete') {
     return if (check_perms('superuser',''));
@@ -2855,8 +2846,8 @@ sub templates_menu() {
   }
   elsif ($sub eq 'addmx') {
     return if (check_perms('superuser',''));
-    $data{zone}=$zoneid;
-    $res=add_magic('addmx','MX template','templates',\%new_template_form,
+    $data{zone}=$zoneid; $data{alevel}=0; $data{mx_l}=[];
+    $res=add_magic('addmx','MX template','templates',\%mx_template_form,
 		   \&add_mx_template,\%data);
     if ($res > 0) {
       $mx_id=$res;
@@ -2866,8 +2857,8 @@ sub templates_menu() {
   }
   elsif ($sub eq 'addwks') {
     return if (check_perms('superuser',''));
-    $data{server}=$serverid;
-    $res=add_magic('addwks','WKS template','templates',\%new_template_form,
+    $data{server}=$serverid; $data{alevel}=0; $data{wks_l}=[];
+    $res=add_magic('addwks','WKS template','templates',\%wks_template_form,
 		   \&add_wks_template,\%data);
     if ($res > 0) {
       $wks_id=$res;
@@ -2877,9 +2868,9 @@ sub templates_menu() {
   }
   elsif ($sub eq 'addpc') {
     return if (check_perms('superuser',''));
-    #$data{server}=$serverid;
+    $data{printer_l}=[];
     $res=add_magic('addwpc','PRINTER class','templates',
-		   \%new_printer_class_form,\&add_printer_class,\%data);
+		   \%printer_class_form,\&add_printer_class,\%data);
     if ($res > 0) {
       $pc_id=$res;
       goto show_pc_record;
@@ -2888,7 +2879,7 @@ sub templates_menu() {
   }
   elsif ($sub eq 'addhinfo') {
     return if (check_perms('superuser',''));
-    $data{type}=0; 
+    $data{type}=0;
     $data{pri}=100;
     $res=add_magic('addhinfo','HINFO template','templates',
 		   \%hinfo_template_form,\&add_hinfo_template,\%data);

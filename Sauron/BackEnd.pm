@@ -1,6 +1,6 @@
 # Sauron::BackEnd.pm  -- Sauron back-end routines
 #
-# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000.
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000-2002.
 # $Id$
 #
 package Sauron::BackEnd;
@@ -159,8 +159,9 @@ sub auto_address($$) {
 
   db_query("SELECT net,range_start,range_end FROM nets " .
 	   "WHERE server=$serverid AND net = '$net';",\@q);
-  return "No auto address range defined for this net: $net ($q[0][0],$q[0][1],$q[0][2]) "
-    unless (is_cidr($q[0][1]) && is_cidr($q[0][2]));
+  return "No auto address range defined for this net: $net ".
+         "($q[0][0],$q[0][1],$q[0][2]) "
+	   unless (is_cidr($q[0][1]) && is_cidr($q[0][2]));
   $s=ip2int($q[0][1]);
   $e=ip2int($q[0][2]);
   return 'Invalid auto address range' if ($s >= $e);
@@ -291,7 +292,7 @@ sub get_array_field($$$$$$$) {
   my($table,$count,$fields,$desc,$rule,$rec,$keyname) = @_;
   my(@list,$l,$i);
 
-  db_query("SELECT $fields FROM $table WHERE $rule;",\@list);
+  db_query("SELECT $fields FROM $table WHERE $rule",\@list);
   $l=[];
   push @{$l}, [split(",",$desc)];
   for $i (0..$#list) {
@@ -306,7 +307,7 @@ sub get_field($$$$$) {
   my($table,$field,$rule,$tag,$rec)=@_;
   my(@list);
 
-  db_query("SELECT $field FROM $table WHERE $rule;",\@list);
+  db_query("SELECT $field FROM $table WHERE $rule",\@list);
   if ($#list >= 0) {
     $rec->{$tag}=$list[0][0];
   }
@@ -327,7 +328,7 @@ sub update_array_field($$$$$$) {
     $m=$$list[$i][$count];
     $id=$$list[$i][0];
     if ($m == -1) { # delete record
-      $str="DELETE FROM $table WHERE id=$id;";
+      $str="DELETE FROM $table WHERE id=$id";
       #print "<BR>DEBUG: delete record $id $str";
       return -5 if (db_exec($str) < 0);
     }
@@ -339,7 +340,7 @@ sub update_array_field($$$$$$) {
 	$str.="$f[$j-1]=". db_encode_str($$list[$i][$j]);
 	$flag=1 if (!$flag);
       }
-      $str.=" WHERE id=$id;";
+      $str.=" WHERE id=$id";
       #print "<BR>DEBUG: update record $id $str";
       return -6 if (db_exec($str) < 0);
     }
@@ -351,7 +352,7 @@ sub update_array_field($$$$$$) {
 	$str.=db_encode_str($$list[$i][$j]);
 	$flag=1 if (!$flag);
       }
-      $str.=",$vals);";
+      $str.=",$vals)";
       #print "<BR>DEBUG: add record $id $str";
       return -7 if (db_exec($str) < 0);
     }
@@ -360,6 +361,33 @@ sub update_array_field($$$$$$) {
   return 0;
 }
 
+sub add_array_field($$$$$$) {
+  my($table,$fields,$keyname,$rec,$rfields,$vals) = @_;
+
+  my($i,$j,$sqlstr,$flag,@f);
+
+  return -1 unless (ref($rec) eq 'HASH');
+  return -2 unless ($table && $keyname && $vals && $rfields);
+  @f = split(",",$fields);
+  return -3 unless (@f > 0);
+
+  for $i (0..$#{$rec->{$keyname}}) {
+    next if (@{$rec->{$keyname}->[$i]} == 0);
+    return -10 unless (@{$rec->{$keyname}->[$i]} >= (@f + 1));
+    $flag = 0;
+    $sqlstr = "INSERT INTO $table ($fields,$rfields) VALUES(";
+    for $j (1..($#f + 1)) {
+      $sqlstr .= "," if ($flag);
+      $sqlstr .= db_encode_str($rec->{$keyname}->[$i][$j]);
+      $flag = 1;
+    }
+    $sqlstr .= ",$vals)";
+    #print "<BR>DEBUG: add_array_field: insert record '$sqlstr'\n";
+    return -20 if (db_exec($sqlstr) < 0);
+  }
+
+  return 0;
+}
 
 sub update_record($$) {
   my ($table,$rec) = @_;
@@ -383,7 +411,7 @@ sub update_record($$) {
     $flag=1 if (! $flag);
   }
 
-  $sqlstr.=" WHERE id=$id;";
+  $sqlstr.=" WHERE id=$id";
   #print "<p>sql=$sqlstr\n";
 
   return db_exec($sqlstr);
@@ -409,7 +437,7 @@ sub add_record_sql($$) {
     else { $sqlstr .= db_encode_str($$rec{$key}); }
     $flag=1 unless ($flag);
   }
-  $sqlstr.=");";
+  $sqlstr.=")";
 
   return $sqlstr;
 }
@@ -428,7 +456,7 @@ sub add_record($$) {
   $res=db_exec($sqlstr);
   return -1 if ($res < 0);
   $oid=db_lastoid();
-  db_query("SELECT id FROM $table WHERE OID=$oid;",\@q);
+  db_query("SELECT id FROM $table WHERE OID=$oid",\@q);
   return -2 if (@q < 1);
   return $q[0][0];
 }
@@ -442,7 +470,7 @@ sub copy_records($$$$$$$) {
 
   # read records into array & fix key fields using hash
 
-  $tmp="SELECT $reffield,$fields FROM $stable WHERE $key IN ($selectsql);";
+  $tmp="SELECT $reffield,$fields FROM $stable WHERE $key IN ($selectsql)";
   #print "$tmp\n";
   db_query($tmp,\@data);
   print "<br>$stable records to copy: " . @data . "\n";
@@ -457,6 +485,31 @@ sub copy_records($$$$$$$) {
   return db_insert($ttable,"$reffield,$fields",\@data);
 }
 
+sub add_std_fields($) {
+  my($rec) = @_;
+
+  return unless (ref($rec) eq 'HASH');
+
+  $rec->{cdate_str}=($rec->{cdate} > 0 ?
+		     localtime($rec->{cdate}).' by '.$rec->{cuser} : 'UNKOWN');
+  $rec->{mdate_str}=($rec->{mdate} > 0 ?
+		     localtime($rec->{mdate}).' by '.$rec->{muser} : '');
+}
+
+sub del_std_fields($) {
+  my($rec) = @_;
+
+  return unless (ref($rec) eq 'HASH');
+
+  delete $rec->{cdate_str};
+  delete $rec->{mdate_str};
+  delete $rec->{cdate};
+  delete $rec->{cuser};
+
+  $rec->{mdate}=time;
+  $rec->{muser}=$muser;
+}
+
 ############################################################################
 # server table functions
 
@@ -464,8 +517,8 @@ sub get_server_id($) {
   my ($server) = @_;
 
   return -1 unless ($server);
-  return -1 
-    unless (db_exec("SELECT id FROM servers WHERE name='$server';")>0);
+  $server=db_encode_str($server);
+  return -2 unless (db_exec("SELECT id FROM servers WHERE name=$server")>0);
   return db_getvalue(0,0);
 }
 
@@ -478,8 +531,7 @@ sub get_server_list($$$) {
   undef %{$rec};
   $$rec{-1}='None';
 
-  db_query("SELECT id,name,comment FROM servers " .
-	   "ORDER BY name;",\@q);
+  db_query("SELECT id,name,comment FROM servers ORDER BY name",\@q);
   for $i (0..$#q) {
     next if ($q[$i][0] == $serverid);
     push @{$lst}, $q[$i][0];
@@ -526,11 +578,6 @@ sub get_server($$) {
   get_array_field("txt_entries",3,"id,txt,comment","TXT,Comments",
 		  "type=10 AND ref=$id ORDER BY id",$rec,'logging');
 
-  $rec->{cdate_str}=($rec->{cdate} > 0 ?
-		     localtime($rec->{cdate}).' by '.$rec->{cuser} : 'UNKOWN');
-  $rec->{mdate_str}=($rec->{mdate} > 0 ?
-		     localtime($rec->{mdate}).' by '.$rec->{muser} : '');
-
   $rec->{dhcp_flags_ad}=($rec->{dhcp_flags} & 0x01 ? 1 : 0);
   $rec->{dhcp_flags_fo}=($rec->{dhcp_flags} & 0x02 ? 1 : 0);
   $rec->{named_flags_ac}=($rec->{named_flags} & 0x01 ? 1 : 0);
@@ -543,6 +590,7 @@ sub get_server($$) {
     $rec->{server_type}='Master';
   }
 
+  add_std_fields($rec);
   return 0;
 }
 
@@ -552,14 +600,9 @@ sub update_server($) {
   my($rec) = @_;
   my($r,$id);
 
-  delete $rec->{cdate_str};
-  delete $rec->{mdate_str};
-  delete $rec->{cdate};
-  delete $rec->{cuser};
+  del_std_fields($rec);
   delete $rec->{dhcp_flags};
   delete $rec->{server_type};
-  $rec->{mdate}=time;
-  $rec->{muser}=$muser;
 
   $rec->{dhcp_flags}=0;
   $rec->{dhcp_flags}|=0x01 if ($rec->{dhcp_flags_ad});
@@ -830,10 +873,6 @@ sub get_zone($$) {
   get_array_field("cidr_entries",3,"id,ip,comment","IP,Comments",
 		  "type=12 AND ref=$id ORDER BY ip",$rec,'forwarders');
 
-  $rec->{cdate_str}=($rec->{cdate} > 0 ?
-		     localtime($rec->{cdate}).' by '.$rec->{cuser} : 'UNKOWN');
-  $rec->{mdate_str}=($rec->{mdate} > 0 ?
-		     localtime($rec->{mdate}).' by '.$rec->{muser} : '');
 
   db_query("SELECT COUNT(h.id) FROM hosts h, zones z " .
 	   "WHERE z.id=$id AND h.zone=$id " .
@@ -841,6 +880,8 @@ sub get_zone($$) {
   $rec->{pending_info}=($q[0][0] > 0 ? 
 			"<FONT color=\"#ff0000\">$q[0][0]</FONT>" : 'None');
 
+
+  add_std_fields($rec);
   return 0;
 }
 
@@ -848,13 +889,8 @@ sub update_zone($) {
   my($rec) = @_;
   my($r,$id,$new_net);
 
-  delete $rec->{cdate_str};
-  delete $rec->{mdate_str};
-  delete $rec->{cdate};
-  delete $rec->{cuser};
+  del_std_fields($rec);
   delete $rec->{pending_info};
-  $rec->{mdate}=time;
-  $rec->{muser}=$muser;
 
   if ($rec->{reverse} eq 't') {
       $new_net=arpa2cidr($rec->{name});
@@ -1297,7 +1333,7 @@ sub get_host($$) {
 
   if ($rec->{cdate} > 0) {
     $rec->{cdate_str}=localtime($rec->{cdate}).' by '.$rec->{cuser};
-    $rec->{cdate_str} .= "<FONT color=\"#ff0000\"> (PENDING)</FONT>"  
+    $rec->{cdate_str} .= "<FONT color=\"#ff0000\"> (PENDING)</FONT>"
       if ($q[0][0] < $rec->{cdate});
   } else {
     $rec->{mdate_str}='UNKNOWN';
@@ -1305,7 +1341,7 @@ sub get_host($$) {
 
   if ($rec->{mdate} > 0) {
     $rec->{mdate_str}=localtime($rec->{mdate}).' by '.$rec->{muser};
-    $rec->{mdate_str} .= "<FONT color=\"#ff0000\"> (PENDING)</FONT>"  
+    $rec->{mdate_str} .= "<FONT color=\"#ff0000\"> (PENDING)</FONT>"
       if ($q[0][0] < $rec->{mdate});
   } else {
     $rec->{mdate_str}='';
@@ -1322,6 +1358,7 @@ sub update_host($) {
   my($rec) = @_;
   my($r,$id);
 
+  del_std_fields($rec);
   delete $rec->{card_info};
   delete $rec->{ether_alias_info};
   delete $rec->{wks_rec};
@@ -1329,15 +1366,10 @@ sub update_host($) {
   delete $rec->{grp_rec};
   delete $rec->{alias_l};
   delete $rec->{alias_d};
-  delete $rec->{mdate_str};
-  delete $rec->{cdate_str};
-  delete $rec->{cdate};
-  delete $rec->{cuser};
   delete $rec->{dhcp_date};
   delete $rec->{dhcp_info};
   delete $rec->{dhcp_date_str};
-  $rec->{mdate}=time;
-  $rec->{muser}=$muser;
+
   $rec->{domain}=lc($rec->{domain}) if (defined $rec->{domain});
 
   db_begin();
@@ -1437,7 +1469,6 @@ sub delete_host($) {
   if ($res < 0) { db_rollback(); return -50; }
 
   return db_commit();
-  #return db_rollback();
 }
 
 sub add_host($) {
@@ -1527,10 +1558,7 @@ sub get_mx_template($$) {
   get_array_field("mx_entries",4,"id,pri,mx,comment","Priority,MX,Comment",
 		  "type=3 AND ref=$id ORDER BY pri,mx",$rec,'mx_l');
 
-  $rec->{cdate_str}=($rec->{cdate} > 0 ?
-		     localtime($rec->{cdate}).' by '.$rec->{cuser} : 'UNKOWN');
-  $rec->{mdate_str}=($rec->{mdate} > 0 ?
-		     localtime($rec->{mdate}).' by '.$rec->{muser} : '');
+  add_std_fields($rec);
   return 0;
 }
 
@@ -1538,12 +1566,7 @@ sub update_mx_template($) {
   my($rec) = @_;
   my($r,$id);
 
-  delete $rec->{mdate_str};
-  delete $rec->{cdate_str};
-  delete $rec->{cdate};
-  delete $rec->{cuser};
-  $rec->{mdate}=time;
-  $rec->{muser}=$muser;
+  del_std_fields($rec);
 
   db_begin();
   $r=update_record('mx_templates',$rec);
@@ -1560,7 +1583,7 @@ sub update_mx_template($) {
 sub add_mx_template($) {
   my($rec) = @_;
 
-  my($res,$id,$i);
+  my($res,$id);
 
   db_begin();
   $rec->{cuser}=$muser;
@@ -1570,11 +1593,9 @@ sub add_mx_template($) {
   $id=$res;
 
   # mx_entries
-    for $i (0..$#{$rec->{mx_l}}) {
-    $res=db_exec("INSERT INTO mx_entries (type,ref,pri,mx) " .
-		 "VALUES(3,$id,'$rec->{mx_l}[$i][1]','$rec->{mx_l}[$i][2]')");
-    if ($res < 0) { db_rollback(); return -3; }
-  }
+  $res=add_array_field('mx_entries','pri,mx,comment','mx_l',$rec,
+		       'type,ref',"3,$id");
+  if ($res < 0) { db_rollback(); return -3; }
 
   return -10 if (db_commit() < 0);
   return $id;
@@ -1637,10 +1658,7 @@ sub get_wks_template($$) {
 		  "Proto,Services,Comment",
 		  "type=2 AND ref=$id ORDER BY proto,services",$rec,'wks_l');
 
-  $rec->{cdate_str}=($rec->{cdate} > 0 ?
-		     localtime($rec->{cdate}).' by '.$rec->{cuser} : 'UNKOWN');
-  $rec->{mdate_str}=($rec->{mdate} > 0 ?
-		     localtime($rec->{mdate}).' by '.$rec->{muser} : '');
+  add_std_fields($rec);
   return 0;
 }
 
@@ -1648,12 +1666,7 @@ sub update_wks_template($) {
   my($rec) = @_;
   my($r,$id);
 
-  delete $rec->{mdate_str};
-  delete $rec->{cdate_str};
-  delete $rec->{cdate};
-  delete $rec->{cuser};
-  $rec->{mdate}=time;
-  $rec->{muser}=$muser;
+  del_std_fields($rec);
 
   db_begin();
   $r=update_record('wks_templates',$rec);
@@ -1680,11 +1693,9 @@ sub add_wks_template($) {
   $id=$res;
 
   # wks entries
-  for $i (0..$#{$rec->{wks_l}}) {
-    $res=db_exec("INSERT INTO wks_entries (type,ref,proto,services) " .
-  	       "VALUES(2,$id,'$rec->{wks_l}[$i][1]','$rec->{wks_l}[$i][2]')");
-    if ($res < 0) { db_rollback(); return -3; }
-  }
+  $res = add_array_field('wks_entries','proto,services,comment','wks_l',$rec,
+			 'type,ref',"2,$id");
+  if ($res < 0) { db_rollback(); return -3; }
 
   return -10 if (db_commit() < 0);
   return $id;
@@ -1746,10 +1757,7 @@ sub get_printer_class($$) {
 		  "Printer,Comment",
 		  "type=3 AND ref=$id ORDER BY printer",$rec,'printer_l');
 
-  $rec->{cdate_str}=($rec->{cdate} > 0 ?
-		     localtime($rec->{cdate}).' by '.$rec->{cuser} : 'UNKOWN');
-  $rec->{mdate_str}=($rec->{mdate} > 0 ?
-		     localtime($rec->{mdate}).' by '.$rec->{muser} : '');
+  add_std_fields($rec);
   return 0;
 }
 
@@ -1757,12 +1765,7 @@ sub update_printer_class($) {
   my($rec) = @_;
   my($r,$id);
 
-  delete $rec->{mdate_str};
-  delete $rec->{cdate_str};
-  delete $rec->{cdate};
-  delete $rec->{cuser};
-  $rec->{mdate}=time;
-  $rec->{muser}=$muser;
+  del_std_fields($rec);
 
   db_begin();
   $r=update_record('printer_classes',$rec);
@@ -1779,9 +1782,22 @@ sub update_printer_class($) {
 sub add_printer_class($) {
   my($rec) = @_;
 
+  my($res,$id);
+
+  db_begin();
   $rec->{cuser}=$muser;
   $rec->{cdate}=time;
-  return add_record('printer_classes',$rec);
+  $res = add_record('printer_classes',$rec);
+  if ($res < 0) { db_rollback(); return -1; }
+  $id=$res;
+
+  # printer entries
+  $res = add_array_field('printer_entries','printer,comment','printer_l',$rec,
+			 'type,ref',"3,$id");
+  if ($res < 0) { db_rollback(); return -2; }
+
+  return -10 if (db_commit() < 0);
+  return $id;
 }
 
 
@@ -1813,10 +1829,7 @@ sub get_hinfo_template($$) {
 			     "hinfo,type,pri,cdate,cuser,mdate,muser",
 			     $id,$rec,"id"));
 
-  $rec->{cdate_str}=($rec->{cdate} > 0 ?
-		     localtime($rec->{cdate}).' by '.$rec->{cuser} : 'UNKOWN');
-  $rec->{mdate_str}=($rec->{mdate} > 0 ?
-		     localtime($rec->{mdate}).' by '.$rec->{muser} : '');
+  add_std_fields($rec);
   return 0;
 }
 
@@ -1824,12 +1837,7 @@ sub update_hinfo_template($) {
   my($rec) = @_;
   my($r,$id);
 
-  delete $rec->{mdate_str};
-  delete $rec->{cdate_str};
-  delete $rec->{cdate};
-  delete $rec->{cuser};
-  $rec->{mdate}=time;
-  $rec->{muser}=$muser;
+  del_std_fields($rec);
 
   db_begin();
   $r=update_record('hinfo_templates',$rec);
@@ -1885,10 +1893,7 @@ sub get_group($$) {
   get_array_field("printer_entries",3,"id,printer,comment","PRINTER,Comments",
 		  "type=1 AND ref=$id ORDER BY printer",$rec,'printer');
 
-  $rec->{cdate_str}=($rec->{cdate} > 0 ?
-		     localtime($rec->{cdate}).' by '.$rec->{cuser} : 'UNKOWN');
-  $rec->{mdate_str}=($rec->{mdate} > 0 ?
-		     localtime($rec->{mdate}).' by '.$rec->{muser} : '');
+  add_std_fields($rec);
   return 0;
 }
 
@@ -1896,12 +1901,7 @@ sub update_group($) {
   my($rec) = @_;
   my($r,$id);
 
-  delete $rec->{mdate_str};
-  delete $rec->{cdate_str};
-  delete $rec->{cdate};
-  delete $rec->{cuser};
-  $rec->{mdate}=time;
-  $rec->{muser}=$muser;
+  del_std_fields($rec);
 
   db_begin();
   $r=update_record('groups',$rec);
@@ -1930,17 +1930,14 @@ sub add_group($) {
   $id=$res;
 
   # dhcp_entries
-  for $i (0..$#{$rec->{dhcp_l}}) {
-    $res=db_exec("INSERT INTO dhcp_entries (type,ref,dhcp) " .
-		 "VALUES(5,$id,'$rec->{dhcp_l}[$i][1]')");
-    if ($res < 0) { db_rollback(); return -3; }
-  }
+  $res = add_array_field('dhcp_entries','dhcp,comment','dhcp',$rec,
+			 'type,ref',"5,$id");
+  if ($res < 0) { db_rollback(); return -3; }
+
   # printer_entries
-  for $i (0..$#{$rec->{printer_l}}) {
-    $res=db_exec("INSERT INTO printer_entries (type,ref,printer) " .
-		 "VALUES(1,$id,'$rec->{printer_l}[$i][1]')");
-    if ($res < 0) { db_rollback(); return -4; }
-  }
+  $res = add_array_field('printer_entries','printer,comment','printer',$rec,
+			 'type,ref',"1,$id");
+  if ($res < 0) { db_rollback(); return -4; }
 
   return -10 if (db_commit() < 0);
   return $id;
@@ -2002,27 +1999,24 @@ sub get_user($$) {
 
   $res = get_record("users",
 	       "username,password,name,superuser,server,zone,comment,gid,".
-	       "email,flags,expiration,last,last_pwd,id",
+	       "email,flags,expiration,last,last_pwd,id,cdate,cuser,".
+	       "mdate,muser",
 	       $uname,$rec,"username");
 
   $rec->{email_notify} = ($rec->{flags} & 0x01 ? 1 : 0);
 
+  add_std_fields($rec);
   return $res;
 }
 
 sub update_user($) {
   my($rec) = @_;
 
+  del_std_fields($rec);
+
   $rec->{flags}=0;
   $rec->{flags}|=0x01 if ($rec->{email_notify});
-
   delete $rec->{email_notify};
-  delete $rec->{mdate_str};
-  delete $rec->{cdate_str};
-  delete $rec->{cdate};
-  delete $rec->{cuser};
-  $rec->{mdate}=time;
-  $rec->{muser}=$muser;
 
   return update_record('users',$rec);
 }
@@ -2111,10 +2105,7 @@ sub get_net($$) {
   get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comment",
 		  "type=4 AND ref=$id ORDER BY dhcp",$rec,'dhcp_l');
 
-  $rec->{cdate_str}=($rec->{cdate} > 0 ?
-		     localtime($rec->{cdate}).' by '.$rec->{cuser} : 'UNKOWN');
-  $rec->{mdate_str}=($rec->{mdate} > 0 ?
-		     localtime($rec->{mdate}).' by '.$rec->{muser} : '');
+  add_std_fields($rec);
   return 0;
 }
 
@@ -2122,12 +2113,7 @@ sub update_net($) {
   my($rec) = @_;
   my($r,$id);
 
-  delete $rec->{mdate_str};
-  delete $rec->{cdate_str};
-  delete $rec->{cdate};
-  delete $rec->{cuser};
-  $rec->{mdate}=time;
-  $rec->{muser}=$muser;
+  del_std_fields($rec);
 
   db_begin();
   $r=update_record('nets',$rec);
@@ -2201,10 +2187,7 @@ sub get_vlan($$) {
   get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comment",
 		  "type=6 AND ref=$id ORDER BY dhcp",$rec,'dhcp_l');
 
-  $rec->{cdate_str}=($rec->{cdate} > 0 ?
-		     localtime($rec->{cdate}).' by '.$rec->{cuser} : 'UNKOWN');
-  $rec->{mdate_str}=($rec->{mdate} > 0 ?
-		     localtime($rec->{mdate}).' by '.$rec->{muser} : '');
+  add_std_fields($rec);
   return 0;
 }
 
@@ -2213,12 +2196,7 @@ sub update_vlan($) {
   my($rec) = @_;
   my($r,$id);
 
-  delete $rec->{mdate_str};
-  delete $rec->{cdate_str};
-  delete $rec->{cdate};
-  delete $rec->{cuser};
-  $rec->{mdate}=time;
-  $rec->{muser}=$muser;
+  del_std_fields($rec);
 
   db_begin();
   $r=update_record('vlans',$rec);
