@@ -48,8 +48,7 @@ if ($opt_help || @ARGV < 1) {
   exit(0);
 }
 
-fatal("DB_CONNECT not defined in configuration!") unless ($DB_CONNECT);
-db_connect($DB_CONNECT);
+db_connect();
 
 set_muser($user);
 

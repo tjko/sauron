@@ -13,14 +13,26 @@ $PROG_DIR = "/usr/local/sauron/";
 # directory for logfiles
 $LOG_DIR = "$PROG_DIR/logs/";
 
-# database connection setup
-#$DB_CONNECT = "host=localhost port=5432 dbname=sauron user=foo password=bar";
-#$DB_CONNECT = "dbname=sauron user=foo password=bar";
-#$DB_CONNECT = "dbname=sauron user=foo";
-$DB_CONNECT = "dbname=sauron";
-
-# unique server ID (if using multiple www-server)
+# unique server ID (if using multiple www-servers)
 $SERVER_ID = "fooserver";
+
+
+########################################################################
+# database connection setup
+
+# for DBI backend (see DBD::Pg module docs for more info on parameters)
+#$DB_DSN = "dbi:Pg:dbname=sauron;host=localhost;port=5432";
+$DB_DSN = "dbi:Pg:dbname=sauron";
+
+# for old Pg backend (see Pg modules docs for more info on parameters)
+#$DB_DSN = "dbname=sauron host=localhost port=5432";
+#$DB_DSN = "dbname=sauron";
+
+# database user
+$DB_USER = "foo";
+# database (user) password
+$DB_PASSWORD = "bar";
+
 
 #########################################################################
 # advanced configuration options

@@ -35,7 +35,9 @@ sub set_defaults() {
 
   undef $main::PROG_DIR;
   undef $main::LOG_DIR;
-  undef $main::DB_CONNECT;
+  undef $main::DB_DSN;
+  undef $main::DB_USER;
+  undef $main::DB_PASSWORD;
   undef $main::SERVER_ID;
 
   $main::SAURON_DEBUG_MODE = 0;
@@ -98,7 +100,9 @@ sub set_defaults() {
 sub print_config() {
   print "PROG_DIR=",$main::PROG_DIR,"\n";
   print "LOG_DIR=",$main::LOG_DIR,"\n";
-  print "DB_CONNECT=",$main::DB_CONNECT,"\n";
+  print "DB_DSN=",$main::DB_DSN,"\n";
+  print "DB_USER=",$main::DB_USER,"\n";
+  print "DB_PASSWORD=",$main::DB_PASSWORD,"\n";
   print "SERVER_ID=",$main::SERVER_ID,"\n";
 
 
@@ -193,7 +197,7 @@ sub load_config() {
   set_defaults();
   load_config_file("config");
 
-  fatal("DB_CONNECT not set in configuration file") unless ($main::DB_CONNECT);
+  fatal("DB_DSN not set in configuration file") unless ($main::DB_DSN);
   fatal("SERVER_ID not set in configuration file") unless ($main::SERVER_ID);
   fatal("PROG_DIR not set in configuration file") unless ($main::PROG_DIR);
   fatal("LOG_DIR not set in configuration file") unless ($main::LOG_DIR);
@@ -222,7 +226,7 @@ sub load_browser_config() {
 
   load_config_file("config-browser");
 
-  fatal("DB_CONNECT not set in configuration file") unless ($main::DB_CONNECT);
+  fatal("DB_DSN not set in configuration file") unless ($main::DB_DSN);
   fatal("PROG_DIR not set in configuration file") unless ($main::PROG_DIR);
 
   return 0;

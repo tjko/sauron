@@ -33,8 +33,7 @@ $opt_verbose=($opt_verbose ? 1 : 0);
 
 fatal("cannot read input file '$file'") unless (-r $file);
 
-fatal("DB_CONNECT not defined in configuration!") unless ($DB_CONNECT);
-db_connect($DB_CONNECT);
+db_connect();
 
 if ($servername eq 'default') {
   print "Creating default root servers\n";

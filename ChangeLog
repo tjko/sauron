@@ -1,6 +1,9 @@
 $Id$
 
 0.7.1beta
+	- Database connection interface changed, new configuration
+	  options DB_DSN,DB_USER,DB_PASSWORD are now used instead of
+	  old DB_CONNECT.
 	- CGI interface: added enable/disable buttons for easy
 	  togling between host and host reservation
 	- CGI interface: added ability to search by date(ranges)

@@ -28,8 +28,7 @@ if ($opt_help || $count < 1) {
   exit(0);
 }
 
-fatal("DB_CONNECT not defined in configuration!") unless ($DB_CONNECT);
-db_connect($DB_CONNECT);
+db_connect();
 db_debug(0);
 
 $opt_verbose = ($opt_verbose ? 1 : 0);

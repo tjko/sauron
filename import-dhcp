@@ -43,9 +43,9 @@ $user = (getpwuid($<))[0];
 $chaosnet = ($opt_chaosnet ? $opt_chaosnet : 'CHAOS');
 
 fatal("cannot read dhcpd.conf ($dhcpdf)") unless (-r $dhcpdf);
-fatal("DB_CONNECT not defined in configuration!") unless ($DB_CONNECT);
+
 set_muser($user);
-db_connect($DB_CONNECT);
+db_connect();
 
 $serverid=get_server_id($servername);
 fatal("cannot find server: $servername") unless ($serverid > 0);

@@ -9,8 +9,6 @@ general:
 	- add DNSSEC (tsig) support
 	- add ACL (BIND) support
 	- allow '*' in hostnames
-	- add support alternative way of specifying database connection
-          (DB_{DSN,USER,PASS})
 	- method for cleaning up ever-growing history/lastlog tables
 	  
 

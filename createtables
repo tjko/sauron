@@ -41,11 +41,10 @@ load_config();
 
 ##############################################
 
-fatal("DB_CONNECT not defined in configuration!") unless ($DB_CONNECT);
 fatal("cannot find $PROG_DIR/runsql (invalid configuration?)")
   unless (-x "$PROG_DIR/runsql");
 
-db_connect($DB_CONNECT);
+db_connect();
 
 print "Create initial tables for sauron [y/n]? ";
 chomp($a=lc(<STDIN>));

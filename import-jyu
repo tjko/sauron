@@ -49,9 +49,7 @@ $user = (getpwuid($<))[0];
 $origin = "$zonename.";
 $cdate = time;
 
-fatal("DB_CONNECT not defined in configuration!") unless ($DB_CONNECT);
-db_connect($DB_CONNECT);
-#db_debug(1);
+db_connect();
 
 fatal("cannot open .hosts file ($hostsfile)") if (! -f $hostsfile);
 

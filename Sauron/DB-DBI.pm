@@ -44,25 +44,13 @@ my $db_last_error_msg = '';
 my $db_last_oid = 0;
 my $db_ignore_begin_and_commit_flag = 0;
 
-sub db_connect2($) {
-  my($DB_CONNECT) = @_;
-  my($user,$password);
+sub db_connect2() {
+  my($dsn,$user,$password);
+  $dsn = ($main::DB_DSN ? $main::DB_DSN : '');
+  $user = ($main::DB_USER ? $main::DB_USER : '');
+  $password = ($main::DB_PASSWORD ? $main::DB_PASSWORD : '');
 
-  if ($DB_CONNECT =~  /(^|\s)user\=(\S+)(\s|$)/) {
-    $user=$2;
-    $DB_CONNECT =~ s/user\=\S+(\s|$)//;
-  }
-  if ($DB_CONNECT =~  /(^|\s)password\=(\S+)(\s|$)/) {
-    $password=$2;
-    $DB_CONNECT =~ s/password\=\S+(\s|$)//;
-  }
-
-  $DB_CONNECT =~ s/(^\s+|\s+$)//g;
-  $DB_CONNECT =~ s/\s+/\;/g;
-  $DB_CONNECT="DBI:Pg:".$DB_CONNECT;
-
-
-  $dbh = DBI->connect($DB_CONNECT,$user,$password);
+  $dbh = DBI->connect($dsn,$user,$password);
   unless ($dbh) {
     error("db_connect() failed: " . $DBI::errstr);
     return 0;
@@ -72,9 +60,8 @@ sub db_connect2($) {
 }
 
 
-sub db_connect($) {
-  my ($DB_CONNECT) = @_;
-  exit(1) unless (db_connect2($DB_CONNECT));
+sub db_connect() {
+  exit(1) unless (db_connect2());
   return 1;
 }
 

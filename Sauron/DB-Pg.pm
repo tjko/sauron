@@ -6,6 +6,7 @@ package Sauron::DB;
 require Exporter;
 use Time::Local;
 use Pg;
+use Sauron::Util;
 use strict;
 use vars qw($VERSION @ISA @EXPORT);
 
@@ -66,27 +67,25 @@ my $db_debug_flag = 0;
 my $db_last_error_msg = '';
 my $db_ignore_begin_and_commit_flag = 0;
 
-sub db_connect($) {
-  my ($DB_CONNECT) = @_;
 
-  $db_connection_handle = Pg::connectdb($DB_CONNECT);
-  die($0 . ": ". $db_connection_handle->errorMessage) 
-         if ($db_connection_handle->status != PGRES_CONNECTION_OK);
-  return 1;
-}
+sub db_connect2() {
 
-sub db_connect2($) {
-  my ($DB_CONNECT) = @_;
+  my $dsn = ($main::DB_DSN ? $main:DB_DSN : '');
+  $dsn .= " user=$main::DB_USER" if ($main::DB_USER);
+  $dsn .= " password=$main::DB_PASSWORD" if ($main::DB_PASSWORD);
 
-  $db_connection_handle = Pg::connectdb($DB_CONNECT);
+  $db_connection_handle = Pg::connectdb($dsn);
   if ($db_connection_handle->status != PGRES_CONNECTION_OK) {
-    warn($0 . ": ". $db_connection_handle->errorMessage);
+    error("db_connect() failed: ". $db_connection_handle->errorMessage);
     return 0;
   }
   return 1;
 }
 
-
+sub db_connect() {
+  exit(1) unless (db_connect2());
+  return 1;
+}
 
 
 sub db_exec($) {

@@ -42,8 +42,7 @@ if ($opt_help || @ARGV < 2 || $result < 1) {
   exit(0);
 }
 
-fatal("DB_CONNECT not defined in configuration!") unless ($DB_CONNECT);
-db_connect($DB_CONNECT);
+db_connect();
 
 $server=$ARGV[0];
 $zone=$ARGV[1];

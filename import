@@ -47,9 +47,8 @@ $cdate = time;
 
 $LOOPBACK_NET='127.0.0.0/24' unless ($LOOPBACK_NET);
 $LOOPBACK_ZONE='localhost.' unless ($LOOPBACK_ZONE);
-fatal("DB_CONNECT not defined in configuration!") unless ($DB_CONNECT);
 
-db_connect($DB_CONNECT);
+db_connect();
 set_muser($user);
 
 fatal("cannot open named.conf ($namedf)") unless (-r $namedf);

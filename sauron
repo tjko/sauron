@@ -1782,8 +1782,7 @@ error("mailer settings missing from config")
 print "Email notification sending: " .
       ($mailnotify_mode ? 'enabled':'disabled') . "\n" if ($opt_verbose);
 
-fatal("DB_CONNECT not defined in configuration!") unless ($DB_CONNECT);
-db_connect($DB_CONNECT);
+db_connect();
 
 $time_now_ticks = time;
 

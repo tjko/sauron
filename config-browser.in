@@ -10,10 +10,22 @@
 # base directory for Sauron install
 $PROG_DIR = "/usr/local/sauron/";
 
+########################################################################
 # database connection setup
-#$DB_CONNECT = "host=localhost port=5432 dbname=sauron user=foo password=bar";
-#$DB_CONNECT = "dbname=sauron user=foo password=bar";
-$DB_CONNECT = "dbname=sauron";
+
+# for DBI backend (see DBD::Pg module docs for more info on parameters)
+#$DB_DSN = "dbi:Pg:dbname=sauron;host=localhost;port=5432";
+$DB_DSN = "dbi:Pg:dbname=sauron";
+
+# for old Pg backend (see Pg modules docs for more info on parameters)
+#$DB_DSN = "dbname=sauron host=localhost port=5432";
+#$DB_DSN = "dbname=sauron";
+
+# database user
+$DB_USER = "foo";
+# database (user) password
+$DB_PASSWORD = "bar";
+
 
 # define which zones are available to browse and via which path
 # under browser.cgi (for example foo --> http://host/cgi-bin/browser.cgi/foo/)

@@ -26,8 +26,7 @@ if ($opt_help) {
   exit(0);
 }
 
-fatal("DB_CONNECT not defined in configuration!") unless ($DB_CONNECT);
-db_connect($DB_CONNECT);
+db_connect();
 
 
 unless ($opt_user) {

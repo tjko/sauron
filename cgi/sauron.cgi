@@ -180,8 +180,7 @@ html_error("Invalid log path (LOG_DIR)") unless (-d $LOG_DIR);
 html_error("Cannot write to log file")
   if (logmsg(($debug_mode ? "debug":"test"),"CGI access from $remote_addr")
       < 0);
-html_error("No database connection defined (DB_CONNECT)") unless ($DB_CONNECT);
-html_error("Cannot connect to database") unless (db_connect2($DB_CONNECT));
+html_error("Cannot connect to database") unless (db_connect2());
 html_error("Database format mismatch!")
   if (sauron_db_version() ne get_db_version());
 html_error("CGI interface disabled: $res") if (($res=cgi_disabled()));

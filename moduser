@@ -220,9 +220,8 @@ $opt_lock = ($opt_lock ? 1 : 0);
 $opt_unlock = ($opt_unlock ? 1 : 0);
 $opt_edit = ($opt_edit ? 1 : 0);
 
-fatal("DB_CONNECT not defined in configuration!") unless ($DB_CONNECT);
-db_connect($DB_CONNECT);
-db_debug(1);
+db_connect();
+db_debug(0);
 
 if ($opt_list) {
   if ($modgroup) {

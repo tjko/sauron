@@ -34,8 +34,7 @@ $opt_comments = ($opt_comments ? 1 : 0);
 $opt_all = ($opt_all ? 1 : 0);
 $servername=shift;
 
-fatal("DB_CONNECT not defined in configuration!") unless ($DB_CONNECT);
-db_connect($DB_CONNECT);
+db_connect();
 
 $serverid=get_server_id($servername);
 fatal("cannot find server '$servername'") unless ($serverid > 0);

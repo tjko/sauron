@@ -35,8 +35,7 @@ fatal("cannot read input file: $filename")
 fatal("cannot specify both --ip and --mac options")  if ($opt_ip && $opt_mac);
 fatal("neither --ip or --mac option specified") unless ($opt_ip || $opt_mac);
 
-fatal("DB_CONNECT not defined in configuration!") unless ($DB_CONNECT);
-db_connect($DB_CONNECT);
+db_connect();
 
 $serverid=get_server_id($server);
 fatal("cannot find server '$server'") unless ($serverid > 0);

@@ -94,8 +94,7 @@ if ($opt_config) {
 
 exit if ($opt_versions || $opt_config);
 
-fatal("DB_CONNECT not defined in configuration!") unless ($DB_CONNECT);
-$db_ok = db_connect2($DB_CONNECT);
+$db_ok = db_connect2();
 
 $VER=sauron_version();
 $DBVER=sauron_db_version();

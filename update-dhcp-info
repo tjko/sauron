@@ -50,8 +50,7 @@ print "Using year (".($year+1900).") as the year for data in logfile.\n"
 
 
 fatal("cannot read input file '$file'") unless (-r $file);
-fatal("DB_CONNECT not defined in configuration!") unless ($DB_CONNECT);
-db_connect($DB_CONNECT);
+db_connect();
 
 $serverid=get_server_id($servername);
 fatal("cannot find server '$servername'") unless ($serverid > 0);

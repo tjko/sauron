@@ -41,10 +41,9 @@ $user = (getpwuid($<))[0];
 
 
 fatal("cannot read zone file: $zonefile") if ( $zonefile && ! -r $zonefile);
-fatal("DB_CONNECT not defined in configuration!") unless ($DB_CONNECT);
 
 set_muser($user);
-db_connect($DB_CONNECT);
+db_connect();
 
 $serverid=get_server_id($servername);
 fatal("cannot find server: $servername") unless ($serverid > 0);

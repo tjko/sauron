@@ -93,8 +93,7 @@ set_muser($user);
 fatal("cannot read input file: $filename")
   if ($filename ne '-' && ! -r $filename);
 
-fatal("DB_CONNECT not defined in configuration!") unless ($DB_CONNECT);
-db_connect($DB_CONNECT);
+db_connect();
 
 $serverid=get_server_id($server);
 fatal("cannot find server: $server") unless ($serverid > 0);

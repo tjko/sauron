@@ -119,8 +119,7 @@ sub do_search();
 
 #####################################################################
 
-db_connect2($DB_CONNECT) ||
-  html_error("Cannot estabilish connection with database");
+db_connect2() || html_error("Cannot estabilish connection with database");
 html_error("CGI interface disabled: $res") if (($res=cgi_disabled()));
 $VER=sauron_version();
 

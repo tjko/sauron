@@ -88,8 +88,7 @@ $seq_start=0;
 $add_count=0;
 
 
-fatal("DB_CONNECT not defined in configuration!") unless ($DB_CONNECT);
-db_connect($DB_CONNECT);
+db_connect();
 
 if ($opt_seqstart) {
   $seq_start = $opt_seqstart;

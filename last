@@ -28,8 +28,7 @@ if ($ARGV[0] =~ /^-(\d+)/) {
 
 $user_rule="$ARGV[0]" if ($ARGV[0]);
 
-fatal("DB_CONNECT not defined in configuration!") unless ($DB_CONNECT);
-db_connect($DB_CONNECT);
+db_connect();
 
 $count=get_lastlog($count_rule,$user_rule,\@q);
 
