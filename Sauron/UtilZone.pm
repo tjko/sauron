@@ -216,10 +216,10 @@ sub process_zonefile($$$$) {
 	$line[1]='$DOMAIN';
       }
 
-      push @{$rec->{MX}}, "$line[0]" . " " . "$line[1]";
+      push @{$rec->{MX}}, "$line[0]" . " " . add_origin($line[1],$origin);
     }
     elsif ($type eq 'NS') {
-      push @{$rec->{NS}}, $line[0];
+      push @{$rec->{NS}}, add_origin($line[0],$origin);
     }
     elsif ($type eq 'HINFO') {
       $rec->{HINFO}[0]=$line[0];
