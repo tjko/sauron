@@ -747,6 +747,48 @@ sub get_mx_template($$) {
   return 0;
 }
 
+sub update_mx_template($) {
+  my($rec) = @_;
+  my($r,$id);
+
+  db_begin();
+  $r=update_record('mx_templates',$rec);
+  if ($r < 0) { db_rollback(); return $r; }
+  $id=$rec->{id};
+
+  $r=update_array_field("mx_entries",4,"pri,mx,comment,type,ref",
+			'mx_l',$rec,"3,$id");
+  if ($r < 0) { db_rollback(); return -10; }
+
+  return db_commit();
+}
+
+sub add_mx_template($) {
+  my($rec) = @_;
+
+  return add_record('mx_templates',$rec);
+}
+
+
+sub delete_mx_template($) {
+  my($id) = @_;
+  my($res);
+
+  return -100 unless ($id > 0);
+
+  db_begin();
+
+  # mx_entries
+  $res=db_exec("DELETE FROM mx_entries WHERE type=3 AND ref=$id;");
+  if ($res < 0) { db_rollback(); return -1; }
+
+  $res=db_exec("DELETE FROM mx_templates WHERE id=$id;");
+  if ($res < 0) { db_rollback(); return -2; }
+
+  return db_commit();
+}
+
+
 sub get_mx_template_list($$$) {
   my($zoneid,$rec,$lst) = @_;
   my(@q,$i);
@@ -777,6 +819,47 @@ sub get_wks_template($$) {
 		  "Proto,Services,Comment",
 		  "type=2 AND ref=$id ORDER BY proto,services",$rec,'wks_l');
   return 0;
+}
+
+sub update_wks_template($) {
+  my($rec) = @_;
+  my($r,$id);
+
+  db_begin();
+  $r=update_record('wks_templates',$rec);
+  if ($r < 0) { db_rollback(); return $r; }
+  $id=$rec->{id};
+
+  $r=update_array_field("wks_entries",4,"proto,services,comment,type,ref",
+			'wks_l',$rec,"2,$id");
+  if ($r < 0) { db_rollback(); return -10; }
+
+  return db_commit();
+}
+
+sub add_wks_template($) {
+  my($rec) = @_;
+
+  return add_record('wks_templates',$rec);
+}
+
+
+sub delete_wks_template($) {
+  my($id) = @_;
+  my($res);
+
+  return -100 unless ($id > 0);
+
+  db_begin();
+
+  # wks_entries
+  $res=db_exec("DELETE FROM wks_entries WHERE type=2 AND ref=$id;");
+  if ($res < 0) { db_rollback(); return -1; }
+
+  $res=db_exec("DELETE FROM wks_templates WHERE id=$id;");
+  if ($res < 0) { db_rollback(); return -2; }
+
+  return db_commit();
 }
 
 sub get_wks_template_list($$$) {

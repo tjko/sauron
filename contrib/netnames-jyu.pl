@@ -1,5 +1,15 @@
 #!/usr/bin/perl
 #
+# Updates subnet names in given server. Subnet names are extracted from
+# files given as parameters on command line.
+#
+# This script looks for lines containing following pattern:
+#  Net <CIRD> <subnet name>
+#
+# For example:
+#  Net 192.168  Testing network
+#  Net 192.168.1.0/27  Testing network...
+#
 # $Id$
 #
 use Net::Netmask;
@@ -55,10 +65,10 @@ while (<>) {
 
 foreach $net (sort keys %hash) {
   undef @q;
-  db_query("SELECT id FROM nets WHERE server=$serverid AND net >>= '$net';",
-	  \@q);
-  unless ($#q > 0) {
-    print "No matching net found for: $net = $hash{$net}\n";
+  db_query("SELECT id FROM nets WHERE server=$serverid " .
+	   " AND net = '$net';",\@q);
+  unless (@q > 0) {
+    print "No matching net found for: $net = $hash{$net} $q[0][0]\n";
     next;
   }
   $id=$q[0][0];

@@ -155,7 +155,7 @@ do "$PROG_DIR/back_end.pl";
    type=>['text','text','text'], fields=>3, len=>[10,30,10], empty=>[0,0,1], 
    elabels=>['Protocol','Services','comment'], iff=>['type','1']},
   {ftype=>2, tag=>'mx_l', name=>'Mail exchanges (MX)', 
-   type=>['priority','domain','text'], fields=>3, len=>[5,30,20], 
+   type=>['priority','mx','text'], fields=>3, len=>[5,30,20], 
    empty=>[0,0,1], 
    elabels=>['Priority','MX','comment'], iff=>['type','[13]']},
   {ftype=>2, tag=>'txt_l', name=>'TXT', type=>['text','text'], 
@@ -266,6 +266,21 @@ do "$PROG_DIR/back_end.pl";
  heading_bg=>'#aaaaff'
 );
 
+%new_template_form=(
+ data=>[
+  {ftype=>0, name=>'New template'},
+  {ftype=>1, tag=>'name', name=>'Name', type=>'text',
+   len=>40, empty=>0},
+  {ftype=>1, tag=>'comment', name=>'Comment', type=>'text',
+   len=>60, empty=>1}
+ ],
+ bgcolor=>'#eeeebf',
+ border=>'0',		
+ width=>'100%',
+ nwidth=>'30%',
+ heading_bg=>'#aaaaff'
+);
+
 %mx_template_form=(
  data=>[
   {ftype=>0, name=>'MX template'},
@@ -273,7 +288,7 @@ do "$PROG_DIR/back_end.pl";
   {ftype=>4, tag=>'id', name=>'ID'},
   {ftype=>1, tag=>'comment', name=>'Comment', type=>'text',len=>60, empty=>1},
   {ftype=>2, tag=>'mx_l', name=>'Mail exchanges (MX)', 
-   type=>['priority','domain','text'], fields=>3, len=>[5,30,20], 
+   type=>['priority','mx','text'], fields=>3, len=>[5,30,20], 
    empty=>[0,0,1],elabels=>['Priority','MX','comment']}
  ],
  bgcolor=>'#eeeebf',
@@ -988,20 +1003,158 @@ sub templates_menu() {
     print "</TABLE>";
     return;
   }
+  elsif ($sub eq 'Edit') {
+    if ($mx_id > 0) {
+      $res=edit_magic('mx','MX template','templates',\%mx_template_form,
+		      \&get_mx_template,\&update_mx_template,$mx_id);
+      goto show_mxt_record if ($res > 0);
+    } elsif ($wks_id > 0) {
+      $res=edit_magic('wks','WKS template','templates',\%wks_template_form,
+		      \&get_wks_template,\&update_wks_template,$wks_id);
+      goto show_wkst_record if ($res > 0);
+    } else { print p,"Unknown template type!"; }
+    return;
+  }
+  elsif ($sub eq 'Delete') {
+    if ($mx_id > 0) {
+      if (get_mx_template($mx_id,\%h)) {
+	print h2("Cannot get mx template (id=$mx_id)");
+	return;
+      }
+      if (param('mx_cancel')) {
+	print h2('MX template not removed');
+	goto show_mxt_record;
+      } 
+      elsif (param('mx_confirm')) {
+	$new_id=param('mx_new');
+	if ($new_id eq $mx_id) {
+	  print h2("Cannot change host records to point template " .
+		   "being deleted!");
+	  goto show_mxt_record;
+	}
+	$new_id=-1 unless ($new_id > 0);
+	if (db_exec("UPDATE hosts SET mx=$new_id WHERE mx=$mx_id;") < 0) {
+	  print h2('Cannot update records pointing to this template!');
+	  return;
+	}
+	if (delete_mx_template($mx_id) < 0) {
+	  print "<FONT color=\"red\">",h1("MX template delete failed!"),
+	        "</FONT>";
+	  return;
+	}
+	print h2("MX template successfully deleted.");
+	return;
+      }
+
+      undef @q;
+      db_query("SELECT COUNT(id) FROM hosts WHERE mx=$mx_id;",\@q);
+      print p,"$q[0][0] host records use this template.",
+	      startform(-method=>'GET',-action=>$selfurl);
+      if ($q[0][0] > 0) {
+	get_mx_template_list($zoneid,\%lsth,\@lst);
+	print p,"Change those host records to point to: ",
+	        popup_menu(-name=>'mx_new',-values=>\@lst,
+			   -default=>-1,-labels=>\%lsth);
+      }
+      print hidden('menu','templates'),hidden('sub','Delete'),
+	      hidden('mx_id',$mx_id),p,
+	      submit(-name=>'mx_confirm',-value=>'Delete'),"  ",
+	      submit(-name=>'mx_cancel',-value=>'Cancel'),end_form;
+      display_form(\%h,\%mx_template_form);
+
+    } elsif ($wks_id > 0) {
+      if (get_wks_template($wks_id,\%h)) {
+	print h2("Cannot get wks template (id=$wks_id)");
+	return;
+      }
+      if (param('wks_cancel')) {
+	print h2('WKS template not removed');
+	goto show_wkst_record;
+      } 
+      elsif (param('wks_confirm')) {
+	$new_id=param('wks_new');
+	if ($new_id eq $wks_id) {
+	  print h2("Cannot change host records to point template " .
+		   "being deleted!");
+	  goto show_wkst_record;
+	}
+	$new_id=-1 unless ($new_id > 0);
+	if (db_exec("UPDATE hosts SET wks=$new_id WHERE wks=$wks_id;") < 0) {
+	  print h2('Cannot update records pointing to this template!');
+	  return;
+	}
+	if (delete_wks_template($wks_id) < 0) {
+	  print "<FONT color=\"red\">",h1("WKS template delete failed!"),
+	        "</FONT>";
+	  return;
+	}
+	print h2("WKS template successfully deleted.");
+	return;
+      }
+
+      undef @q;
+      db_query("SELECT COUNT(id) FROM hosts WHERE wks=$wks_id;",\@q);
+      print p,"$q[0][0] host records use this template.",
+	      startform(-method=>'GET',-action=>$selfurl);
+      if ($q[0][0] > 0) {
+	get_wks_template_list($serverid,\%lsth,\@lst);
+	print p,"Change those host records to point to: ",
+	        popup_menu(-name=>'wks_new',-values=>\@lst,
+			   -default=>-1,-labels=>\%lsth);
+      }
+      print hidden('menu','templates'),hidden('sub','Delete'),
+	      hidden('wks_id',$wks_id),p,
+	      submit(-name=>'wks_confirm',-value=>'Delete'),"  ",
+	      submit(-name=>'wks_cancel',-value=>'Cancel'),end_form;
+      display_form(\%h,\%wks_template_form);
+
+    } else { print p,"Unknown template type!"; }
+    return;
+  }
+  elsif ($sub eq 'addmx') {
+    $data{zone}=$zoneid;
+    $res=add_magic('addmx','MX template','templates',\%new_template_form,
+		   \&add_mx_template,\%data);
+    if ($res > 0) {
+      $mx_id=$res;
+      goto show_mxt_record;
+    }
+  }
+  elsif ($sub eq 'addwks') {
+    $data{server}=$serverid;
+    $res=add_magic('addwks','WKS template','templates',\%new_template_form,
+		   \&add_wks_template,\%data);
+    if ($res > 0) {
+      $wks_id=$res;
+      goto show_wkst_record;
+    }
+  }
   elsif ($mx_id > 0) {
+  show_mxt_record:
     if (get_mx_template($mx_id,\%mxhash)) {
       print h2("Cannot get MX template (id=$mx_id)!");
       return;
     }
     display_form(\%mxhash,\%mx_template_form);
+    print p,startform(-method=>'GET',-action=>$selfurl),
+          hidden('menu','templates'),
+          submit(-name=>'sub',-value=>'Edit'), "  ",
+          submit(-name=>'sub',-value=>'Delete'),
+          hidden('mx_id',$mx_id),end_form;
     return;
   }
   elsif ($wks_id > 0) {
+  show_wkst_record:
     if (get_wks_template($wks_id,\%wkshash)) {
       print h2("Cannot get WKS template (id=$wks_id)!");
       return;
     }
     display_form(\%wkshash,\%wks_template_form);
+    print p,startform(-method=>'GET',-action=>$selfurl),
+          hidden('menu','templates'),
+          submit(-name=>'sub',-value=>'Edit'), "  ",
+          submit(-name=>'sub',-value=>'Delete'),
+          hidden('wks_id',$wks_id),end_form;
     return;
   }
 
@@ -1642,6 +1795,9 @@ sub form_check_field($$$) {
     return '';
   } elsif ($type eq 'enum') {
     return '';
+  } elsif ($type eq 'mx') {
+    return 'valid domain or "$DOMAIN" required!'
+      unless(($value eq '$DOMAIN') || valid_domainname($value));
   } elsif ($type eq 'int' || $type eq 'priority') {
     return 'integer required!' unless ($value =~ /^(-?\d+)$/);
     $t=$1;
