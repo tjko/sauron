@@ -3677,6 +3677,7 @@ sub frame_set2() {
 
   print "<HTML>" .
         "<FRAMESET border=\"0\" cols=\"17%,*\">\n" .
+        "  <TITLE>Sauron ($SERVER_ID)</TITLE>" .
 	"  <FRAME src=\"$script_name/frame2$menu\" name=\"menu\" noresize>\n" .
         "  <FRAME src=\"$script_name/frame3$menu\" name=\"main\">\n" .
         "  <NOFRAMES>\n" .

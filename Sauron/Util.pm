@@ -291,7 +291,7 @@ sub fatal($) {
 }
 
 # print error message
-sub fatal($) {
+sub error($) {
   my ($msg) = @_;
   print STDERR "$0: $msg\n";
 }

@@ -1008,9 +1008,19 @@ sub delete_zone($) {
 
 sub add_zone($) {
   my($rec) = @_;
+  my($new_net);
 
   $rec->{cdate}=time;
   $rec->{cuser}=$muser;
+
+  if ($rec->{reverse} =~ /^(t|true)$/) {
+      $new_net=arpa2cidr($rec->{name});
+      if (($new_net eq '0.0.0.0/0') or ($new_net eq '')) {
+	  return -100;
+      }
+      $rec->{reversenet}=$new_net;
+  }
+
   return add_record('zones',$rec);
 }
 
@@ -1544,9 +1554,24 @@ sub update_mx_template($) {
 sub add_mx_template($) {
   my($rec) = @_;
 
+  my($res,$id,$i);
+
+  db_begin();
   $rec->{cuser}=$muser;
   $rec->{cdate}=time;
-  return add_record('mx_templates',$rec);
+  $res = add_record('mx_templates',$rec);
+  if ($res < 0) { db_rollback(); return -1; }
+  $id=$res;
+
+  # mx_entries
+    for $i (0..$#{$rec->{mx_l}}) {
+    $res=db_exec("INSERT INTO mx_entries (type,ref,pri,mx) " .
+		 "VALUES(3,$id,'$rec->{mx_l}[$i][1]','$rec->{mx_l}[$i][2]')");
+    if ($res < 0) { db_rollback(); return -3; }
+  }
+
+  return -10 if (db_commit() < 0);
+  return $id;
 }
 
 
@@ -1635,9 +1660,24 @@ sub update_wks_template($) {
 sub add_wks_template($) {
   my($rec) = @_;
 
+  my($res,$id,$i);
+
+  db_begin();
   $rec->{cuser}=$muser;
   $rec->{cdate}=time;
-  return add_record('wks_templates',$rec);
+  $res = add_record('wks_templates',$rec);
+  if ($res < 0) { db_rollback(); return -1; }
+  $id=$res;
+
+  # wks entries
+  for $i (0..$#{$rec->{wks_l}}) {
+    $res=db_exec("INSERT INTO wks_entries (type,ref,proto,services) " .
+  	       "VALUES(2,$id,'$rec->{wks_l}[$i][1]','$rec->{wks_l}[$i][2]')");
+    if ($res < 0) { db_rollback(); return -3; }
+  }
+
+  return -10 if (db_commit() < 0);
+  return $id;
 }
 
 

@@ -51,12 +51,12 @@ sub process_zonefile($$$$$$) {
     #print "line: $_\n";
 
     if (/^\$ORIGIN\s+(\S+)(\s|$)/) {
-      print "\$ORIGIN: '$1'\n";
+      #print "\$ORIGIN: '$1'\n";
       $origin=add_origin($1,$origin);
       next;
     }
     if (/^\$INCLUDE\s+(\S+)(\s+(\S+))?(\s|$)/) {
-      print "\$INCLUDE: '$1' '$3'\n";
+      #print "\$INCLUDE: '$1' '$3'\n";
       $tmporigin=$3;
       $tmporigin=$origin if ($3 eq '');
       process_zonefile($handle,$1,$tmporigin,$zonedata,$ext_flag);
@@ -110,7 +110,7 @@ sub process_zonefile($$$$$$) {
 	      CLASS => $class,
 	      SOA => '',
 	      A => [],
-	      PTR => '',
+	      PTR => [],
 	      CNAME => '',
 	      MX => [],
 	      NS => [],
@@ -165,7 +165,7 @@ sub process_zonefile($$$$$$) {
       $rec->{SOA} = join(" ",@line);
     }
     elsif ($type eq 'PTR') {
-      $rec->{PTR} = $line[0];
+      push @{$rec->{PTR}}, $line[0];
     }
     elsif ($type eq 'CNAME') {
       $rec->{CNAME} = add_origin($line[0],$origin);
