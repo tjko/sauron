@@ -1,0 +1,286 @@
+#!/usr/bin/perl -I/usr/local/sauron
+#
+# update-hosts -- updates hosts from data in CSV format file
+#
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2003.
+# $Id$
+#
+use Getopt::Long;
+use Sauron::DB;
+use Sauron::BackEnd;
+use Sauron::Util;
+use Sauron::Sauron;
+
+load_config();
+
+sub parse_csv($) {  # code based on the Perl cookbook example...
+    my($str) = @_;
+    my @new = ();
+
+    push (@new,$+) while $str =~ m{
+        "([^\"\\]*(?:\\.[^\"\\]*)*)",?
+#       | ([^,]+(\\,[^,\\]*)*?),?
+        | ([^,]+),?
+        | ,
+    }gx;
+    push(@new,undef) if (substr($str,-1,1) eq ',');
+    return @new;
+}
+
+sub fix_ether($) {
+  my($mac) = @_;
+  my(@m);
+
+  ($mac = uc($mac)) =~ s/\s+//g;
+
+  if (@m = ($mac =~ /^([0-9A-F]{1,2})[:\-]([0-9A-F]{1,2})[:\-]([0-9A-F]{1,2})[:\-]([0-9A-F]{1,2})[:\-]([0-9A-F]{1,2})[:\-]([0-9A-F]{1,2})$/)) {
+    for $i (0..$#m) { $m[$i] = "0".$m[$i] if (length($m[$i]) < 2); }
+    $mac=join('',@m);
+  }
+
+  return $mac;
+}
+
+sub get_host_id_by_ip($$$) {
+  my($serverid,$zoneid,$ip) = @_;
+  my(@q,$rule,$sql);
+
+  return -1 unless ($serverid > 0);
+  if ($zoneid) { return -2 unless ($zoneid > 0); }
+  return -3 unless (is_cidr($ip));
+
+  $ip =~ s/\/32$//;
+  if ($zoneid > 0) {
+    $rule = " h.zone=$zoneid ";
+  } else {
+    $rule = " z.server=$serverid AND h.zone=z.id ";
+  }
+
+  $sql = "SELECT h.id FROM hosts h, a_entries a, zones z " .
+         "WHERE $rule AND a.host=h.id AND a.ip='$ip'";
+  db_query($sql,\@q);
+
+  return $q[0][0] if ($q[0][0] > 0);
+  return 0;
+}
+
+
+GetOptions("help|h","ether=s","ip=s","domain=s","hinfo=s",
+	   "dept=s","room=s","user=s","commit","origin=s");
+
+if ($opt_help || @ARGV < 2) {
+  print "syntax: $0 [OPTIONS] <servername> <zonename> <inputfile>\n\n",
+        "\toptions:\n",
+	"\t--domain=<n>\t\tcolumn # for domain names\n",
+	"\t--ip=<n>\t\tcolumn # for IP addresses\n",
+	"\t--ether=<n>\t\tcolumn # for Ethernet addresses\n",
+	"\t--hinfo=<n>\t\tcolumn # for HINFO\n",
+	"\t--dept=<n>\t\tcolumn # for Department info\n",
+	"\t--room=<n>\t\tcolumn # for Location info\n",
+	"\t--user=<n>\t\tcolumn # for User info\n",
+	"\n",
+	"\t--origin=<origin>\torigin for domain names in input\n",
+	"\n";
+  exit(($opt_help ? 0 : 1));
+}
+
+$server=shift;
+$zone=shift;
+$origin=$zone;
+$origin.='.' unless ($origin =~ /\.$/);
+$filename=shift;
+$opt_commit=($opt_commit ? 1 : 0);
+$opt_origin.='.' if ($opt_origin && $opt_origin !~ /^\.$/);
+
+fatal("cannot read input file: $filename")
+  if ($filename ne '-' && ! -r $filename);
+
+fatal("DB_CONNECT not defined in configuration!") unless ($DB_CONNECT);
+db_connect($DB_CONNECT);
+
+$serverid=get_server_id($server);
+fatal("cannot find server: $server") unless ($serverid > 0);
+
+$zoneid=get_zone_id($zone,$serverid);
+fatal("cannot find zone: $zone") unless ($zoneid > 0);
+
+if ($opt_ip) {
+  fatal("invalid parameter for --ip") unless ($opt_ip =~ /^\d+$/);
+  $fields{$opt_ip}="ip";
+}
+
+if ($opt_ether) {
+  fatal("invalid parameter for --ether") unless ($opt_ether =~ /^\d+$/);
+  fatal("cannot use same column twice: $fields{$opt_ether}")
+    if ($fields{$opt_ether});
+  $fields{$opt_ether}="ether";
+}
+
+if ($opt_domain) {
+  fatal("invalid parameter for --domain") unless ($opt_domain =~ /^\d+$/);
+  fatal("cannot use same column twice: $fields{$opt_domain}")
+    if ($fields{$opt_domain});
+  $fields{$opt_domain}="domain";
+}
+
+if ($opt_hinfo) {
+  fatal("invalid parameter for --domain") unless ($opt_hinfo =~ /^\d+$/);
+  fatal("cannot use same column twice: $fields{$opt_hinfo}")
+    if ($fields{$opt_hinfo});
+  $fields{$opt_hinfo}="hinfo";
+}
+
+if ($opt_dept) {
+  fatal("invalid parameter for --domain") unless ($opt_dept =~ /^\d+$/);
+  fatal("cannot use same column twice: $fields{$opt_dept}")
+    if ($fields{$opt_dept});
+  $fields{$opt_dept}="dept";
+}
+
+if ($opt_room) {
+  fatal("invalid parameter for --domain") unless ($opt_room =~ /^\d+$/);
+  fatal("cannot use same column twice: $fields{$opt_room}")
+    if ($fields{$opt_room});
+  $fields{$opt_room}="room";
+}
+
+if ($opt_user) {
+  fatal("invalid parameter for --domain") unless ($opt_user =~ /^\d+$/);
+  fatal("cannot use same column twice: $fields{$opt_user}")
+    if ($fields{$opt_user});
+  $fields{$opt_user}="user";
+}
+
+fatal("either --ip or --domain option has to be specified")
+  unless ($opt_ip || $opt_domain);
+
+
+open(FILE,$filename) || fatal("cannot open file: $filename");
+
+while(<FILE>) {
+  chomp;
+  next if /^\s*$/;
+  @l = parse_csv($_);
+
+#  print "line:",join(',',@l),"\n";
+
+  $domain='';
+  if ($opt_domain) {
+    $domain=$l[$opt_domain-1];
+    unless (valid_domainname($domain)) {
+      error("$file($.): invalid domain: $domain");
+      next;
+    }
+  }
+
+  if ($domain =~ /$zone$/) { $domain = remove_origin($domain,$zone); }
+  else { $domain = remove_origin($domain,$origin); }
+
+  $ip='';
+  if ($opt_ip) {
+    $ip=$l[$opt_ip-1];
+    unless (is_cidr($ip)) {
+      error("file($.): invalid ip: $ip");
+      next;
+    }
+  }
+
+  $ether='';
+  if ($opt_ether) {
+    $ether=fix_ether($l[$opt_ether-1]);
+    unless ($ether =~ /^[0-9A-F]{12}$/) {
+      error("$file($.): invalid ether: $ether") if ($ether);
+      $ether='';
+    }
+  }
+
+  undef @hinfo;
+  if ($opt_hinfo) {
+    $tmp=$l[$opt_hinfo-1];
+    $tmp =~ s/\ \+\ /\//;
+    $tmp =~ s/\"//g;
+    (@hinfo = split('\s+',$tmp));
+    if (@hinfo > 0 && @hinfo != 2) {
+      error("$file($.): invalid hinfo field: $tmp");
+      undef @hinfo;
+    }
+    $hinfo[0] =~ s/[^A-Z0-9\/\-]//g;
+    $hinfo[1] =~ s/[^A-Z0-9\/\-]//g;
+  }
+
+  $dept='';
+  if ($opt_dept) {
+    $dept=$l[$opt_dept-1];
+  }
+
+  $room='';
+  if ($opt_room) {
+    $room=$l[$opt_room-1];
+  }
+
+  $user='';
+  if ($opt_user) {
+    $user=$l[$opt_user-1];
+  }
+
+  print "domain=$domain,ip=$ip $ether,$hinfo[0],$hinfo[1],$user,$dept,$room\n"
+    if ($opt_verbose);
+
+  push @data,[$domain,$ip,$ether,$hinfo[0],$hinfo[1],$user,$dept,$room];
+}
+
+close(FILE);
+
+
+print @data . " records found in CSV file.\n";
+
+
+for $i (0..$#data) {
+  $id=-1; $id2=-1;
+  $id=get_host_id($zoneid,$data[$i][0]) if ($opt_domain);
+  $id2=get_host_id_by_ip($serverid,$zoneid,$data[$i][1]) if ($opt_ip);
+
+  if ($id > 0 && $id2 > 0 && $id != $id2) {
+    error("skipping $data[$i][0] ($data[$i][1]) ip and domain point to " .
+	  "different entries in database ($id,$id2)");
+    next;
+  }
+
+  $id=$id2 if ($id < 0 && $id2 > 0);
+
+
+  unless ($id > 0) {
+    error("cannot find host with domain or ip: $data[$i][0] ($data[$i][1])");
+    next;
+  }
+
+  undef %h;
+  $h{id}=$id;
+  $h{ether}=$data[$i][2] if ($data[$i][2]);
+  $h{hinfo_hw}=$data[$i][3] if ($data[$i][3]);
+  $h{hinfo_sw}=$data[$i][4] if ($data[$i][4]);
+  $h{huser}=$data[$i][5] if ($data[$i][5]);
+  $h{dept}=$data[$i][6] if ($data[$i][6]);
+  $h{location}=$data[$i][7] if ($data[$i][7]);
+
+  print "Updating record id=$id ($data[$i][0]/$data[$i][1])...\n";
+  $r = update_host(\%h);
+  error("failed to update host: $r ".db_lasterrormsg()) if ($r < 0);
+}
+
+
+exit;
+unless ($opt_commit) {
+  print "Found ". (keys %delhash) . " hosts to delete. (no changes made)\n";
+  exit;
+}
+
+print "Deleting " . (keys %delhash) . " hosts:\n";
+
+foreach $id (sort keys %delhash) {
+  print "Deleting host (id=$id)...\n";
+  fatal("failed to delete host (id=$id)") if (delete_host($id) < 0);
+}
+
+
+# eof
