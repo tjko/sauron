@@ -2,6 +2,8 @@ $Id$
 
 	
 0.6.1	
+	- check-pending: added --dir & --cmd options for easily running
+	  given command if there is pending hosts for server
 	- sauron.cgi: added "Ping Sweep" button to scan selected network
 	- sauron.cgi: added "Ping Sweep" button for "ping scanning"
 	  (using nmap) displayed hosts from search results.
