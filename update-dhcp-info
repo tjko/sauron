@@ -3,7 +3,7 @@
 # update-dhcp-info  reads dhcpd syslog entries and updates host dhcp_date
 #                   field in hosts table (for given server)
 #
-# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2001-2004.
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2001-2005.
 # $Id$
 #
 require 5;
@@ -70,6 +70,8 @@ print "Reading logfile..." if ($opt_verbose);
 
 if ($file =~ /\.gz$/) {
   open(FILE,"gzip -dc $file |") || fatal("cannot decompress file: $file");
+} elsif ($file =~ /\.bz2$/) {
+  open(FILE,"bzip2 -dc $file |") || fatal("cannot decompress file: $file");
 } else {
   open(FILE,"$file") || fatal("cannot open file: $file");
 }
@@ -90,36 +92,38 @@ while (<FILE>) {
   if ($rest =~ /^(DHCPDISCOVER|BOOTREQUEST)\s+from\s+(\S+)\s+via\s+(.*)$/) {
     #print "$1 $2 $3\n";
     $cmd=$1;
-    $mac="\U$2";
+    $mac=$2;
     $via=$3;
   }
   elsif ($rest =~ /^(DHCPREQUEST)\s+for\s+(\S+)(\s+\((\S+)\))?\s+from\s+(\S+)\s+via\s+(.*)$/) {
     $cmd=$1;
-    $mac="\U$5";
+    $mac=$5;
     $via=$6;
     #print "$1 $2 ($4) $5 '$6' : $mac\n";
   }
   elsif ($rest =~ /^(DHCPACK|DHCPNAK)\s+on\s+(\S+)\s+to\s+(\S+)\s+via\s+(.*)$/) {
     $cmd=$1;
     $ip=$2;
-    $mac="\U$3";
+    $mac=$3;
     $via=$4;
     #print "$1 $2 $3 '$4'\n";
   }
   elsif ($rest =~ /^(BOOTREPLY)\s+for\s+(\S+)\s+to\s+(\S+)\s+\((\S+)\)\s+via\s+(.*)$/) {
     $cmd=$1;
     $ip=$2;
-    $mac="\U$4";
+    $mac=$4;
     $via=$5;
     #print "$1 $2 $3 $4 '$5'\n";
   }
 
 
   if ($mac) {
+    my $origmac=$mac;
+    $mac = uc($mac);
     $mac =~ s/[^A-F0-9]//g;
     next if (length($mac) == 32); # ignore those damn MS RAS requests...
     unless (length($mac)==12) {
-      print "$file($.): invalid mac addres found ($mac)\n";
+      print "$file($.): invalid mac addres found ($origmac)\n";
       next;
     }
     #print "$t : $mac\n";
@@ -127,6 +131,7 @@ while (<FILE>) {
     $hash{$mac}->{$cmd}=$t;
     $hash{$mac}->{"$cmd-via"}=$via;
     $hash{$mac}->{"$cmd-ip"}=$ip;
+    $iphash{$ip}=$mac if ($ip);
   }
 
 }
@@ -138,17 +143,34 @@ print "done. (found $hashcount different MACs)\n" if ($opt_verbose);
 
 print "Fetching host info from database..." if ($opt_verbose);
 undef @q;
-db_query("SELECT h.id,h.ether,h.dhcp_date,h.domain FROM hosts h,zones z " .
-	 "WHERE z.server=$serverid AND h.zone=z.id AND h.type=1 " .
-	 " AND NOT h.ether ISNULL;",\@q);
+db_query("SELECT h.id,h.ether,h.dhcp_date,h.domain,a.ip " .
+	 "FROM hosts h JOIN zones z ON h.zone=z.id " .
+	 " LEFT JOIN a_entries a ON a.host=h.id " .
+	 "WHERE z.server=$serverid AND h.type=1",\@q);
 $c=@q;
-print "done. ($c MACs found in database)\n" if ($opt_verbose);
+print "done. ($c suitable host entries found in database)\n" if ($opt_verbose);
+$matchbyip=0;
+$notfounds=0;
+$notupdated=0;
 
 for $i (0..$#q) {
-  $mac="\U$q[$i][1]";
+  $mac=uc($q[$i][1]);
+  $ip=$q[$i][4];
+  $matchtype='MAC';
   unless (defined $hash{$mac}) {
-    $notfounds++;
-    next;
+    # try to lookup host record by IP when MAC lookup fails...
+    if ($iphash{$ip}) {
+      $mac=$iphash{$ip};
+      unless (defined $hash{$mac}) {
+	$notfounds++;
+	next;
+      }
+      $matchtype='IP';
+      $matchbyip++;
+    } else {
+      $notfounds++;
+      next;
+    }
   }
   $id=$q[$i][0];
   $date=($q[$i][2] > 0 ? $q[$i][2] : 0);
@@ -172,12 +194,15 @@ for $i (0..$#q) {
     $notupdated++;
     next;
   }
-  #print "match: $domain $id $date : $t ($via,$ip)\n" if ($opt_debug);
+  
+  print "match by IP: $domain $id $date : $t ($via,$ip)\n" 
+    if ($opt_debug && $matchtype eq 'IP');
   push @match, [$id,$t,"$ip for " . dhcpether($mac) . " via $via"];
+  $matchhash{$id}=$matchtype;
 }
 
-print "No requests from $notfounds host(s) (that are in database).\n",
-      "$notupdated hosts(s) info not updated\n" if ($opt_debug);
+print "$matchbyip host(s) matched using IP\n",
+      "$notupdated host(s) info not updated\n" if ($opt_debug);
 
 $mcount=@match;
 unless ($mcount > 0) {
