@@ -997,6 +997,13 @@ sub make_bind() {
 
     }
 
+    # custom zone file entries
+    if (@{$zone{zentries}} > 1) {
+      print ZONEFILE ";\n; Custom entries\n;\n";
+      for $i (1..$#{$zone{zentries}}) {
+	print ZONEFILE $zone{zentries}[$i][1],"\n";
+      }
+    }
     print ZONEFILE ";\n;\n; eof\n";
     close(ZONEFILE);
 

@@ -1,6 +1,9 @@
 $Id$
 
 0.6.2beta
+	- custom zone file entries can be specified for each master
+	  zone, these lines will appear "as is" at the end of generated 
+	  zone file
 	- preliminary support for DBI (DBD:Pg)
 	- fixes to zone file parsing code (UtilZone.pm)
 	- configuration file directory is now patched into Sauron.pm

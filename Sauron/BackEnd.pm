@@ -887,6 +887,10 @@ sub delete_server($) {
   $res=db_exec("DELETE FROM txt_entries " .
 	       "WHERE (type=3 OR type=10 OR type=11) AND ref=$id;");
   if ($res < 0) { db_rollback(); return -17; }
+  $res=db_exec("DELETE FROM txt_entries WHERE id IN ( " . 
+	       "SELECT a.id FROM txt_entries a, zones z " .
+	       "WHERE z.server=$id AND a.type=12 AND a.ref=z.id);");
+  if ($res < 0) { db_rollback(); return -180; }
   $res=db_exec("DELETE FROM txt_entries WHERE id IN ( " .
 	       "SELECT a.id FROM txt_entries a, zones z, hosts h " .
 	  "WHERE z.server=$id AND h.zone=z.id AND a.type=2 AND a.ref=h.id);");
@@ -1022,6 +1026,8 @@ sub get_zone($$) {
 		  "type=6 AND ref=$id ORDER BY ip",$rec,'also_notify');
   get_array_field("cidr_entries",3,"id,ip,comment","IP,Comments",
 		  "type=12 AND ref=$id ORDER BY ip",$rec,'forwarders');
+  get_array_field("txt_entries",3,"id,txt,comment","ZoneEntry,Comments",
+		  "type=12 AND ref=$id ORDER BY id",$rec,'zentries');
 
 
   db_query("SELECT COUNT(h.id) FROM hosts h, zones z " .
@@ -1121,6 +1127,10 @@ sub update_zone($) {
   $r=update_array_field("cidr_entries",3,"ip,comment,type,ref",
 			'forwarders',$rec,"12,$id");
   if ($r < 0) { db_rollback(); return -20; }
+  # zentries
+  $r=update_array_field("txt_entries",3,"txt,comment,type,ref",
+			'zentries',$rec,"12,$id");
+  if ($r < 0) { db_rollback(); return -21; }
 
   return db_commit();
 }
@@ -1189,8 +1199,8 @@ sub delete_zone($) {
 
   # txt_entries
   print "<BR>Deleting TXT entries...\n";
-  #$res=db_exec("DELETE FROM txt_entries WHERE type=1 AND ref=$id");
-  #if ($res < 0) { db_rollback(); return -11; }
+  $res=db_exec("DELETE FROM txt_entries WHERE type=12 AND ref=$id");
+  if ($res < 0) { db_rollback(); return -11; }
   $res=db_exec("DELETE FROM txt_entries WHERE id IN ( " .
 	       "SELECT a.id FROM txt_entries a, hosts h " .
 	       "WHERE h.zone=$id AND a.type=2 AND a.ref=h.id)");
@@ -1324,6 +1334,10 @@ sub add_zone($) {
   $res = add_array_field('cidr_entries','ip,comment','forwarders',$rec,
 			 'type,ref',"12,$id");
   if ($res < 0) { db_rollback(); return -7; }
+  # zentries
+  $res = add_array_field('txt_entries','txt,comment','zentries',$rec,
+			 'type,ref',"12,$id");
+  if ($res < 0) { db_rollback(); return -8; }
 
 
   return -100 if (db_commit() < 0);
