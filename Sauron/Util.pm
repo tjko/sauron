@@ -10,6 +10,7 @@ require Exporter;
 @EXPORT = qw(
 	     valid_domainname_check
 	     valid_domainname
+	     valid_texthandle
 	     is_cidr
 	     arpa2cidr
 	     cidr2arpa
@@ -97,6 +98,11 @@ sub valid_domainname($) {
   return valid_domainname_check($domain,0);
 }
 
+sub valid_texthandle($) {
+  my($str) = @_;
+
+  return ($str =~ /^[a-zA-Z0-9_\-]+$/ ? 1 : 0);
+}
 
 
 # check if parameter contains a valid CIDR...returns 0 if not.

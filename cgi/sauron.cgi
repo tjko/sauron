@@ -737,6 +737,11 @@ do "$conf_dir/config" || die("cannot load configuration!");
   {ftype=>1, tag=>'comment', name=>'Comments', type=>'text',
    len=>60, empty=>1},
 
+  {ftype=>0, name=>'DHCP'},
+  {ftype=>2, tag=>'dhcp_l', name=>'VLAN specific DHCP entries',
+   type=>['text','text'], fields=>2,
+   len=>[40,20], empty=>[0,1], elabels=>['DHCP','comment']},
+
   {ftype=>0, name=>'Record info', no_edit=>1},
   {ftype=>4, name=>'Record created', tag=>'cdate_str', no_edit=>1},
   {ftype=>4, name=>'Last modified', tag=>'mdate_str', no_edit=>1}

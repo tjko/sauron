@@ -914,7 +914,7 @@ sub delete_zone($) {
   # cidr_entries
   print "<BR>Deleting CIDR entries...\n";
   $res=db_exec("DELETE FROM cidr_entries WHERE " .
-	       "(type=2 OR type=3 OR type=4 OR type=5 OR type=6) " .
+	       "(type=2 OR type=3 OR type=4 OR type=5 OR type=6 OR type=12) " .
 	       " AND ref=$id;");
   if ($res < 0) { db_rollback(); return -1; }
 
@@ -1001,6 +1001,10 @@ sub delete_zone($) {
   print "<BR>Deleting Zone record...\n";
   $res=db_exec("DELETE FROM zones WHERE id=$id;");
   if ($res < 0) { db_rollback(); return -50; }
+
+
+  $res=db_exec("DELETE FROM user_rights WHERE rtype=2 AND rref=$id");
+  if ($res < 0) { db_rollback(); return -100; }
 
   return db_commit();
   #return db_rollback();
@@ -1334,7 +1338,7 @@ sub update_host($) {
   delete $rec->{dhcp_date_str};
   $rec->{mdate}=time;
   $rec->{muser}=$muser;
-  $rec->{domain}=lc($rec->{domain});
+  $rec->{domain}=lc($rec->{domain}) if (defined $rec->{domain});
 
   db_begin();
   $r=update_record('hosts',$rec);
@@ -1592,6 +1596,10 @@ sub delete_mx_template($) {
   $res=db_exec("DELETE FROM mx_templates WHERE id=$id;");
   if ($res < 0) { db_rollback(); return -2; }
 
+
+  $res=db_exec("UPDATE hosts SET mx=-1 WHERE mx=$id");
+  if ($res < 0) { db_rollback(); return -10; }
+
   return db_commit();
 }
 
@@ -1692,11 +1700,15 @@ sub delete_wks_template($) {
   db_begin();
 
   # wks_entries
-  $res=db_exec("DELETE FROM wks_entries WHERE type=2 AND ref=$id;");
+  $res=db_exec("DELETE FROM wks_entries WHERE type=2 AND ref=$id");
   if ($res < 0) { db_rollback(); return -1; }
 
-  $res=db_exec("DELETE FROM wks_templates WHERE id=$id;");
+  $res=db_exec("DELETE FROM wks_templates WHERE id=$id");
   if ($res < 0) { db_rollback(); return -2; }
+
+
+  $res=db_exec("UPDATE hosts SET wks=-1 WHERE wks=$id");
+  if ($res < 0) { db_rollback(); return -10; }
 
   return db_commit();
 }
@@ -1945,14 +1957,18 @@ sub delete_group($) {
   db_begin();
 
   # dhcp_entries
-  $res=db_exec("DELETE FROM dhcp_entries WHERE type=5 AND ref=$id;");
+  $res=db_exec("DELETE FROM dhcp_entries WHERE type=5 AND ref=$id");
   if ($res < 0) { db_rollback(); return -1; }
   # printer_entries
-  $res=db_exec("DELETE FROM printer_entries WHERE type=1 AND ref=$id;");
+  $res=db_exec("DELETE FROM printer_entries WHERE type=1 AND ref=$id");
   if ($res < 0) { db_rollback(); return -2; }
 
-  $res=db_exec("DELETE FROM groups WHERE id=$id;");
+  $res=db_exec("DELETE FROM groups WHERE id=$id");
   if ($res < 0) { db_rollback(); return -3; }
+
+
+  $res=db_exec("UPDATE hosts SET grp=-1 WHERE grp=$id");
+  if ($res < 0) { db_rollback(); return -10; }
 
   return db_commit();
 }
@@ -2159,11 +2175,15 @@ sub delete_net($) {
   db_begin();
 
   # dhcp_entries
-  $res=db_exec("DELETE FROM dhcp_entries WHERE type=4 AND ref=$id;");
+  $res=db_exec("DELETE FROM dhcp_entries WHERE type=4 AND ref=$id");
   if ($res < 0) { db_rollback(); return -1; }
 
-  $res=db_exec("DELETE FROM nets WHERE id=$id;");
+  $res=db_exec("DELETE FROM nets WHERE id=$id");
   if ($res < 0) { db_rollback(); return -2; }
+
+
+  $res=db_exec("DELETE FROM user_rights WHERE rtype=3 AND rref=$id");
+  if ($res < 0) { db_rollback(); return -10; }
 
   return db_commit();
 }
@@ -2177,6 +2197,9 @@ sub get_vlan($$) {
   return -100 if (get_record("vlans",
                       "server,name,description,comment,".
 		      "cdate,cuser,mdate,muser", $id,$rec,"id"));
+
+  get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comment",
+		  "type=6 AND ref=$id ORDER BY dhcp",$rec,'dhcp_l');
 
   $rec->{cdate_str}=($rec->{cdate} > 0 ?
 		     localtime($rec->{cdate}).' by '.$rec->{cuser} : 'UNKOWN');
@@ -2202,15 +2225,33 @@ sub update_vlan($) {
   if ($r < 0) { db_rollback(); return $r; }
   $id=$rec->{id};
 
+  $r=update_array_field("dhcp_entries",3,"dhcp,comment,type,ref",
+			'dhcp_l',$rec,"6,$id");
+  if ($r < 0) { db_rollback(); return -10; }
+
   return db_commit();
 }
 
 sub add_vlan($) {
   my($rec) = @_;
+  my($res,$id,$i);
 
+  db_begin();
   $rec->{cdate}=time;
   $rec->{cuser}=$muser;
-  return add_record('vlans',$rec);
+  $res = add_record('vlans',$rec);
+  if ($res < 0) { db_rollback(); return -1; }
+  $id=$res;
+
+  # dhcp_entries
+  for $i (0..$#{$rec->{dhcp_l}}) {
+    $res=db_exec("INSERT INTO dhcp_entries (type,ref,dhcp) " .
+		 "VALUES(6,$id,'$rec->{dhcp_l}[$i][1]')");
+    if ($res < 0) { db_rollback(); return -3; }
+  }
+
+  return -10 if (db_commit() < 0);
+  return $id;
 }
 
 sub delete_vlan($) {
@@ -2221,8 +2262,16 @@ sub delete_vlan($) {
 
   db_begin();
 
-  $res=db_exec("DELETE FROM vlans WHERE id=$id;");
+  # dhcp_entries
+  $res=db_exec("DELETE FROM dhcp_entries WHERE type=6 AND ref=$id");
+  if ($res < 0) { db_rollback(); return -1; }
+
+  $res=db_exec("DELETE FROM vlans WHERE id=$id");
   if ($res < 0) { db_rollback(); return -2; }
+
+
+  $res=db_exec("UPDATE nets SET vlan=-1 WHERE vlan=$id");
+  if ($res < 0) { db_rollback(); return -10; }
 
   return db_commit();
 }

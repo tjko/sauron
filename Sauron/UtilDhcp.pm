@@ -74,6 +74,7 @@ sub process_line($$$) {
     $block=lc($1);
     ($rest=$2) =~ s/^\s+|\s+$//g;
     if ($block eq 'group') {
+      # generate name for groups
       $$state{groupcounter}++;
       $rest="group-" . $$state{groupcounter};
     }
@@ -95,10 +96,16 @@ sub process_line($$$) {
       push @{$$data{$block}->{$rest}}, "GROUP $$state{group}->[0]"
 	if ($$state{group}->[0]);
     }
+    if ($block eq 'subnet') {
+      push @{$$data{$block}->{$rest}}, "VLAN $$state{'shared-network'}->[0]"
+	if ($$state{'shared-network'}->[0]);
+    }
     return 0;
   }
+
   $block=$$state{BLOCKS}->[0];
   $rest=$$state{$block}->[0];
+
   if ($line =~ /^\s*}\s*$/) {
     # print "end '$block:$rest'\n";
     unless (@{$$state{BLOCKS}} > 0) {
@@ -116,7 +123,7 @@ sub process_line($$$) {
   if ($block eq 'GLOBAL') {
     push @{$$data{GLOBAL}}, $line;
   }
-  elsif ($block eq 'subnet' or $block eq 'shared-network') {
+  elsif ($block =~ /^(subnet|shared-network|group)$/) {
     push @{$$data{$block}->{$rest}}, $line;
   }
   elsif ($block eq 'pool') {

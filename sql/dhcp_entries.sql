@@ -12,7 +12,8 @@ CREATE TABLE dhcp_entries (
 					2=zone,
 					3=host,
 					4=net,
-					5=group */
+					5=group
+					6=vlan (shared-network) */
         ref         INT4 NOT NULL, /* ptr to table speciefied by type field
 					-->servers.id
 					-->zones.id
