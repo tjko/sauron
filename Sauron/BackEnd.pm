@@ -587,6 +587,8 @@ sub get_server($$) {
   $rec->{dhcp_flags_fo}=($rec->{dhcp_flags} & 0x02 ? 1 : 0);
   $rec->{named_flags_ac}=($rec->{named_flags} & 0x01 ? 1 : 0);
   $rec->{named_flags_isz}=($rec->{named_flags} & 0x02 ? 1 : 0);
+  $rec->{named_flags_hinfo}=($rec->{named_flags} & 0x04 ? 1 : 0);
+  $rec->{named_flags_wks}=($rec->{named_flags} & 0x08 ? 1 : 0);
 
   if ($rec->{masterserver} > 0) {
     db_query("SELECT name FROM servers WHERE id=$rec->{masterserver}",\@q);
@@ -617,8 +619,12 @@ sub update_server($) {
   $rec->{named_flags}=0;
   $rec->{named_flags}|=0x01 if ($rec->{named_flags_ac});
   $rec->{named_flags}|=0x02 if ($rec->{named_flags_isz});
+  $rec->{named_flags}|=0x04 if ($rec->{named_flags_hinfo});
+  $rec->{named_flags}|=0x08 if ($rec->{named_flags_wks});
   delete $rec->{named_flags_ac};
   delete $rec->{named_flags_isz};
+  delete $rec->{named_flags_hinfo};
+  delete $rec->{named_flags_wks};
 
   db_begin();
   $r=update_record('servers',$rec);

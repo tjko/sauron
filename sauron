@@ -784,11 +784,15 @@ sub make_bind() {
 	  }
 	  $dnames{$domain}=$ip;
 	  printf ZONEFILE $ZFORMAT, $domain,$ttl,$class,'A',$ip;
-	  printf ZONEFILE $ZFORMAT, '',$ttl,$class,'HINFO',
-	    "$hinfo_hw $hinfo_sw"  if ($hinfo_hw ne '' && $hinfo_sw ne '');
-	  if ($wks) {
-	    for $k (0 .. $#{$wks}) {
-	      printf ZONEFILE $ZFORMAT, '',$ttl,$class,'WKS',"$ip $$wks[$k]";
+	  unless ($server{named_flags_hinfo}) {
+	    printf ZONEFILE $ZFORMAT, '',$ttl,$class,'HINFO',
+	      "$hinfo_hw $hinfo_sw"  if ($hinfo_hw ne '' && $hinfo_sw ne '');
+	  }
+	  unless ($server{named_flags_wks}) {
+	    if ($wks) {
+	      for $k (0 .. $#{$wks}) {
+		printf ZONEFILE $ZFORMAT, '',$ttl,$class,'WKS',"$ip $$wks[$k]";
+	      }
 	    }
 	  }
 	  if ($mx) {

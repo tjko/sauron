@@ -1,7 +1,9 @@
 $Id$
 	
 	
-0.50
+0.5.0
+	- added flag for omiting WKS/HINFO record generation per server basis
+	- added private flag to nets (for hiding nets/hosts from browser)
 	- added "show hosts" button to network entry display
 	- update-dhcp-info now updates dhcp_date field only for
 	  DHCPACK or BOOTREPLY

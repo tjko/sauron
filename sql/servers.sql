@@ -28,7 +28,9 @@ CREATE TABLE servers (
 	named_flags	INT DEFAULT 0, /* named option flags:
 			      0x01 = access control from master (slave only) */
 			      0x02 = include also slave zones from master
-				     (slave only) */
+				     (slave only)
+			      0x04 = do NOT generate HINFO records
+			      0x08 = do NOT generate WKS records */
 	masterserver	INT DEFAULT -1, /* dynamically add slave zones
 					   for all zones in master server */
 

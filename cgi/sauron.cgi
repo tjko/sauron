@@ -126,6 +126,10 @@ do "$conf_dir/config" || die("cannot load configuration!");
    elabels=>['CIDR','comment'], iff=>['named_flags_ac','0']},
 
   {ftype=>0, name=>'BIND options' },
+  {ftype=>3, tag=>'named_flags_hinfo', name=>'Do not generate HINFO records',
+   type=>'enum', enum=>{0=>'No',1=>'Yes'}},
+  {ftype=>3, tag=>'named_flags_wks', name=>'Do not generate WKS records',
+   type=>'enum', enum=>{0=>'No',1=>'Yes'}},
   {ftype=>3, tag=>'nnotify', name=>'Notify', type=>'enum',
    conv=>'U', enum=>\%yes_no_enum},
   {ftype=>3, tag=>'authnxdomain', name=>'Auth-nxdomain', type=>'enum',
