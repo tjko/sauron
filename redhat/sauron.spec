@@ -9,7 +9,7 @@ Group: Applications/Internet
 BuildRoot: %{_tmppath}/%{name}-%{version}-buildroot
 BuildRequires: perl >= 5.6.0
 Requires: perl >= 5.6.0, perl-CGI, postgresql-perl, perl-Digest-HMAC
-Requires: perl-Net-Netmask, perl-Term-ReadKey || perl-TermReadKey
+Requires: perl-Net-Netmask, perl-Term-ReadKey
 
 %description
 Sauron is a scalable system for management of DNS & DHCP services. Sauron
@@ -18,20 +18,32 @@ DNS/DHCP configuration from a central SQL-database (PostgreSQL).
 Sauron has www interface and command-line interface.
 
 %prep
+if [ "${RPM_BUILD_ROOT}x" == "x" ]; then
+        echo "RPM_BUILD_ROOT empty, bad idea!"
+        exit 1
+fi
+if [ "${RPM_BUILD_ROOT}" == "/" ]; then
+        echo "RPM_BUILD_ROOT is set to "/", bad idea!"
+        exit 1
+fi
 %setup -q
 
 %build
-./configure
+./configure --prefix=/opt --sysconfdir=/etc
 
 %install
 rm -rf $RPM_BUILD_ROOT
+INSTALL_ROOT=$RPM_BUILD_ROOT make install
 
 %clean
 rm -rf $RPM_BUILD_ROOT
 
 %files
 %defattr(-,root,root)
-
+/opt/sauron
+/etc/sauron/config.in
+%config /etc/sauron/config
+%doc README COPYRIGHT COPYING ChangeLog
 
 %changelog
 * Tue Nov 26 2002 Timo Kokkonen <tjko@cc.jyu.fi>

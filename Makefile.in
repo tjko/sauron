@@ -3,7 +3,7 @@
 # 
 # Makefile for sauron
 #
-Version = 0.50
+Version = 0.5.0
 PKGNAME = sauron
 
 DBASE = sauron
@@ -12,6 +12,8 @@ SHELL = /bin/sh
 
 DEFS = @DEFS@
 
+#INSTALL_ROOT =
+
 srcdir = @srcdir@
 VPATH = @srcdir@
 
@@ -19,7 +21,8 @@ prefix = @prefix@
 exec_prefix = @exec_prefix@
 
 # Where to install the configuration file(s)
-etcdir = $(prefix)/etc/sauron
+sysconfdir = @sysconfdir@
+etcdir = $(sysconfdir)/sauron
 
 # Where to install the executables.
 bindir = $(exec_prefix)/sauron
@@ -73,14 +76,16 @@ SQL_TABLES =	sql/common.sql \
 		sql/history.sql sql/lastlog.sql sql/news.sql \
 		sql/vlans.sql 
 
-#		sql/host_info.sql \
+
+SQL_MISC =      sql/DEFAULTS.sql sql/misc.sql sql/copy_tables.sql \
+		sql/drop_tables.sql
+
 
 PROGS = sauron addgroup adduser deluser modhosts \
 	import import-ethers import-jyu import-roots \
 	last moduser runsql status update-dhcp-info \
 	export-networks generatehosts addhosts check-pending
 
-# PLFILES = back_end.pl db.pl parseconf.pl util.pl util_zone.pl cgi_util.pl
 MODULES = Sauron/Util.pm Sauron/DB.pm Sauron/BackEnd.pm Sauron/CGIutil.pm \
 	  Sauron/UtilZone.pm
 
@@ -156,27 +161,31 @@ backup:	clean
 
 
 install: all make_dirs
-	$(INSTALL) -m 644 config.in $(etcdir)/config.in
-	if [ ! -f $(etcdir)/config ]; then \
-		$(INSTALL) -m 644 config.in $(etcdir)/config; \
+	$(INSTALL) -m 644 config.in $(INSTALL_ROOT)/$(etcdir)/config.in
+	if [ ! -f $(INSTALL_ROOT)/$(etcdir)/config ]; then \
+	    $(INSTALL) -m 644 config.in $(INSTALL_ROOT)/$(etcdir)/config; \
 	fi
-	$(INSTALL) -m 755 $(PROGS) $(bindir)
-#	$(INSTALL) -m 644 $(PLFILES) $(bindir)
-	$(INSTALL) -m 644 $(MISCFILES) $(bindir)
-	$(INSTALL) -m 755 $(CGIFILES) $(bindir)/cgi
-	$(INSTALL) -m 644 $(LOGOFILES) $(bindir)/cgi
-	$(INSTALL) -m 644 $(MODULES) $(bindir)/Sauron
-	@[ -f $(bindir)/modgroup ] && rm -f $(bindir)/modgroup || :
-	@ln -s moduser $(bindir)/modgroup
+	$(INSTALL) -m 755 $(PROGS) $(INSTALL_ROOT)/$(bindir)
+	$(INSTALL) -m 644 $(MISCFILES) $(INSTALL_ROOT)/$(bindir)
+	$(INSTALL) -m 755 $(CGIFILES) $(INSTALL_ROOT)/$(bindir)/cgi
+	$(INSTALL) -m 644 $(LOGOFILES) $(INSTALL_ROOT)/$(bindir)/cgi
+	$(INSTALL) -m 644 $(MODULES) $(INSTALL_ROOT)/$(bindir)/Sauron
+	$(INSTALL) -m 644 $(SQL_TABLES) $(SQL_MISC) \
+				 $(INSTALL_ROOT)/$(bindir)/sql
+	@[ -f $(INSTALL_ROOT)/$(bindir)/modgroup ] && \
+		 rm -f $(INSTALL_ROOT)/$(bindir)/modgroup || :
+	@ln -s moduser $(INSTALL_ROOT)/$(bindir)/modgroup
 
 
 make_dirs:
-	$(INSTALL) -m 755 -d $(etcdir)
-	$(INSTALL) -m 755 -d $(bindir)
-	$(INSTALL) -m 755 -d $(bindir)/backups
-	$(INSTALL) -m 755 -d $(bindir)/cgi
-	$(INSTALL) -m 755 -d $(bindir)/Sauron
-#	$(INSTALL) -m 755 -d $(bindir)/contrib
+	$(INSTALL) -m 755 -d $(INSTALL_ROOT)/$(etcdir)
+	$(INSTALL) -m 755 -d $(INSTALL_ROOT)/$(bindir)
+	$(INSTALL) -m 755 -d $(INSTALL_ROOT)/$(bindir)/backups
+	$(INSTALL) -m 755 -d $(INSTALL_ROOT)/$(bindir)/cgi
+	$(INSTALL) -m 755 -d $(INSTALL_ROOT)/$(bindir)/Sauron
+	$(INSTALL) -m 755 -d $(INSTALL_ROOT)/$(bindir)/sql
+	$(INSTALL) -m 755 -d $(INSTALL_ROOT)/$(bindir)/logs
+#	$(INSTALL) -m 755 -d $(INSTALL_ROOT)/$(bindir)/contrib
 
 
 printable.man:
