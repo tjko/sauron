@@ -3,7 +3,7 @@
 # browser.cgi
 # $Id$
 #
-# Copyright (c) Timo Kokkonen <tjko@iki.fi>, 2001.
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>, 2001-2002.
 # All Rights Reserved.
 #
 use Sys::Syslog;
@@ -38,15 +38,13 @@ else {
 do "$conf_dir/config-browser" || die("cannot load configuration!");
 die("invalid configuration file") unless ($DB_CONNECT);
 $BROWSER_CHARSET = 'iso-8859-1' unless ($BROWSER_CHARSET);
-$BROWSER_SHOW_FIELDS = 'huser,location,info,dept' unless ($BROWSER_SHOW_FIELDS);
+$BROWSER_SHOW_FIELDS = 'huser,location,info,dept'
+  unless ($BROWSER_SHOW_FIELDS);
 
-
-%yes_no_enum = (D=>'Default',Y=>'Yes', N=>'No');
 
 %host_types=(0=>'Any type',1=>'Host',2=>'Delegation',3=>'Plain MX',
 	     4=>'Alias',5=>'Printer',6=>'Glue record',7=>'AREC Alias',
 	     8=>'SRV record',9=>'DHCP only');
-
 
 %host_form = (
  data=>[
@@ -131,6 +129,9 @@ $BROWSER_SHOW_FIELDS = 'huser,location,info,dept' unless ($BROWSER_SHOW_FIELDS);
 );
 
 
+sub display_host($);
+sub do_search();
+
 #####################################################################
 
 db_connect2($DB_CONNECT) ||
@@ -179,10 +180,9 @@ $help_str = ( @{$$BROWSER_HELP{$key}} == 2 ?
 	  "<a href=\"$$BROWSER_HELP{$key}[1]\">$$BROWSER_HELP{$key}[0]</a>" :
           "&nbsp;" );
 
-$show_max=$BROWSER_MAX;
-$show_max=100 unless ($show_max > 0);
+$show_max=($BROWSER_MAX > 0 ? $BROWSER_MAX : 100);
 
-($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime(time);
+($min,$hour,$mday,$mon,$year) = (localtime(time))[1, 2, 3, 4, 5];
 $timestamp = sprintf "%d.%d.%d %02d:%02d",$mday,$mon,$year+1900,$hour,$min;
 
 
@@ -224,18 +224,14 @@ if (($id=int(param('id'))) > 0) {
 
 
 if ($debug_mode) {
-  print "<hr><FONT size=-1><p>script name: " . script_name() ." $formmode\n";
-  print "<br>extra path: " . path_info() ."<br>framemode=$frame_mode\n",
-         "<br>cookie='$scookie'\n",
+  print "<hr><FONT size=-1><p>script_name: " . script_name(),
+  print "<br>path_info: " . path_info(),
         "<br>s_url='$s_url' '$selfurl'\n",
         "<br>url()=" . url(),
         "<p>remote_addr=$remote_addr",
         "<p>";
   @names = param();
-  foreach $var (@names) {
-    print "$var = '" . param($var) . "'<br>\n";
-  }
-
+  foreach $var (@names) { print "$var = '" . param($var) . "'<br>\n"; }
   print "<hr><p>\n";
 }
 
@@ -377,7 +373,6 @@ sub do_search() {
   }
 
   for $i (0..($count-1)) {
-    $private = 0;
     $color = (($i % 2) ? "#eeeeee" : "#ffffcc");
     $name="<a href=\"$url&id=$q[$i][0]\">$q[$i][2]</a>";
     $type = $q[$i][1];
@@ -442,7 +437,7 @@ sub do_search() {
 
 sub display_host($) {
   my($id) = @_;
-  my @q, @r, $i, $j, $url;
+  my(@q, @r, $i, $j, $url);
 
   if (get_host($id,\%host)) {
     alert2("Cannot get host record (id=$id)");
