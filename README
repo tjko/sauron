@@ -1,11 +1,13 @@
 Sauron v.0.5.0 - DNS/DHCP Management System
 ==============
 
+$Date$
 
 REQUIREMENTS
 	- BIND v8 or later [9.2.x or newer recommended]
 	- ISC dhcpd v2 or later [3.x or newer recommended] (optional)
 	- Perl 5 or better [at least 5.6 recommended]
+		- CGI module
 		- Net::Netmask module
 		- Digest::MD5 module
 	- PostgresSQL (or add support to your favorite db yourself :)
