@@ -847,7 +847,8 @@ sub make_bind() {
 
       # aliases (A records)
       undef @q;
-      db_query("SELECT a.domain,b.domain,ae.ip,a.ttl,a.expiration " .
+      db_query("SELECT a.domain,b.domain,ae.ip,a.ttl,a.expiration," .
+	       " b.expiration " .
 	       "FROM hosts a, hosts b,zones z, arec_entries r,a_entries ae " .
 	       "WHERE z.id=$zoneid AND a.type=7 AND a.zone=z.id " .
 	       " AND r.host=a.id AND b.id=r.arec AND ae.host=b.id " .
@@ -868,7 +869,12 @@ sub make_bind() {
 	    next;
 	  }
 	  if (($q[$i][4] > 0) && ($q[$i][4] < $time_now_ticks)) {
-	    error("Skipping expired A rec alias: $q[$i][0]");
+	    error("Skipping expired A rec alias: $q[$i][0]") if ($opt_verbose);
+	    next;
+	  }
+	  if (($q[$i][5] > 0) && ($q[$i][5] < $time_now_ticks)) {
+	    error("Skipping A rec alias to expired host: $q[$i][0]")
+	      if ($opt_verbose);
 	    next;
 	  }
 	  $alias=$q[$i][2];
@@ -884,7 +890,7 @@ sub make_bind() {
 
       # aliases (CNAME records)
       undef @q;
-      db_query("SELECT a.domain,b.domain,a.ttl,a.expiration " .
+      db_query("SELECT a.domain,b.domain,a.ttl,a.expiration,b.expiration " .
 	       "FROM hosts a, hosts b,zones z " .
 	       "WHERE a.zone=z.id AND z.id=$zoneid " .
 	       "AND a.type=4 AND a.alias=b.id " .
@@ -904,7 +910,12 @@ sub make_bind() {
 	    next;
 	  }
 	  if (($q[$i][3] > 0) && ($q[$i][3] < $time_now_ticks)) {
-	    error("Skipping expired CNAME alias: $q[$i][0]");
+	    error("Skipping expired CNAME alias: $q[$i][0]") if ($opt_verbose);
+	    next;
+	  }
+	  if (($q[$i][4] > 0) && ($q[$i][4] < $time_now_ticks)) {
+	    error("Skipping CNAME alias to expired host: $q[$i][0]")
+	      if ($opt_verbose);
 	    next;
 	  }
 	  $ttl=$q[$i][2];

@@ -2,6 +2,8 @@ $Id$
 
 	
 0.6.1	
+	- sauron: not anymore generating "broken" aliases to expired
+	  hosts (if a host has expired aliases are now considered expired too)
 	- added new utility remove-hosts that removes hosts based on
 	  list of IPs or MACs read from a file
 	- sauron: bug fixes for $DOMAIN substitution in MX records and
