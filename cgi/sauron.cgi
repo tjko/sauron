@@ -18,6 +18,9 @@ use Sauron::CGIutil;
 $CGI::DISABLE_UPLOADS = 1; # no uploads
 $CGI::POST_MAX = 100000; # max 100k posts
 
+my ($PG_DIR,$PG_NAME) = ($0 =~ /^(.*\/)(.*)$/);
+$0 = $PG_NAME;
+
 $SAURON_CGI_VER = ' $Revision$ $Date$ ';
 $SAURON_CHARSET='iso-8859-1' unless ($SAURON_CHARSET);
 $ALEVEL_VLANS = 5 unless (defined($ALEVEL_VLANS));
@@ -58,7 +61,7 @@ do "$conf_dir/config" || die("cannot load configuration!");
    conv=>'L', enum=>{t=>'Generate named.zones',f=>'Generate full named.conf'}},
   {ftype=>1, tag=>'comment', name=>'Comments',  type=>'text', len=>60,
    empty=>1},
-  {ftype=>3, tag=>'named_flags_isz', 
+  {ftype=>3, tag=>'named_flags_isz',
    name=>'Include also slave zones from master',
    type=>'enum', enum=>{0=>'No',1=>'Yes'}, iff=>['masterserver','\d+']},
 
@@ -68,10 +71,10 @@ do "$conf_dir/config" || die("cannot load configuration!");
   {ftype=>1, tag=>'refresh', name=>'Refresh', type=>'int', len=>10},
   {ftype=>1, tag=>'retry', name=>'Retry', type=>'int', len=>10},
   {ftype=>1, tag=>'expire', name=>'Expire', type=>'int', len=>10},
-  {ftype=>1, tag=>'minimum', name=>'Minimum (negative caching TTL)', 
+  {ftype=>1, tag=>'minimum', name=>'Minimum (negative caching TTL)',
    type=>'int', len=>10},
   {ftype=>1, tag=>'ttl', name=>'Default TTL', type=>'int', len=>10},
-  {ftype=>2, tag=>'txt', name=>'Default zone TXT', type=>['text','text'], 
+  {ftype=>2, tag=>'txt', name=>'Default zone TXT', type=>['text','text'],
    fields=>2, len=>[40,15], empty=>[0,1], elabels=>['TXT','comment']},
 
   {ftype=>0, name=>'Paths'},
@@ -89,7 +92,7 @@ do "$conf_dir/config" || die("cannot load configuration!");
    len=>30, empty=>1},
   {ftype=>1, tag=>'stats_file', name=>'statistics-file path', type=>'text',
    len=>30, empty=>1},
-  {ftype=>1, tag=>'memstats_file', name=>'memstatistics-file path', 
+  {ftype=>1, tag=>'memstats_file', name=>'memstatistics-file path',
    type=>'text', len=>30, empty=>1},
   {ftype=>1, tag=>'named_xfer', name=>'named-xfer path', type=>'text',
    len=>30, empty=>1},
@@ -99,13 +102,13 @@ do "$conf_dir/config" || die("cannot load configuration!");
    conv=>'U', enum=>{'D'=>'Default','O'=>'Only','F'=>'First'}},
   {ftype=>2, tag=>'forwarders', name=>'Forwarders', fields=>2,
    type=>['ip','text'], len=>[20,30], empty=>[0,1],elabels=>['IP','comment']},
-  {ftype=>1, tag=>'transfer_source', name=>'Transfer source IP', 
+  {ftype=>1, tag=>'transfer_source', name=>'Transfer source IP',
    type=>'ip', empty=>1, definfo=>['','Default'], len=>15},
-  {ftype=>1, tag=>'query_src_ip', name=>'Query source IP', 
+  {ftype=>1, tag=>'query_src_ip', name=>'Query source IP',
    type=>'ip', empty=>1, definfo=>['','Default'], len=>15},
   {ftype=>1, tag=>'query_src_port', name=>'Query source port', 
    type=>'port', empty=>1, definfo=>['','Default port'], len=>5},
-  {ftype=>1, tag=>'listen_on_port', name=>'Listen on port', 
+  {ftype=>1, tag=>'listen_on_port', name=>'Listen on port',
    type=>'port', empty=>1, definfo=>['','Default port'], len=>5},
   {ftype=>2, tag=>'listen_on', name=>'Listen-on', fields=>2,
    type=>['cidr','text'], len=>[20,30], empty=>[0,1],
@@ -941,6 +944,17 @@ do "$conf_dir/config" || die("cannot load configuration!");
 );
 
 
+@menulist = (
+	  ['Hosts','menu=hosts',0],
+	  ['Zones','menu=zones',0],
+	  ['Nets','menu=nets',0],
+	  ['Templates','menu=templates',0],
+	  ['Groups','menu=groups',0],
+	  ['Servers','menu=servers',0],
+	  ['Login','menu=login',0],
+	  ['About','menu=about',0],
+	 );
+
 %menus = (
 	  'servers'=>\&servers_menu,
 	  'zones'=>\&zones_menu,
@@ -1587,7 +1601,8 @@ sub hosts_menu() {
     if ($res==1) {
       update_history($state{uid},$state{sid},1,
 		    "DELETE: $host_types{$host{type}} ",
-		    "domain: $host{domain}",$host{id});
+		    "domain: $host{domain}, ip:$host{ip}[1][1], " .
+		    "ether: $host{ether}",$host{id});
     }
     return;
   }
@@ -2226,17 +2241,18 @@ sub hosts_menu() {
     $type=$host{type};
     param('copy_id',$id);
     param('sub','add');
-    if ($host{domain} =~ /^([^\.]+)(\..*)$/) {
+    if ($host{domain} =~ /^([^\.]+)(\..*)?$/) {
       $p1=$1; $p2=$2;
-      if ($p1 =~ /^([^\d]+)(\d+)$/) {
-	$data{domain}=$1.($2+1).$p2;
+      if ($p1 =~ /(\d+)/) {
+	$p3len=length(($p3=$1));
+	$p4 = sprintf("%0${p3len}d",$p3+1);
+	$p1 =~ s/${p3}/${p4}/;
+	$data{domain}=$p1.$p2;
       } else {
 	$data{domain}=$p1.'2'.$p2;
       }
     }
-    if (($newip=next_free_ip($serverid,$data{ip}))) {
-      $data{ip}=$newip;
-    }
+    $data{ip}=$newip if (($newip=next_free_ip($serverid,$data{ip})));
     goto copy_add_label;
   }
 
@@ -3628,7 +3644,7 @@ sub login_auth() {
 
 sub top_menu($) {
   my($mode)=@_;
-  my($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst);
+  my($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst,$i);
 
   ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime(time);
 
@@ -3653,26 +3669,15 @@ sub top_menu($) {
       '<FONT color="white">&nbsp;Sauron </FONT></TD>',
       '<TD height="24"><FONT color="white">';
   }
-  print
-    "<A HREF=\"$s_url?menu=hosts\"><FONT color=\"#ffffff\">",
-      "Hosts</FONT></A> | ",
-    "<A HREF=\"$s_url?menu=zones\"><FONT color=\"#ffffff\">",
-      "Zones</FONT></A> | ",
-    "<A HREF=\"$s_url?menu=nets\"><FONT color=\"#ffffff\">",
-      "Nets</FONT></A> | ",
-    "<A HREF=\"$s_url?menu=templates\"><FONT color=\"#ffffff\">",
-      "Templates</FONT></A> | ",
-    "<A HREF=\"$s_url?menu=groups\"><FONT color=\"#ffffff\">",
-      "Groups</FONT></A> | ",
-    "<A HREF=\"$s_url?menu=servers\"><FONT color=\"#ffffff\">",
-      "Servers</FONT></A> | ",
-    "<A HREF=\"$s_url?menu=login\"><FONT color=\"#ffffff\">",
-      "Login</FONT></A> | ",
-    "<A HREF=\"$s_url?menu=about\"><FONT color=\"#ffffff\">About</FONT></A> ",
-    '</FONT></TD>';
+
+  for $i (0..$#menulist) {
+    print "<A HREF=\"$s_url?$menulist[$i][1]\"><FONT color=\"#ffffff\">",
+          "$menulist[$i][0]</FONT></A>";
+    print " | " if ($i < $#menulist);
+  }
 
   print  "<TD align=\"right\"><FONT color=\"#ffffff\">";
-  if ($frame_mode) { print "$SERVER_ID &nbsp;"; } 
+  if ($frame_mode) { print "$SERVER_ID &nbsp;"; }
   else {
     printf "%s &nbsp; &nbsp; %d.%d.%d %02d:%02d ",
            $SERVER_ID,$mday,$mon+1,$year+1900,$hour,$min;
@@ -3804,6 +3809,7 @@ sub frame_2() {
 }
 
 #####################################################################
+
 sub make_cookie($) {
   my($path) = @_;
 
@@ -3821,8 +3827,7 @@ sub make_cookie($) {
   undef %state;
   $state{auth}='no';
   #$state{'host'}=remote_host();
-  $state{addr}=$ENV{'REMOTE_ADDR'};
-  $state{addr}='0.0.0.0' unless ($state{addr});
+  $state{addr}=($ENV{'REMOTE_ADDR'} ? $ENV{'REMOTE_ADDR'} : '0.0.0.0');
   save_state($val);
   $ncookie=$val;
   return cookie(-name=>"sauron-$SERVER_ID",-expires=>'+7d',
@@ -3918,7 +3923,7 @@ sub load_state($) {
 sub remove_state($) {
   my($id) = @_;
 
-  db_exec("DELETE FROM utmp WHERE cookie='$id';");
+  db_exec("DELETE FROM utmp WHERE cookie='$id';") if ($id > 0);
   undef %state;
 }
 
