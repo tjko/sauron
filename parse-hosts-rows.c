@@ -1,5 +1,9 @@
-/* Raw parse in.named format lines (possibly continued) and print them out */
-/* $Id$ */
+/* Raw parse in.named format lines (possibly continued) and print them out 
+ *
+ * code by Otto Makela <om@iki.fi>
+ *
+ * $Id$ 
+ */
 
 #include	<stdio.h>
 #include	<ctype.h>

@@ -1,4 +1,4 @@
-#!/usr/bin/perl
+#!/usr/bin/perl -I/usr/local/sauron
 #
 # import - imports BIND configuration/databases
 #
@@ -8,6 +8,9 @@
 require 5;
 use Net::Netmask;
 use Getopt::Long;
+use Sauron::DB;
+use Sauron::Util;
+use Sauron::UtilZone;
 
 ($PG_DIR,$PG_NAME) = ($0 =~ /^(.*\/)(.*)$/);
 $0 = $PG_NAME;
@@ -21,9 +24,6 @@ if (-r "/etc/sauron/config") {
 }
 
 do "$config_file" || die("cannot load config: $config_file");
-do "$PG_DIR/util.pl";
-do "$PG_DIR/util_zone.pl";
-do "$PG_DIR/db.pl";
 
 # if these are not defined, then values are taken from first master zone
 # processed...
@@ -50,7 +50,7 @@ $user = (getpwuid($<))[0];
 $cdate = time;
 %zonedata = {};
 
-db_connect();
+db_connect($DB_CONNECT);
 
 #$serverid=1;
 #goto 'foo';
@@ -342,7 +342,7 @@ for ($i=0; $i <= $#zones; $i+=1) {
     die("cannot update zone record id=$zoneid!") if (db_exec($sqlstr)<0);
     next;
   }
-  process_zonefile("fh0000",$files{$zones[$i]},$zone,\%zonedata);
+  process_zonefile("fh0000",$files{$zones[$i]},$zone,\%zonedata,0,$PROG_DIR);
   print " found " . keys(%zonedata) . " domainames in zone\n";
   $rec = $zonedata{$origin};
   die ("No SOA record found in zone $zone! ($origin)") if (! $rec);

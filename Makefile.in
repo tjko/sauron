@@ -81,7 +81,8 @@ PROGS = sauron addgroup adduser deluser modhosts \
 	export-networks generatehosts addhosts check-pending
 
 PLFILES = back_end.pl db.pl parseconf.pl util.pl util_zone.pl cgi_util.pl
-MODULES = Sauron/Util.pm Sauron/DB.pm Sauron/BackEnd.pm Sauron/CGIutil.pm
+MODULES = Sauron/Util.pm Sauron/DB.pm Sauron/BackEnd.pm Sauron/CGIutil.pm \
+	  Sauron/UtilZone.pm
 
 CGIFILES = cgi/sauron.cgi cgi/browser.cgi
 LOGOFILES = cgi/logo.png cgi/logo_large.png

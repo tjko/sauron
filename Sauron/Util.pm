@@ -25,6 +25,7 @@ require Exporter;
 	     error
 	     show_hash
 	     check_ipmask
+	     dhcpether
 	    );
 
 
@@ -359,6 +360,21 @@ sub check_ipmask($$) {
 
     return 1;
 }
+
+
+# convert ethernet address to format suitable for dhcpd.conf
+sub dhcpether($) {
+  my ($e) = @_;
+
+  $e="\L$e";
+  if ($e =~ /(..)(..)(..)(..)(..)(..)/) {
+    return "$1:$2:$3:$4:$5:$6";
+  }
+
+  return "00:00:00:00:00:00";
+}
+
+
 
 1;
 # eof
