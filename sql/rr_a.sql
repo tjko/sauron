@@ -9,7 +9,7 @@ CREATE TABLE rr_a (
       id	   SERIAL PRIMARY KEY,
       host	   INT4 NOT NULL, /* ptr to hosts table id */
 
-      ip	   CIDR,
+      ip	   INET,
       reverse	   BOOL DEFAULT true, /* generate reverse (PTR) record */
       forward      BOOL DEFAULT true, /* generate (A) record */
       comment	   TEXT

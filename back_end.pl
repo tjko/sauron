@@ -80,7 +80,7 @@ sub domain_in_use($$) {
   return -1 unless ($zoneid > 0);
   db_query("SELECT h.id FROM hosts h ".
 	   "WHERE h.zone=$zoneid AND domain='$domain';",\@q);
-  return 1 if ($q[0][0] > 0);
+  return $q[0][0] if ($q[0][0] > 0);
   return 0;
 }
 
@@ -909,7 +909,7 @@ sub get_host($$) {
 
   return -1 if ($res < 0);
 
-  get_array_field("rr_a",5,"id,ip,reverse,forward,comment",
+  get_array_field("rr_a",4,"id,ip,reverse,forward",
 		  "IP,reverse,forward,Comments","host=$id ORDER BY ip",
 		  $rec,'ip');
 
@@ -927,10 +927,10 @@ sub get_host($$) {
   get_array_field("printer_entries",3,"id,printer,comment","PRINTER,Comments",
 		  "type=2 AND ref=$id ORDER BY printer",$rec,'printer_l');
 
-  get_array_field("hosts",3,"id,domain,type","Domain,cname",
+  get_array_field("hosts",4,"0,id,domain,type","Domain,cname",
 	          "type=4  AND alias=$id ORDER BY domain",$rec,'alias_l');
 
-  get_array_field("hosts h, arec_entries a",3,"h.id,h.domain,h.type",
+  get_array_field("hosts h, arec_entries a",4,"a.id,h.id,h.domain,h.type",
 		  "Domain,cname",
 	          "h.type=7 AND a.host=h.id AND a.arec=$id ORDER BY h.domain",
 		  $rec,'alias_l2');
@@ -972,7 +972,7 @@ sub get_host($$) {
     get_host($rec->{alias},\%h);
     $rec->{alias_d}=$h{domain};
   } elsif ($rec->{type} == 7) {
-    get_array_field("hosts h, arec_entries a ",2,"h.id,h.domain",
+    get_array_field("hosts h, arec_entries a ",4,"a.id,h.id,h.domain,h.type",
 		    "Domain",
 	          "a.host=$id AND a.arec=h.id ORDER BY h.domain",
 		    $rec,'alias_a');
@@ -992,7 +992,6 @@ sub update_host($) {
   delete $rec->{grp_rec};
   delete $rec->{alias_l};
   delete $rec->{alias_d};
-  delete $rec->{alias_a};
 
   db_begin();
   $r=update_record('hosts',$rec);
@@ -1018,9 +1017,15 @@ sub update_host($) {
 			'printer_l',$rec,"2,$id");
   if ($r < 0) { db_rollback(); return -17; }
 
-  $r=update_array_field("rr_a",4,"ip,reverse,forward,comment,host",
+  $r=update_array_field("rr_a",4,"ip,reverse,forward,host",
 			'ip',$rec,"$id");
   if ($r < 0) { db_rollback(); return -20; }
+
+  if ($rec->{type}==7) {
+    $r=update_array_field("arec_entries",2,"arec,host",
+			  'alias_a',$rec,"$id");
+    if ($r < 0) { db_rollback(); return -21; }
+  }
 
   return db_commit();
 }
@@ -1078,10 +1083,14 @@ sub delete_host($) {
 
 sub add_host($) {
   my($rec) = @_;
-  my($res,$i,$id);
+  my($res,$i,$id,$a_id);
 
   return -100 unless ($rec->{zone} > 0);
   db_begin();
+  if ($rec->{type}==7) {
+    $a_id=$rec->{alias};
+    delete $rec->{alias};
+  }
   $res=add_record('hosts',$rec);
   if ($res < 0) { db_rollback(); return -1; }
   $id=$res;
@@ -1118,6 +1127,11 @@ sub add_host($) {
     $res=db_exec("INSERT INTO printer_entries (type,ref,printer,comment) " .
        "VALUES(2,$id,'$rec->{printer_l}[$i][1]','$rec->{printer_l}[$i][2]');");
     if ($res < 0) { db_rollback(); return -5; }
+  }
+
+  if ($rec->{type}==7) {
+    $res=db_exec("INSERT INTO arec_entries (host,arec) VALUES($id,$a_id);");
+    if ($res < 0) { db_rollback(); return -6; }
   }
 
   return -10 if (db_commit() < 0);

@@ -21,7 +21,6 @@ INSERT INTO hinfo_templates (hinfo,type,pri) VALUES('IBM',0,20);
 INSERT INTO hinfo_templates (hinfo,type,pri) VALUES('HP-PROCURVE-224M',0,50);
 INSERT INTO hinfo_templates (hinfo,type,pri) VALUES('HP-PROCURVE-2424M',0,50);
 INSERT INTO hinfo_templates (hinfo,type,pri) VALUES('HP-PROCURVE-2524',0,50);
-INSERT INTO hinfo_templates (hinfo,type,pri) VALUES('HP-PROCURVE-224M',0,50);
 INSERT INTO hinfo_templates (hinfo,type,pri) VALUES('HP-J3210A',0,50);
 INSERT INTO hinfo_templates (hinfo,type,pri) VALUES('CISCO-1900',0,50);
 INSERT INTO hinfo_templates (hinfo,type,pri) VALUES('CISCO-2900',0,50);

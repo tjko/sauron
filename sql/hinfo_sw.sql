@@ -9,7 +9,6 @@ INSERT INTO hinfo_templates (hinfo,type,pri) VALUES('MS-DOS',1,2);
 INSERT INTO hinfo_templates (hinfo,type,pri) VALUES('MS-WINDOWS-95',1,10);
 INSERT INTO hinfo_templates (hinfo,type,pri) VALUES('MS-WINDOWS-NT',1,10);
 INSERT INTO hinfo_templates (hinfo,type,pri) VALUES('MS-WINDOWS-2000',1,10);
-INSERT INTO hinfo_templates (hinfo,type,pri) VALUES('MS-WINDOWS-2000',1,10);
 INSERT INTO hinfo_templates (hinfo,type,pri) VALUES('MACOS',1,10);
 
 INSERT INTO hinfo_templates (hinfo,type,pri) VALUES('UNIX-LINUX',1,20);

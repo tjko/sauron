@@ -10,6 +10,7 @@ use Sys::Syslog;
 use CGI qw/:standard *table/;
 use CGI::Carp 'fatalsToBrowser'; # debug stuff
 use Digest::MD5;
+use Net::Netmask;
 
 $CGI::DISABLE_UPLOADS =1; # no uploads
 $CGI::POST_MAX = 100000; # max 100k posts
@@ -102,15 +103,17 @@ do "$PROG_DIR/back_end.pl";
    len=>[15,45], empty=>[0,1], elabels=>['IP','comment'], iff=>['type','S']},
   {ftype=>1, tag=>'hostmaster', name=>'Hostmaster', type=>'domain', len=>30,
    empty=>1, iff=>['type','M']},
+  {ftype=>3, tag=>'nnotify', name=>'Notify', type=>'enum', conv=>'L',
+   enum=>{f=>'No',t=>'Yes'}, iff=>['type','M']},
   {ftype=>4, tag=>'serial', name=>'Serial', iff=>['type','M']},
   {ftype=>1, tag=>'refresh', name=>'Refresh', type=>'int', len=>10, 
    iff=>['type','M']},
   {ftype=>1, tag=>'retry', name=>'Rery', type=>'int', len=>10, 
    iff=>['type','M']},
-  {ftype=>1, tag=>'expire', name=>'Expire', type=>'int', len=>10, 
+  {ftype=>1, tag=>'expire', name=>'Expire', type=>'int', len=>10,
    iff=>['type','M']},
-  {ftype=>1, tag=>'minimum', name=>'Minimum', type=>'int', len=>10, 
-   iff=>['type','M']},
+  {ftype=>1, tag=>'minimum', name=>'Minimum (negative caching TTL)', 
+   type=>'int', len=>10, iff=>['type','M']},
   {ftype=>1, tag=>'ttl', name=>'Default TTL', type=>'int', len=>10, 
    iff=>['type','M']},
   {ftype=>2, tag=>'ns', name=>'Name servers (NS)', type=>['text','text'], 
@@ -160,12 +163,10 @@ do "$PROG_DIR/back_end.pl";
   {ftype=>5, tag=>'ip', name=>'IP address', iff=>['type','[16]']},
   {ftype=>9, tag=>'alias_d', name=>'Alias for', idtag=>'alias',
    iff=>['type','4']},
-  {ftype=>8, tag=>'alias_a', name=>'Alias for host(s)', fields=>2, 
-   elabels=>['Alias','Info'], iff=>['type','7']},
+  {ftype=>8, tag=>'alias_a', name=>'Alias for host(s)', fields=>3,
+   arec=>1, iff=>['type','7']},
   {ftype=>4, tag=>'id', name=>'Host ID'},
   {ftype=>4, tag=>'type', name=>'Type', type=>'enum', enum=>\%host_types},
-#  {ftype=>3, tag=>'cname', name=>'Alias type', type=>'enum', conv=>'L',
-#   enum=>{t=>'CNAME',f=>'AREC'}, iff=>['type','4']},
   {ftype=>4, tag=>'class', name=>'Class'},
   {ftype=>1, tag=>'ttl', name=>'TTL', type=>'int', len=>10},
   {ftype=>1, tag=>'info', name=>'Info', type=>'text', len=>50, empty=>1,
@@ -212,8 +213,7 @@ do "$PROG_DIR/back_end.pl";
    type=>['text','text'], fields=>2,len=>[40,20], empty=>[0,1], 
    elabels=>['PRINTER','comment'], iff=>['type','[15]']},
   {ftype=>0, name=>'Aliases', no_edit=>1, iff=>['type','1']},
-  {ftype=>8, tag=>'alias_l', name=>'Aliases', fields=>2, 
-   elabels=>['Alias','Info'], iff=>['type','1']}
+  {ftype=>8, tag=>'alias_l', name=>'Aliases', fields=>3, iff=>['type','1']}
  ]
 );
 
@@ -273,10 +273,10 @@ do "$PROG_DIR/back_end.pl";
 
 %new_alias_form = (
  data=>[
-  {ftype=>0, name=>'New CNAME Alias' },
+  {ftype=>0, name=>'New Alias' },
   {ftype=>1, tag=>'domain', name=>'Hostname', type=>'domain', len=>40},
-#  {ftype=>3, tag=>'cname', name=>'Type', type=>'enum', 
-#   enum=>{t=>'CNAME',f=>'AREC'}},
+  {ftype=>3, tag=>'type', name=>'Type', type=>'enum',
+   enum=>{4=>'CNAME',7=>'AREC'}},
   {ftype=>0, name=>'Alias for'},
   {ftype=>4, tag=>'aliasname', name=>'Host'},
   {ftype=>4, tag=>'alias', name=>'ID'}
@@ -371,6 +371,26 @@ do "$PROG_DIR/back_end.pl";
    type=>['text','text'], fields=>2,
    len=>[40,20], empty=>[0,1], elabels=>['DHCP','comment']}
  ]
+);
+
+%net_info_form=(
+ data=>[
+  {ftype=>0, name=>'Net'},
+  {ftype=>1, tag=>'net', name=>'Net (CIDR)', type=>'cidr'},
+  {ftype=>1, tag=>'base', name=>'Base', type=>'cidr'},
+  {ftype=>1, tag=>'netmask', name=>'Netmask', type=>'cidr'},
+  {ftype=>1, tag=>'hostmask', name=>'Hostmask', type=>'cidr'},
+  {ftype=>1, tag=>'broadcast', name=>'Broadcast address', type=>'cidr'},
+  {ftype=>1, tag=>'size', name=>'Size', type=>'int'},
+  {ftype=>0, name=>'Usable address range'},
+  {ftype=>1, tag=>'first', name=>'Start', type=>'int'},
+  {ftype=>1, tag=>'last', name=>'End', type=>'int'},
+  {ftype=>1, tag=>'ssize', name=>'Usable addresses', type=>'int'},
+  {ftype=>0, name=>'Address Usage'},
+  {ftype=>1, tag=>'inuse', name=>'Addresses in use', type=>'int'},
+  {ftype=>1, tag=>'inusep', name=>'Usage', type=>'int'}
+ ],
+ nwidth=>'40%'
 );
 
 %group_form=(
@@ -589,7 +609,7 @@ unless ($frame_mode) {
   #print "<TABLE width=100%><TR bgcolor=\"#ffffff\"><TD>";
 }
 
-print "<br>";
+print "<br>" unless ($frame_mode);
 
 if ($menu eq 'servers') { servers_menu(); }
 elsif ($menu eq 'zones') { zones_menu(); }
@@ -908,7 +928,6 @@ sub hosts_menu() {
 	return;
       }
       $data{aliasname}=$host{domain};
-      #$data{cname}='t';
     }
     $data{type}=4;
     $data{zone}=$zoneid;
@@ -1467,7 +1486,7 @@ sub nets_menu() {
     $res=edit_magic('net','Net','nets',\%net_form,\&get_net,\&update_net,$id);
     goto browse_nets if ($res == -1);
     goto show_net_record if ($res > 0);
-    return;		    
+    return;
   }
   elsif ($sub eq 'Delete') {
     $res=delete_magic('net','Net','nets',\%net_form,\&get_net,
@@ -1475,7 +1494,77 @@ sub nets_menu() {
     goto show_net_record if ($res == 2);
     return;
   }
-  
+  elsif ($sub eq 'Net Info') {
+    if (($id < 0) || get_net($id,\%net)) {
+      alert2("Cannot get net record (id=$id)");
+      return;
+    }
+
+    db_query("SELECT a.ip FROM rr_a a, hosts h, zones z " .
+	     "WHERE z.server=$serverid AND h.zone=z.id AND a.host=h.id " .
+	     " AND a.ip << '$net{net}' ORDER BY a.ip;",\@q);
+    $net{inuse}=@q;
+    for $i (0..$#q) {
+      $ip=$q[$i][0]; $ip=~s/\/32$//;
+      $netmap{$ip}=1;
+    }
+
+    $net = new Net::Netmask($net{net});
+    $net{base}=$net->base();
+    $net{netmask}=$net->mask();
+    $net{hostmask}=$net->hostmask();
+    $net{broadcast}=$net->broadcast();
+    $net{size}=$net->size();
+    $net{first}=$net->nth(1);
+    $net{last}=$net->nth(-2);
+    $net{ssize}=$net->size()-2;
+    $net{inusep}=sprintf("%3.0f", ($net{inuse} / $net{size})*100) ."%";
+
+    $state=($netmap{$net{first}} > 0 ? 1 : 0);
+    $si=1;
+    for $i (1..($net->size()-1)) {
+      $ip=$net->nth($i);
+      $nstate=($netmap{$ip} > 0 ? 1 : 0);
+      if ($nstate != $state) {
+	push @blocks, [$state,($i-$si),$net->nth($si),$net->nth($i-1)];
+	$si=$i;
+      }
+      $state=$nstate;
+    }
+    $i=$net->size()-1;
+    push( @blocks, [$state,($i-$si),$net->nth($si),$net->nth($i-1)] )
+      if ($si < $i);
+
+    print "<TABLE width=\"100%\"><TR><TD valign=\"top\">";
+
+    display_form(\%net,\%net_info_form);
+    print p,startform(-method=>'GET',-action=>$selfurl),
+          hidden('menu','nets'),
+          submit(-name=>'sub',-value=>'<-- Back'),
+          hidden('net_id',$id),end_form;
+
+    print "</TD><TD valign=\"top\">";
+
+    if ($net{subnet} eq 't') {
+      print "<TABLE cellspacing=0 cellpadding=3 border=0 bgcolor=\"eeeeef\">",
+          "<TR><TH colspan=3 bgcolor=\"#aaaaff\">Net usage map</TH></TR>";
+      $state=0;
+      $state=1 if ($q[0][0] =~ /^($net{first})(\/32)?/);
+      for $i (0..$#blocks) {
+	if ($blocks[$i][0] == 1) { print "<TR bgcolor=\"#00ff00\">"; }
+	else { print "<TR bgcolor=\"#eeeebf\">"; }
+	print td("$blocks[$i][1] &nbsp;"),td($blocks[$i][2]),
+	  td($blocks[$i][3]),"</TR>";
+      }
+      print "<TR><TH colspan=3 bgcolor=\"#aaaaff\">&nbsp;</TH></TR></TABLE>";
+      print p,"Legend: <TABLE><TR bgcolor=\"#00ff00\"><TD>in use</TD></TR>",
+	    "<TR bgcolor=\"#eeeebf\"><TD>unused</TD></TR></TABLE>";
+    }
+
+    print "</TD></TR></TABLE>";
+    return;
+  }
+
  show_net_record:
   if ($id > 0) {
     if (get_net($id,\%net)) {
@@ -1486,7 +1575,8 @@ sub nets_menu() {
     print p,startform(-method=>'GET',-action=>$selfurl),
           hidden('menu','nets'),
           submit(-name=>'sub',-value=>'Edit'), "  ",
-          submit(-name=>'sub',-value=>'Delete'),
+          submit(-name=>'sub',-value=>'Delete'), " &nbsp;&nbsp;&nbsp; ",
+          submit(-name=>'sub',-value=>'Net Info'),
           hidden('net_id',$id),end_form;
     return;
   }
@@ -2153,16 +2243,24 @@ sub login_form($$) {
   $host='localhost???';
   $host=$1 if (self_url =~ /https?\:\/\/([^\/]+)\//);
 
-  print start_form,"<CENTER>",h1("Sauron at $host"),hr,h2($msg),p,"<TABLE>",
+  print "<FONT color=\"blue\">";
+  print "<CENTER><TABLE width=\"50%\" cellspacing=0 border=0>",
+        "<TR bgcolor=\"#0000ff\"><TD> Sauron</TD>",
+	"<TD align=\"right\">$host </TD>",
+	"<TR><TD colspan=2 bgcolor=\"#dddddd\">";
+
+  print start_form,"<BR><CENTER>",h2($msg),p,"<TABLE>",
         Tr,td("Login:"),td(textfield(-name=>'login_name',-maxlength=>'8')),
         Tr,td("Password:"),
                    td(password_field(-name=>'login_pwd',-maxlength=>'30')),
               "</TABLE>",
         hidden(-name=>'login',-default=>'yes'),
-        submit,end_form,p,"</CENTER>";
+        submit(-name=>'submit',-value=>'Login'),end_form,"</CENTER>";
+
+  print "</TD></TR></TABLE>";
 
   #print "</TABLE>\n" unless($frame_mode);
-  print p,hr,"You should have cookies enabled for this site...",end_html();
+  print p,"You should have cookies enabled for this site...",end_html();
   $state{'mode'}='1';
   $state{'auth'}='no';
   save_state($c);
@@ -2229,15 +2327,26 @@ sub top_menu($) {
 
   ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime(time);
 
-  print	'<a href="http://sauron.jyu.fi/" target="sauron">',
-        '<IMG src="' .$ICON_PATH . '/logo.png" border="0" alt=""></a>';
+  if ($frame_mode) {
+    print '<TABLE border="0" cellspacing="0" width="100%">',
+          '<TR bgcolor="#002d5f"><TD rowspan=2>',
+          '<a href="http://sauron.jyu.fi/" target="sauron">',
+          '<IMG src="' .$ICON_PATH . '/logo.png" widht="80" height="70" border="0" alt=""></a></TD>',
+          '<TD colspan=2><FONT size=+2 color="white">Sauron</WHITE></TD></TR>',
+	  '<TR bgcolor="#002d5f" align="left" valign="center">',
+          '<TD><FONT color="white">';
+  } else {
+    print '<a href="http://sauron.jyu.fi/" target="sauron">',
+      '<IMG src="' .$ICON_PATH . '/logo.png" border="0" alt=""></a>';
 
-  print '<TABLE border="0" cellspacing="0" width="100%">';
+    print '<TABLE border="0" cellspacing="0" width="100%">';
 
-  print '<TR bgcolor="#002d5f" align="left" valign="center">',
-    '<TD width="15%" height="24">',
-    '<FONT color="white">&nbsp;Sauron </FONT></TD><TD>',
-    '<FONT color="white">',
+    print '<TR bgcolor="#002d5f" align="left" valign="center">',
+      '<TD width="15%" height="24">',
+      '<FONT color="white">&nbsp;Sauron </FONT></TD>',
+      '<TD height="24"><FONT color="white">';
+  }
+  print
     "<A HREF=\"$s_url?menu=hosts\"><FONT color=\"#ffffff\">",
       "Hosts</FONT></A> | ",
     "<A HREF=\"$s_url?menu=zones\"><FONT color=\"#ffffff\">",
@@ -2256,8 +2365,11 @@ sub top_menu($) {
     '</FONT></TD>';
 
   print  "<TD align=\"right\">";
-  printf "<FONT color=\"#ffffff\">%d.%d.%d %02d:%02d </FONT></TD>",
-         $mday,$mon,$year+1900,$hour,$min;
+  if ($frame_mode) { print "&nbsp;"; } 
+  else {
+    printf "<FONT color=\"#ffffff\">%d.%d.%d %02d:%02d </FONT></TD>",
+           $mday,$mon,$year+1900,$hour,$min;
+  }
   print "</TR></TABLE>";
 }
 
@@ -2268,7 +2380,7 @@ sub left_menu($) {
   $w="\"100\"";
 
   $url=$s_url;
-  print "<BR><TABLE width=$w bgcolor=\"#002d5f\" border=\"0\" " .
+  print "<TABLE width=$w bgcolor=\"#002d5f\" border=\"0\" " .
         "cellspacing=\"3\" cellpadding=\"0\">", # Tr,th(h4("$menu")),
         "<TR><TD><TABLE width=\"100%\" cellspacing=\"2\" cellpadding=\"1\" " ,
 	 "border=\"0\">",
@@ -2363,7 +2475,7 @@ sub left_menu($) {
 sub frame_set() {
   print header;
 
-  print "<HTML><FRAMESET border=\"0\" rows=\"115,*\" >\n" .
+  print "<HTML><FRAMESET border=\"0\" rows=\"90,*\" >\n" .
         "  <FRAME src=\"$script_name/frame1\" noresize>\n" .
         "  <FRAME src=\"$script_name/frames2\" name=\"bottom\">\n" .
         "  <NOFRAMES>\n" .
@@ -2393,7 +2505,7 @@ sub frame_set2() {
 
 sub frame_1() {
   print header,
-        start_html(-title=>"sauron: top menu",-BGCOLOR=>'black',
+        start_html(-title=>"sauron: top menu",-BGCOLOR=>'white',
 		   -target=>'bottom');
 
   $s_url .= '/frames2';
@@ -2619,7 +2731,7 @@ sub form_get_defaults($) {
 #####################################################################
 # form_check_form($prefix,$data,$form)
 #
-# checks if form contains valid data and updates 'data' hash 
+# checks if form contains valid data and updates 'data' hash
 #
 sub form_check_form($$$) {
   my($prefix,$data,$form) = @_;
@@ -2655,15 +2767,23 @@ sub form_check_form($$$) {
       return 101 if (form_check_field($rec,$tmp,0) ne '');
       $data->{$tag}=$tmp;
     }
-    elsif  ($type == 2) {
+    elsif  ($type == 2 || $type==5 || ($type==8 && $rec->{arec})) {
       $f=$rec->{fields};
+      $f=1 if ($type==8);
+      $f=3 if ($type==5);
+      $rec->{type}=['ip','text','text'] if ($type==5);
       $a=param($p."_count");
       $a=0 if (!$a || $a < 0);
       for $j (1..$a) {
+	next if ($type==8);
 	next if (param($p."_".$j."_del") eq 'on'); # skip if 'delete' checked
 	for $k (1..$f) {
 	  return 2 
 	    if (form_check_field($rec,param($p."_".$j."_".$k),$k) ne '');
+	}
+	if ($type==5) {
+	  param($p."_".$j."_2",(param($p."_".$j."_2") eq 'on' ? 't':'f'));
+	  param($p."_".$j."_3",(param($p."_".$j."_3") eq 'on' ? 't':'f'));
 	}
       }
 
@@ -2767,7 +2887,7 @@ sub form_magic($$$) {
 	param($p1,$val);
       }
       elsif ($rec->{ftype} == 5) {
-	$rec->{fields}=5;
+	$rec->{fields}=3;
 	$a=$data->{$rec->{tag}};
 	for $j (1..$#{$a}) {
 	  param($p1."_".$j."_id",$$a[$j][0]);
@@ -2778,7 +2898,7 @@ sub form_magic($$$) {
 	  param($p1."_".$j."_2",$t);
 	  $t=''; $t='on' if ($$a[$j][3] eq 't');
 	  param($p1."_".$j."_3",$t);
-	  param($p1."_".$j."_4",$$a[$j][4]);
+	  #param($p1."_".$j."_4",$$a[$j][4]);
 	}
 	param($p1."_count",$#{$a});
       }
@@ -2955,7 +3075,46 @@ sub form_magic($$$) {
       print_wks_template(\%tmpl_rec);
       print "</TD></TR></TABLE></TD></TR>";
     } elsif ($rec->{ftype} == 8) {
-      # do nothing...
+      next unless ($rec->{arec});
+      # do nothing...unless editing arec aliases
+
+      print "<TR>",td($rec->{name}),"<TD><TABLE><TR>";
+      $a=param($p1."_count");
+      if (param($p1."_add") ne '') {
+	if (($id=domain_in_use($zoneid,param($p1."_".($a+1)."_2")))>0) {
+	  get_host($id,\%host);
+	  if ($host{type}==1) {
+	    $a=$a+1;
+	    param($p1."_count",$a);
+	    param($p1."_".$a."_1",$id);
+	    $unknown_host=0;
+	  } else { $invalid_host=1; }
+	}
+	else { $unknown_host=1; }
+      }
+      $a=0 unless ($a > 0);
+      print hidden(-name=>$p1."_count",-value=>$a);
+
+      for $j (1..$a) {
+	$p2=$p1."_".$j;
+	print "<TR>",hidden(-name=>$p2."_id",param($p2."_id"));
+	$n=$p2."_1";
+	print hidden($n,param($n));
+	$n=$p2."_2";
+	print td(param($n)),hidden($n,param($n));
+        print td(checkbox(-label=>' Delete',
+	             -name=>$p2."_del",-checked=>param($p2."_del") )),"</TR>";
+      }
+      $j=$a+1;
+      $n=$prefix."_".$rec->{tag}."_".$j."_2";
+      print "<TR><TD>",textfield(-name=>$n,-size=>25,-value=>param($n));
+      print "<BR><FONT color=\"red\">Uknown host!</FONT>" 
+	if ($unknown_host);
+      print "<BR><FONT color=\"red\">Invalid host!</FONT>" 
+	if ($invalid_host);
+      print "</TD>",
+	td(submit(-name=>$prefix."_".$rec->{tag}."_add",-value=>'Add'));
+      print "</TR></TABLE></TD></TR>\n";
     }
     elsif ($rec->{ftype} == 9) {
       # do nothing...
@@ -3084,13 +3243,13 @@ sub display_form($$) {
       print Tr,td($rec->{name}),"<TD><TABLE>",Tr;
       $a=$data->{$rec->{tag}};
       for $j (1..$#{$a}) {
-	$com=$$a[$j][4];
+	#$com=$$a[$j][4];
 	$ip=$$a[$j][1];
 	$ip=~ s/\/\d{1,2}$//g;
 	$ipinfo='';
 	$ipinfo.=' (no reverse)' if ($$a[$j][2] ne 't');
 	$ipinfo.=' (no A record)' if ($$a[$j][3] ne 't');
-	print Tr,td($ip),td($ipinfo),td($com);
+	print Tr(td($ip),td($ipinfo));
       }
       print "</TABLE></TD>\n";
     } elsif (($rec->{ftype} == 6) || ($rec->{ftype} ==7) ||
@@ -3111,8 +3270,8 @@ sub display_form($$) {
       #for $k (1..$rec->{fields}) { print "<TH>",$$a[0][$k-1],"</TH>";  }
       for $j (1..$#{$a}) {
 	$k=' ';
-	$k=' (AREC)' if ($$a[$j][2] eq '7');
-	print "<TR>",td("<a href=\"$url$$a[$j][0]\">".$$a[$j][1]."</a> "),
+	$k=' (AREC)' if ($$a[$j][3] eq '7');
+	print "<TR>",td("<a href=\"$url$$a[$j][1]\">".$$a[$j][2]."</a> "),
 	          td($k),"</TR>";
       }
       print "</TABLE></TD>\n";
