@@ -10,6 +10,8 @@ require Exporter;
 @EXPORT = qw(
 	     load_config
 	     load_browser_config
+
+	     logmsg
 	    );
 
 use strict;
@@ -116,6 +118,20 @@ sub load_browser_config() {
   fatal("DB_CONNECT not set in configuration file") unless ($main::DB_CONNECT);
   fatal("PROG_DIR not set in configuration file") unless ($main::PROG_DIR);
 
+  return 0;
+}
+
+# add message to log file
+sub logmsg($$) {
+  my($type,$msg)=@_;
+  my $logdir = $main::LOG_DIR;
+  my $prog = $0;
+
+  $prog = $2 if ($prog =~ /^(.*\/)(.*)$/);
+  return -1 unless ($logdir);
+  open(LOGFILE,">>$logdir/sauron.log") || return -2;
+  print LOGFILE localtime(time) . " " . $prog . "[$$]: [".lc($type)."] $msg\n";
+  close(LOGFILE);
   return 0;
 }
 
