@@ -7,6 +7,7 @@
 #
 require 5;
 use Net::Netmask;
+use Getopt::Long;
 
 ($PG_DIR,$PG_NAME) = ($0 =~ /^(.*\/)(.*)$/);
 $0 = $PG_NAME;
@@ -26,56 +27,29 @@ $printer_conf=0;
 
 $ZFORMAT = "%-22s %6s %2s  %-6s %s\n";
 
-#@a = (1,2,3);
-#@b = (5,6,7);
-#@c = (@a , @b);
-#print @a . " " . join(",",@a) . "\n";
-#print @b . " " . join(",",@b) . "\n";
-#print @c . " " . join(",",@c) . "\n";
-
-
-
 ##############################
 
-for ($i=0; $i < @ARGV; $i++) {
-  $argument=$ARGV[$i];
-  last unless ($argument =~ /^-\S+$/);
+$result=GetOptions("help|h","all|a","bind|b","dhcp|d","printer|p");
 
-  for ($j=1;$j < length($argument); $j++) {
-    $arg=substr($argument,$j,1);
-
-    if ($arg eq 'a') {
-      $bind_conf=1; 
-      $dhcp_conf=1; 
-      $printer_conf=1;
-    } 
-    elsif ($arg eq 'b') {
-      $bind_conf=1;
-    } 
-    elsif ($arg eq 'd') {
-      $dhcp_conf=1;
-    } 
-    elsif ($arg eq 'p') {
-      $printer_conf=1;
-    } 
-    else {
-      print STDERR "$0: unknown command line option '$arg' (ignored)\n";
-    }
-  }
-
-}
-
-$argc=@ARGV - $i;
-
-if ($argc < 1 || $argc > 2) {
-    print "syntax: $0 [-abdp] <servername> [<target directory>]\n";
+if ($opt_help || @ARGV < 1 || $result < 1) {
+    print "syntax: $0 [--help] [options] <servername> [<target directory>]\n";
+    print "\n\toptions:\n",
+      "\t--all      generate all configuration files\n",
+      "\t--bind     generate BIND (named) configuration files\n",
+      "\t--dhcp     generate DHCP (dhcpd) configuration files\n",
+      "\t--printer  generate PRINTER (lpd) configuration files\n\n";
     exit(1);
 }
 
 
-$servername = $ARGV[$i];
-if ($argc > 1) {
-	$targetdir = $ARGV[$i+1];
+$dhcp_conf=1 if ($opt_dhcp || $opt_all);
+$bind_conf=1 if ($opt_bind || $opt_all);
+$printer_conf=1 if ($opt_printer || $opt_all);
+
+
+$servername = $ARGV[0];
+if (@ARGV > 1) {
+	$targetdir = $ARGV[1];
 	$targetdir .= "/" unless ($targetdir =~ /\/$/);
 } else {
 	$targetdir = "./";
@@ -751,6 +725,27 @@ sub make_dhcp() {
   print DHCPFILE "# dhcpd.conf -- automagically generated using $0 $VER\n";
   print DHCPFILE "#               created by $user at $time_now\n#\n";
 
+  # ether hash
+  undef @q;
+  db_query("SELECT h.ether,a.ip FROM hosts h,zones z,rr_a a " .
+	   "WHERE z.server=$serverid AND h.zone=z.id AND a.host=h.id " .
+	   " AND h.ether NOTNULL;",\@q);
+  for $i (0..$#q) {
+    $etherhash{$q[$i][0]}=[] unless ($etherhash{$q[$i][0]});
+    push @{$etherhash{$q[$i][0]}}, $q[$i][1];
+  }
+
+  # host dhcp hash
+  undef @q;
+  db_query("SELECT h.id,d.dhcp FROM hosts h,zones z,dhcp_entries d " .
+	   "WHERE z.server=$serverid AND h.zone=z.id AND d.type=3 " .
+	   " AND d.ref=h.id;",\@q);
+  for $i (0..$#q) {
+    $dhcphosth{$q[$i][0]}=[] unless ($dhcphosth{$q[$i][0]});
+    push @{$dhcphosth{$q[$i][0]}}, $q[$i][1];
+  }
+
+
   # global entries
   undef @q;
   db_query("SELECT d.dhcp FROM dhcp_entries d " .
@@ -870,28 +865,33 @@ sub make_dhcp() {
 	  $net=new Net::Netmask($nets[$j][0]);
 	  print DHCPFILE "\t# net: " .$net->desc() . "\n";
 	  for $k (0 .. $#ghosts) {
-	    if ($ghosts[$k][0]==$gid && $net->match($ghosts[$k][2]) ) {
+	    $iplst=$etherhash{$ghosts[$k][1]};
+	    $ip='';
+	    for $l (0..$#{$iplst}) {
+	      if ($net->match($$iplst[$l])) {
+		$ip.=", " if ($ip ne '');
+		$ip.=$$iplst[$l];
+	      }
+	    }
+	    #print "IP '$ip'\n" if ($ip =~ /,/);
+	    if ($ghosts[$k][0]==$gid && ($ip ne '')) {
 	      $host=$ghosts[$k][3];
 	      $host.=".$ghosts[$k][4]" unless ($host =~ /\.$/);
-	      $ip=$ghosts[$k][2];
-	      $ip =~ s/\/\d{1,2}\s*$//g;
 	      $ether=dhcpether($ghosts[$k][1]);
 	      #$dhcp=db_decode_list_str($ghosts[$k][5]);
 	      $dhcpid=$ghosts[$k][5];
 	      if ($ethers{$ether}>0) {
-		error("dublicate interface $ip for $ether ($host) ignored");
+		#error("dublicate interface $ip for $ether ($host)");
 		next;
 	      }
 	      $ethers{$ether}++;
 	      print DHCPFILE "\thost $host {\n";
 	      print DHCPFILE "\t\tfixed-address $ip;\n";
 	      print DHCPFILE "\t\thardware ethernet $ether;\n";
-	      undef @qqq;
-	      db_query("SELECT d.dhcp FROM dhcp_entries d " .
-		       "WHERE d.type=3 AND d.ref=$dhcpid;",\@qqq);
-	      for $l (0..$#qqq) {
-		$qqq[$l][0] =~ s/\\"/"/g;
-		print DHCPFILE "\t\t$qqq[$l][0];\n";
+
+	      $dhcplst=$dhcphosth{$dhcpid};
+	      for $l (0..$#{$dhcplst}) {
+		print DHCPFILE "\t\t$$dhcplst[$l];\n";
 	      }
 	      print DHCPFILE "\t}\n";
 	    }
@@ -918,28 +918,33 @@ sub make_dhcp() {
       $net=new Net::Netmask($nets[$j][0]);
       print DHCPFILE "# net: " .$net->desc() . "\n";
       for $k (0 .. $#ghosts) {
-	if ($net->match($ghosts[$k][2]) ) {
+	$iplst=$etherhash{$ghosts[$k][1]};
+	$ip='';
+	for $l (0..$#{$iplst}) {
+	  if ($net->match($$iplst[$l])) {
+	    $ip.=", " if ($ip ne '');
+	    $ip.=$$iplst[$l];
+	  }
+	}
+	#print "IP '$ip'\n" if ($ip =~ /,/);
+	if ($ip ne '') {
 	  $host=$ghosts[$k][3];
 	  $host.=".$ghosts[$k][4]" unless ($host =~ /\.$/);
-	  $ip=$ghosts[$k][2];
-	  $ip =~ s/\/\d{1,2}\s*$//g;
 	  $ether=dhcpether($ghosts[$k][1]);
 	  #$dhcp=db_decode_list_str($ghosts[$k][5]);
 	  $dhcpid=$ghosts[$k][5];
 	  if ($ethers{$ether}>0) {
-	    error("dublicate interface $ip for $ether ($host) ignored");
+	    #error("duplicate interface $ip for $ether ($host)");
 	    next;
 	  }
 	  $ethers{$ether}++;
 	  print DHCPFILE "host $host {\n";
 	  print DHCPFILE "\tfixed-address $ip;\n";
 	  print DHCPFILE "\thardware ethernet $ether;\n";
-	  undef @qqq;
-	  db_query("SELECT d.dhcp FROM dhcp_entries d " .
-		       "WHERE d.type=3 AND d.ref=$dhcpid;",\@qqq);
-	  for $l (0..$#qqq) {
-	    $qqq[$l][0] =~ s/\\"/"/g;
-	    print DHCPFILE "\t$qqq[$l][0];\n";
+
+	  $dhcplst=$dhcphosth{$dhcpid};
+	  for $l (0..$#{$dhcplst}) {
+	    print DHCPFILE "\t$$dhcplst[$l];\n";
 	  }
 	  print DHCPFILE "}\n";
 	}
@@ -964,11 +969,13 @@ sub make_printcap() {
   # printcap
   print "Generating printcap...\n";
 
-  
+
   open(PCAPFILE,">printcap") || fatal("Cannot create printcap!");
   print PCAPFILE "# printcap -- automagically generated using $0 $VER\n";
   print PCAPFILE "#             created by $user at $time_now\n#\n";
 
+
+  # FIXME .................................!!!!!!!!!!
 
   print PCAPFILE "# eof\n";
   close(PCAPFILE);
