@@ -316,7 +316,12 @@ sub make_bind() {
       if (is_cidr($zone{transfer_src}) && $loopcounter < $normalzones);
 
     # allow_update
-    print_cidr_list('allow-update',2,$zoneid,"\t");
+    if (($type eq 'slave') && ($loopcounter >= $normalzones) && 
+	($subtype eq 'master')) {
+      # omit allow-update for this zone in slave server configuration
+    } else {
+      print_cidr_list('allow-update',2,$zoneid,"\t");
+    }
     # allow_query
     print_cidr_list('allow-query',4,$zoneid,"\t");
     # allow_transfer
