@@ -1,0 +1,25 @@
+#!/bin/sh
+#
+# check-pending -- utility (to be run from cron) to check for pending host
+#                  changes in Sauron database
+#
+# $Id$
+#
+
+SAURONHOME=/opt/sauron
+
+
+
+######################################################################
+
+if [ "$1x" == "x" ]; then
+   echo "Usage: $0 <servername>"
+   exit 1
+fi
+
+
+${SAURONHOME}/status --quiet --pending=$1
+
+
+# eof
+
