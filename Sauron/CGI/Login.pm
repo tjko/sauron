@@ -167,6 +167,17 @@ sub menu_handler {
       print h3('Defaults saved successfully!');
     }
   }
+  elsif ($sub eq 'clear') {
+    my $uid=$state->{'uid'};
+    return if ($uid < 1);
+    $sqlstr="UPDATE users SET server=NULL,zone=NULL WHERE id=$uid;";
+    $res=db_exec($sqlstr);
+    if ($res < 0) {
+      print h3('Clearing defaults failed!');
+    } else {
+      print h3('Defaults cleared successfully!');
+    }
+  }
   elsif ($sub eq 'edit') {
     %data=%user;
     $res=display_dialog("Personal Settings",\%data,\%user_settings_form,

@@ -1,6 +1,8 @@
 $Id$
 
 0.7.1beta
+	- new command "Clear Defaults" in web interface
+	  patch by Michael S. Liebman <m-liebman@northwestern.edu>
 	- status command now detecs also zone/server changes
 	  (previously only host changes were detected)
 	- import-dhcp: support for multiple host entries with same

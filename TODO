@@ -12,8 +12,6 @@ general:
 	- add support alternative way of specifying database connection
           (DB_{DSN,USER,PASS})
 	- method for cleaning up ever-growing history/lastlog tables
-	- status command should detect server/zone modifications in
-	  addition to host changes
 	  
 
 import:

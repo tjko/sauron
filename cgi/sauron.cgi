@@ -132,6 +132,7 @@ $debug_mode = $SAURON_DEBUG_MODE;
 		      ['Change password','sub=passwd'],
 		      ['Edit settings','sub=edit'],
 		      ['Save defaults','sub=save'],
+		      ['Clear defaults','sub=clear'],
 		      ['Frames OFF','FRAMEOFF','frames'],
 		      ['Frames ON','FRAMEON','noframes'],
 		      [],
