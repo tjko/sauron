@@ -826,12 +826,8 @@ sub logmsg($$) {
   my($type,$msg)=@_;
 
   open(LOGFILE,">>$LOG_DIR/sauron.log");
-  print LOGFILE localtime(time) . " sauron: $msg\n";
+  print LOGFILE localtime(time) . " sauron[$$]: $msg\n";
   close(LOGFILE);
-
-  #openlog("sauron","cons,pid","user");
-  #syslog($type,"foo: %s\n",$msg);
-  #closelog();
 }
 
 
@@ -851,7 +847,7 @@ $menu=param('menu');
 $remote_addr = $ENV{'REMOTE_ADDR'};
 $remote_host = remote_host();
 
-$scookie = cookie(-name=>"sauron-$SERVER_ID");
+($scookie = cookie(-name=>"sauron-$SERVER_ID")) =~ s/[^a-f0-9]//g;
 if ($scookie) {
   unless (load_state($scookie)) { 
     logmsg("notice","invalid cookie ($scookie) supplied by $remote_addr"); 
@@ -3145,9 +3141,9 @@ sub login_auth() {
   $p=param('login_pwd');
   $p=~s/\ \t\n//g;
   print "<P><BR><BR><BR><BR><CENTER>";
-  if ($u eq '' || $p eq '') {
-    print p,h1("Username or password empty!");
-  } else {
+  if ($u eq '' || $p eq '') { print p,h1("Username or password empty!");  } 
+  elsif ($u !~ /^[a-zA-Z0-9\.\-]$/) { print p,h1("Invalid usrname!"); }
+  else {
     unless (get_user($u,\%user)) {
       if (pwd_check($p,$user{'password'}) == 0) {
 	$state{'auth'}='yes';

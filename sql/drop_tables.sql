@@ -30,11 +30,13 @@ DROP TABLE ether_info;
 DROP TABLE settings;
 DROP TABLE hinfo_templates;
 DROP TABLE root_servers;
-DROP TABLE common_fields;
 DROP TABLE lastlog;
 DROP TABLE history;
 DROP TABLE deleted_hosts;
 DROP TABLE news;
+DROP TABLE vlans;
+
+DROP TABLE common_fields;
 
 DROP SEQUENCE a_entries_id_seq;
 DROP SEQUENCE mx_templates_id_seq;
@@ -63,6 +65,9 @@ DROP SEQUENCE root_servers_id_seq;
 DROP SEQUENCE history_id_seq;
 DROP SEQUENCE lastlog_id_seq;
 DROP SEQUENCE news_id_seq;
+DROP SEQUENCE vlans_id_seq;
+
+
 DROP SEQUENCE sid_seq;
 
 /* eof */

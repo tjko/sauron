@@ -70,7 +70,8 @@ SQL_TABLES =	sql/common.sql \
 		sql/wks_entries.sql sql/wks_templates.sql \
 		sql/utmp.sql sql/hinfo_templates.sql \
 		sql/arec_entries.sql sql/root_servers.sql \
-		sql/history.sql sql/lastlog.sql sql/news.sql
+		sql/history.sql sql/lastlog.sql sql/news.sql \
+		sql/vlans.sql 
 
 #		sql/host_info.sql \
 

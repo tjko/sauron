@@ -46,15 +46,18 @@ CREATE TABLE servers (
 	/* boolean flags: D=default, Y=yes, N=no */
 	nnotify		CHAR(1)	DEFAULT 'D', /* notify */
 	recursion	CHAR(1) DEFAULT 'D', /* recursion */
+	authnxdomain	CHAR(1) DEFAULT 'D', /* auth-nxdomain */
 
 	/* default TTLs */
-	ttl		INT4 DEFAULT 86400,  /* default TTL for RR records */
-	refresh		INT4 DEFAULT 43200,  /* default SOA refresh */
-	retry		INT4 DEFAULT 3600,   /* default SOA retry */
-	expire		INT4 DEFAULT 604800, /* default SOA expire */
-	minimum		INT4 DEFAULT 86400,  /* default SOA minimum 
+	ttl		INT4 DEFAULT 86400,   /* default TTL for RR records */
+	refresh		INT4 DEFAULT 43200,   /* default SOA refresh */
+	retry		INT4 DEFAULT 3600,    /* default SOA retry */
+	expire		INT4 DEFAULT 2419200, /* default SOA expire */
+	minimum		INT4 DEFAULT 86400,   /* default SOA minimum 
 						(negative caching ttl) */
 
+	/* IPv6 */
+	ipv6		TEXT, /* reserved */
 
 	/* defaults to use in zones */
 	hostname	TEXT,  /* primary servername for sibling zone SOAs */

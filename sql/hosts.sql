@@ -51,6 +51,7 @@ CREATE TABLE hosts (
        ether_alias INT4 DEFAULT -1, /* ptr to another host record
 					(for ETHER address) */
        dhcp_date   INT4,       /* last time host requested IP */
+       dhcp_info   TEXT,       /* reserved */
        info	   TEXT,       /* Host info (appears as TXT record) */
        location	   TEXT,       /* Host location info */
        dept	   TEXT,       /* Department name */
