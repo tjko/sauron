@@ -243,7 +243,7 @@ sub do_search() {
   }
   elsif ($type =~ /^Info/) {
     push @irules, "h.location ~* $mask_str"  if ($BROWSER_SHOW_FIELDS =~ /location/);
-    push @irules, "h.user ~* $mask_str"  if ($BROWSER_SHOW_FIELDS =~ /huser/);
+    push @irules, "h.huser ~* $mask_str"  if ($BROWSER_SHOW_FIELDS =~ /huser/);
     push @irules, "h.dept ~* $mask_str"  if ($BROWSER_SHOW_FIELDS =~ /dept/);
     push @irules, "h.info ~* $mask_str"  if ($BROWSER_SHOW_FIELDS =~ /info/);
     $rule = " (" . join(' OR ',@irules) . ") ";
@@ -282,7 +282,8 @@ sub do_search() {
   $sql  = "SELECT h.id,h.type,h.domain,a.ip,''::text,h.ether,h.info,h.huser, ".
           " h.dept,h.location " .
           "FROM hosts h, a_entries a " .
-	  "WHERE h.zone=$zoneid AND a.host=h.id AND h.type=1 AND $rule ";
+	  "WHERE h.zone=$zoneid AND a.host=h.id AND (h.type=1 OR h.type=9) " .
+	  "AND $rule ";
 
 
   if ($alias) {
@@ -317,7 +318,7 @@ sub do_search() {
 
   #print "<p>sql '$sql'";
   db_query($sql,\@q);
-  print "<br> " . db_errormsg()  if (db_errormsg());
+  print "SQL error:<br>$sql<br>" . db_errormsg()  if (db_errormsg());
   $count = @q;
 
   $count=$show_max if ($count > $show_max);
@@ -354,7 +355,7 @@ sub do_search() {
     $color = (($i % 2) ? "#eeeeee" : "#ffffcc");
     $name="<a href=\"$url&id=$q[$i][0]\">$q[$i][2]</a>";
     $type = $q[$i][1];
-    if ($type == 1) {
+    if ($type == 1 || $type == 9) {
       $ip=$q[$i][3];
       $ip =~ s/\/32//;
       $ether=($q[$i][5] ? "<PRE>$q[$i][5]</PRE>" : '&nbsp;');
