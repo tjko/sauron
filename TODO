@@ -5,7 +5,7 @@ import:
 
 	- fix transaction stuff
 	- add SRV stuff
-
+	- remove unneccessary (?) quoting (\"...) from dhcp (and other) records
 
 
 sauron:

@@ -682,7 +682,7 @@ sub make_dhcp() {
   } 
   else {
     undef @ghosts;
-    db_query("SELECT h.grp,h.ether,a.ip,h.domain,z.name,h.dhcp " .
+    db_query("SELECT h.grp,h.ether,a.ip,h.domain,z.name,h.id " .
 	     "FROM hosts h, zones z, rr_a a " .
 	     "WHERE h.zone=z.id AND a.host=h.id AND h.type=1 " .
 	     "AND h.ether NOTNULL AND z.server=$serverid AND a.forward=true " .
@@ -713,7 +713,8 @@ sub make_dhcp() {
 	      $ip=$ghosts[$k][2];
 	      $ip =~ s/\/\d{1,2}\s*$//g;
 	      $ether=dhcpether($ghosts[$k][1]);
-	      $dhcp=db_decode_list_str($ghosts[$k][5]);
+	      #$dhcp=db_decode_list_str($ghosts[$k][5]);
+	      $dhcpid=$ghosts[$k][5];
 	      if ($ethers{$ether}>0) {
 		error("dublicate interface $ip for $ether ($host) ignored");
 		next;
@@ -722,8 +723,12 @@ sub make_dhcp() {
 	      print DHCPFILE "\thost $host {\n";
 	      print DHCPFILE "\t\tfixed-address $ip;\n";
 	      print DHCPFILE "\t\thardware ethernet $ether;\n";
-	      for $l (0 .. $#{$dhcp}) {
-		print DHCPFILE "\t\t$$dhcp[$l];\n";
+	      undef @qqq;
+	      db_query("SELECT d.dhcp FROM dhcp_entries d " .
+		       "WHERE d.type=3 AND d.ref=$dhcpid;",\@qqq);
+	      for $l (0..$#qqq) {
+		$qqq[$l][0] =~ s/\\"/"/g;
+		print DHCPFILE "\t\t$qqq[$l][0];\n";
 	      }
 	      print DHCPFILE "\t}\n";
 	    }
@@ -739,7 +744,7 @@ sub make_dhcp() {
   # not grouped hosts...
   print DHCPFILE "\n# hosts not in any group\n\n";
   undef @ghosts;
-  db_query("SELECT h.grp,h.ether,a.ip,h.domain,z.name,h.dhcp " .
+  db_query("SELECT h.grp,h.ether,a.ip,h.domain,z.name,h.id " .
 	   "FROM hosts h, zones z, rr_a a " .
 	   "WHERE h.zone=z.id AND a.host=h.id AND h.type=1 " .
 	   "AND h.ether NOTNULL AND z.server=$serverid AND a.forward=true " .
@@ -756,7 +761,8 @@ sub make_dhcp() {
 	  $ip=$ghosts[$k][2];
 	  $ip =~ s/\/\d{1,2}\s*$//g;
 	  $ether=dhcpether($ghosts[$k][1]);
-	  $dhcp=db_decode_list_str($ghosts[$k][5]);
+	  #$dhcp=db_decode_list_str($ghosts[$k][5]);
+	  $dhcpid=$ghosts[$k][5];
 	  if ($ethers{$ether}>0) {
 	    error("dublicate interface $ip for $ether ($host) ignored");
 	    next;
@@ -765,8 +771,12 @@ sub make_dhcp() {
 	  print DHCPFILE "host $host {\n";
 	  print DHCPFILE "\tfixed-address $ip;\n";
 	  print DHCPFILE "\thardware ethernet $ether;\n";
-	  for $l (0 .. $#{$dhcp}) {
-	    print DHCPFILE "\t$$dhcp[$l];\n";
+	  undef @qqq;
+	  db_query("SELECT d.dhcp FROM dhcp_entries d " .
+		       "WHERE d.type=3 AND d.ref=$dhcpid;",\@qqq);
+	  for $l (0..$#qqq) {
+	    $qqq[$l][0] =~ s/\\"/"/g;
+	    print DHCPFILE "\t$qqq[$l][0];\n";
 	  }
 	  print DHCPFILE "}\n";
 	}
