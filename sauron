@@ -1582,7 +1582,7 @@ sub print_subnets() {
   db_query("SELECT ip,router FROM hosts,zones,a_entries " .
 	       "WHERE hosts.zone=zones.id AND a_entries.host=hosts.id " .
 	       "AND zones.server=$serverid AND router>0 " .
-	       "AND ip << '$net' " .
+	       ($net_map_mode == 1 ? "AND ip << '$net' " : "") .
 	       "ORDER BY ip,router;",\@qq);
   error("No router interfaces found for net $net!") if (@qq < 1);
 
