@@ -2,7 +2,7 @@
 #
 # $Id$
 #
-$VER = "0.1a";
+$VER = "0.42";
 
 $LOG_DIR = "/tmp/";
 $PROG_DIR = "/home/tjko/work/sauron/";

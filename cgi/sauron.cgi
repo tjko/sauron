@@ -99,7 +99,11 @@ do "$PROG_DIR/back_end.pl";
 
   {ftype=>0, name=>'DHCP'},
   {ftype=>2, tag=>'dhcp', name=>'Global DHCP', type=>['text','text'], 
-   fields=>2, len=>[35,20], empty=>[0,1],elabels=>['dhcptab line','comment']} 
+   fields=>2, len=>[35,20], empty=>[0,1],elabels=>['dhcptab line','comment']},
+
+  {ftype=>0, name=>'Record info', no_edit=>0},
+  {ftype=>4, name=>'Record created', tag=>'cdate_str', no_edit=>1},
+  {ftype=>4, name=>'Last modified', tag=>'mdate_str', no_edit=>1}
  ]
 # bgcolor=>'#eeeebf',
 # border=>'0',		
@@ -181,9 +185,13 @@ do "$PROG_DIR/back_end.pl";
    iff=>['type','M']},
 
   {ftype=>0, name=>'DHCP', iff=>['type','M']},
-  {ftype=>2, tag=>'dhcp', name=>'Zone specific DHCP entries', 
+  {ftype=>2, tag=>'dhcp', name=>'Zone specific DHCP entries',
    type=>['text','text'], fields=>2,
-   len=>[40,20], empty=>[0,1], elabels=>['DHCP','comment'], iff=>['type','M']}
+   len=>[40,20], empty=>[0,1], elabels=>['DHCP','comment'], iff=>['type','M']},
+
+  {ftype=>0, name=>'Record info', no_edit=>0},
+  {ftype=>4, name=>'Record created', tag=>'cdate_str', no_edit=>1},
+  {ftype=>4, name=>'Last modified', tag=>'mdate_str', no_edit=>1}
  ]
 );
 

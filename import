@@ -202,9 +202,9 @@ db_begin() unless ($opt_notransaction);
 # create server record
 
 $sqlstr = "INSERT INTO servers " .
-      " (name,comment,named_ca,directory,cuser,muser) " .
+      " (name,comment,named_ca,directory,cuser,cdate) " .
       "VALUES ('$servername','imported from named.conf',".
-      "'$named_ca','$directory','$user','$user');";
+      "'$named_ca','$directory','$user','$cdate');";
 
 die("Cannot create server record '$servername' (already exists?)")
 	 if (db_exec($sqlstr) < 0);

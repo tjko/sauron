@@ -35,6 +35,7 @@ CREATE TABLE zones (
 			     is used instead) */
        serial	   CHAR(10) DEFAULT '1999123001', /* zone serial number
 						   (automagically updated) */
+       serial_date INT4 DEFAULT 0,  /* zone serial last update date */
        refresh	   INT4,  /* zone SOA refresh time */
        retry	   INT4,  /* zone SOA retry time */
        expire	   INT4,  /* zone SOA expire time */

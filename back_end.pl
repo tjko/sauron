@@ -334,7 +334,8 @@ sub get_server($$) {
 		    "named_xfer,stats_file,query_src_ip,query_src_port," .
 		    "listen_on_port,checknames_m,checknames_s,checknames_r," .
 		    "nnotify,recursion,ttl,refresh,retry,expire,minimum," .
-		    "pzone_path,szone_path,hostname,hostmaster,comment",
+		    "pzone_path,szone_path,hostname,hostmaster,comment," .
+		    "cdate,cuser,mdate,muser",
 		    $id,$rec,"id");
   return -1 if ($res < 0);
 
@@ -345,6 +346,11 @@ sub get_server($$) {
   get_array_field("txt_entries",3,"id,txt,comment","TXT,Comments",
 		  "type=3 AND ref=$id ORDER BY id",$rec,'txt');
 
+  $rec->{cdate_str}=($rec->{cdate} > 0 ?
+		     localtime($rec->{cdate}).' by '.$rec->{cuser} : 'UNKOWN');
+  $rec->{mdate_str}=($rec->{mdate} > 0 ?
+		     localtime($rec->{mdate}).' by '.$rec->{muser} : '');
+
   return 0;
 }
 
@@ -353,6 +359,13 @@ sub get_server($$) {
 sub update_server($) {
   my($rec) = @_;
   my($r,$id);
+
+  delete $rec->{cdate_str};
+  delete $rec->{mdate_str};
+  delete $rec->{cdate};
+  delete $rec->{cuser};
+  $rec->{mdate}=time;
+  $rec->{muser}=$muser;
 
   db_begin();
   $r=update_record('servers',$rec);
@@ -374,6 +387,8 @@ sub update_server($) {
 sub add_server($) {
   my($rec) = @_;
 
+  $rec->{cdate}=time;
+  $rec->{cuser}=$muser;
   return add_record('servers',$rec);
 }
 
@@ -579,7 +594,8 @@ sub get_zone($$) {
   $res = get_record("zones",
 	       "server,active,dummy,type,reverse,class,name,nnotify," .
 	       "hostmaster,serial,refresh,retry,expire,minimum,ttl," .
-	       "chknames,reversenet,comment",
+	       "chknames,reversenet,comment,cdate,cuser,mdate,muser," .
+	       "serial_date",
 	       $id,$rec,"id");
   return -1 if ($res < 0);
 
@@ -602,12 +618,24 @@ sub get_zone($$) {
   get_array_field("cidr_entries",3,"id,ip,comment","IP,Comments",
 		  "type=6 AND ref=$id ORDER BY ip",$rec,'also_notify');
 
+  $rec->{cdate_str}=($rec->{cdate} > 0 ?
+		     localtime($rec->{cdate}).' by '.$rec->{cuser} : 'UNKOWN');
+  $rec->{mdate_str}=($rec->{mdate} > 0 ?
+		     localtime($rec->{mdate}).' by '.$rec->{muser} : '');
+
   return 0;
 }
 
 sub update_zone($) {
   my($rec) = @_;
   my($r,$id);
+
+  delete $rec->{cdate_str};
+  delete $rec->{mdate_str};
+  delete $rec->{cdate};
+  delete $rec->{cuser};
+  $rec->{mdate}=time;
+  $rec->{muser}=$muser;
 
   db_begin();
   $r=update_record('zones',$rec);
@@ -751,6 +779,8 @@ sub delete_zone($) {
 sub add_zone($) {
   my($rec) = @_;
 
+  $rec->{cdate}=time;
+  $rec->{cuser}=$muser;
   return add_record('zones',$rec);
 }
 
