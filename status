@@ -24,7 +24,7 @@ load_config();
 $argcount=@ARGV;
 
 $result = GetOptions("cgi-enable","cgi-disable=s","help|h","pending:s",
-		     "quiet","versions");
+		     "quiet","versions","config");
 
 if ($opt_help || not $result) {
   print "syntax: $0 [options]\n\n",
@@ -35,6 +35,7 @@ if ($opt_help || not $result) {
     " --cgi-disable='message'      disable CGI interface\n",
     " --cgi-enable                 enable CGI interface\n",
     " --versions                   display module versions\n",
+    " --config                     display current configuration values\n",
     " --quiet                      no verbose output\n";
   print "\n" if ($opt_help || $opt_cgi_enable); # to get rid of warnings :)
   exit(0);
@@ -58,10 +59,11 @@ if ($opt_versions) {
         "\n";
   print "Sauron::UtilZone: ",($Sauron::UtilZone::VERSION =~ /,v\s+(\S+)\s/),
         "\n";
-  print "\n" if ($opt_versions);
-  exit;
+  print "\n";
 }
 
+print_config() if ($opt_config);
+exit if ($opt_versions || $opt_config);
 
 fatal("DB_CONNECT not defined in configuration!") unless ($DB_CONNECT);
 $db_ok = db_connect2($DB_CONNECT);
