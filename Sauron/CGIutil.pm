@@ -27,6 +27,9 @@ require Exporter;
 	    );
 
 use CGI;
+use Sauron::DB;
+use Sauron::Util;
+use Sauron::BackEnd;
 use strict;
 
 my($CGI_UTIL_zoneid,$CGI_UTIL_serverid);
