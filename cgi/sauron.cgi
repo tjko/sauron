@@ -1968,7 +1968,9 @@ sub hosts_menu() {
     undef @q;
     $fields="a.id,a.type,a.domain,a.ether,a.info,a.huser,a.dept," .
 	    "a.location,a.expiration,a.ether_alias";
-    $fields.=",a.cdate,a.mdate,a.dhcp_date" if (param('csv'));
+    $fields.=",a.cdate,a.mdate,a.expiration,a.dhcp_date," .
+             "a.hinfo_hw,a.hinfo_sw,a.model,a.serial,a.misc,a.asset_id"
+	       if (param('csv'));
 
     $sql1="SELECT b.ip,'',$fields FROM hosts a,a_entries b " .
 	  "WHERE a.zone=$zoneid AND b.host=a.id $typerule $typerule2 " .
@@ -2001,14 +2003,17 @@ sub hosts_menu() {
     }
 
     if (param('csv')) {
-      $csv_format =
-	  '"%s","%s","%s","%s","%s","%s","%s","%s","%s","%s","%s"'."\n";
-      printf $csv_format,'Domain','Type','IP','Ether','User','Dept.',
-	                 'Location','Info','cdate','edate','dhcpdate';
+      printf print_csv(['Domain','Type','IP','Ether','User','Dept.',
+	                 'Location','Info','Hardware','Software',
+			 'Model','Serial','Misc','AssetID',
+			 'cdate','mdate','edate','dhcpdate']) . "\n";
       for $i (0..$#q) {
-	printf $csv_format,$q[$i][4],$host_types{$q[$i][3]},$q[$i][0],
+	printf print_csv([ $q[$i][4],$host_types{$q[$i][3]},$q[$i][0],
 	                   $q[$i][5],$q[$i][7],$q[$i][8],$q[$i][9],
-			   $q[$i][6],$q[$i][12],$q[$i][13],$q[$i][14];
+			   $q[$i][6],$q[$i][16],$q[$i][17],
+			   $q[$i][18],$q[$i][19],$q[$i][20],$q[$i][21],
+			   $q[$i][12],$q[$i][13],$q[$i][14],$q[$i][15]
+			 ]) . "\n";
       }
       return;
     }
