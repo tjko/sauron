@@ -219,7 +219,7 @@ foreach $key (keys %{$data{host}}) {
     } else {
       push @q, $line;
     }
-    
+
   }
   next unless ($ip && $ether);
   print "host: $key ip=$ip,ether=$ether,groupid=$id\n" if ($opt_verbose);
@@ -240,6 +240,8 @@ if (@list > 0) {
     $routers{$list[$i][2]}=$i if ($routers{$list[$i][2]}< 0);
     next unless ($hosts{$list[$i][2]});
     if ($list[$i][2] eq $list[$i-1][2] || $list[$i][2] eq $list[$i+1][2]) {
+      $matchcount++;
+      $hostrefs{$list[$i][2]}=$i;
       $skiplist{$list[$i][2]}=1;
       next;
     }
@@ -247,9 +249,20 @@ if (@list > 0) {
     $hostrefs{$list[$i][2]}=$i;
   }
 }
+
 print "Found $matchcount hosts in database to update\n";
 
 print "Updating hosts...\n";
+
+db_query("SELECT h.ether, h.id from hosts h, zones z " .
+         "WHERE z.server=$serverid AND h.zone=z.id AND h.type=1 " .
+         "AND h.ether!=\'\'", \@current_ethers);
+
+if (@current_ethers > 0) {
+  for $i (0..$#current_ethers) {
+    $macs{$current_ethers[$i][0]} = $current_ethers[$i][1];
+  }
+}
 
 foreach $ip (keys %hostrefs) {
   next unless defined ($hostrefs{$ip});
@@ -257,6 +270,18 @@ foreach $ip (keys %hostrefs) {
   $id=$list[$i][0];
   $domain=$list[$i][1];
   $ip=$list[$i][2];
+
+  if ($macs{$hosts{$ip}[0]}){
+    print "duplicate found, $hosts{$ip}[0]\n" if ($opt_verbose);
+    print "Updating $domain ($ip,$id) <-- ",
+          "$macs{$hosts{$ip}[0]},$hosts{$ip}[1],$hosts{$ip}[2]\n"
+	    if ($opt_verbose);
+    $res = update_host({id=>$id,ether_alias=>$macs{$hosts{$ip}[0]},
+			grp=>$hosts{$ip}[1]});
+    fatal("cannot update host: $domain ($res)\n".db_errormsg()) if ($res < 0);
+    next;
+  }
+  $macs{$hosts{$ip}[0]} = $id;
 
   print "Updating $domain ($ip,$id) <-- ",
         "$hosts{$ip}[0],$hosts{$ip}[1],$hosts{$ip}[2]\n" if ($opt_verbose);
