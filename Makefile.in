@@ -186,7 +186,7 @@ backup:	clean
 
 
 
-install: all make_dirs
+install: make_dirs
 	$(INSTALL) -m 644 config.in $(INSTALL_ROOT)/$(etcdir)/config.in
 	$(PERL) -p -i -e 's@^\$$PROG_DIR = "/usr/local/sauron/";@\$$PROG_DIR = "$(bindir)/";@;' $(INSTALL_ROOT)/$(etcdir)/config.in
 	if [ ! -f $(INSTALL_ROOT)/$(etcdir)/config ]; then \
