@@ -2,6 +2,9 @@ $Id$
 
 	
 0.6.1	
+	- sauron.cgi: added "Ping Sweep" button for "ping scanning"
+	  (using nmap) displayed hosts from search results.
+	- sauron.cgi: added "-> This Subnet" jump button in host display
 	- fixed several bugs in special "CNAME hack" delegations for smaller
 	  than class-C nets
 	

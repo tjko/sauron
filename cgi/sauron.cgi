@@ -2052,11 +2052,69 @@ sub hosts_menu() {
           "<TR><TD><B>Zone:</B> $zone</TD>",
           "<TD align=right>Page: ".($page+1)."</TD></TR></TABLE>";
 
+    if (param('pingsweep')) {
+      if (check_perms('level',$ALEVEL_NMAP,1)) {
+	logmsg("warning","unauthorized ping sweep attempt: $state{user}");
+	alert1("Access denied.");
+	return;
+      }
+      unless (-d $SAURON_NMAP_TMPDIR && -w $SAURON_NMAP_TMPDIR) {
+	logmsg("notice","SAURON_NMAP_TMPDIR misconfigured");
+	alert2("Ping Sweep not configured!");
+	return;
+      }
+      $nmap_file = "$SAURON_NMAP_TMPDIR/nmap-$$.input";
+      $nmap_log = "$SAURON_NMAP_TMPDIR/nmap-$$.log";
+
+      print h3("Please wait...Running Ping sweep.");
+      logmsg("notice","running nmap (ping sweep): $state{user}");
+
+      if (open(FILE,">$nmap_file")) {
+	for $i (0..$#q) {
+	  next unless ($q[$i][3] == 1);
+	  ($ip=$q[$i][0]) =~ s/\/\d{1,2}$//g;
+	  print FILE "$ip\n";
+	}
+	close(FILE);
+
+	$r = run_command_quiet($SAURON_NMAP_PROG,
+			 [split(/\s+/,$SAURON_NMAP_ARGS),
+			  '-oG',$nmap_log,'-iL',$nmap_file],
+			 $SAURON_NMAP_TIMEOUT);
+	
+	unlink($nmap_file);
+	unless ($r == 0) {
+	  if (($r & 255) == 14) { alert2("Nmap timed out!") }
+	  else { alert1("Ping sweep failed!"); }
+	  return;
+	}
+
+	if (open(FILE,"$nmap_log")) {
+	  while (<FILE>) {
+	    next if (/^#/);
+	    next unless
+		     (/^\s*Host:\s+(\d+\.\d+\.\d+\.\d+)\s.*(Status:\s+(\S+))/);
+	    $nmaphash{$1}=$3;
+	  }
+	  close(FILE);
+	  unlink($nmap_log);
+	  $pingsweep=1;
+	} else {
+	  alert2("cannot read nmap output!");
+	  return;
+	}
+      } else {
+	logmsg("notice","cannot write tmp file for nmap: $nmap_file");
+	alert2("Cannot write tmp file for nmap");
+	return;
+      }
+    }
+
     $sorturl="$selfurl?menu=hosts&sub=browse&lastsearch=1";
     print 
       "<TABLE width=\"99%\" border=0 cellspacing=1 cellpadding=1 ".
       " BGCOLOR=\"#ccccff\"><TR bgcolor=#aaaaff>",
-      th(['#',
+      th([($pingsweep ? 'Status':'#'),
 	  "<a href=\"$sorturl&bh_order=1\">Hostname</a>",
 	  'Type',
 	  "<a href=\"$sorturl&bh_order=2\">IP</a>",
@@ -2084,8 +2142,18 @@ sub hosts_menu() {
       $trcolor='#ffffcc' if ($i % 2 == 0);
       $trcolor='#ffcccc' if ($q[$i][10] > 0 && $q[$i][10] < time());
       $trcolor='#ccffff' if (param('bh_type')==1 && $type == 101);
+
+      if ($pingsweep) {
+	if ($nmaphash{$ip} =~ /^Up/) {
+	  $nro = "<FONT color=\"green\" size=-1>Up</FONT>";
+	} else {
+	  $nro = "<FONT color=\"red\" size=-1>Down $nmaphash{$ip}</FONT>";
+	}
+      } else {
+	$nro = "<FONT size=-1>".($i+1)."</FONT>";
+      }
       print "<TR bgcolor=\"$trcolor\">",
-	    td(["<FONT size=-1>".($i+1)."</FONT>",$hostname,
+	    td([$nro, $hostname,
 		"<FONT size=-1>$host_types{$q[$i][3]}</FONT>",$ip,
 	        "<font size=-3 face=\"courier\">$ether&nbsp;</font>",
 	        "<FONT size=-1>".$info."&nbsp;</FONT>"]),"</TR>";
@@ -2114,6 +2182,17 @@ sub hosts_menu() {
           "<div align=right><font size=-2>",
           "<a title=\"foo.csv\" href=\"$sorturl&csv=1\">",
           "[Download results in CSV format]</a> &nbsp;</font></div>";
+
+    if ($SAURON_NMAP_PROG && param('bh_type') == 1 &&
+	!check_perms('level',$ALEVEL_NMAP,1)) {
+
+      print startform(-method=>'POST',-action=>$selfurl),
+	hidden('menu','hosts'),hidden('sub','browse'),
+	  hidden('lastsearch','1'),hidden('pingsweep','1');
+      print submit(-name=>sweep,-value=>'Ping Sweep');
+      print end_form;
+    }
+
     return;
   }
   elsif ($sub eq 'add') {

@@ -35,6 +35,13 @@ $SERVER_ID = "fooserver";
 # $SAURON_PING_TIMEOUT = '15';  
 # $ALEVEL_PING = 1;  # authorization level needed to use ping
 
+# set to enable ping sweeps from web interface using nmap
+# $SAURON_NMAP_PROG = '/usr/bin/nmap';
+# $SAURON_NMAP_TMPDIR = "$PROG_DIR/tmp/";
+# $SAURON_NMAP_ARGS = '-n -sP';  
+# $SAURON_NMAP_TIMEOUT = '30';  
+# $ALEVEL_NMAP = 5;  # authorization level needed to use nmap
+
 # set to enable traceroute command in web interface
 # $SAURON_TRACEROUTE_PROG = '/usr/sbin/traceroute';
 # $SAURON_TRACEROUTE_ARGS = '';  

@@ -28,6 +28,7 @@ sub set_defaults() {
   $main::SAURON_REMOVE_EXPIRED_DELAY = 30;
   $main::SAURON_PING_TIMEOUT = 15;
   $main::SAURON_TRACEROUTE_TIMEOUT = 15;
+  $main::SAURON_NMAP_TIMEOUT = 30;
   $main::SAURON_SECURE_COOKIES = 0;
   $main::SAURON_USER_TIMEOUT = 3600;
   $main::SAURON_DTD_HACK = 0;
