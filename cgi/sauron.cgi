@@ -236,11 +236,17 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>1, tag=>'info', name=>'[Extra] Info', type=>'text', len=>50, 
    empty=>1, iff=>['type','1']},
   {ftype=>0, name=>'Equipment info', iff=>['type','1']},
-  {ftype=>1, tag=>'hinfo_hw', name=>'HINFO hardware', type=>'hinfo', len=>25,
-   empty=>1, iff=>['type','1']},
-  {ftype=>1, tag=>'hinfo_sw', name=>'HINFO software', type=>'hinfo', len=>25,
-   empty=>1, iff=>['type','1']},
-  {ftype=>1, tag=>'ether', name=>'Ethernet address', type=>'mac', len=>12,
+#  {ftype=>1, tag=>'hinfo_hw', name=>'HINFO hardware', type=>'hinfo', len=>25,
+#   empty=>1, iff=>['type','1']},
+#  {ftype=>1, tag=>'hinfo_sw', name=>'HINFO software', type=>'hinfo', len=>25,
+#   empty=>1, iff=>['type','1']},
+  {ftype=>101, tag=>'hinfo_hw', name=>'HINFO hardware', type=>'hinfo', len=>25,
+   sql=>"SELECT hinfo FROM hinfo_templates WHERE type=0 ORDER BY pri,hinfo;",
+   lastempty=>1, empty=>1, iff=>['type','1']},
+  {ftype=>101, tag=>'hinfo_sw', name=>'HINFO sowftware', type=>'hinfo',len=>25,
+   sql=>"SELECT hinfo FROM hinfo_templates WHERE type=1 ORDER BY pri,hinfo;",
+   lastempty=>1, empty=>1, iff=>['type','1']},
+  {ftype=>1, tag=>'ether', name=>'Ethernet address', type=>'mac', len=>17,
    conv=>'U', iff=>['type','[19]'], empty=>1},
   {ftype=>4, tag=>'card_info', name=>'Card manufacturer', 
    iff=>['type','[19]']},
@@ -325,7 +331,7 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>101, tag=>'hinfo_sw', name=>'HINFO sowftware', type=>'hinfo',len=>25,
    sql=>"SELECT hinfo FROM hinfo_templates WHERE type=1 ORDER BY pri,hinfo;",
    lastempty=>1, empty=>1, iff=>['type','1']},
-  {ftype=>1, tag=>'ether', name=>'Ethernet address', type=>'mac', len=>12,
+  {ftype=>1, tag=>'ether', name=>'Ethernet address', type=>'mac', len=>17,
    conv=>'U', iff=>['type','[19]'], iff2=>['ether_alias_info',''], empty=>0},
   {ftype=>4, tag=>'ether_alias_info', name=>'Ethernet alias', 
    iff=>['type','1']}, 
@@ -391,7 +397,7 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>101, tag=>'hinfo_sw', name=>'HINFO sowftware', type=>'hinfo',len=>20,
    sql=>"SELECT hinfo FROM hinfo_templates WHERE type=1 ORDER BY pri,hinfo;",
    lastempty=>1, empty=>1, iff=>['type','1']},
-  {ftype=>1, tag=>'ether', name=>'Ethernet address', type=>'mac', len=>12,
+  {ftype=>1, tag=>'ether', name=>'Ethernet address', type=>'mac', len=>17,
    conv=>'U', iff=>['type','[19]'], empty=>1},
   {ftype=>1, tag=>'model', name=>'Model', type=>'text', len=>30, empty=>1, 
    iff=>['type','1']},
@@ -447,7 +453,7 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>101, tag=>'hinfo_sw', name=>'HINFO sowftware', type=>'hinfo',len=>20,
    sql=>"SELECT hinfo FROM hinfo_templates WHERE type=1 ORDER BY pri,hinfo;",
    lastempty=>0, empty=>0, iff=>['type','1']},
-  {ftype=>1, tag=>'ether', name=>'Ethernet address', type=>'mac', len=>12,
+  {ftype=>1, tag=>'ether', name=>'Ethernet address', type=>'mac', len=>17,
    conv=>'U', iff=>['type','[19]'], empty=>0},
   {ftype=>1, tag=>'model', name=>'Model', type=>'text', len=>30, empty=>1, 
    iff=>['type','1']},
@@ -1278,6 +1284,8 @@ sub hosts_menu() {
 	  $old_ip=$host{ip}[1][1];
 	  $host{ip}[1][1]=param('new_ip');
 	  $host{ip}[1][4]=1;
+	  $host{location}=param('new_loc') 
+	    unless (param('new_loc') =~ /^\s*$/);
 	  unless (update_host(\%host)) {
 	    update_history($state{uid},$state{sid},1,
 			   "MOVE: $host_types{$host{type}} ",
@@ -1299,13 +1307,17 @@ sub hosts_menu() {
 	print h3($newip);
 	$newip=$host{ip}[1][1];
       }
+      $newloc=$host{location};
       print p,startform(-method=>'GET',-action=>$selfurl),
             hidden('menu','hosts'),hidden('h_id',$id),hidden('sub','Move'),
-            hidden('move_confirm'),hidden('move_net'),p,"New IP: ",
-            textfield(-name=>'new_ip',-maxlength=>15,-default=>$newip), " ",
-            submit(-name=>'move_confirm2',-value=>'Update'), " ",
-            submit(-name=>'move_cancel',-value=>'Cancel'), " ",
-            end_form;
+            hidden('move_confirm'),hidden('move_net'),p,
+	    "<TABLE><TR><TD>New IP:</TD>",
+            td(textfield(-name=>'new_ip',-maxlength=>15,-default=>$newip)),
+            "<TD>",submit(-name=>'move_confirm2',-value=>'Update'), " ",
+            submit(-name=>'move_cancel',-value=>'Cancel'), "</TD></TR>",
+	    "<TR><TD>New Location:</TD>",
+	    td(textfield(-name=>'new_loc',-maxlength=>15,-default=>$newloc)),
+	    td(),"</TR></TABLE>",end_form;
       display_form(\%host,\%host_form);
       return;
     }
@@ -1411,11 +1423,11 @@ sub hosts_menu() {
   }
   elsif ($sub eq 'browse') {
     %bdata=(domain=>'',net=>'ANY',nets=>\%nethash,nets_k=>\@netkeys,
-	    type=>1,order=>2,stype=>1,size=>3);
+	    type=>1,order=>2,stype=>0,size=>3);
     if (param('bh_submit')) {
       if (param('bh_submit') eq 'Clear') {
 	param('bh_pattern','');
-	param('bh_stype','1');
+	param('bh_stype','0');
 
 	param('bh_type','1');
 	param('bh_net','');
@@ -1713,7 +1725,7 @@ sub hosts_menu() {
   make_net_list($serverid,1,\%nethash,\@netkeys,0);
 
   %bdata=(domain=>'',net=>'ANY',nets=>\%nethash,nets_k=>\@netkeys,
-	    type=>1,order=>2,stype=>1,size=>3);
+	    type=>1,order=>2,stype=>0,size=>3);
   if ($state{searchopts} =~ /^(\d+),(\d+),(\d+),(\d+),(\S*),(\S*)$/) {
     $bdata{type}=$1;
     $bdata{order}=$2;
