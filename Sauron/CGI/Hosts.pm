@@ -817,7 +817,7 @@ sub menu_handler {
       if (@q > 0) {
 	param('bh_type','1'); param('bh_order','2');
 	param('bh_size','3'); param('bh_stype','0');
-	param('bh_net',$q[$#q][0]);
+	param('bh_net',$q[$#q][0]); param('bh_sdtype','0');
 	param('bh_submit','Search');
 	goto browse_hosts_jump_point;
       }
