@@ -1109,6 +1109,14 @@ sub hosts_menu() {
     #print "<br>$sql";
     db_query($sql,\@q);
     $count=scalar @q;
+    if ($count < 1) {
+      alert2("No matching records found.");
+      goto browse_hosts;
+    } elsif ($count == 1) {
+      param('h_id',$q[0][2]);
+      goto show_host_record;
+    }
+
     print "<TABLE width=\"99%\" cellspacing=0 cellpadding=1 border=0 " .
           "BGCOLOR=\"aaaaff\">",
           "<TR><TD><B>Zone:</B> $zone</TD>",
@@ -1116,7 +1124,7 @@ sub hosts_menu() {
 
     print "<TABLE width=\"99%\" cellspacing=0 cellpadding=1 BGCOLOR=\"#eeeeff\">",
           Tr,Tr,
-          "<TR bgcolor=#aaaaff>",th(['Hostname','Type','IP','Ether','Info']);
+          "<TR bgcolor=#aaaaff>",th(['#','Hostname','Type','IP','Ether','Info']);
     for $i (0..$#q) {
       $type=$q[$i][3];
       ($ip=$q[$i][0]) =~ s/\/\d{1,2}$//g;
@@ -1129,8 +1137,11 @@ sub hosts_menu() {
 	        "$q[$i][4]</A>";
       $trcolor='#eeeeee';
       $trcolor='#ffffcc' if ($i % 2 == 0);
-      print "<TR bgcolor=\"$trcolor\">",td([$hostname,$host_types{$q[$i][3]},$ip,
-		   "<PRE>$ether&nbsp;</PRE>",$q[$i][6]."&nbsp;"]),"</TR>";
+      print "<TR bgcolor=\"$trcolor\">",
+	    "<TD><FONT size=-1>".($i+1).".</FONT></TD>",
+	    td([$hostname,$host_types{$q[$i][3]},$ip,
+	       "<PRE>$ether&nbsp;</PRE>",
+	       "<FONT size=-1>".$q[$i][6]."&nbsp;</FONT>"]),"</TR>";
 
     }
     print "</TABLE><BR><CENTER>[";
