@@ -818,7 +818,7 @@ Adding zone: 255.in-addr.arpa...OK (id=4)
         when adding/modifying hosts. To makes it easier to define or
         change  certain settings for large groups of hosts, by just modifying
         the related template or group. More information about these
-        can be found in <xref linkend="reference">.
+        can be found in <xref linkend="templates-menu">.
       </para>
  
       </section>
@@ -905,39 +905,301 @@ Adding zone: 255.in-addr.arpa...OK (id=4)
     <section>
     <title>Generating DNS & DHCP Configurations</title>
     <para>
+      Generation of BIND and dhcpd configurations files is done using
+      command-line utilitye <filename>sauron</>. Configuration files
+      can be generated at the server where Sauron and PostgreSQL are installed,
+      or Sauron software can be installed also in the actual DNS & DHCP
+      server and configured to connect to PostgreSQL database over network
+      (if connecting PostgreSQL over the network SSL connection 
+      should be used).
+    </para>
+    <para> 
+      To generate complete BIND configuration fileset as well as dhcpd
+      configuration file, following command could be used:
+      <screen>
+      ./sauron --bind --dhcp --updateserial ns1 /opt/ns/
+      </screen>
+      This will create configuration files for server <quote>ns1</>.
+      Option <option>--updateserial</> forces the update of zone 
+      <acronym>SOA</> serial numbers. Normally Sauron tries to detect
+      if zone serial number update is necessary and update it only when
+      needed, but this detection routine may sometimes fail, so for now
+      it's recommended to use <option>--updateserial</> option.
+    </para>
+    <para>
+      Sauron should always generate valid configuration files for BIND
+      and dhcpd, but to be sure and automatically validate generated
+      files, there is <option>--check</> option that causes <filename>sauron</>
+      command to check generated files. For this to work you need to
+      set specify the locations of <filename>dhcpd</>, 
+      <filename>named-checkconf</>, and <filename>named-checkzone</> programs
+      in Sauron configuration file. Here's an example for enabling
+      <option>--check</> option to work in a RedHat Linux:
+      <screen>
+# set to enable dhcpd.conf validation from sauron
+$SAURON_DHCP_CHK_PROG = '/usr/sbin/dhcpd';
+$SAURON_DHCP_CHK_ARGS = '-q -t -cf';
+
+# set to enable named.conf validation from sauron
+$SAURON_NAMED_CHK_PROG = '/usr/sbin/named-checkconf';
+$SAURON_NAMED_CHK_ARGS = '';
+
+# set to enable zone file validation from sauron
+$SAURON_ZONE_CHK_PROG = '/usr/sbin/named-checkzone';
+$SAURON_ZONE_CHK_ARGS = '-q';
+      </screen>
+      It is also possible to tell <filename>sauron</> to send e-mail 
+      notifications to users whose changes are in effect after new
+      configuration files are put into use using the <option>--mail</>
+      option. For this option to work you need to configure a mailer
+      program for Sauron to use in configuration file. Here's example
+      how to do this in a RedHat Linux:
+      <screen>
+# mailer configuration (set to enable email notifications)
+$SAURON_MAILER = '/usr/sbin/sendmail';
+$SAURON_MAILER_ARGS = '-t'; 
+$SAURON_MAIL_FROM = 'postmaster@middle.earth'; 
+      </screen>
+      This configures Sauron to use <application>Sendmail</> for sending
+      e-mail notifications, and messages will appear to come from
+      <email>postmaster@middle.earth</email>.
+    </para>
+    <para>
+      You can automate BIND & dhcpd configuraton files generation using
+      for example a simple shell script that is run periodically from
+      <application>cron</>. But you should use <option>--check</>
+      when doing this to make sure you always end up with valid
+      configuration files.
     </para>
     </section>
     
   </chapter>
 
+  <chapter id="account-management">
+  <title>Account Management</>
+  <para>
+    FIXME
+  </para>
+  </chapter>
 
-  <chapter id="reference">
-    <title>Reference</>
+  <chapter id="web-interface">
+    <title>Web Interface</>
     <para>
       FIXME
     </para>
 
-    <section id="account-management">
-    <title>Account Management</>
+    <section id="servers-menu">
+    <title>Servers</>
     <para>
-    FIXME
+      FIXME  
     </para>
     </section>
+
+    <section id="zones-menu">
+    <title>Zones</>
+    <para>
+      FIXME
+    </para>
+    </section>
+
+    <section id="hosts-menu">
+    <title>Hosts</>
+    <para>
+      FIXME  
+    </para>
+    </section>
+
+    <section id="templates-menu">
+    <title>Templates and Groups</>
+    <para>
+      FIXME  
+    </para>
+    </section>
+
+    <section id="nets-menu">
+    <title>Nets</>
+    <para>
+      FIXME
+    </para>
+    </section>
+
+    <section id="login-menu">
+    <title>Login</>
+    <para>
+      FIXME  
+    </para>
+    </section>
+
   </chapter>
 
-  <appendix id="command-ref">
+  <chapter id="command-ref">
     <title>Command Reference</>
     <para>
       FIXME
     </para>
-  </appendix>
+
+    <section id="addgroup-cmd">
+    <title>addgroup</>
+    <para>
+      FIXME
+    </para>
+    </section>
+
+    <section id="addhost-cmd">
+    <title>addhost</>
+    <para>
+      FIXME
+    </para>
+    </section>
+
+    <section id="adduser-cmd">
+    <title>adduser</>
+    <para>
+      FIXME
+    </para>
+    </section>
+
+    <section id="check-pending-cmd">
+    <title>check-pending</>
+    <para>
+      FIXME
+    </para>
+    </section>
+
+    <section id="deluser-cmd">
+    <title>del-user</>
+    <para>
+      FIXME
+    </para>
+    </section>
+
+    <section id="expire-hosts-cmd">
+    <title>expire-hosts</>
+    <para>
+      FIXME
+    </para>
+    </section>
+
+    <section id="expot-networks-cmd">
+    <title>export-networks</>
+    <para>
+      FIXME
+    </para>
+    </section>
+
+    <section id="generatehosts-cmd">
+    <title>generatehosts</>
+    <para>
+      FIXME
+    </para>
+    </section>
+
+    <section id="import-cmd">
+    <title>import</>
+    <para>
+      FIXME
+    </para>
+    </section>
+
+    <section id="import-dhcp-cmd">
+    <title>import-dhcp</>
+    <para>
+      FIXME
+    </para>
+    </section>
+
+    <section id="import-ethers-cmd">
+    <title>import-ethers</>
+    <para>
+      FIXME
+    </para>
+    </section>
+
+    <section id="import-roots-cmd">
+    <title>import-roots</>
+    <para>
+      FIXME
+    </para>
+    </section>
+
+    <section id="last-cmd">
+    <title>last</>
+    <para>
+      FIXME
+    </para>
+    </section>
+
+    <section id="modgroup-cmd">
+    <title>modgroup</>
+    <para>
+      FIXME
+    </para>
+    </section>
+
+    <section id="modhosts-cmd">
+    <title>modhosts</>
+    <para>
+      FIXME
+    </para>
+    </section>
+
+    <section id="modusers-cmd">
+    <title>modusers</>
+    <para>
+      FIXME
+    </para>
+    </section>
+
+    <section id="runsql-cmd">
+    <title>runsql</>
+    <para>
+      FIXME
+    </para>
+    </section>
+
+    <section id="sauron-cmd">
+    <title>sauron</>
+    <para>
+      FIXME
+    </para>
+    </section>
+
+    <section id="status-cmd">
+    <title>status</>
+    <para>
+      FIXME
+    </para>
+    </section>
+
+    <section id="update-dhcp-info-cmd">
+    <title>update-dhcp-info</>
+    <para>
+      FIXME
+    </para>
+    </section>
+
+  </chapter>
 
   <appendix id="tech-details">
     <title>Technical Details</>
     <para>
-      FIXME
+      This appendix describes the Sauron database layout. Sauron database
+      contains database version number stored in <filename>settings</>
+      table. This database version number must match with the version
+      sauron <quote>back end</> was made for. If database format changes
+      in future versions, the database version number will be incremented 
+      and a conversion script from previous vesion will be shipped with
+      Sauron.
     </para>
+    <para>
+    Current Sauron Database version is 1.0
+    <figure id="relations-fig"><title>Table Relations</title>
+	<graphic scale=60 fileref="relations.eps">
+    </figure>
+    </para>
+
     &sql-tables;
+
   </appendix>
 
   <appendix id="license">
