@@ -1,9 +1,9 @@
 List of codes used on 802.3 and Ethernet networks.
 
-Revision: 2.83 
-Date: 1999/03/09 11:36:19 
-Author: map 
-Id: Ethernet.txt,v 2.83 1999/03/09 11:36:19 map Exp 
+$Revision$
+$Date$
+$Author$
+$Id$
 
 
 This file contains collected information on the various codes used on
