@@ -1,9 +1,11 @@
-Sauron v.0.5.0 - DNS/DHCP Management System
+Sauron v.0.5.1 - DNS/DHCP Management System
 ==============
 
-NOTE! This release is the first public release, and is primarily meant for 
-developers and does not contain much documentation yet (user's guide
-expected to be included in 0.6.0). 
+NOTE! This is a development release, altough the code is believed to be
+stable (Sauron has been in production use almost two years now).
+This release is primarily meant for developers and early adopters, 
+and does not contain much documentation yet (user's guide expected to be 
+included in 0.6.0). 
 
 
 REQUIREMENTS
@@ -25,10 +27,9 @@ DOWNLOAD
 
 
 TESTED PLATFORMS
-	Sauron is currently developed using Red Hat Linux and GNU/Debian Linux,
-	but it should work pretty much on any Unix variant (if required
-	programs are available).
-
+	Sauron is currently developed using Red Hat Linux,GNU/Debian Linux,
+	and Solaris but it should work pretty much on any Unix variant 
+	(if required programs are available).
 
 
 INSTALLATION 
