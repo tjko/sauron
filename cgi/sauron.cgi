@@ -1127,7 +1127,7 @@ sub hosts_menu() {
       #$hostname=add_origin($q[$i][4],$zone);
       $hostname="<A HREF=\"$selfurl?menu=hosts&h_id=$q[$i][2]\">".
 	        "$q[$i][4]</A>";
-      $trcolor='#eeeeff';
+      $trcolor='#eeeeee';
       $trcolor='#ffffcc' if ($i % 2 == 0);
       print "<TR bgcolor=\"$trcolor\">",td([$hostname,$host_types{$q[$i][3]},$ip,
 		   "<PRE>$ether&nbsp;</PRE>",$q[$i][6]."&nbsp;"]),"</TR>";
@@ -2264,71 +2264,73 @@ sub left_menu($) {
          "<TR><TH><FONT color=\"#ffffff\">$menu</FONT></TH></TR>",
 	  "<TR><TD BGCOLOR=\"#eeeeee\"><FONT size=\"-1\">";
   #print "<p>mode=$mode";
+  print "<TABLE width=\"100%\" bgcolor=\"#cccccc\" cellspacing=2 border=0>";
 
   if ($menu eq 'servers') {
     $url.='?menu=servers';
-    print p,li("<a href=\"$url\">Current</a>"),
-          li("<a href=\"$url&sub=select\">Select</a>"),
-          p,li("<a href=\"$url&sub=add\">Add</a>"),
-          li("<a href=\"$url&sub=del\">Delete</a>"),
-          li("<a href=\"$url&sub=edit\">Edit</a>");
+    print Tr(td("<a href=\"$url\">Current</a>")),
+          Tr(td("<a href=\"$url&sub=select\">Select</a>")),
+          Tr(),Tr(),Tr(td("<a href=\"$url&sub=add\">Add</a>")),
+          Tr(td("<a href=\"$url&sub=del\">Delete</a>")),
+          Tr(td("<a href=\"$url&sub=edit\">Edit</a>"));
   } elsif ($menu eq 'zones') {
     $url.='?menu=zones';
-    print p,li("<a href=\"$url\">Current</a>"),
-          p,li("<a href=\"$url&sub=select\">Select</a>"),
-          p,li("<a href=\"$url&sub=add\">Add</a>"),
-          li("<a href=\"$url&sub=Copy\">Copy</a>"),
-          li("<a href=\"$url&sub=Delete\">Delete</a>"),
-          li("<a href=\"$url&sub=Edit\">Edit</a>");
+    print Tr(td("<a href=\"$url\">Current</a>")),
+          Tr(),Tr(),Tr(td("<a href=\"$url&sub=select\">Select</a>")),
+          Tr(),Tr(),Tr(td("<a href=\"$url&sub=add\">Add</a>")),
+          Tr(td("<a href=\"$url&sub=Copy\">Copy</a>")),
+          Tr(td("<a href=\"$url&sub=Delete\">Delete</a>")),
+          Tr(td("<a href=\"$url&sub=Edit\">Edit</a>"));
   } elsif ($menu eq 'nets') {
     $url.='?menu=nets';
-    print p,li("<a href=\"$url\">Networks</a>"),
-          p,li("<a href=\"$url&sub=addnet\">Add net</a>"),
-          li("<a href=\"$url&sub=addsub\">Add subnet</a>");
+    print Tr(td("<a href=\"$url\">Networks</a>")),
+          Tr(),Tr(),Tr(td("<a href=\"$url&sub=addnet\">Add net</a>")),
+          Tr(td("<a href=\"$url&sub=addsub\">Add subnet</a>"));
   } elsif ($menu eq 'templates') {
     $url.='?menu=templates';
-    print p,li("<a href=\"$url&sub=mx\">Show MX</a>"),
-          li("<a href=\"$url&sub=wks\">Show WKS</a><br>"),
-          li("<a href=\"$url&sub=pc\">Show Prn Class</a><br>"),
-          li("<a href=\"$url&sub=hinfo\">Show HINFO</a><br>"),
-          p,li("<a href=\"$url&sub=addmx\">Add MX</a>"),
-          li("<a href=\"$url&sub=addwks\">Add WKS</a>"),
-          li("<a href=\"$url&sub=addpc\">Add Prn Class</a>"),
-          li("<a href=\"$url&sub=addhinfo\">Add HINFO</a>");
+    print Tr(td("<a href=\"$url&sub=mx\">Show MX</a>")),
+          Tr(td("<a href=\"$url&sub=wks\">Show WKS</a><br>")),
+          Tr(td("<a href=\"$url&sub=pc\">Show Prn Class</a><br>")),
+          Tr(td("<a href=\"$url&sub=hinfo\">Show HINFO</a><br>")),
+          Tr(),Tr(),Tr(td("<a href=\"$url&sub=addmx\">Add MX</a>")),
+          Tr(td("<a href=\"$url&sub=addwks\">Add WKS</a>")),
+          Tr(td("<a href=\"$url&sub=addpc\">Add Prn Class</a>")),
+          Tr(td("<a href=\"$url&sub=addhinfo\">Add HINFO</a>"));
   } elsif ($menu eq 'groups') {
     $url.='?menu=groups';
-    print p,li("<a href=\"$url\">Groups</a>"),
-          p,li("<a href=\"$url&sub=add\">Add</a>");
+    print Tr(td("<a href=\"$url\">Groups</a>")),
+          Tr(),Tr(td("<a href=\"$url&sub=add\">Add</a>"));
   } elsif ($menu eq 'hosts') {
     $url.='?menu=hosts';
-    print p,li("<a href=\"$url\">Search</a>"),
-          li("<a href=\"$url&sub=browse&lastsearch=1\">Last Search</a>"),
-          p,li("<a href=\"$url&sub=add&type=1\">Add host</a>"),
-          p,li("<a href=\"$url&sub=add&type=3\">Add MX entry</a>"),
-          li("<a href=\"$url&sub=add&type=2\">Add delegation</a>"),
-          li("<a href=\"$url&sub=add&type=6\">Add glue rec.</a>"),
-          li("<a href=\"$url&sub=add&type=5\">Add printer</a>");
+    print Tr(td("<a href=\"$url\">Search</a>")),
+          Tr(td("<a href=\"$url&sub=browse&lastsearch=1\">Last Search</a>")),
+          Tr(),Tr(),Tr(td("<a href=\"$url&sub=add&type=1\">Add host</a>")),
+          Tr(),Tr(),Tr(td("<a href=\"$url&sub=add&type=3\">Add MX entry</a>")),
+          Tr(td("<a href=\"$url&sub=add&type=2\">Add delegation</a>")),
+          Tr(td("<a href=\"$url&sub=add&type=6\">Add glue rec.</a>")),
+          Tr(td("<a href=\"$url&sub=add&type=5\">Add printer</a>"));
   } elsif ($menu eq 'login') {
     $url.='?menu=login';
-    print p,li("<a href=\"$url&sub=login\">Login</a>"),
-          li("<a href=\"$url&sub=logout\">Logout</a>"),
-          p,li("<a href=\"$url&sub=who\">Who</a>"),
-          li("<a href=\"$url\">User info</a>"),
-          p,li("<a href=\"$url&sub=passwd\">Change password</a>"),
-          li("<a href=\"$url&sub=save\">Save defaults</a>");
+    print Tr(td("<a href=\"$url&sub=login\">Login</a>")),
+          Tr(td("<a href=\"$url&sub=logout\">Logout</a>")),
+          Tr(),Tr(),Tr(td("<a href=\"$url&sub=who\">Who</a>")),
+          Tr(td("<a href=\"$url\">User info</a>")),
+          Tr(),Tr(),Tr(td("<a href=\"$url&sub=passwd\">Change password</a>")),
+          Tr(td("<a href=\"$url&sub=save\">Save defaults</a>"));
     if ($frame_mode) {
-      print li("<a href=\"$script_name\" target=\"_top\">Frames OFF</a>");
+      print Tr(td("<a href=\"$script_name\" target=\"_top\">Frames OFF</a>"));
     } else {
-      print li("<a href=\"$s_url/frames\" target=\"_top\">Frames ON</a>");
+      print Tr(td("<a href=\"$s_url/frames\" target=\"_top\">Frames ON</a>"));
     }
   } elsif ($menu eq 'about') {
     $url.='?menu=about';
-    print p,li("<a href=\"$url\">About</a>"),
-          li("<a href=\"$url&sub=copyright\">Copyright</a>"),
-          li("<a href=\"$url&sub=copying\">License</a>");
+    print Tr(td("<a href=\"$url\">About</a>")),
+          Tr(td("<a href=\"$url&sub=copyright\">Copyright</a>")),
+          Tr(td("<a href=\"$url&sub=copying\">License</a>"));
   } else {
     print "<p><p>empty menu\n";
   }
+  print "</TABLE>";
   print "</FONT></TR></TABLE></TD></TABLE><BR>";
 
   print "<TABLE width=$w bgcolor=\"#002d5f\" border=\"0\" cellspacing=\"3\" " .
@@ -2336,7 +2338,7 @@ sub left_menu($) {
         "<TR><TD><TABLE width=\"100%\" cellspacing=\"2\" cellpadding=\"1\" " .
 	"border=\"0\">",
 	"<TR><TH><FONT color=white size=-1>Current selections</FONT></TH></TR>",
-	"<TR><TD BGCOLOR=\"white\">";
+	"<TR><TD BGCOLOR=\"#eeeeee\">";
 
   print "<FONT size=-1>",
         "Server: $server",br,
