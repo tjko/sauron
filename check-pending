@@ -17,11 +17,14 @@ $MAXLINES = 100;
 #######################################################################
 
 
-$result = GetOptions("help|h");
+$result = GetOptions("help|h","dir=s","cmd=s","verbose");
 if ($opt_help || @ARGV < 2 || $result < 1) {
-    print "syntax: $0 [--help] <servername> <emailaddress>\n\n";
-    print "" if ($opt_help);
-    exit(1);
+    print "syntax: $0 [--help] [OPTIONS] <servername> <emailaddress>\n\n";
+    print "\toptions:\n",
+	  "\t--cmd=<command>\t\tcommand to run if there are pending changes\n",
+          "\t--dir=<directory>\tdirectory to change before running\n",
+          "\t\t\t\tcommand specified using --command option\n\n";
+    exit(($opt_help ? 0 : 1));
 }
 
 $server = shift;
@@ -29,16 +32,22 @@ $to_address = shift;
 
 fatal("invalid email address: $to_address") 
   unless ($to_address =~ /^\S+\@\S+$/);
-fatal("Mailer not defined in configuration!") unless ($SAURON_MAILER);
-fatal("Cannot find mailer program: $SAURON_MAILER") unless (-x $SAURON_MAILER);
-fatal("Mail from address not defined in configuration!")
+fatal("mailer not defined in configuration!") unless ($SAURON_MAILER);
+fatal("cannot find mailer program: $SAURON_MAILER") unless (-x $SAURON_MAILER);
+fatal("mail from address (SAURON_MAIL_FROM) not defined in configuration!")
   unless ($SAURON_MAIL_FROM);
-fatal("Cannot find program: $PROG_DIR/status") unless (-x "$PROG_DIR/status");
+fatal("cannot find program: $PROG_DIR/status") unless (-x "$PROG_DIR/status");
 $SAURON_MAILER_ARGS='' unless (defined($SAURON_MAILER_ARGS));
+fatal("parameter to argument --dir not a directory: $opt_dir")
+  if ($opt_dir && ! -d $opt_dir);
 
+print "checking for pending hosts...\n" if ($opt_verbose);
 $res = (system("$PROG_DIR/status","--pending=$server","--quiet") >> 8);
 exit(0) unless ($res==2);
 
+$subject = "pending host changes";
+
+print "listing pending hosts..\n" if ($opt_verbose);
 open(PIPE,"$PROG_DIR/status --pending=$server |")
     || fatal("status command pipe failed");
 while(<PIPE>) {
@@ -47,17 +56,42 @@ while(<PIPE>) {
     last if (@output > $MAXLINES);
 }
 close(PIPE);
-
 push @output, "[...]\n" if (@output > $MAXLINES);
+
+
+$res=0;
+
+if ($opt_cmd) {
+  if ($opt_dir) {
+    fatal("cannot change to directory: $opt_dir") unless (chdir($opt_dir));
+  }
+  push @output,"\n";
+  push @output,"-" x 72, "\n";
+  push @output,"Command results ($opt_cmd):\n";
+  push @output,"\n";
+
+  print "running command: $opt_cmd\n" if ($opt_verbose);
+  open(PIPE,"$opt_cmd 2>&1 |") || fatal("pipe failed");
+  while(<PIPE>) {
+    next if /^\s*$/;
+    push @output, $_;
+  }
+  close(PIPE);
+  $res=($? >> 8);
+  print "command result code: $res\n" if ($opt_verbose);
+
+  $subject = ($res ? "FAILED Update report" : "Update report");
+}
+
 
 if (@output > 1) {
     open(PIPE,"| $SAURON_MAILER $SAURON_MAILER_ARGS")
       || fatal("mail pipe failed");
 
     print PIPE "From: Sauron <$SAURON_MAIL_FROM>\n",
-               "Subject: [sauron] pending host changes ($server)\n",
-	       "To: $to_address\n\n";
-
+               "Subject: [sauron] $subject ($server)\n",
+	       "To: $to_address\n",
+	       "X-Report: sauron\n\n";
 
     foreach $line (@output) {
 	print PIPE $line;
