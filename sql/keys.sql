@@ -10,8 +10,7 @@ CREATE TABLE keys (
 	type        INT4 NOT NULL, /* type:
 				      1=server */
         ref	    INT4 NOT NULL, /* ptr to table speciefied by type field
-					-->servers.id
-					-->acls.id  */
+					-->servers.id */
 
 	name	    TEXT NOT NULL,  /* key name */
 	keytype	    INT4 DEFAULT 0, /* key type (bitmap):
