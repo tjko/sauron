@@ -293,7 +293,7 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>4, name=>'Record created', tag=>'cdate_str', no_edit=>1},
   {ftype=>4, name=>'Last modified', tag=>'mdate_str', no_edit=>1},
   {ftype=>1, name=>'Expiration date', tag=>'expiration', len=>30,
-   type=>'expiration', empty=>1},
+   type=>'expiration', empty=>1, iff=>['type','[147]']},
   {ftype=>4, name=>'Last seen by DHCP server', tag=>'dhcp_date_str', 
    no_edit=>1, iff=>['type','[19]']}
  ]
@@ -347,7 +347,7 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>7, tag=>'wks', name=>'WKS template', iff=>['type','1']},
   {ftype=>0, name=>'Record info'},
   {ftype=>1, name=>'Expiration date', tag=>'expiration', len=>30,
-   type=>'expiration', empty=>1}
+   type=>'expiration', empty=>1, iff=>['type','[147]']}
  ]
 );
 

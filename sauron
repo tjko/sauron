@@ -81,6 +81,8 @@ chdir($targetdir) || fatal("Cannot change to directory '$targetdir'!");
 
 db_connect();
 
+$time_now_ticks = time;
+
 
 $serverid = get_server_id($servername);
 fatal("Cannot find server '$servername' from database.") if ($serverid < 0);
@@ -492,7 +494,7 @@ sub make_bind() {
       $rorigin = cidr2arpa($zone{'reversenet'}) . ".";
 
       undef @q;
-      db_query("SELECT a.ip,h.domain,h.ttl,z.name " .
+      db_query("SELECT a.ip,h.domain,h.ttl,z.name,h.expiration " .
 	       "FROM hosts h,zones z,a_entries a " .
 	       "WHERE z.server=$serverid AND h.zone=z.id AND h.type=1 " .
 	       " AND a.host=h.id " .
@@ -504,6 +506,10 @@ sub make_bind() {
 	for $i (0 .. $#q) {
 	  if (findNetblock($q[$i][0],\%delegnets)) {
 	    #print "SKIP: $q[$i][0]\n";
+	    next;
+	  }
+	  if (($q[$i][4] > 0) && ($q[$i][4] < $time_now_ticks)) {
+	    #print "Skipping expired host reverse: $q[$i][0]\n";
 	    next;
 	  }
 	  $rip=remove_origin(cidr2arpa($q[$i][0]).".",$rorigin);
@@ -708,7 +714,7 @@ sub make_bind() {
       undef @q;
       undef %dnames;
       db_query("SELECT h.domain,a.ip,h.hinfo_hw,h.hinfo_sw,h.ttl,h.huser, " .
-	       " h.dept,h.location,h.info,h.mx " .
+	       " h.dept,h.location,h.info,h.mx,h.expiration " .
 	       "FROM hosts h, a_entries a, zones z " .
 	       "WHERE h.zone=z.id AND a.host=h.id " .
 	       "AND z.id=$zoneid AND h.type=1 " .
@@ -726,6 +732,10 @@ sub make_bind() {
 	  }
 	  if ($domain =~ /\.($delegation_mask)$/) {
 	    error("Host in delegated zone skipped: $q[$i][0]");
+	    next;
+	  }
+	  if (($q[$i][10] > 0) && ($q[$i][10] < $time_now_ticks)) {
+	    error("Skipping expired host: $q[$i][0]");
 	    next;
 	  }
 	  $ip=$q[$i][1];
@@ -780,7 +790,7 @@ sub make_bind() {
 
       # aliases (A records)
       undef @q;
-      db_query("SELECT a.domain,b.domain,ae.ip,a.ttl " .
+      db_query("SELECT a.domain,b.domain,ae.ip,a.ttl,a.expiration " .
 	       "FROM hosts a, hosts b,zones z, arec_entries r,a_entries ae " .
 	       "WHERE z.id=$zoneid AND a.type=7 AND a.zone=z.id " .
 	       " AND r.host=a.id AND b.id=r.arec AND ae.host=b.id " .
@@ -800,6 +810,10 @@ sub make_bind() {
 	    error("Alias (A rec) in delegated zone skipped: $q[$i][0]");
 	    next;
 	  }
+	  if (($q[$i][4] > 0) && ($q[$i][4] < $time_now_ticks)) {
+	    error("Skipping expired A rec alias: $q[$i][0]");
+	    next;
+	  }
 	  $alias=$q[$i][2];
 	  $ttl=$q[$i][3];
 	  $ttl='' unless ($ttl > 0);
@@ -813,7 +827,7 @@ sub make_bind() {
 
       # aliases (CNAME records)
       undef @q;
-      db_query("SELECT a.domain,b.domain,a.ttl " .
+      db_query("SELECT a.domain,b.domain,a.ttl,a.expiration " .
 	       "FROM hosts a, hosts b,zones z " .
 	       "WHERE a.zone=z.id AND z.id=$zoneid " .
 	       "AND a.type=4 AND a.alias=b.id " .
@@ -832,6 +846,10 @@ sub make_bind() {
 	    error("Alias (CNAME) in delegated zone skipped: $q[$i][0]");
 	    next;
 	  }
+	  if (($q[$i][3] > 0) && ($q[$i][3] < $time_now_ticks)) {
+	    error("Skipping expired CNAME alias: $q[$i][0]");
+	    next;
+	  }
 	  $ttl=$q[$i][2];
 	  $ttl='' unless ($ttl > 0);
 	  $alias=$q[$i][1];
@@ -841,10 +859,11 @@ sub make_bind() {
       }
       # aliases outside zone
       undef @q;
-      db_query("SELECT domain,cname_txt,hosts.ttl FROM hosts,zones " .
-	       "WHERE hosts.zone=zones.id AND zones.id=$zoneid " .
-	       "AND hosts.type=4 AND hosts.alias=-1 " .
-	       "ORDER BY hosts.domain;",\@q);
+      db_query("SELECT h.domain,h.cname_txt,h.ttl,h.expiration " .
+               "FROM hosts h,zones z " .
+	       "WHERE h.zone=z.id AND z.id=$zoneid " .
+	       "AND h.type=4 AND h.alias=-1 " .
+	       "ORDER BY h.domain;",\@q);
       error(db_errormsg()) if (db_errormsg());
       if (@q > 0) {
 	print ZONEFILE ";\n;\n; Outside-zone aliases (CNAME records)\n;\n";
@@ -857,6 +876,10 @@ sub make_bind() {
 	  }
 	  if ($domain =~ /\.($delegation_mask)$/) {
 	    error("Alias (CNAME) in delegated zone skipped: $q[$i][0]");
+	    next;
+	  }
+	  if (($q[$i][3] > 0) && ($q[$i][3] < $time_now_ticks)) {
+	    error("Skipping expired (out of zone) CNAME alias: $q[$i][0]");
 	    next;
 	  }
 	  $alias=$q[$i][1];
@@ -1017,7 +1040,7 @@ sub make_dhcp() {
   }
   else {
     undef @ghosts;
-    db_query("SELECT h.grp,h.ether,a.ip,h.domain,z.name,h.id " .
+    db_query("SELECT h.grp,h.ether,a.ip,h.domain,z.name,h.id,h.expiration " .
 	     "FROM hosts h, zones z, a_entries a " .
 	     "WHERE h.zone=z.id AND a.host=h.id AND h.type=1 " .
 	     "AND h.ether NOTNULL AND z.server=$serverid " .
@@ -1042,6 +1065,10 @@ sub make_dhcp() {
 	  $net=new Net::Netmask($nets[$j][0]);
 	  print DHCPFILE "\t# net: " .$net->desc() . "\n";
 	  for $k (0 .. $#ghosts) {
+	    if (($ghosts[$k][6] > 0) && ($ghosts[$k][6] < $time_now_ticks)) {
+	      # error("expired host in DHCP: $ghosts[$k][3]");
+	      next;
+	    }
 	    $iplst=$etherhash{$ghosts[$k][1]};
 	    $ip='';
 	    for $l (0..$#{$iplst}) {
@@ -1085,7 +1112,7 @@ sub make_dhcp() {
   # not grouped hosts...
   print DHCPFILE "\n# hosts not in any group\n\n";
   undef @ghosts;
-  db_query("SELECT h.grp,h.ether,a.ip,h.domain,z.name,h.id " .
+  db_query("SELECT h.grp,h.ether,a.ip,h.domain,z.name,h.id,h.expiration " .
 	   "FROM hosts h, zones z, a_entries a " .
 	   "WHERE h.zone=z.id AND a.host=h.id AND ( h.type=1 OR h.type=9 ) " .
 	   "AND h.ether NOTNULL AND z.server=$serverid " .
@@ -1096,6 +1123,10 @@ sub make_dhcp() {
       $net=new Net::Netmask($nets[$j][0]);
       print DHCPFILE "# net: " .$net->desc() . "\n";
       for $k (0 .. $#ghosts) {
+	if (($ghosts[$k][6] > 0) && ($ghosts[$k][6] < $time_now_ticks)) {
+	  # error("expired host in DHCP: $ghosts[$k][3]");
+	  next;
+	}
 	$iplst=$etherhash{$ghosts[$k][1]};
 	$ip='';
 	for $l (0..$#{$iplst}) {
