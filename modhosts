@@ -194,7 +194,7 @@ for $i (0..$#q) {
   fatal("cannot get host record (id=$id)") if (get_host($id,\%host));
 
   if ($opt_delete) {
-    print "\tDelete; $q[$i][1]\n";
+    print "\tDelete: $q[$i][1]\n";
     fatal("cannot delete host: $q[$i][1]") if (delete_host($id));
   }
   elsif ($opt_rename || $opt_move) {
