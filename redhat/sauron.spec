@@ -1,15 +1,16 @@
 Summary: Sauron - DNS/DHCP management system
 Name: sauron
 Version: 0.5.0
-Release: 2
+Release: 3
 URL: http://sauron.jyu.fi/
-Source0: %{name}-%{version}.tar.gz
+Packager: Timo Kokkonen <tjko@iki.fi>
 License: GPL
 Group: Applications/Internet
+Source0: %{name}-%{version}.tar.gz
 BuildRoot: %{_tmppath}/%{name}-%{version}-buildroot
 BuildRequires: perl >= 5.6.0
-Requires: perl >= 5.6.0, perl-CGI, postgresql-perl, perl-Digest-HMAC
-Requires: perl-Net-Netmask
+Requires: perl >= 5.6.0, perl-CGI, postgresql-perl
+# Requires: perl-Net-Netmask
 BuildArch: noarch
 
 %description
@@ -31,6 +32,7 @@ fi
 
 %build
 ./configure --prefix=/opt --sysconfdir=/etc
+make
 
 %install
 rm -rf $RPM_BUILD_ROOT
@@ -47,9 +49,13 @@ rm -rf $RPM_BUILD_ROOT
 %config /etc/sauron/config
 %config /etc/sauron/config-browser
 %doc README COPYRIGHT ChangeLog
-%doc test/*
+%doc test
+%doc doc
 
 %changelog
+* Wed Jan  8 2003 Timo Kokkonen <tjko@iki.fi> 0.5.0-3
+- included more docs
+
 * Mon Jan  6 2003 Timo Kokkonen <tjko@iki.fi> 0.5.0-2
 - included test directory in docs
 
