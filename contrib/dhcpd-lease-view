@@ -58,6 +58,9 @@ if ($all) {
 # normalise column print order to array
 @print_columns = normalise($columns);
 
+# init counter
+$ac = 0;
+
 # read input file(s)
 while (<>) {
     chomp;
@@ -164,7 +167,7 @@ foreach $ac (sort sortfunc keys %hash) {
     }
 
     # build a array of printable columns
-    (@line = @flen) = ();
+    @line = @flen = ();
     foreach $j (@print_columns) {
 	if (defined($hash{$ac}->{$j})) { 
 	    if ($j =~ /^ip$/) {
@@ -197,9 +200,9 @@ foreach $ac (sort sortfunc keys %hash) {
 
     # format the desired printout from array
     if (defined($sep)) {
-	print "\"" if ($sep eq '","'); # CSV quoted special ...
+	print "\"" if ($sep =~ /\".\"/); # CSV quoted special ...
 	print join($sep,@line);
-	print "\"" if ($sep eq '","'); # CSV quoted special ...
+	print "\"" if ($sep =~ /\".\"/); # CSV quoted special ...
     } else {
         foreach $j (@line) {
 	    printf "%s%s ",$j," " x (shift(@flen)-length($j));
