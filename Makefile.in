@@ -3,7 +3,7 @@
 # 
 # Makefile for sauron
 #
-Version = 0.6.1
+Version = 0.6.2
 PKGNAME = sauron
 
 DBASE = sauron
@@ -89,7 +89,8 @@ PROGS = sauron addgroup adduser deluser delgroup modhosts \
 	import import-ethers import-jyu import-roots \
 	last moduser runsql status update-dhcp-info \
 	export-networks generatehosts addhosts check-pending \
-	expire-hosts createtables import-zone remove-hosts
+	expire-hosts createtables import-zone remove-hosts \
+	update-hosts
 
 MODULES = Sauron/Util.pm Sauron/BackEnd.pm Sauron/CGIutil.pm \
 	  Sauron/UtilZone.pm Sauron/Sauron.pm Sauron/UtilDhcp.pm \
