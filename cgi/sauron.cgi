@@ -267,6 +267,49 @@ do "$PROG_DIR/back_end.pl";
  ]
 );
 
+
+%restricted_host_form = (
+ data=>[
+  {ftype=>0, name=>'Host' },
+  {ftype=>1, tag=>'domain', name=>'Hostname', type=>'domain', len=>30},
+  {ftype=>5, tag=>'ip', name=>'IP address', restricted=>1,
+   iff=>['type','[16]']},
+  {ftype=>1, tag=>'cname_txt', name=>'Static alias for', type=>'domain',
+   len=>60, iff=>['type','4'], iff2=>['alias','-1']},
+  {ftype=>4, tag=>'id', name=>'Host ID'},
+  {ftype=>4, tag=>'type', name=>'Type', type=>'enum', enum=>\%host_types},
+  {ftype=>1, tag=>'info', name=>'Info', type=>'text', len=>50, empty=>1,
+   iff=>['type','1']},
+  {ftype=>1, tag=>'huser', name=>'User', type=>'text', len=>25, empty=>0,
+   iff=>['type','1']},
+  {ftype=>1, tag=>'dept', name=>'Dept.', type=>'text', len=>25, empty=>0,
+   iff=>['type','1']},
+  {ftype=>1, tag=>'location', name=>'Location', type=>'text', len=>25,
+   empty=>0, iff=>['type','1']},
+  {ftype=>0, name=>'Equipment info', iff=>['type','1']},
+  {ftype=>1, tag=>'hinfo_hw', name=>'HINFO hardware', type=>'hinfo', len=>20,
+   iff=>['type','1']},
+  {ftype=>1, tag=>'hinfo_sw', name=>'HINFO sowftware', type=>'hinfo', len=>20,
+   iff=>['type','1']},
+  {ftype=>1, tag=>'ether', name=>'Ethernet address', type=>'mac', len=>12,
+   iff=>['type','1'], iff2=>['ether_alias','-1'], empty=>0},
+  {ftype=>4, tag=>'ether_alias_info', name=>'ETHER2', 
+   iff=>['type','1'], iff2=>['ether_alias','\d+']},
+
+  {ftype=>1, tag=>'model', name=>'Model', type=>'text', len=>30, empty=>1, 
+   iff=>['type','1']},
+  {ftype=>1, tag=>'serial', name=>'Serial no.', type=>'text', len=>20,
+   empty=>1, iff=>['type','1']},
+  {ftype=>1, tag=>'misc', name=>'Misc.', type=>'text', len=>40, empty=>1, 
+   iff=>['type','1']},
+  {ftype=>0, name=>'Group/Template selections', iff=>['type','[15]']},
+  {ftype=>10, tag=>'grp', name=>'Group', iff=>['type','[15]']},
+  {ftype=>6, tag=>'mx', name=>'MX template', iff=>['type','1']},
+  {ftype=>7, tag=>'wks', name=>'WKS template', iff=>['type','1']}
+ ]
+);
+
+
 %new_host_nets = (dummy=>'dummy');
 @new_host_netsl = ('dummy');
 
@@ -646,11 +689,8 @@ if ($pathinfo ne '') {
 }
 
 
-unless ($state{superuser} eq 'yes') {
- error("cannot get permissions!")
-   if (get_permissions($state{uid},$state{gid},\%perms));
-}
 
+set_muser($state{user});
 $bgcolor='black';
 $bgcolor='white' if ($frame_mode);
 
@@ -659,6 +699,8 @@ print header(-type=>'text/html; charset=iso-8859-1'),
 		 -meta=>{'keywords'=>'GNU Sauron DNS DHCP tool'}),
       "\n\n<!-- Sauron $VER -->\n",
       "<!-- Copyright (c) Timo Kokkonen <tjko\@iki.fi>  2000,2001. -->\n\n";
+
+
 
 unless ($frame_mode) {
   top_menu(0);
@@ -670,6 +712,11 @@ unless ($frame_mode) {
   print "</TD><TD align=\"left\" valign=\"top\" bgcolor=\"#ffffff\">\n";
 } else {
   #print "<TABLE width=100%><TR bgcolor=\"#ffffff\"><TD>";
+}
+
+unless ($state{superuser} eq 'yes') {
+ error("cannot get permissions!")
+   if (get_permissions($state{uid},$state{gid},\%perms));
 }
 
 print "<br>" unless ($frame_mode);
@@ -724,8 +771,7 @@ exit;
 sub servers_menu() {
   $sub=param('sub');
 
-  goto select_server if (check_perms('server','R'));
-
+  goto select_server if ($serverid && check_perms('server','R'));
 
   if ($sub eq 'add') {
     return if (check_perms('superuser',''));
@@ -1081,7 +1127,7 @@ sub hosts_menu() {
       display_form(\%host,\%host_form);
       return;
     }
-    make_net_list($serverid,0,\%nethash,\@netkeys);
+    make_net_list($serverid,0,\%nethash,\@netkeys,1);
     $ip=$host{ip}[1][1];
     undef @q;
     db_query("SELECT net FROM nets WHERE server=$serverid AND subnet=true " .
@@ -1099,16 +1145,40 @@ sub hosts_menu() {
     return;
   }
   elsif ($sub eq 'Edit') {
-    if (get_host(param('h_id'),\%host)) {
+    $id=param('h_id');
+    if (get_host($id,\%host)) {
 	alert2("Cannot get host record (id=$id)!");
 	return;
     }
     goto show_host_record if (check_perms('host',$host{domain}));
+    $hform=(check_perms('zone','RWX',1) ? \%restricted_host_form :\%host_form);
 
-    $res=edit_magic('h','Host','hosts',\%host_form,\&get_host,\&update_host,
-		   param('h_id'));
-    goto browse_hosts if ($res == -1);
-    goto show_host_record if ($res > 0);
+    if (param('h_cancel')) {
+      print h2("No changes made to host record.");
+      goto show_host_record;
+    }
+
+    if (param('h_submit')) {
+      unless (($res=form_check_form('h',\%host,$hform))) {
+	if (check_perms('host',$host{domain},1)) {
+	  alert2("Invalid hostname: does not conform your restrictions");
+	} else {
+	  if (check_perms('ip',$host{ip}[1][1],1)) {
+	    alert2("Invalid IP number: outside allowed range(s)");
+	  } else {
+	    alert1("submit");
+	  }
+	}
+      } else {
+	alert1("Invalid data in form! ($res)");
+      }
+    }
+
+    print h2("Edit host:"),p,startform(-method=>'POST',-action=>$selfurl),
+	  hidden('menu',$menu),hidden('sub','Edit');
+    form_magic('h',\%host,$hform);
+    print submit(-name=>'h_submit',-value=>'Make changes')," ",
+          submit(-name=>'h_cancel',-value=>'Cancel'),end_form;
     return;
   }
   elsif ($sub eq 'browse') {
@@ -1290,7 +1360,7 @@ sub hosts_menu() {
       return;
     }
     if ($type == 1) {
-      make_net_list($serverid,0,\%new_host_nets,\@new_host_netsl);
+      make_net_list($serverid,0,\%new_host_nets,\@new_host_netsl,1);
       $new_host_nets{MANUAL}='<Manual IP>';
       push @new_host_netsl, 'MANUAL';
       $data{net}='MANUAL';
@@ -1364,11 +1434,13 @@ sub hosts_menu() {
 
     display_form(\%host,\%host_form);
     print p,startform(-method=>'GET',-action=>$selfurl),
-          hidden('menu','hosts'),hidden('h_id',$id),
-          submit(-name=>'sub',-value=>'Edit'), " ",
-          submit(-name=>'sub',-value=>'Delete'), " ";
-    print submit(-name=>'sub',-value=>'Move'), " " if ($host{type} == 1);
-    print submit(-name=>'sub',-value=>'Alias'), " " if ($host{type} == 1);
+          hidden('menu','hosts'),hidden('h_id',$id);
+    unless (check_perms('zone','RW',1)) {
+      print submit(-name=>'sub',-value=>'Edit'), " ",
+            submit(-name=>'sub',-value=>'Delete'), " ";
+      print submit(-name=>'sub',-value=>'Move'), " " if ($host{type} == 1);
+      print submit(-name=>'sub',-value=>'Alias'), " " if ($host{type} == 1);
+    }
     print "&nbsp;&nbsp;",submit(-name=>'sub',-value=>'Refresh'), " ",end_form;
     return;
   }
@@ -1376,7 +1448,7 @@ sub hosts_menu() {
 
  browse_hosts:
   param('sub','browse');
-  make_net_list($serverid,1,\%nethash,\@netkeys);
+  make_net_list($serverid,1,\%nethash,\@netkeys,0);
 
   %bdata=(domain=>'',net=>'ANY',nets=>\%nethash,nets_k=>\@netkeys,
 	    type=>1,order=>2,stype=>1,size=>3);
@@ -1401,9 +1473,11 @@ sub hosts_menu() {
 
 }
 
-sub make_net_list($$$$) {
-  my($id,$flag,$h,$l) = @_;
-  my($i,$nets);
+sub make_net_list($$$$$) {
+  my($id,$flag,$h,$l,$pcheck) = @_;
+  my($i,$nets,$pc);
+
+  $pcheck=0 if (keys %{$perms{net}} < 1);
 
   $nets=get_net_list($id,1);
   undef %{$h}; undef @{$l};
@@ -1414,6 +1488,7 @@ sub make_net_list($$$$) {
   }
   for $i (0..$#{$nets}) { 
     next unless ($$nets[$i][2]);
+    next if ($pcheck && !($perms{net}->{$$nets[$i][1]})); 
     $h->{$$nets[$i][0]}="$$nets[$i][0] - " . substr($$nets[$i][2],0,25);
     push @{$l}, $$nets[$i][0];
   }
@@ -1701,7 +1776,7 @@ sub nets_menu() {
 
   print "<TABLE><TR bgcolor=\"#aaaaff\">",
         "<TH>Net</TH>",th("Name"),th("Type"),th("Comment"),"</TR>";
-  
+
   for $i (0..$#q) {
       if ($q[$i][3] eq 't') {  
 	print "<TR bgcolor=\"#eeeebf\">";
@@ -2761,12 +2836,13 @@ sub remove_state($) {
 }
 
 sub check_perms($$$) {
-  my($type,$rule) = @_;
-  my($i,$re);
+  my($type,$rule,$quiet) = @_;
+  my($i,$re,@n,$s,$e,$ip);
 
   return 0 if ($state{superuser} eq 'yes');
 
   if ($type eq 'superuser') {
+    return 1 if ($quiet);
     alert1("Access denied: administrator priviliges required.");
     return 1;
   }
@@ -2780,19 +2856,38 @@ sub check_perms($$$) {
   elsif ($type eq 'host') {
     return 0  if ($perms{server}->{$serverid} =~ /RW/);
     if ($perms{zone}->{$zoneid} =~ /RW/) {
+      return 0 if (@{$perms{hostname}} == 0);
+
       for $i (0..$#{$perms{hostname}}) {
 	$re=$perms{hostname}[$i];
 	#print p,"regexp='$re' '$rule'";
 	return 0 if ($rule =~ /$re/);
       }
     }
+    return 1 if ($quiet);
     alert1("You are not authorized to modify this host record");
     return 1;
   }
-  elsif ($type eq 'net') {
+  elsif ($type eq 'ip') {
+    @n=keys %{$perms{net}};
+    return 0  if (@n < 1);
+    $ip=ip2int($rule); #print "<br>ip=$rule ($ip)";
 
+    for $i (0..$#n) {
+      $s=ip2int($perms{net}->{$n[$i]}[0]);
+      $e=ip2int($perms{net}->{$n[$i]}[1]);
+      if (($s > 0) && ($e > 0)) {
+	#print "<br>$i $n[$i] $s,$e : $ip";
+	return 0 if (($s <= $ip) && ($ip <= $e));
+      }
+    }
+
+    return 1 if ($quiet);
+    alert1("Invalid IP (IP is outsize allowed net(s))");
+    return 1;
   }
 
+  return 1 if ($quiet);
   alert1("Access to $type denied");
   return 1;
 }
@@ -2917,6 +3012,8 @@ sub form_check_form($$$) {
       next unless ($val =~ /^($e)$/);
     }
 
+    #print "<br>check $p,$type";
+
     if ($type == 1) {
       #print "<br>check $p ",param($p);
       return 1 if (form_check_field($rec,param($p),0) ne '');
@@ -2934,6 +3031,7 @@ sub form_check_form($$$) {
       $f=1 if ($type==8);
       $f=3 if ($type==5);
       $rec->{type}=['ip','text','text'] if ($type==5);
+      $rec->{empty}=[0,1,1] if ($type==5);
       $a=param($p."_count");
       $a=0 if (!$a || $a < 0);
       for $j (1..$a) {
@@ -2942,10 +3040,6 @@ sub form_check_form($$$) {
 	for $k (1..$f) {
 	  return 2 
 	    if (form_check_field($rec,param($p."_".$j."_".$k),$k) ne '');
-	}
-	if ($type==5) {
-	  param($p."_".$j."_2",(param($p."_".$j."_2") eq 'on' ? 't':'f'));
-	  param($p."_".$j."_3",(param($p."_".$j."_3") eq 'on' ? 't':'f'));
 	}
       }
 
@@ -2972,13 +3066,19 @@ sub form_check_form($$$) {
 	    #print p,"$p2 add new record";
 	    $new=[];
 	    $$new[$f+1]=2;
-	    for $k (1..$f) { $$new[$k]=param($p2."_".$k); }
+	    for $k (1..$f) { 
+	      $tmp=param($p2."_".$k);
+	      $tmp=($tmp eq 'on' ? 't':'f') if ($type==5 && $k>1);
+	      $$new[$k]=$tmp;
+	    }
 	    push @{$list}, $new;
 	  } else {
 	    for $k (1..$f) {
 	      if (param($p2."_".$k) ne $$list[$ind][$k]) {
 		$$list[$ind][$f+1]=1;
-		$$list[$ind][$k]=param($p2."_".$k);
+		$tmp=param($p2."_".$k);
+		$tmp=($tmp eq 'on' ? 't':'f') if ($type==5 && $k>1);
+		$$list[$ind][$k]=$tmp;
 		#print p,"$p2 modified record (field $k)";
 	      }
 	    }
@@ -3199,28 +3299,42 @@ sub form_magic($$$) {
 
       for $j (1..$a) {
 	$p2=$p1."_".$j;
-	print "<TR>",hidden(-name=>$p2."_id",param($p2."_id"));
+	print "<TR>",hidden(-name=>$p2."_id",-value=>param($p2."_id"));
 
 	$n=$p2."_1";
 	print "<TD>",textfield(-name=>$n,-size=>15,-value=>param($n));
         print "<FONT size=-1 color=\"red\"><BR>",
               form_check_field($rec,param($n),1),"</FONT></TD>";
-	$n=$p2."_2";
-	print td(checkbox(-label=>' A',-name=>$n,-checked=>param($n)));
-	$n=$p2."_3";
-	print td(checkbox(-label=>' PTR',-name=>$n,-checked=>param($n)));
 
-        print td(checkbox(-label=>' Delete',
-	             -name=>$p2."_del",-checked=>param($p2."_del") )),
-	     "</TR>";
+	if ($rec->{restricted}) {
+	  $n=$p2."_2";
+	  print hidden(-name=>$n,-value=>param($n)),
+	        td((param($n) eq 'on' ? 'on':'off'));
+	  $n=$p2."_3";
+	  print hidden(-name=>$n,-value=>param($n)),
+	        td((param($n) eq 'on' ? 'on':'off'));
+	}
+	else {
+	  $n=$p2."_2";
+	  print td(checkbox(-label=>' A',-name=>$n,-checked=>param($n)));
+	  $n=$p2."_3";
+	  print td(checkbox(-label=>' PTR',-name=>$n,-checked=>param($n)));
+
+	  print td(checkbox(-label=>' Delete',
+			    -name=>$p2."_del",-checked=>param($p2."_del") )),
+			      "</TR>";
+	}
       }
-      #print Tr,Tr,Tr,Tr;
-      $j=$a+1;
-      $n=$prefix."_".$rec->{tag}."_".$j."_1";
-      print "<TR>",td(textfield(-name=>$n,-size=>15,-value=>param($n)));
 
-      print td(submit(-name=>$prefix."_".$rec->{tag}."_add",-value=>'Add'));
-      print "</TR></TABLE></TD></TR>\n";
+      unless ($rec->{restricted}) {
+	$j=$a+1;
+	$n=$prefix."_".$rec->{tag}."_".$j."_1";
+	print "<TR>",td(textfield(-name=>$n,-size=>15,-value=>param($n))),
+	      td(submit(-name=>$prefix."_".$rec->{tag}."_add",-value=>'Add')),
+	      "</TR>";
+      }
+
+      print "</TABLE></TD></TR>\n";
     } elsif ($rec->{ftype} == 6) {
       get_mx_template_list($zoneid,\%lsth,\@lst);
       get_mx_template(param($p1),\%tmpl_rec);

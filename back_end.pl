@@ -7,6 +7,13 @@
 #
 use strict;
 
+my($muser);
+
+sub set_muser($) {
+  my($usr)=@_;
+  $muser=$usr;
+}
+
 sub new_serial($) {
   my ($serial) = @_;
   my ($sec,$min,$hour,$day,$mon,$year,$s);
@@ -905,8 +912,9 @@ sub get_host($$) {
   $res = get_record("hosts",
 	       "zone,type,domain,ttl,class,grp,alias,cname_txt," .
 	       "hinfo_hw,hinfo_sw,wks,mx,rp_mbox,rp_txt,router," .
-	       "prn,ether,ether_alias,info,location,dept,huser,model,serial,misc,comment",
-		    $id,$rec,"id");
+	       "prn,ether,ether_alias,info,location,dept,huser,model," .
+	       "serial,misc,comment",
+	       $id,$rec,"id");
 
   return -1 if ($res < 0);
 
@@ -1003,6 +1011,8 @@ sub update_host($) {
   delete $rec->{grp_rec};
   delete $rec->{alias_l};
   delete $rec->{alias_d};
+  $rec->{mdate}=time;
+  $rec->{muser}=$muser;
 
   db_begin();
   $r=update_record('hosts',$rec);
@@ -1626,10 +1636,10 @@ sub cgi_disabled() {
 
 sub get_permissions($$$) {
   my($uid,$gid,$rec) = @_;
-  my(@q,$i,$type,$ref,$mode,$s,$e);
+  my(@q,$i,$type,$ref,$mode,$s,$e,$sql);
 
   return -1 unless ($uid > 0);
-  return -2 unless ($gid > 0);
+  return -2 unless ($gid >= -1);
   return -3 unless ($rec);
 
   $rec->{server}={};
@@ -1638,15 +1648,16 @@ sub get_permissions($$$) {
   $rec->{hostname}=[];
 
   undef @q;
-  db_query("SELECT a.rtype,a.rref,a.rule,n.range_start,n.range_end " .
+  $sql = "SELECT a.rtype,a.rref,a.rule,n.range_start,n.range_end " .
 	   "FROM user_rights a, nets n " .
 	   "WHERE ((a.type=2 AND a.ref=$uid) OR (a.type=1 AND a.ref=$gid)) " .
            "  AND a.rtype=3 AND a.rref=n.id " .
 	   "UNION " .
 	   "SELECT rtype,rref,rule,NULL,NULL FROM user_rights " .
 	   "WHERE ((ref=$uid AND type=2) OR (ref=$gid AND type=1)) " .
-	   " AND rtype<>3 ORDER BY 1;",\@q);
-
+	   " AND rtype<>3 ORDER BY 1;";
+  db_query($sql,\@q);
+  #print "<p>$sql\n";
 
   for $i (0..$#q) {
     $type=$q[$i][0];
@@ -1655,6 +1666,7 @@ sub get_permissions($$$) {
     $s=$q[$i][3];
     $e=$q[$i][4];
     $mode =~ s/\s+$//;
+    #print "<p> type=$type ref=$ref rule=$mode [$s,$e]\n";
 
     if ($type == 1) { $rec->{server}->{$ref}=$mode; }
     elsif ($type == 2) { $rec->{zone}->{$ref}=$mode; }

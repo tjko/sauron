@@ -41,7 +41,7 @@ $result = GetOptions("help|h","list!","add:s","delall!","del=s","passwd:s",
 $opt_user=$ARGV[0];
 
 
-if ($opt_help || ($opt_user eq '' &&  $opt_listusers eq '')) {
+if ($opt_help || ($opt_user eq '' &&  $opt_list eq '')) {
   print "syntax: $0 <$fooname> [options]\n\n";
   print " Option descriptions: \n";
 
@@ -69,13 +69,25 @@ if ($opt_help || ($opt_user eq '' &&  $opt_listusers eq '')) {
 db_connect();
 db_debug(1);
 
-if ($opt_listusers) {
-  print "Login      Name                                     Superuser\n";
-  print "---------- ---------------------------------------- ---------\n";
-  undef @q;
-  db_query("SELECT id,username,name,superuser,comment FROM users;",\@q);
-  for $i (0..$#q) {
-    printf "%-10s %-40s %-5s\n", $q[$i][1],$q[$i][2],$q[$i][3];
+if ($opt_list) {
+  if ($modgroup) {
+    print "Name                                     Comments\n";
+    print "---------------------------------------- ----------------------\n";
+    undef @q;
+    db_query("SELECT id,name,comment FROM user_groups ORDER BY name;",\@q);
+    for $i (0..$#q) {
+      printf "%-40s %-20s\n", $q[$i][1],$q[$i][2];
+    }
+  }
+  else {
+    print "Login      Name                                     Superuser\n";
+    print "---------- ---------------------------------------- ---------\n";
+    undef @q;
+    db_query("SELECT id,username,name,superuser,comment FROM users ".
+	     "ORDER BY username;",\@q);
+    for $i (0..$#q) {
+      printf "%-10s %-40s %-5s\n", $q[$i][1],$q[$i][2],$q[$i][3];
+    }
   }
 
   exit 0;
