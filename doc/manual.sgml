@@ -12,6 +12,7 @@
 <!ENTITY form-edit-host SYSTEM "form-edit-host.sgml">
 <!ENTITY form-search-hosts SYSTEM "form-search-hosts.sgml">
 <!ENTITY form-edit-net SYSTEM "form-edit-net.sgml">
+<!ENTITY command-reference SYSTEM "command-ref.sgml">
 ]>
 
 
@@ -825,7 +826,7 @@ Adding zone: 255.in-addr.arpa...OK (id=4)
  
       </section>
 
-      <section>
+      <section id="import-dns">
       <title>Using Existing DNS/DHCP Configuration</>
       <para>
         For importing existing BIND configuration files and existing
@@ -904,7 +905,7 @@ Adding zone: 255.in-addr.arpa...OK (id=4)
       </section>
     </section>
 
-    <section>
+    <section id="sauron-sec">
     <title>Generating DNS & DHCP Configurations</title>
     <para>
       Generation of BIND and dhcpd configurations files is done using
@@ -2131,156 +2132,22 @@ ID     Type     Ref.                      Mode
   <chapter id="command-ref">
     <title>Command Reference</>
     <para>
-      FIXME
+      This chapter provides a reference for all the command-line
+      utilities included with Sauron. All these utilities have
+      built-in help which can be displayed by invoking them 
+      with single argument <option>--help</> (these utilities
+      use GNU style long options).
     </para>
-
-    <section id="addgroup-cmd">
-    <title>addgroup</>
     <para>
-      FIXME
+      These utilities are meant for Sauron administrators and do not 
+      implement any access control methods. To protect unauthorized
+      access into Sauron database, restrict access to the database
+      in PostgreSQL (and don't forget to restrict access to the Sauron
+      configuration file if it contains sensitive information such as
+      database password).
     </para>
-    </section>
 
-    <section id="addhost-cmd">
-    <title>addhost</>
-    <para>
-      FIXME
-    </para>
-    </section>
-
-    <section id="adduser-cmd">
-    <title>adduser</>
-    <para>
-      FIXME
-    </para>
-    </section>
-
-    <section id="check-pending-cmd">
-    <title>check-pending</>
-    <para>
-      FIXME
-    </para>
-    </section>
-
-    <section id="deluser-cmd">
-    <title>deluser</>
-    <para>
-      FIXME
-    </para>
-    </section>
-
-    <section id="delgroup-cmd">
-    <title>delgroup</>
-    <para>
-      FIXME
-    </para>
-    </section>
-
-    <section id="expire-hosts-cmd">
-    <title>expire-hosts</>
-    <para>
-      FIXME
-    </para>
-    </section>
-
-    <section id="expot-networks-cmd">
-    <title>export-networks</>
-    <para>
-      FIXME
-    </para>
-    </section>
-
-    <section id="generatehosts-cmd">
-    <title>generatehosts</>
-    <para>
-      FIXME
-    </para>
-    </section>
-
-    <section id="import-cmd">
-    <title>import</>
-    <para>
-      FIXME
-    </para>
-    </section>
-
-    <section id="import-dhcp-cmd">
-    <title>import-dhcp</>
-    <para>
-      FIXME
-    </para>
-    </section>
-
-    <section id="import-ethers-cmd">
-    <title>import-ethers</>
-    <para>
-      FIXME
-    </para>
-    </section>
-
-    <section id="import-roots-cmd">
-    <title>import-roots</>
-    <para>
-      FIXME
-    </para>
-    </section>
-
-    <section id="last-cmd">
-    <title>last</>
-    <para>
-      FIXME
-    </para>
-    </section>
-
-    <section id="modgroup-cmd">
-    <title>modgroup</>
-    <para>
-      FIXME
-    </para>
-    </section>
-
-    <section id="modhosts-cmd">
-    <title>modhosts</>
-    <para>
-      FIXME
-    </para>
-    </section>
-
-    <section id="modusers-cmd">
-    <title>modusers</>
-    <para>
-      FIXME
-    </para>
-    </section>
-
-    <section id="runsql-cmd">
-    <title>runsql</>
-    <para>
-      FIXME
-    </para>
-    </section>
-
-    <section id="sauron-cmd">
-    <title>sauron</>
-    <para>
-      FIXME
-    </para>
-    </section>
-
-    <section id="status-cmd">
-    <title>status</>
-    <para>
-      FIXME
-    </para>
-    </section>
-
-    <section id="update-dhcp-info-cmd">
-    <title>update-dhcp-info</>
-    <para>
-      FIXME
-    </para>
-    </section>
-
+    &command-reference;
   </chapter>
 
   <appendix id="tech-details">
