@@ -163,8 +163,8 @@ sub make_bind() {
     "// server: $server{name} -- $server{comment}\n//\n\n";
 
   unless ($zones_only) {
-    # keys section
-    print_keys($server{id});
+    # key & acl section
+    print_keys_acls($server{id});
 
     # options section
     print BINDFILE "options {\n";
@@ -1687,9 +1687,9 @@ sub print_subnets() {
 }
 
 
-sub print_keys($) {
+sub print_keys_acls($) {
   my($serverid) = @_;
-  my(@keys,@reflist,%refs,$i);
+  my(@keys,@reflist,%refs,%keyhash,$i);
 
   return unless ($serverid > 0);
 
@@ -1723,7 +1723,8 @@ sub print_keys($) {
     my $name = $keys[$i][1];
     my $algorithm = $algorithm_enum{$keys[$i][2]};
     my $key = $keys[$i][5];
-
+    my $comment = $keys[$i][6];
+    
     unless ($name) {
       error("Skipping key with empty name (id=$id)");
       next;
@@ -1740,11 +1741,75 @@ sub print_keys($) {
     my $dkey = encode_base64($h->decrypt(decode_base64($key)));
     chomp($dkey);
 
+    $comment =~ s/(^\s+|\s+$)//g;
+
     print BINDFILE "key \"$name\" {\n",
+		   ($comment ? "\t# $comment\n" : ''),
                    "\talgorithm $algorithm;\n",
 		   "\tsecret \"$dkey\";\n",
+		   
 		   "};\n\n";
     $dkey=$key;
+    $keyhash{$id}=1;
+  }
+
+
+  # get ACLs...
+  
+  my(@acls,%aclhash);
+  db_query("SELECT id,name,comment FROM acls " .
+	   "WHERE server=$serverid ORDER BY id",\@acls);
+  return unless (@acls > 0);
+
+  print BINDFILE "// ACLs\n\n";
+
+  # print ACLs...
+  for $i (0..$#acls) {
+    my($id,$name,$comment) = @{$acls[$i]};
+    
+    print BINDFILE "acl \"$name\" {\n";
+    print BINDFILE "\t  // $comment\n" if ($comment);
+    $aclhash{$name}=1;
+
+    my @rules;
+    db_query("SELECT c.id,c.mode,c.ip,c.acl,c.tkey,c.op,c.comment," .
+	     " a.name,a.server,k.name " .
+	     "FROM cidr_entries c LEFT JOIN acls a ON c.acl=a.id " .
+	     " LEFT JOIN keys k ON c.tkey=k.id " .
+	     "WHERE c.type=0 AND c.ref=$id ORDER BY c.id",\@rules);
+    my $j;
+    for $j (0..$#rules) {
+      my($rid,$mode,$cidr,$acl,$tkey,$op,$comment,
+	 $aclname,$aclref,$keyname) = @{$rules[$j]};
+
+      if ($op == 1) { $op='!'; } else { $op=' '; }
+      if ($comment) { $comment="\t// $comment"; }
+      else { $comment=''; }
+
+      if ($mode == 0 && $cidr) {
+	$cidr =~ s/\/32$//;
+	printf BINDFILE "\t%1s %-20s %s\n",$op,"$cidr;",$comment;
+      } elsif ($mode == 1 && $acl > 0) {
+	if (($acl >= $id || not $aclhash{$aclname}) && $aclref != -1) {
+	  error("Skipping invalid reference to ACL $aclname in ACL: $name");
+	} elsif ($aclname) {
+	  printf BINDFILE "\t%1s %-20s %s\n",$op,"$aclname;",$comment;
+	} else {
+	  error("Skipping missing ACL reference ($acl) in ACL: $name");
+	}
+      } elsif ($mode == 2 && $tkey > 0) {
+	unless ($keyhash{$tkey}) {
+	  error("Skipping reference to unknown key: $keyname (id=$tkey) " .
+		"in ACL: $name");
+	} else {
+	  printf BINDFILE "\t%1s %-20s %s\n",$op,"key $keyname;",$comment;
+	}
+      } else {
+	error("Invalid entry (id=$rid) in acl: $name");
+      }
+    }
+    
+    print BINDFILE "};\n\n";
   }
 
 }
