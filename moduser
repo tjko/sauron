@@ -45,7 +45,8 @@ $mdate = time;
 ##############################################
 
 $result = GetOptions("help|h","list!","add:s","delall!","del=s","passwd:s",
-  	     "group=s","name=s","superuser=s","lock!","unlock!","edit!");
+  	     "group=s","name=s","superuser=s","lock!","unlock!","edit!",
+	      "email=s","comment=s");
 
 $opt_user=$ARGV[0];
 
@@ -55,6 +56,8 @@ if ($opt_help || ($opt_user eq '' &&  $opt_list eq '')) {
   print " Option descriptions: \n";
 
   print "   --name=\"user name\"                    full user name\n",
+        "   --email=<address>                     set user's email address\n",
+        "   --comment=<text>                      set user comments\n",
         "   --superuser=<yes|no>                  toggle superuser flag\n",
         "   --passwd                              set password (interactive)\n",
         "   --group=<groupname>                   set user group\n",
@@ -63,6 +66,9 @@ if ($opt_help || ($opt_user eq '' &&  $opt_list eq '')) {
         "   --lock                                lock account\n",
         "   --unlock                              unlock account\n\n"
 	  unless ($modgroup);
+
+  print "   --list                                list all groups\n"
+      if ($modgroup);
 
   print "                                         Priviliges\n",
         "   --add                                 interactive add\n",
@@ -90,13 +96,23 @@ if ($opt_list) {
     }
   }
   else {
-    print "Login      Name                                     Superuser\n";
-    print "---------- ---------------------------------------- ---------\n";
+    print 
+     "Login      Group      Name                      Email                  Superusr\n",
+     "---------- ---------- ------------------------- ---------------------- --------\n";
     undef @q;
-    db_query("SELECT id,username,name,superuser,comment FROM users ".
+    db_query("SELECT id,username,name,superuser,comment,email,gid FROM users ".
 	     "ORDER BY username;",\@q);
     for $i (0..$#q) {
-      printf "%-10s %-40s %-5s\n", $q[$i][1],$q[$i][2],$q[$i][3];
+	$gid=$q[$i][6];
+	if ($gid > 0) {
+	    db_query("SELECT name FROM user_groups WHERE id=$gid",\@qq);
+	    $group=substr($qq[0][0],0,10);
+	} else {
+	    $group='';
+	}
+      printf "%-10s %-10s %-25s %-25s %-5s\n", 
+              $q[$i][1],$group,substr($q[$i][2],0,25),
+	      substr($q[$i][5],0,25),($q[$i][3] eq 't' ? 'Yes' : '');
     }
   }
 
@@ -134,6 +150,18 @@ if ($modgroup) {
 		 " muser='$user',mdate='$mdate' WHERE id=$id;");
     fatal("Cannot update user description!") if ($res < 0);
     print "User description succesfully updated.\n";
+  }
+  if ($opt_email) {
+    $res=db_exec("UPDATE users SET email='$opt_email', " .
+		 " muser='$user',mdate='$mdate' WHERE id=$id;");
+    fatal("Cannot update user email!") if ($res < 0);
+    print "User email succesfully updated.\n";
+  }
+  if ($opt_comment) {
+    $res=db_exec("UPDATE users SET comment='$opt_comment', " .
+		 " muser='$user',mdate='$mdate' WHERE id=$id;");
+    fatal("Cannot update user comment!") if ($res < 0);
+    print "User comment succesfully updated.\n";
   }
 
   if ($opt_group) {
@@ -196,7 +224,7 @@ if ($modgroup) {
 
   undef @q;
   db_query("SELECT u.id,u.name,u.superuser,u.comment,u.password,u.gid, " .
-	   " u.cdate,u.cuser,u.mdate,u.muser " .
+	   " u.cdate,u.cuser,u.mdate,u.muser,u.expiration,u.email " .
 	   "FROM users u " .
 	   "WHERE u.username='$opt_user';",\@q);
   fatal("Cannot find user '$opt_user' from users table!") if (@q < 1);
@@ -210,24 +238,28 @@ if ($modgroup) {
 
   $cdate_str=($q[0][6] > 0 ? localtime($q[0][6])." by $q[0][7]" : '<never>');
   $mdate_str=($q[0][8] > 0 ? localtime($q[0][8])." by $q[0][9]" : '<never>');
+  $edate_str=($q[0][10] > 0 ? localtime($q[0][10])."" : '<never>');
   $gid=$q[0][5];
   $gidname='<none>';
   $longname=$q[0][1];
   $comment=$q[0][3];
+  $email=$q[0][11];
   if ($gid > 0) {
     undef @q;
     db_query("SELECT name FROM user_groups WHERE id=$gid;",\@q);
     $gidname=$q[0][0] if (@q > 0);
   }
 
-  print "\n        Username: $opt_user (id=$id)\n",
-        "        longname: $longname\n",
-        "            info: $comment\n",
-        "       superuser: " ,($q[0][2] eq 't' ? 'Yes':'No'), "\n",
-        "           group: $gidname (gid=$gid)\n",
-	"   passwd status: $status\n",
-	" account created: $cdate_str\n",
-	"   last modified: $mdate_str\n\n";
+  print "\n           Username: $opt_user (id=$id)\n",
+        "           longname: $longname\n",
+        "              email: $email\n",
+        "               info: $comment\n",
+        "          superuser: " ,($q[0][2] eq 't' ? 'Yes':'No'), "\n",
+        "              group: $gidname (gid=$gid)\n",
+	"      passwd status: $status\n",
+	" account expiration: $edate_str\n",
+	"    account created: $cdate_str\n",
+	"      last modified: $mdate_str\n\n";
 }
 
 

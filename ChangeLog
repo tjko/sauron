@@ -1,6 +1,7 @@
 $Id$
 	
 0.50		
+	- added vlans table and VLAN (Layer-2 networks) management 
 	- add new "info" fields to hosts table (asset ID)
 	- clear ether_alias ptrs from other hosts when deleting a host
 	- "Show Network Settings" button added to host display
