@@ -1216,7 +1216,8 @@ else { print p,"Unknown menu '$menu'"; }
 if ($debug_mode) {
   print "<hr><FONT size=-1><p>script name: " . script_name(),
         ", script_path: $script_path, frame_mode=$frame_mode",
-	" (DTD_HACK=$SAURON_DTD_HACK) ",
+	" (DTD_HACK=$SAURON_DTD_HACK ",
+	" (NO_REMOTE_ADDR_AUTH=$SAURON_NO_REMOTE_ADDR_AUTH) ",
         "<br>path_info: " . path_info(),
         "<br>cookie='$scookie'\n",
         "<br>s_url='$s_url', selfurl='$selfurl'\n",
@@ -2077,6 +2078,7 @@ sub hosts_menu() {
 	}
 	close(FILE);
 
+	$SAURON_NMAP_ARGS = '-n -sP' unless ($SAURON_NMAP_ARGS);
 	$r = run_command_quiet($SAURON_NMAP_PROG,
 			 [split(/\s+/,$SAURON_NMAP_ARGS),
 			  '-oG',$nmap_log,'-iL',$nmap_file],
@@ -2189,7 +2191,7 @@ sub hosts_menu() {
       print startform(-method=>'POST',-action=>$selfurl),
 	hidden('menu','hosts'),hidden('sub','browse'),
 	  hidden('lastsearch','1'),hidden('pingsweep','1');
-      print submit(-name=>sweep,-value=>'Ping Sweep');
+      print submit(-name=>'foobar',-value=>'Ping Sweep');
       print end_form;
     }
 
