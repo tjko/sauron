@@ -18,29 +18,11 @@ $DB_CONNECT = "dbname=sauron";
 $REMOVE_EXPIRED_DELAY = 30;  # sauron --clean will remove all hosts that
 		             # have been expired longer than days defined here
 
+
 # mailer configuration (set to enable email notifications)
 # $SAURON_MAILER = '/usr/sbin/sendmail';
 # $SAURON_MAILER_ARGS = '-t'; 
 # $SAURON_MAIL_FROM = 'postmaster@somedomain'; 
-
-# default method for encrypting passwords:
-#        0 = simple MD5 based hash with salt
-#        1 = standard Unix crypt
-#
-$SAURON_PWD_MODE = 1;
-
-
-#########################################################################
-# WWW interface (sauron.cgi) configuration options 
-
-$ICON_PATH = "/sauron/icons";
-$SERVER_ID = "fooserver";   # unique server ID (if using multiple www-server)
-
-$USER_TIMEOUT = 3600; # idle timeout for user sessions
-
-$ALEVEL_VLANS = 5;  # authorization level needed to see vlan info 
-                    # in web interface
-$ALEVEL_HISTORY = 1; # authorization level needed to see host history
 
 # set to enable ping command in web interface
 # $SAURON_PING_PROG = '/bin/ping';
@@ -54,10 +36,34 @@ $ALEVEL_HISTORY = 1; # authorization level needed to see host history
 # $SAURON_TRACEROUTE_TIMEOUT = 15;
 # $ALEVEL_TRACEROUTE = 1; # authorization level needed to use traceroute
 
+# default method for encrypting passwords:
+#        0 = simple MD5 based hash with salt
+#        1 = standard Unix crypt
+#
+$SAURON_PWD_MODE = 1;
+
+# External authentication command/script.
+# This script should read one line from STDIN that contains username
+# and password separated by whitespace and return: 
+#   0 = successful authnentication
+#   <nonzero> = failed (wrong password)
+#
+# $SAURON_AUTH_PROG = "$PROG_DIR/contrib/kerberos-auth";
+
+#########################################################################
+# WWW interface (sauron.cgi) configuration options 
+
+$ICON_PATH = "/sauron/icons";
+$SERVER_ID = "fooserver";   # unique server ID (if using multiple www-server)
+
+$USER_TIMEOUT = 3600; # idle timeout for user sessions
+
+$ALEVEL_VLANS = 5;  # authorization level needed to see vlan info 
+                    # in web interface
+$ALEVEL_HISTORY = 1; # authorization level needed to see host history
+
 # specify charset for CGI interface (default is iso-8859-1)
 # $SAURON_CHARSET = 'iso-8859-15';
-
-# $SAURON_DTDHACK = 1;
 
 # Set this 1 to enable secure cookies. Note, this may cause problems
 # with some broken browsers, so it's not enabled by default.
@@ -74,6 +80,7 @@ $SAURON_RHF{model}    = 1; # Model
 $SAURON_RHF{serial}   = 1; # Serial
 $SAURON_RHF{misc}     = 1; # Misc.
 
+# $SAURON_DTDHACK = 1;
 
 $SAURON_BGCOLOR="white";
 $SAURON_FGCOLOR="black";

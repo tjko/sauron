@@ -3094,6 +3094,11 @@ sub login_menu() {
           "if you want to logout.";
   }
   elsif ($sub eq 'passwd') {
+    if ($SAURON_AUTH_PROG) {
+      print h3("External authentication in use. " .
+	       "Cannot change password through here.");
+      return;
+    }
     if (param('passwd_cancel')) {
       print h2("Password not changed.");
       return;
@@ -3542,7 +3547,7 @@ sub login_form($$) {
 
 sub login_auth() {
   my($u,$p);
-  my(%user,%h,$ticks);
+  my(%user,%h,$ticks,$pwd_chk);
 
   $ticks=time();
   $state{'auth'}='no';
@@ -3562,7 +3567,17 @@ sub login_auth() {
   }
   else {
     unless (get_user($u,\%user)) {
-      if ( (pwd_check($p,$user{'password'}) == 0) &&
+      $pwd_chk = -1;
+      if ($SAURON_AUTH_PROG) {
+	if (-x $SAURON_AUTH_PROG) {
+	  $pwd_chk = pwd_external_check($SAURON_AUTH_PROG,$u,$p);
+	} else {
+	  alert2("Authentication services unavailable!");
+	}
+      } else {
+	$pwd_chk = pwd_check($p,$user{password});
+      }
+      if ( ($pwd_chk == 0) &&
 	   ($user{expiration} == 0 || $user{expiration} > time()) ) {
 	$state{'auth'}='yes';
 	$state{'user'}=$u;
