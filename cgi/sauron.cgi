@@ -208,7 +208,8 @@ do "$PROG_DIR/cgi_util.pl";
 %host_form = (
  data=>[
   {ftype=>0, name=>'Host' },
-  {ftype=>1, tag=>'domain', name=>'Hostname', type=>'domain', len=>30},
+  {ftype=>1, tag=>'domain', name=>'Hostname', type=>'domain',
+   conv=>'L', len=>40},
   {ftype=>5, tag=>'ip', name=>'IP address', iff=>['type','[169]']},
   {ftype=>9, tag=>'alias_d', name=>'Alias for', idtag=>'alias',
    iff=>['type','4'], iff2=>['alias','\d+']},
@@ -233,9 +234,9 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>1, tag=>'info', name=>'[Extra] Info', type=>'text', len=>50, 
    empty=>1, iff=>['type','1']},
   {ftype=>0, name=>'Equipment info', iff=>['type','1']},
-  {ftype=>1, tag=>'hinfo_hw', name=>'HINFO hardware', type=>'hinfo', len=>20,
+  {ftype=>1, tag=>'hinfo_hw', name=>'HINFO hardware', type=>'hinfo', len=>25,
    empty=>1, iff=>['type','1']},
-  {ftype=>1, tag=>'hinfo_sw', name=>'HINFO software', type=>'hinfo', len=>20,
+  {ftype=>1, tag=>'hinfo_sw', name=>'HINFO software', type=>'hinfo', len=>25,
    empty=>1, iff=>['type','1']},
   {ftype=>1, tag=>'ether', name=>'Ethernet address', type=>'mac', len=>12,
    conv=>'U', iff=>['type','[19]'], empty=>1},
@@ -244,9 +245,9 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>1, tag=>'ether_alias_info', name=>'Ethernet alias', no_empty=>1,
    empty=>1, type=>'domain', len=>30, iff=>['type','1'] },
 
-  {ftype=>1, tag=>'model', name=>'Model', type=>'text', len=>30, empty=>1, 
+  {ftype=>1, tag=>'model', name=>'Model', type=>'text', len=>40, empty=>1, 
    no_empty=>1, iff=>['type','1']},
-  {ftype=>1, tag=>'serial', name=>'Serial no.', type=>'text', len=>20,
+  {ftype=>1, tag=>'serial', name=>'Serial no.', type=>'text', len=>30,
    empty=>1, no_empty=>1, iff=>['type','1']},
   {ftype=>1, tag=>'misc', name=>'Misc.', type=>'text', len=>40, empty=>1, 
    no_empty=>1, iff=>['type','1']},
@@ -295,7 +296,8 @@ do "$PROG_DIR/cgi_util.pl";
 %restricted_host_form = (
  data=>[
   {ftype=>0, name=>'Host (restricted edit)' },
-  {ftype=>1, tag=>'domain', name=>'Hostname', type=>'domain', len=>30},
+  {ftype=>1, tag=>'domain', name=>'Hostname', type=>'domain', 
+   conv=>'L', len=>40},
   {ftype=>5, tag=>'ip', name=>'IP address', restricted=>1,
    iff=>['type','[169]']},
   {ftype=>1, tag=>'cname_txt', name=>'Static alias for', type=>'domain',
@@ -315,10 +317,10 @@ do "$PROG_DIR/cgi_util.pl";
 #   empty=>1, iff=>['type','1']},
 #  {ftype=>1, tag=>'hinfo_sw', name=>'HINFO software', type=>'hinfo', len=>20,
 #   empty=>1, iff=>['type','1']},
-  {ftype=>101, tag=>'hinfo_hw', name=>'HINFO hardware', type=>'hinfo', len=>20,
+  {ftype=>101, tag=>'hinfo_hw', name=>'HINFO hardware', type=>'hinfo', len=>25,
    sql=>"SELECT hinfo FROM hinfo_templates WHERE type=0 ORDER BY pri,hinfo;",
    lastempty=>1, empty=>1, iff=>['type','1']},
-  {ftype=>101, tag=>'hinfo_sw', name=>'HINFO sowftware', type=>'hinfo',len=>20,
+  {ftype=>101, tag=>'hinfo_sw', name=>'HINFO sowftware', type=>'hinfo',len=>25,
    sql=>"SELECT hinfo FROM hinfo_templates WHERE type=1 ORDER BY pri,hinfo;",
    lastempty=>1, empty=>1, iff=>['type','1']},
   {ftype=>1, tag=>'ether', name=>'Ethernet address', type=>'mac', len=>12,
@@ -326,9 +328,9 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>4, tag=>'ether_alias_info', name=>'Ethernet alias', 
    iff=>['type','1']}, 
 
-  {ftype=>1, tag=>'model', name=>'Model', type=>'text', len=>30, empty=>1, 
+  {ftype=>1, tag=>'model', name=>'Model', type=>'text', len=>40, empty=>1, 
    iff=>['type','1']},
-  {ftype=>1, tag=>'serial', name=>'Serial no.', type=>'text', len=>20,
+  {ftype=>1, tag=>'serial', name=>'Serial no.', type=>'text', len=>30,
    empty=>1, iff=>['type','1']},
   {ftype=>1, tag=>'misc', name=>'Misc.', type=>'text', len=>40, empty=>1, 
    iff=>['type','1']},
@@ -1355,6 +1357,9 @@ sub hosts_menu() {
 		  ip_in_use($serverid,$host{ip}[$i][1])) {
 		alert2("IP number already in use: $host{ip}[$i][1]");
 		$update_ok=0;
+		$update_ok=1 
+		  if (param('h_ip_allowdup') && 
+		      check_perms('zone','RWX',1)==0);
 	      }
 	    }
 

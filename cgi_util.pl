@@ -440,7 +440,11 @@ sub form_magic($$$) {
       $a=0 if (!$a || $a < 0);
       #if ($a > 50) { $a = 50; }
       print hidden(-name=>$p1."_count",-value=>$a);
-      print td('IP'),td('Reverse'),td('Forward'),"</TR>";
+      print td('IP'),td('Reverse'),td('Forward');
+      print td("(",
+	       checkbox(-label=>'allow duplicate IPs',name=>$p1."_allowdup",
+			-checked=>'0'),")")  unless ($rec->{restricted});
+      print "</TR>";
 
       for $j (1..$a) {
 	$p2=$p1."_".$j;
@@ -460,9 +464,9 @@ sub form_magic($$$) {
 	        td((param($n) eq 'on' ? 'on':'off'));
 	}
 	else {
-	  $n=$p2."_2";
-	  print td(checkbox(-label=>' A',-name=>$n,-checked=>param($n)));
 	  $n=$p2."_3";
+	  print td(checkbox(-label=>' A',-name=>$n,-checked=>param($n)));
+	  $n=$p2."_2";
 	  print td(checkbox(-label=>' PTR',-name=>$n,-checked=>param($n)));
 
 	  print td(checkbox(-label=>' Delete',
