@@ -21,6 +21,7 @@ DROP TABLE txt_entries;
 DROP TABLE wks_entries;
 DROP TABLE host_info;
 DROP TABLE users;
+DROP TABLE user_rights;
 
 DROP TABLE pokemon;
 
@@ -43,7 +44,7 @@ DROP SEQUENCE txt_entries_id_seq;
 DROP SEQUENCE wks_entries_id_seq;
 DROP SEQUENCE host_info_id_seq;
 DROP SEQUENCE users_id_seq;
-
+DROP SEQUENCE user_rights_id_seq;
 
 
 // eof

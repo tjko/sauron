@@ -294,9 +294,17 @@ CREATE TABLE users (
 	username    TEXT UNIQUE NOT NULL CHECK(username <> ''),
 	password    TEXT,
 	name	    TEXT,
+	superuser   BOOL DEFAULT false,
 
 	comment	    TEXT
 ) INHERITS(pokemon);
 
+CREATE TABLE user_rights (
+       id           SERIAL PRIMARY KEY,
+       user	    INT4 NOT NULL, // ptr to users record
+       type	    INT4 NOT NULL, // 1=server,2=zone,3=net
+       ref	    INT4 NOT NULL, // ptr to table specified by type field
+       mode	    TEXT, // R,RW,RWS      
+);
 
 // eof
