@@ -350,15 +350,16 @@ sub get_net_list($$) {
 
   if ($subnets) {
     $subnets=($subnets==0?'false':'true');
+    $subnets=" AND subnet=$subnets ";
   } else {
-    $subnets='false';
+    $subnets='';
   }
 
   $list=[];
   return $list unless ($serverid >= 0);
 
-  $res=db_exec("SELECT net,id FROM nets " .
-	       "WHERE server=$serverid " .
+  $res=db_exec("SELECT net,id,comment FROM nets " .
+	       "WHERE server=$serverid $subnets " .
 	       "ORDER BY net;");
 
   for($i=0; $i < $res; $i++) {

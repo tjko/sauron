@@ -123,6 +123,25 @@ error("invalid directory configuration")
  heading_bg=>'#aaaaff'
 );
 
+%host_types=(0=>'Any type',1=>'Host',2=>'Delegation',3=>'Plain MX',
+	     4=>'Alias',5=>'Printer',6=>'Glue record');
+
+%browse_hosts_form=(
+ data=>[
+  {ftype=>0, name=>'Browse hosts' },
+  {ftype=>3, tag=>'type', name=>'Record type', type=>'enum',
+   enum=>\%host_types},
+  {ftype=>3, tag=>'net', name=>'Subnet', type=>'list', listkeys=>'nets_k', 
+   list=>'nets'},
+  {ftype=>1, tag=>'domain', name=>'Domain pattern (regexp)', type=>'text', len=>40,
+   empty=>1}
+ ],
+ bgcolor=>'#eeeebf',
+ border=>'0',		
+ width=>'100%',
+ nwidth=>'30%',
+ heading_bg=>'#aaaaff'
+);
 
 #####################################################################
 
@@ -165,6 +184,10 @@ if ($state{'auth'} ne 'yes' || $pathinfo eq '/login') {
 error("Unauthorized Access denied!") 
   if ($ENV{'REMOTE_ADDR'} != $state{'addr'}) ;
 
+$server=$state{'server'};
+$serverid=$state{'serverid'};
+$zone=$state{'zone'};
+$zoneid=$state{'zoneid'};
 
 
 if ($pathinfo ne '') {
@@ -194,9 +217,10 @@ unless ($frame_mode) {
 
 
 
-if ($menu eq 'servers') { servers(); }
-elsif ($menu eq 'zones') { zones(); }
-elsif ($menu eq 'login') { login(); }
+if ($menu eq 'servers') { servers_menu(); }
+elsif ($menu eq 'zones') { zones_menu(); }
+elsif ($menu eq 'login') { login_menu(); }
+elsif ($menu eq 'hosts') { hosts_menu(); }
 else {
   print p,"unknown menu '$menu'";
 }
@@ -230,10 +254,12 @@ print "<p><hr>Sauron";
 print end_html();
 
 exit;
-
-
 #####################################################################
-sub servers() {
+
+
+# SERVERS menu
+#
+sub servers_menu() {
   $sub=param('sub');
 
   if ($sub eq 'add') {
@@ -243,8 +269,6 @@ sub servers() {
     print p,"del...";
   }
   elsif ($sub eq 'edit') {
-    $server=$state{'server'};
-    $serverid=$state{'serverid'};
     if ($serverid eq '') {
       print p,"Server not selected";
       goto select_server;
@@ -321,12 +345,11 @@ sub servers() {
 }
 
 
-# ZONES
+# ZONES menu
 #
-sub zones() {
+sub zones_menu() {
   $sub=param('sub');
-  $server=$state{'server'};
-  $serverid=$state{'serverid'};
+
   if ($server eq '') { 
     print h2("Server not selected!");
     return;
@@ -339,8 +362,6 @@ sub zones() {
     print p,"del...";
   }
   elsif ($sub eq 'edit') {
-    $zone=$state{'zone'};
-    $zoneid=$state{'zoneid'};
     if ($zoneid eq '') {
       print p,"Zone not selected";
       goto select_zone;
@@ -422,7 +443,88 @@ sub zones() {
 }
 
 
-sub login() {
+# HOSTS menu
+#
+sub hosts_menu() {
+  unless ($serverid) {
+    print h2("Server not selected!");
+    return;
+  }
+  unless ($zoneid) {
+    print h2("Zone not selected!");
+    return;
+  }
+  
+  $sub=param('sub');
+  
+  if ($sub eq 'edit') {
+    print p,'edit...';
+  }
+  elsif ($sub eq 'browse') {
+    undef $typerule;
+    $type=param('bh_type');
+    if (param('bh_type') > 0) {
+      $typerule=" AND a.type=".param('bh_type')." ";
+    }
+    undef $netrule; 
+    if (param('bh_net') ne 'ANY') {
+      $netrule=" AND b.ip << '" . param('bh_net') . "' ";
+    }
+    undef $domainrule;
+    if (param('bh_domain') ne '') {
+      $domainrule=" AND a.domain ~ '".param('bh_domain')."' "; 
+    }
+
+    undef @q;
+    $fields="a.id,a.type,a.domain,a.ether,a.info";
+    $sql1="SELECT b.ip,$fields FROM hosts a,rr_a b " .
+	  "WHERE a.zone=$zoneid AND b.host=a.id AND a.type=1 " .
+	  " $netrule $domainrule ";
+    $sql2="SELECT '0.0.0.0',$fields FROM hosts a " .
+          "WHERE a.zone=$zoneid AND type!=1 $typerule $domainrule ";
+
+    if ($type == 1) { $sql="$sql1 ORDER BY 4;"; }
+    elsif ($type == 0) { $sql="$sql1 UNION $sql2 ORDER BY 4;"; } 
+    else { $sql="$sql2 ORDER BY 4;"; }
+    #print p,$sql;
+    db_query($sql,\@q);
+    #print p,"Found " . scalar @q . " matching records:",br;
+    print "<TABLE cellpadding=1 BGCOLOR=\"#eeeeff\">",
+          Tr,"<TD colspan=5 bgcolor=#aaaaff><B>Zone:</B> $zone</TD>",
+          Tr,"<TD colspan=5 bgcolor=#aaaaff>Matches found: " . scalar @q .
+	    "</TD>",
+          "<TR bgcolor=#aaaaff>",th(['Hostname','IP','Type','Ether','Info']);
+    for $i (0..$#q) {
+      ($ip=$q[$i][0]) =~ s/\/\d{1,2}$//g;
+
+      print Tr,td([$q[$i][3],$ip,$q[$i][2],"<PRE>$q[$i][4]</PRE>",$q[$i][5]]);
+      last if ($i > 50);
+    }
+    print "</TABLE>";
+  }
+  else {
+    #$nethash=get_nets($serverid);
+    $nets=get_net_list($serverid,1);
+    undef %nethash; undef @netkeys;
+    $nethash{'ANY'}='Any net';
+    $netkeys[0]='ANY';
+    for $i (0..$#{$nets}) { 
+      #print p,$$nets[$i][0]; 
+      $nethash{$$nets[$i][0]}="$$nets[$i][0] - $$nets[$i][2]";
+      push @netkeys, $$nets[$i][0];
+    }
+    %bdata=(domain=>'',net=>'ANY',nets=>\%nethash,nets_k=>\@netkeys,type=>1);
+    print startform(-method=>'POST',-action=>$selfurl),
+          hidden('menu','hosts'),hidden('sub','browse');
+    form_magic('bh',\%bdata,\%browse_hosts_form);
+    print submit(-name=>'bh_submit',-value=>'Search'),end_form;
+  }
+}
+
+
+# LOGIN menu
+#
+sub login_menu() {
   $sub=param('sub');
 
   if ($sub eq 'login') {
@@ -529,22 +631,29 @@ sub top_menu($) {
   
   print '<TABLE bgcolor="white" border="0" cellspacing="0" width="100%">' .
         '<TR align="left" valign="bottom"><TD rowspan="2">' . 
-	'<IMG src="' .$ICON_PATH . '/logo.png" alt="">';
+	'<IMG src="' .$ICON_PATH . '/logo.png" alt=""></TD>';
 
-  print "<TD>mode=$mode<TD>foo<TD>foo<TD>";
+  #print "<TD>mode=$mode<TD>foo<TD>foo<TD>";
   print '<TR align="left" valign="bottom">';
-  print "<TD><A HREF=\"$s_url?menu=servers\">servers</A>" .
-        "<TD><A HREF=\"$s_url?menu=zones\">zones</A>" . 
-	"<TD><A HREF=\"$s_url?menu=login\">login</A>";
+  print td("<A HREF=\"$s_url?menu=servers\">Servers</A>"),
+        td("<A HREF=\"$s_url?menu=zones\">Zones</A>"),
+        td("<A HREF=\"$s_url?menu=hosts\">Hosts</A>"),
+	td("<A HREF=\"$s_url?menu=login\">login</A>");
   print "</TABLE>";
 }
 
 sub left_menu($) {
   my($mode)=@_;
-  my($url);
-    
+  my($url,$w);
+  
+  $w="\"100\"";
+  
   $url=$s_url;
-  print h3("Menu:<br>$menu");
+  print "<BR><TABLE width=$w bgcolor=\"#f7bb10\" border=\"0\" " .
+          "cellspacing=\"0\" cellpadding=\"0\">",Tr,th(h3("Menu:<br>$menu")),
+        Tr,"<TD><TABLE width=\"100%\" cellspacing=\"2\" cellpadding=\"1\" " .
+	   "border=\"0\">",
+	  "<TD BGCOLOR=\"white\">";
   #print "<p>mode=$mode";
 
   if ($menu eq 'servers') {
@@ -561,6 +670,10 @@ sub left_menu($) {
           p,"<a href=\"$url&sub=add\">Add zone</a><br>",
           "<a href=\"$url&sub=del\">Delete zone</a><br>",
           "<a href=\"$url&sub=edit\">Edit zone</a><br>";
+  } elsif ($menu eq 'hosts') {
+    $url.='?menu=hosts';
+    print p,"<a href=\"$url\">Browse hosts</a><br>",
+          "<a href=\"$url&sub=edit\">Edit hosts</a><br>";
   } elsif ($menu eq 'login') {
     $url.='?menu=login';
     print p,"<a href=\"$url&sub=login\">Login</a><br>",
@@ -569,6 +682,23 @@ sub left_menu($) {
   } else {
     print "<p><p>empty menu\n";
   }
+  print "</TABLE></TD></TABLE><BR>";
+
+  print "<TABLE width=$w bgcolor=\"#f7bb10\" border=\"0\" cellspacing=\"0\" " .
+        "cellpadding=\"0\">", #<TR><TD><H4>Current selections</H4></TD></TR>",
+        "<TR><TD><TABLE width=\"100%\" cellspacing=\"2\" cellpadding=\"1\" " .
+	"border=\"0\">",
+	"<TR><TH><FONT size=-1>Current selections</FONT></TH></TR>",
+	"<TR><TD BGCOLOR=\"white\">";
+
+  print "<FONT size=-1>",
+        "Server: $server",br,
+        "Zone: $zone",br,
+        "</FONT>";
+
+  print "</FONT></TABLE></TD></TR></TABLE><BR>";
+
+  
 }
 
 sub frame_set() {
@@ -590,7 +720,7 @@ sub frame_set2() {
   $menu="?menu=" . param('menu') if ($menu);
   
   print "<HTML>" .
-        "<FRAMESET border=\"1\" cols=\"15%,85%\">\n" .
+        "<FRAMESET border=\"0\" cols=\"15%,85%\">\n" .
 	"  <FRAME src=\"$script_name/frame2$menu\" name=\"menu\" noresize>\n" .
         "  <FRAME src=\"$script_name/frame3$menu\" name=\"main\">\n" .
         "  <NOFRAMES>\n" .
@@ -822,7 +952,8 @@ sub form_check_form($$$) {
 #
 sub form_magic($$$) {
   my($prefix,$data,$form) = @_;
-  my($i,$j,$k,$n,$key,$rec,$a,$formdata,$h_bg,$e_str,$p1,$p2,$val,$e);
+  my($i,$j,$k,$n,$key,$rec,$a,$formdata,$h_bg,$e_str,$p1,$p2,$val,$e,$enum,
+     $values);
 
   $formdata=$form->{data};
   if ($form->{heading_bg}) { $h_bg=$form->{heading_bg}; }
@@ -933,9 +1064,20 @@ sub form_magic($$$) {
       print td(submit(-name=>$prefix."_".$rec->{tag}."_add",-value=>'Add'));
       print "</TABLE></TD>\n";
     } elsif ($rec->{ftype} == 3) {
-      print Tr,td($rec->{name}),td(
-               popup_menu(-name=>$p1,-values=>[keys %{$rec->{enum}}],
-		        -default=>param($p1),-labels=>$rec->{enum}) );
+      if ($rec->{type} eq 'enum') {
+	$enum=$rec->{enum};
+	$values=[sort keys %{$enum}];
+      } elsif ($rec->{type} eq 'list') {
+	$enum=$data->{$rec->{list}};
+	if ($rec->{listkeys}) {
+	  $values=$data->{$rec->{listkeys}}; print p,"foo1";
+	} else {
+	  $values=[sort keys %{$enum}];
+	}
+      }
+      print Tr,td($rec->{name}),
+	    td(popup_menu(-name=>$p1,-values=>$values,
+	                  -default=>param($p1),-labels=>$enum));
     } elsif ($rec->{ftype} == 4) {
       $val=param($p1);
       $val=${$rec->{enum}}{$val}  if ($rec->{type} eq 'enum');
