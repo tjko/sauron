@@ -1664,7 +1664,8 @@ sub hosts_menu() {
     }
 
     undef @q;
-    $fields="a.id,a.type,a.domain,a.ether,a.info,a.huser,a.dept,a.location";
+    $fields="a.id,a.type,a.domain,a.ether,a.info,a.huser,a.dept," .
+	    "a.location,a.expiration";
     $fields.=",a.cdate,a.mdate,a.dhcp_date" if (param('csv'));
 
     $sql1="SELECT b.ip,'',$fields FROM hosts a,a_entries b " .
@@ -1705,7 +1706,7 @@ sub hosts_menu() {
       for $i (0..$#q) {
 	printf $csv_format,$q[$i][4],$host_types{$q[$i][3]},$q[$i][0],
 	                   $q[$i][5],$q[$i][7],$q[$i][8],$q[$i][9],
-			   $q[$i][6],$q[$i][10],$q[$i][11],$q[$i][12];
+			   $q[$i][6],$q[$i][11],$q[$i][12],$q[$i][13];
       }
       return;
     }
@@ -1749,6 +1750,7 @@ sub hosts_menu() {
 
       $trcolor='#eeeeee';
       $trcolor='#ffffcc' if ($i % 2 == 0);
+      $trcolor='#ffcccc' if ($q[$i][10] > 0 && $q[$i][10] < time());
       print "<TR bgcolor=\"$trcolor\">",
 	    td(["<FONT size=-1>".($i+1)."</FONT>",$hostname,
 		"<FONT size=-1>$host_types{$q[$i][3]}</FONT>",$ip,
@@ -1890,6 +1892,8 @@ sub hosts_menu() {
       return;
     }
 
+    $host_form{bgcolor}='#ffcccc' 
+	if ($host{expiration} > 0 && $host{expiration} < time());
     display_form(\%host,\%host_form);
     print p,startform(-method=>'GET',-action=>$selfurl),
           hidden('menu','hosts'),hidden('h_id',$id);

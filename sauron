@@ -40,7 +40,7 @@ $ZFORMAT = "%-22s %6s %2s  %-6s %s\n";
 ##############################
 
 $result=GetOptions("help|h","all|a","bind|b","dhcp|d","printer|p",
-		  "updateserial","noupdateserial","verbose","dhcp2");
+		  "updateserial","noupdateserial","verbose","dhcp2","clean");
 
 if ($opt_help || @ARGV < 1 || $result < 1) {
     print "syntax: $0 [--help] [options] <servername> [<target directory>]\n";
@@ -48,6 +48,7 @@ if ($opt_help || @ARGV < 1 || $result < 1) {
       "\t--all            generate all configuration files\n",
       "\t--bind           generate BIND (named) configuration files\n",
       "\t--dhcp           generate DHCP (dhcpd) configuration files\n",
+      "\t--clean          cleanup expired records and vacuum database\n",
       "\t--printer        generate PRINTER (lpd) configuration files\n\n",
       "\t--updateserial   force serial update on master zones\n\n",
       "\t--dhcp2          enable DHCPv2 compatibilty mode\n\n";
@@ -103,6 +104,7 @@ $zonelist = get_zone_list($serverid);
 $zones = @{$zonelist};
 print "Server '$servername' has $zones zones.\n";
 
+clean_up() if ($opt_clean);
 make_bind() if ($bind_conf);
 make_dhcp() if ($dhcp_conf);
 make_printcap() if ($printer_conf);
@@ -110,6 +112,31 @@ make_printcap() if ($printer_conf);
 exit;
 ###########################################################################
 
+sub clean_up() {
+  my(@q,$i,$count,$t);
+
+  print "Cleaning up database...\n";
+
+  $t=$time_now_ticks - (86400 * 30);
+
+  db_query("SELECT h.id,h.expiration,h.domain,h.type " .
+	   "FROM hosts h, zones z " .
+	   "WHERE z.server=$serverid AND h.zone=z.id " .
+	   " AND h.expiration > 0 AND h.expiration < $time_now_ticks " .
+	   "ORDER BY h.expiration",\@q);
+  error(db_errormsg()) if (db_errormsg());
+  $count=@q;
+
+  for $i (0..$#q) {
+    print "Purging: $q[$i][2] (id=$q[$i][0])   ".localtime($q[$i][1])."\n"
+      if ($verbose);
+    error("Cannot remove host: $q[$i][2] (id=$q[$i][0])")
+      if (delete_host($q[$i][0]) < 0);
+  }
+  print "$count expired host(s) purged.\n";
+
+  # error("Database vacuum failed!") if (db_vacuum() < 0);
+}
 
 
 sub make_bind() {
