@@ -208,10 +208,8 @@ if ($modgroup) {
       $status="Invalid password" ;
     }
 
-  $cdate_str=localtime($q[0][6]);
-  $cuser_str=$q[0][7];
-  $mdate_str=localtime($q[0][8]);
-  $muser_str=$q[0][9];
+  $cdate_str=($q[0][6] > 0 ? localtime($q[0][6])." by $q[0][7]" : '<never>');
+  $mdate_str=($q[0][8] > 0 ? localtime($q[0][8])." by $q[0][9]" : '<never>');
   $gid=$q[0][5];
   $gidname='<none>';
   $longname=$q[0][1];
@@ -226,8 +224,8 @@ if ($modgroup) {
         "       superuser: " ,($q[0][2] eq 't' ? 'Yes':'No'), "\n",
         "           group: $gidname (gid=$gid)\n",
 	"   passwd status: $status\n",
-	" account created: $cdate_str by $cuser_str\n",
-	"   last modified: $mdate_str by $muser_str\n\n";
+	" account created: $cdate_str\n",
+	"   last modified: $mdate_str\n\n";
 }
 
 
