@@ -45,8 +45,8 @@ if ($opt_help || @ARGV < 1) {
     "\t--norecord\t\tonly expire hosts with no recorded dhcp activity\n",
     "\t--edate=<dd-mm-yyy>\tset hosts to expire on this date (default: now)\n",
     "\n",
-    "\t--commit\t\tcommit changes (w/o this NO changes are made)\n",
-    "\n";
+    "\t--commit\t\tcommit changes (w/o this NO changes are made)\n";
+  print "\n" if ($opt_help); # to get rid of warnings :)
   exit(0);
 }
 
@@ -175,8 +175,8 @@ for $i (0..$#q) {
     next unless $ok;
   }
 
-  print "Skipping host w/o Ethernet address $domain $ip\n"
-    unless ($ether && $opt_verbose);
+  print "Skipping host w/o Ethernet address $domain $ip ($ether)\n"
+    if ((not $ether) && $opt_verbose);
 
   $mdate=($cdate > $mdate ? $cdate : $mdate);
   $ddate=0 unless ($ddate > 0);

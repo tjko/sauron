@@ -1,5 +1,9 @@
 $Id$
-	
+
+0.5.1
+	- expire-hosts: fixed erroneous (but harmless) warnings about
+	  hosts not having ethernet address
+     
 	
 0.5.0
 	- implemented host copy option
