@@ -144,7 +144,7 @@ if ($opt_cgi_disable) {
     $res=db_exec("INSERT INTO settings (key,value) " .
 		 "VALUES('cgi_disable',$msg);");
   }
-  print "CGI interface succesfully disabled.\n";
+  print "CGI interface successfully disabled.\n";
   exit;
 }
 

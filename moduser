@@ -152,19 +152,19 @@ if ($modgroup) {
     $res=db_exec("UPDATE users SET name='$opt_name', " .
 		 " muser='$user',mdate='$mdate' WHERE id=$id;");
     fatal("Cannot update user description!") if ($res < 0);
-    print "User description succesfully updated.\n";
+    print "User description successfully updated.\n";
   }
   if ($opt_email) {
     $res=db_exec("UPDATE users SET email='$opt_email', " .
 		 " muser='$user',mdate='$mdate' WHERE id=$id;");
     fatal("Cannot update user email!") if ($res < 0);
-    print "User email succesfully updated.\n";
+    print "User email successfully updated.\n";
   }
   if ($opt_comment) {
     $res=db_exec("UPDATE users SET comment='$opt_comment', " .
 		 " muser='$user',mdate='$mdate' WHERE id=$id;");
     fatal("Cannot update user comment!") if ($res < 0);
-    print "User comment succesfully updated.\n";
+    print "User comment successfully updated.\n";
   }
 
   if ($opt_expiration) {
@@ -181,7 +181,7 @@ if ($modgroup) {
       $res=db_exec("UPDATE users SET expiration=$edate, " .
 		   " muser='$user',mdate='$mdate' WHERE id=$id;");
       fatal("Cannot update user account expiration!") if ($res < 0);
-      print "User account expiration succesfully updated.\n";
+      print "User account expiration successfully updated.\n";
   }
 
   if ($opt_group) {
@@ -196,7 +196,7 @@ if ($modgroup) {
       $res=db_exec("UPDATE users SET gid=$group_id, " .
 		   " muser='$user',mdate='$mdate' WHERE id=$id;");
       fatal("Cannot update user description!") if ($res < 0);
-      print "User description succesfully updated.\n";
+      print "User description successfully updated.\n";
   }
 
   if ($opt_superuser) {
@@ -206,7 +206,7 @@ if ($modgroup) {
     $res=db_exec("UPDATE users SET superuser=$superuser, " .
 		 "muser='$user',mdate='$mdate' WHERE id=$id;");
     fatal("Cannot update user superuser status!") if ($res < 0);
-    print "User superuser status succesfully updated.\n";
+    print "User superuser status successfully updated.\n";
   }
 
   if (defined $opt_passwd) {
@@ -224,7 +224,7 @@ if ($modgroup) {
     $res=db_exec("UPDATE users SET password='$pwd', " .
 		 " muser='$user',mdate='$mdate' WHERE id=$id;");
     fatal("Cannot update user password!") if ($res < 0);
-    print "User password succesfully updated.\n";
+    print "User password successfully updated.\n";
   }
 
   if ($opt_lock) {
@@ -233,7 +233,7 @@ if ($modgroup) {
     $res=db_exec("UPDATE users SET password='$pwd', " .
 		 " muser='$user',mdate='$mdate' WHERE id=$id;");
     fatal("Cannot update user password!") if ($res < 0);
-    print "User account succesfully locked.\n";
+    print "User account successfully locked.\n";
   }
 
   if ($opt_unlock) {
@@ -242,7 +242,7 @@ if ($modgroup) {
     $res=db_exec("UPDATE users SET password='$pwd', " .
 		 " muser='$user',mdate='$mdate' WHERE id=$id;");
     fatal("Cannot update user password!") if ($res < 0);
-    print "User account succesfully unlocked.\n";
+    print "User account successfully unlocked.\n";
   }
 
 
@@ -459,7 +459,7 @@ if (defined $opt_add) {
   $res=db_exec("INSERT INTO user_rights (type,ref,rtype,rref,rule) " .
 	       "VALUES($utype,$id,$type,$ref,'$mode');");
   fatal("cannot insert record to user_rights table!") if ($res < 0);
-  print "Record succesfully inserted.\n";
+  print "Record successfully inserted.\n";
 }
 elsif (defined $opt_del) {
   fatal("invalid parameter to del option!")
@@ -470,7 +470,7 @@ elsif (defined $opt_del) {
 	       "WHERE type=$utype AND ref=$id AND id=$tmp;");
   print "res=$res\n";
   fatal("cannot delete record (id=$tmp) from user_rights!") if ($res <0);
-  print "User right record succesfully deleted.\n";
+  print "User right record successfully deleted.\n";
   exit;
 }
 elsif ($opt_delall) {

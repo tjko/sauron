@@ -1792,15 +1792,32 @@ sub get_group_list($$$$) {
 
 sub get_user($$) {
   my ($uname,$rec) = @_;
+  my ($res);
 
-  return get_record("users",
+  $res = get_record("users",
 	       "username,password,name,superuser,server,zone,comment,gid,".
-	       "email,id",
+	       "email,flags,expiration,last,last_pwd,id",
 	       $uname,$rec,"username");
+
+  $rec->{email_notify} = ($rec->{flags} & 0x01 ? 1 : 0);
+
+  return $res;
 }
 
 sub update_user($) {
   my($rec) = @_;
+
+  $rec->{flags}=0;
+  $rec->{flags}|=0x01 if ($rec->{email_notify});
+
+  delete $rec->{email_notify};
+  delete $rec->{mdate_str};
+  delete $rec->{cdate_str};
+  delete $rec->{cdate};
+  delete $rec->{cuser};
+  $rec->{mdate}=time;
+  $rec->{muser}=$muser;
+ 
   return update_record('users',$rec);
 }
 

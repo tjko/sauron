@@ -636,15 +636,29 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>0, name=>'User info' },
   {ftype=>4, tag=>'user', name=>'Login'},
   {ftype=>4, tag=>'name', name=>'User Name'},
-  {ftype=>4, tag=>'email', name=>'Email'},
   {ftype=>4, tag=>'groupname', name=>'Group'},
   {ftype=>4, tag=>'login', name=>'Last login', type=>'localtime'},
   {ftype=>4, tag=>'addr', name=>'Host'},
+  {ftype=>4, tag=>'last_pwd', name=>'Last password change', type=>'localtime'},
+  {ftype=>4, tag=>'expiration', name=>'Account expiration'},
   {ftype=>4, tag=>'superuser', name=>'Superuser', iff=>['superuser','yes']},
+  {ftype=>0, name=>'Personal settings'},
+  {ftype=>4, tag=>'email', name=>'Email'},
+  {ftype=>4, tag=>'email_notify', name=>'Email notifications',type=>'enum',
+   enum=>{0=>'Disabled',1=>'Enabled'}},
   {ftype=>0, name=>'Current selections'},
   {ftype=>4, tag=>'server', name=>'Server'},
   {ftype=>4, tag=>'zone', name=>'Zone'},
   {ftype=>4, tag=>'sid', name=>'Session ID (SID)'}
+ ]
+);
+
+%user_settings_form=(
+ data=>[
+  {ftype=>0, name=>'Settings' },
+  {ftype=>1, tag=>'email', name=>'Email', type=>'email'},
+  {ftype=>3, tag=>'email_notify', name=>'Email notifications',type=>'enum',
+   enum=>{0=>'Disabled',1=>'Enabled'}},
  ]
 );
 
@@ -2822,7 +2836,7 @@ sub templates_menu() {
 #
 sub login_menu() {
   $sub=param('sub');
-  
+
   if (get_user($state{user},\%user) < 0) {
       fatal("Cannot get user record!");
   };
@@ -2883,7 +2897,28 @@ sub login_menu() {
     if ($res < 0) {
       print h3('Saving defaults failed!');
     } else {
-      print h3('Defaults saved succesfully!');
+      print h3('Defaults saved successfully!');
+    }
+  }
+  elsif ($sub eq 'edit') {
+    %data=%user;
+    $res=display_dialog("Personal Settings",\%data,\%user_settings_form,
+			 'menu,sub',$selfurl);
+    if ($res == 1) {
+      $tmp= ($data{email_notify} ? ($user{flags} | 0x0001) :
+	                           ($user{flags} & 0xfffe));
+      $sqlstr="UPDATE users SET email=".db_encode_str($data{email}).", ".
+	      "flags=$tmp WHERE id=$state{uid}";
+      $res=db_exec($sqlstr);
+      if ($res < 0) {
+	print h3("Cannot save personal settings!");
+      } else {
+	print h3("Personal settings successfully updated.");
+      }
+      get_user($state{user},\%user);
+      goto show_user_info;
+    } elsif ($res == -1) {
+      print h2("No changes made.");
     }
   }
   elsif ($sub eq 'who') {
@@ -2988,9 +3023,14 @@ sub login_menu() {
     return;
   }
   else {
+  show_user_info:
     print h2("User info:");
     $state{email}=$user{email};
     $state{name}=$user{name};
+    $state{last_pwd}=$user{last_pwd};
+    $state{expiration}=($user{expiration} > 0 ? 
+			localtime($user{expiration}) : 'None');
+    $state{email_notify}=$user{email_notify};
     if ($state{gid} > 0) {
 	undef @q;
 	db_query("SELECT name FROM user_groups WHERE id=$state{gid}",\@q);
@@ -3484,6 +3524,7 @@ sub left_menu($) {
           Tr(),Tr(),Tr(td("<a href=\"$url&sub=login\">Login</a>")),
           Tr(td("<a href=\"$url&sub=logout\">Logout</a>")),
           Tr(),Tr(),Tr(td("<a href=\"$url&sub=passwd\">Change password</a>")),
+	  Tr(td("<a href=\"$url&sub=edit\">Edit settings</a>")),
           Tr(td("<a href=\"$url&sub=save\">Save defaults</a>"));
     if ($frame_mode) {
       print Tr(td("<a href=\"$script_name\" target=\"_top\">Frames OFF</a>"));

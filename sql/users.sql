@@ -20,7 +20,8 @@ CREATE TABLE users (
 	last_pwd	INT4 DEFAULT 0, /* last password change time */
 	last_from	TEXT, /* last login host */
 	search_opts	TEXT, /* default search options */
-	flags		INT4 DEFAULT 0, /* reserved */
+	flags		INT4 DEFAULT 0, /* user account flasgs:
+					   0x01 = email notifications on */
 
 	comment		TEXT,
 

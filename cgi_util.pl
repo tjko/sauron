@@ -42,7 +42,7 @@ sub valid_safe_string($$) {
 #
 sub form_check_field($$$) {
   my($field,$value,$n) = @_;
-  my($type,$empty,$t);
+  my($type,$empty,$t,$tmp1,$tmp2);
 
   if ($n > 0) {
     $empty=${$field->{empty}}[$n-1];
@@ -83,6 +83,13 @@ sub form_check_field($$$) {
     return 'valid CIDR (IP) required!' unless (is_cidr($value));
   } elsif ($type eq 'text') {
     return '';
+  } elsif ($type eq 'email') {
+    return 'valid email address required!'
+      unless (($tmp1,$tmp2)=($value =~ /^(\S+)\@(\S+)$/));
+    return 'invalid domain part in email address!'
+      unless (valid_domainname($tmp2));
+    return 'invalid email address!'
+      unless ($tmp1 =~ /^[A-Za-z0-9_\.\+\-]+$/);
   } elsif ($type eq 'passwd') {
     return '';
   } elsif ($type eq 'enum') {

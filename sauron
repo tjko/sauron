@@ -96,6 +96,10 @@ print "target directory: $targetdir\n";
 print "DHCP v2 compatibility mode enabled\n" if ($dhcp2_mode);
 chdir($targetdir) || fatal("Cannot change to directory '$targetdir'!");
 
+$mailnotify_mode = (($SAURON_MAILER && -x $SAURON_MAILER) ? 1 : 0);
+$mailnotify_mode = 0 unless ($SAURON_MAIL_FROM);
+
+
 db_connect();
 
 $time_now_ticks = time;
@@ -167,6 +171,51 @@ sub clean_up() {
 }
 
 
+sub make_mail_notify_list() {
+  my(@q,$i,$user,$date,$mode,$lst,$line);
+
+  db_query("SELECT h.id,h.domain,z.name,h.cdate,h.mdate,h.cuser,h.muser " .
+	   "FROM hosts h, zones z " .
+	   "WHERE h.zone=z.id AND z.server=$serverid " .
+	   " AND (h.cdate > z.serial_date OR h.mdate > z.serial_date) ".
+	   "ORDER BY z.name,h.domain",\@q);
+
+  for $i (0..$#q) {
+    $mode=($q[$i][3] > $q[$i][4] ? 1 : 0);
+    $date=($mode ? $q[$i][3] : $q[$i][4]);
+    $user=($mode ? $q[$i][5] : $q[$i][6]);
+    $line = sprintf "%-30s %6s  %-20s  %s",
+              $q[$i][1],($mode?'Create':'Modify'),"".localtime($date),$user;
+    $mailnotify{$user}=[] unless ($mailnotify{$user});
+    $lst=$mailnotify{$user};
+    push @{$lst}, $line;
+    #print "$line\n";
+  }
+}
+
+sub mail_notifications() {
+  my ($u,%user,$i,$lst);
+
+  foreach $u (sort keys %mailnotify) {
+    next if (get_user($user,\%user) < 0);
+    next unless ($user{email_notify} && $user{email});
+    $lst=$mailnotify{$u};
+    #print "user: $u $user{id} $user{email}\n";
+    open(PIPE,"| $SAURON_MAILER $SAURON_MAILER_ARGS") || error("pipe failed");
+    print PIPE "From: Sauron <$SAURON_MAIL_FROM>\n",
+               "Subject: [sauron] update notification ($servername)\n",
+               "To: $user{email}\n\n",
+	       "Following changes from you are now in effect:\n\n";
+    for $i (0..$#{$lst}) {
+      print PIPE "$$lst[$i]\n";
+    }
+    print PIPE "\n\n";
+    close(PIPE);
+    error("Error sending email notification to $u!") if ($? != 0);
+  }
+
+}
+
 sub make_bind() {
   $zones_only=($server{zones_only} eq 't' ? 1 : 0);
   $bind_filename=($zones_only ? 'named.zones':'named.conf');
@@ -174,6 +223,8 @@ sub make_bind() {
 
   print "BIND configuration\n";
   $time_now = localtime;
+
+  make_mail_notify_list() if ($mailnotify_mode);
 
   ##################################################
   # named.conf
@@ -1056,6 +1107,10 @@ sub make_bind() {
 
   print BINDFILE "\n\n// eof\n";
   close(BINDFILE);
+
+
+  # mail notification to users...
+  mail_notifications() if ($mailnotify_mode);
 }
 
 
