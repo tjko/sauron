@@ -2,7 +2,7 @@
 #
 # moduser - utility to modify user rights
 #
-# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000-2003.
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000-2004.
 # $Id$
 #
 require 5;
@@ -385,7 +385,7 @@ if ($modgroup) {
   $email=$q[0][11];
   $last_from=($q[0][13] > 0 ? localtime($q[0][13])." from $q[0][12]" : '');
 
-  db_query("SELECT g.id,g.name FROM user_groups g, user_rights r " .
+  db_query("SELECT g.id,g.name,r.id FROM user_groups g, user_rights r " .
 	   "WHERE g.id=r.rref AND r.rtype=0 AND r.type=2 AND " .
 	   " r.ref=$id ORDER BY g.id",\@groups);
   $groupnames='';
@@ -423,7 +423,7 @@ unless (defined $opt_add || defined $opt_del || defined $opt_delall) {
 
   if ($utype == 2) {
     for $i (0..$#groups) {
-      print "[Group ($groups[$i][1]) priviliges]\n";
+      printf "%-6d [Group (%s) priviliges]\n", $groups[$i][2],$groups[$i][1];
       list_privs($groups[$i][0],1);
     }
   }
@@ -664,7 +664,6 @@ elsif (defined $opt_del) {
 
   $res=db_exec("DELETE FROM user_rights " .
 	       "WHERE type=$utype AND ref=$id AND id=$tmp;");
-  print "res=$res\n";
   fatal("cannot delete record (id=$tmp) from user_rights!") if ($res <0);
   print "User right record successfully deleted.\n";
   exit;
