@@ -6,6 +6,7 @@
 package Sauron::CGI::Zones;
 require Exporter;
 use CGI qw/:standard *table -no_xhtml/;
+use Sauron::DB;
 use Sauron::CGIutil;
 use Sauron::BackEnd;
 use Sauron::Sauron;
@@ -320,10 +321,20 @@ sub menu_handler {
   #display zone selection list
   my %ztypecolors=(M=>'#c0ffc0',S=>'#eeeeff',F=>'#eedfdf',H=>'#eeeebf');
   my %ztypenames=(M=>'Master',S=>'Slave',F=>'Forward',H=>'Hint');
-
-  print h2("Select zone:"),p,"<TABLE width=98% bgcolor=white border=0>",
-        "<TR bgcolor=\"#aaaaff\">",th(['Zone','Type','Reverse','Comments']);
   my $list=get_zone_list($serverid,0,0);
+  my $zlimit = 50;
+
+  print startform(-method=>'GET',-action=>$selfurl),
+        hidden('menu','zones'),hidden('sub','select'),"Zone display filter: ",
+	textfield(-name=>'select_filter',-size=>20,-maxlength=>80),"  ",
+	submit(-name=>'filter',-value=>'Go'),end_form,
+        h2("Select zone:"),
+        ((@{$list} > $zlimit && ! param('select_filter')) ?
+	 "(only first $zlimit zones displayed)":""),
+	p,"<TABLE width=98% bgcolor=white border=0>",
+        "<TR bgcolor=\"#aaaaff\">",th(['Zone','Type','Reverse','Comments']);
+
+
   for $i (0 .. $#{$list}) {
     my $type=$ztypenames{$$list[$i][2]};
     my $color=$ztypecolors{$$list[$i][2]};
@@ -331,11 +342,15 @@ sub menu_handler {
     my $id=$$list[$i][1];
     my $name=$$list[$i][0];
     my $comment=$$list[$i][4].'&nbsp;';
+    my $filter = param('select_filter');
 
     if ($main::SAURON_PRIVILEGE_MODE==1) {
       next unless ( $perms->{zone}->{$id} =~ /R/ ||
 		    !check_perms('superuser','',1) );
     }
+
+    next if ($filter && $name !~ /$filter/);
+    last if ($i >= $zlimit && ! $filter);
 
     print "<TR bgcolor=\"$color\">",td([
 	"<a href=\"$selfurl?menu=zones&selected_zone=$name\">$name</a>",

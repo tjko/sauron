@@ -8,6 +8,8 @@ general:
 	- change database routines to be less PostgreSQL dependant
 	- add DNSSEC (tsig) support
 	- allow '*' in hostnames
+	- add support alternative way of specifying database connection
+          (DB_{DSN,USER,PASS})
 
 import:
 	- real parser for both imports
@@ -16,6 +18,7 @@ import:
 sauron:
 	- more sanity checks
 	- printcap generation
+	- support for hashing zone file directories 
 
 
 sauron.cgi:
@@ -27,7 +30,7 @@ sauron.cgi:
 	- advertise "Save settings" feature if user doesn't have any
           default settings	
 	- module support for easily extending user interface
-	
+	- allow "<none>" to befault for HINFO selections
 
 browser.cgi:
 	- optional user authentication support
@@ -37,6 +40,8 @@ browser.cgi:
 
 next database format (1.2):
 	- hosts: change ether_key to server wide (instead of just zone)
+	- settings: change field name key --> settings_key
+
 
 
 
