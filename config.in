@@ -5,9 +5,12 @@
 #
 
 #########################################################################
-# general configuration options
+# general configuration options (you need to configure at least these)
 
+# Base directory for Sauron install
 $PROG_DIR = "/usr/local/sauron/";
+
+# directory for logfiles
 $LOG_DIR = "$PROG_DIR/logs/";
 
 # database connection setup
@@ -15,9 +18,11 @@ $LOG_DIR = "$PROG_DIR/logs/";
 #$DB_CONNECT = "dbname=sauron user=foo password=bar";
 $DB_CONNECT = "dbname=sauron";
 
-$REMOVE_EXPIRED_DELAY = 30;  # sauron --clean will remove all hosts that
-		             # have been expired longer than days defined here
+# unique server ID (if using multiple www-server)
+$SERVER_ID = "fooserver";
 
+#########################################################################
+# advanced configuration options
 
 # mailer configuration (set to enable email notifications)
 # $SAURON_MAILER = '/usr/sbin/sendmail';
@@ -36,11 +41,15 @@ $REMOVE_EXPIRED_DELAY = 30;  # sauron --clean will remove all hosts that
 # $SAURON_TRACEROUTE_TIMEOUT = 15;
 # $ALEVEL_TRACEROUTE = 1; # authorization level needed to use traceroute
 
+# sauron --clean will remove all hosts that have been expired longer 
+# than days defined here
+# $SAURON_REMOVE_EXPIRED_DELAY = 30;
+
 # default method for encrypting passwords:
 #        0 = simple MD5 based hash with salt
 #        1 = standard Unix crypt
 #
-$SAURON_PWD_MODE = 1;
+# $SAURON_PWD_MODE = 1;
 
 # External authentication command/script.
 # This script should read one line from STDIN that contains username
@@ -53,37 +62,41 @@ $SAURON_PWD_MODE = 1;
 #########################################################################
 # WWW interface (sauron.cgi) configuration options 
 
-$ICON_PATH = "/sauron/icons";
-$SERVER_ID = "fooserver";   # unique server ID (if using multiple www-server)
 
-$USER_TIMEOUT = 3600; # idle timeout for user sessions
+# icon path for sauron icons (under www-server)
+# $SAURON_ICON_PATH = "/sauron/icons";
 
-$ALEVEL_VLANS = 5;  # authorization level needed to see vlan info 
-                    # in web interface
-$ALEVEL_HISTORY = 1; # authorization level needed to see host history
+# idle timeout for user sessions (in seconds)
+# $SAURON_USER_TIMEOUT = 3600;
+
+# authorization level needed to see vlan info in web interface
+# $ALEVEL_VLANS = 5;
+
+# authorization level needed to see host history
+# $ALEVEL_HISTORY = 1;
 
 # specify charset for CGI interface (default is iso-8859-1)
 # $SAURON_CHARSET = 'iso-8859-15';
 
 # Set this 1 to enable secure cookies. Note, this may cause problems
 # with some broken browsers, so it's not enabled by default.
-$SAURON_SECURE_COOKIES = 0;
+# $SAURON_SECURE_COOKIES = 0;
 
 # restricted host form field defaults: 0=required, 1=optional
-$SAURON_RHF{huser}    = 0; # User
-$SAURON_RHF{dept}     = 0; # Dept.
-$SAURON_RHF{location} = 0; # Location
-$SAURON_RHF{info}     = 1; # [Extra] Info
-$SAURON_RHF{ether}    = 0; # Ether
-$SAURON_RHF{asset_id} = 1; # Asset ID
-$SAURON_RHF{model}    = 1; # Model
-$SAURON_RHF{serial}   = 1; # Serial
-$SAURON_RHF{misc}     = 1; # Misc.
+# $SAURON_RHF{huser}    = 0; # User
+# $SAURON_RHF{dept}     = 0; # Dept.
+# $SAURON_RHF{location} = 0; # Location
+# $SAURON_RHF{info}     = 1; # [Extra] Info
+# $SAURON_RHF{ether}    = 0; # Ether
+# $SAURON_RHF{asset_id} = 1; # Asset ID
+# $SAURON_RHF{model}    = 1; # Model
+# $SAURON_RHF{serial}   = 1; # Serial
+# $SAURON_RHF{misc}     = 1; # Misc.
 
 # $SAURON_DTDHACK = 1;
 
-$SAURON_BGCOLOR="white";
-$SAURON_FGCOLOR="black";
+# $SAURON_BGCOLOR="white";
+# $SAURON_FGCOLOR="black";
 
 #########################################################################
 # misc
@@ -91,9 +104,8 @@ $SAURON_FGCOLOR="black";
 # uncomment to enable compatibilty with DHCP v2.0 ...
 # $SAURON_DCHP2_MODE = 1;
 
-$LOOPBACK_NET = "127.0.0.0/24";
-$LOOPBACK_ZONE = "loopback.";
-
+# $LOOPBACK_NET = "127.0.0.0/24";
+# $LOOPBACK_ZONE = "loopback.";
 
 1;
 # eof
