@@ -2163,7 +2163,14 @@ ID     Type     Ref.                      Mode
     </section>
 
     <section id="deluser-cmd">
-    <title>del-user</>
+    <title>deluser</>
+    <para>
+      FIXME
+    </para>
+    </section>
+
+    <section id="delgroup-cmd">
+    <title>delgroup</>
     <para>
       FIXME
     </para>
