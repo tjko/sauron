@@ -191,9 +191,9 @@ if (defined $opt_pending) {
 
 
 if (defined $opt_cgi_enable) {
-  db_exec("DELETE FROM settings WHERE key='cgi_disable';");
+  db_exec("DELETE FROM settings WHERE setting='cgi_disable';");
   undef @q;
-  db_query("SELECT value FROM settings WHERE key='cgi_disable';",\@q);
+  db_query("SELECT value FROM settings WHERE setting='cgi_disable';",\@q);
   if (@q > 0) {
     print STDERR "Cannot enable CGI interface!\n";
     exit(1);
@@ -210,11 +210,11 @@ if ($opt_cgi_disable) {
   }
   $msg=db_encode_str($msg);
   undef @q;
-  db_query("SELECT value FROM settings WHERE key='cgi_disable';",\@q);
+  db_query("SELECT value FROM settings WHERE setting='cgi_disable';",\@q);
   if (@q > 0) {
-    $res=db_exec("UPDATE settings SET value='$msg' WHERE key='cgi_disable';");
+    $res=db_exec("UPDATE settings SET value='$msg' WHERE setting='cgi_disable';");
   } else {
-    $res=db_exec("INSERT INTO settings (key,value) " .
+    $res=db_exec("INSERT INTO settings (setting,value) " .
 		 "VALUES('cgi_disable',$msg);");
   }
   print "CGI interface successfully disabled.\n";
@@ -223,7 +223,7 @@ if ($opt_cgi_disable) {
 
 
 undef @q;
-db_query("SELECT value FROM settings WHERE key='cgi_disable';",\@q);
+db_query("SELECT value FROM settings WHERE setting='cgi_disable';",\@q);
 
 unless ($opt_quiet) {
   printf "CGI interface:         %s\n",

@@ -161,7 +161,7 @@ sub set_muser($) {
 
 sub get_db_version() {
   my(@q);
-  db_query("SELECT value FROM settings WHERE key='dbversion';",\@q);
+  db_query("SELECT value FROM settings WHERE setting='dbversion';",\@q);
   return ($q[0][0] =~ /^\d/ ? $q[0][0] : 'ERROR');
 }
 
@@ -2831,7 +2831,7 @@ sub get_who_list($$) {
 
 sub cgi_disabled() {
   my(@q);
-  db_query("SELECT value FROM settings WHERE key='cgi_disable';",\@q);
+  db_query("SELECT value FROM settings WHERE setting='cgi_disable';",\@q);
   return ''if ($q[0][0] =~ /^\s*$/);
   return $q[0][0];
 }
