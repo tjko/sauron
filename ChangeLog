@@ -2,6 +2,9 @@ $Id$
 	
 	
 0.5.0
+	- implemented host copy option
+	- added host history display button
+	- added ping/traceroute support
 	- user account expiration implemented
 	- adduser now prompts for expiration date for new accounts
 	- adduser now suggests default password for new accounts
