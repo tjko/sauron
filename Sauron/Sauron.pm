@@ -8,6 +8,8 @@ require Exporter;
 use Sauron::Util;
 use strict;
 use vars qw($VERSION @ISA @EXPORT);
+use warnings;
+no warnings 'once';
 
 $VERSION = '$Id$ ';
 
@@ -18,6 +20,7 @@ $VERSION = '$Id$ ';
 	     logmsg
 	     sauron_version
 	    );
+
 
 
 sub sauron_version() {
@@ -138,7 +141,13 @@ sub logmsg($$) {
 
   $prog = $2 if ($prog =~ /^(.*\/)(.*)$/);
   return -1 unless ($logdir);
-  open(LOGFILE,">>$logdir/sauron.log") || return -2;
+  if ($type eq 'test') {
+    return -2 unless (-d $logdir);
+    return -3 unless (-w $logdir or -w "$logdir/sauron.log");
+    return 0;
+  }
+
+  open(LOGFILE,">>$logdir/sauron.log") || return -4;
   print LOGFILE localtime(time) . " " . $prog . "[$$]: [".lc($type)."] $msg\n";
   close(LOGFILE);
   return 0;
