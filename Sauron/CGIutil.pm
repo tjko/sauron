@@ -937,9 +937,10 @@ sub display_dialog($$$$$) {
 
 sub display_list($$$)
 {
-  my($header,$list,$mode) = @_;
-  my($i,$j,$cols);
+  my($header,$list,$offset) = @_;
+  my($i,$j,$cols,$val);
 
+  $offset = 0 unless ($offset > 0);
   $cols = $#{$header};
   print "<TABLE width=\"99%\" bgcolor=\"#ccccff\" cellspacing=1>\n",
         "<TR bgcolor=\"#aaaaff\">";
@@ -950,11 +951,11 @@ sub display_list($$$)
   for $i (0..$#{$list}) {
     print "<TR bgcolor=\"#eeeebf\">";
     for $j (0..$cols) {
+      $val = $$list[$i][$offset+$j];
       if ($$header[$j] =~ /Date/) {
-	$$list[$i][$j] = localtime($$list[$i][$j])." "
-	  if ($$list[$i][$j] > 0);
+	$val = localtime($val)." " if ($val > 0);
       }
-      print td(($$list[$i][$j] ? $$list[$i][$j] : '&nbsp;'));
+      print td(($val ne '' ? $val : '&nbsp;'));
     }
     print "</TR>\n";
   }
