@@ -339,6 +339,14 @@ foreach $host (keys %zonedata) {
 }
 
 
+# build domainname<-->id hash 
+$res=db_exec("SELECT id,domain FROM hosts WHERE zone=$zoneid;");
+die("Cannot get host list!") if ($res < 1);
+for $j (0..$res-1) {
+  $lastid=db_getvalue($j,0);
+  $hostname=db_getvalue($j,1);
+  $hostidhash{$hostname}=$lastid;
+}
 
 # hosts
 
@@ -348,6 +356,9 @@ foreach $host (keys %zonedata) {
   $rec = $zonedata{$host};
   if (@{$rec->{A}} > 0) {
     $hostname = remove_origin($host,$origin);
+    $lastid=$hostidhash{$hostname};
+    die("cannot find id for host $hostname in hostidhash!") if (! $lastid);
+
     $ether = "'$rec->{ETHER}'";
     $ether = 'NULL' if ($ether eq "''");
     $dhcplist = db_build_list_str($rec->{DHCP});
@@ -355,6 +366,13 @@ foreach $host (keys %zonedata) {
       $dhcplist='NULL'; 
     } else {
       $dhcplist="'{$dhcplist}'";
+      foreach $rtmp (@{$rec->{DHCP}}) {
+	next if ($rtmp =~ /^\s*$/);
+	$res=db_exec("INSERT INTO dhcp_entries (type,ref,dhcp) " .
+		     "VALUES(3,$lastid,'$rtmp');");
+	die("cannot insert dhcp_entry '$rtmp' for $hostname ($id)!") 
+	  if ($res < 0);
+      }    
     }
     $prlist=db_build_list_str($rec->{PRINTER});
     if ($prlist eq '') {
@@ -363,6 +381,13 @@ foreach $host (keys %zonedata) {
     } else {
       $prlist="'{$prlist}'";
       $prn='true';
+      foreach $rtmp (@{$rec->{PRINTER}}) {
+	next if ($rtmp =~ /^\s*$/);
+	$res=db_exec("INSERT INTO printer_entries (type,ref,printer) " .
+		     "VALUES(2,$lastid,'$rtmp');");
+	die("cannot insert printer_entry '$rtmp' for $hostname ($id)!") 
+	  if ($res < 0);
+      }    
     }
     $group=$grouphash{$rec->{GROUP}};
     $group=-1 if (! $group);
@@ -371,7 +396,8 @@ foreach $host (keys %zonedata) {
 
     $sqlstr = "UPDATE hosts SET ether=$ether, dhcp=$dhcplist, " .
               "printer=$prlist, grp=$group, prn=$prn " .
-              "WHERE zone=$zoneid AND domain='$hostname';";
+		"WHERE id=$lastid;";
+#              "WHERE zone=$zoneid AND domain='$hostname';";
 
     $str.=$sqlstr . "\n";
     $j++;
@@ -419,7 +445,7 @@ if (@plist > 0) {
 }
 
 
-exit;
+
 print "Commiting changes...\n";
 die("error commiting the changes!") 
   if (db_commit() < 0);

@@ -568,7 +568,7 @@ for ($i=0; $i <= $#zones; $i+=1) {
     foreach $rtmp (@{$tmplist}) {
       next unless $rtmp =~ /^\s*(\d+)\s+(\S+)\s*$/;
       $sqlstr="INSERT INTO mx_entries (type,ref,pri,mx) ".
-	"VALUES(2,$c,'$1','$2');";
+	"VALUES(3,$c,'$1','$2');";
       #print STDERR "MX insert:$sqlstr\n";
       die("cannot insert MX entries id=$c!") if (db_exec($sqlstr)<0);
     }

@@ -1,0 +1,10 @@
+
+
+
+
+REQUIREMENTS
+
+	- Perl 5 or better
+		- Net::Netmask module
+	- PostgresSQL (or add support to your favorite db yourself :)
+		- Pg perl module
