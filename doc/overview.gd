@@ -3,7 +3,7 @@ Storage
 	{ Format 1.31 }
 	{ GeneratedFrom TGD-version-2.01 }
 	{ WrittenBy tjko }
-	{ WrittenOn "Wed Feb 28 10:43:21 2001" }
+	{ WrittenOn "Thu Mar  1 23:51:38 2001" }
 }
 
 Document 
@@ -113,7 +113,15 @@ GenericNode 10
 
 Comment 54
 {
-	{ Name "Sauron:\rgeneral system layout" }
+	{ Name "Sauron: General System Layout" }
+	{ Annotation "" }
+	{ Parent 0 }
+	{ Index "" }
+}
+
+Comment 56
+{
+	{ Name "$Id$" }
 	{ Annotation "" }
 	{ Parent 0 }
 	{ Index "" }
@@ -241,7 +249,7 @@ Disk 22
 {
 	{ View 21 }
 	{ Subject 1 }
-	{ Position 130 330 }
+	{ Position 140 390 }
 	{ Size 96 74 }
 	{ Color "black" }
 	{ LineWidth 1 }
@@ -259,7 +267,7 @@ StickMan 23
 {
 	{ View 21 }
 	{ Subject 2 }
-	{ Position 400 100 }
+	{ Position 410 160 }
 	{ Size 38 76 }
 	{ Color "black" }
 	{ LineWidth 1 }
@@ -277,7 +285,7 @@ BuildingBlock 24
 {
 	{ View 21 }
 	{ Subject 4 }
-	{ Position 260 330 }
+	{ Position 270 390 }
 	{ Size 76 52 }
 	{ Color "black" }
 	{ LineWidth 1 }
@@ -295,7 +303,7 @@ Box 26
 {
 	{ View 21 }
 	{ Subject 3 }
-	{ Position 260 220 }
+	{ Position 270 280 }
 	{ Size 76 38 }
 	{ Color "black" }
 	{ LineWidth 1 }
@@ -319,9 +327,9 @@ Line 27
 	{ End1 FilledArrow }
 	{ End2 FilledArrow }
 	{ Points 2 }
-	{ Point 260 304 }
-	{ Point 260 239 }
-	{ NamePosition 246 271 }
+	{ Point 270 364 }
+	{ Point 270 299 }
+	{ NamePosition 256 331 }
 	{ Color "black" }
 	{ LineWidth 1 }
 	{ LineStyle Solid }
@@ -336,7 +344,7 @@ StickMan 28
 {
 	{ View 21 }
 	{ Subject 5 }
-	{ Position 260 100 }
+	{ Position 270 160 }
 	{ Size 38 76 }
 	{ Color "black" }
 	{ LineWidth 1 }
@@ -360,9 +368,9 @@ Line 29
 	{ End1 FilledArrow }
 	{ End2 FilledArrow }
 	{ Points 2 }
-	{ Point 222 239 }
-	{ Point 146 294 }
-	{ NamePosition 176 258 }
+	{ Point 248 299 }
+	{ Point 156 354 }
+	{ NamePosition 195 318 }
 	{ Color "black" }
 	{ LineWidth 1 }
 	{ LineStyle Dashed }
@@ -383,9 +391,9 @@ Line 30
 	{ End1 Empty }
 	{ End2 OpenArrow }
 	{ Points 2 }
-	{ Point 260 138 }
-	{ Point 260 201 }
-	{ NamePosition 246 169 }
+	{ Point 270 198 }
+	{ Point 270 261 }
+	{ NamePosition 256 229 }
 	{ Color "black" }
 	{ LineWidth 1 }
 	{ LineStyle Dotted }
@@ -400,7 +408,7 @@ NoteBox 31
 {
 	{ View 21 }
 	{ Subject 6 }
-	{ Position 380 570 }
+	{ Position 390 630 }
 	{ Size 90 38 }
 	{ Color "black" }
 	{ LineWidth 1 }
@@ -418,7 +426,7 @@ Box 32
 {
 	{ View 21 }
 	{ Subject 7 }
-	{ Position 400 220 }
+	{ Position 410 280 }
 	{ Size 76 38 }
 	{ Color "black" }
 	{ LineWidth 1 }
@@ -442,9 +450,9 @@ Line 33
 	{ End1 Empty }
 	{ End2 OpenArrow }
 	{ Points 2 }
-	{ Point 400 138 }
-	{ Point 400 201 }
-	{ NamePosition 386 169 }
+	{ Point 410 198 }
+	{ Point 410 261 }
+	{ NamePosition 396 229 }
 	{ Color "black" }
 	{ LineWidth 1 }
 	{ LineStyle Dotted }
@@ -465,9 +473,9 @@ Line 34
 	{ End1 FilledArrow }
 	{ End2 FilledArrow }
 	{ Points 2 }
-	{ Point 293 304 }
-	{ Point 362 239 }
-	{ NamePosition 318 264 }
+	{ Point 303 364 }
+	{ Point 386 299 }
+	{ NamePosition 336 324 }
 	{ Color "black" }
 	{ LineWidth 1 }
 	{ LineStyle Solid }
@@ -482,7 +490,7 @@ Box 35
 {
 	{ View 21 }
 	{ Subject 8 }
-	{ Position 260 450 }
+	{ Position 270 510 }
 	{ Size 76 38 }
 	{ Color "black" }
 	{ LineWidth 1 }
@@ -500,7 +508,7 @@ NoteBox 37
 {
 	{ View 21 }
 	{ Subject 9 }
-	{ Position 260 570 }
+	{ Position 270 630 }
 	{ Size 88 38 }
 	{ Color "black" }
 	{ LineWidth 1 }
@@ -518,7 +526,7 @@ NoteBox 38
 {
 	{ View 21 }
 	{ Subject 10 }
-	{ Position 140 570 }
+	{ Position 150 630 }
 	{ Size 90 40 }
 	{ Color "black" }
 	{ LineWidth 1 }
@@ -542,9 +550,9 @@ Line 47
 	{ End1 Empty }
 	{ End2 FilledArrow }
 	{ Points 2 }
-	{ Point 144 366 }
-	{ Point 222 431 }
-	{ NamePosition 191 391 }
+	{ Point 154 426 }
+	{ Point 250 491 }
+	{ NamePosition 209 450 }
 	{ Color "black" }
 	{ LineWidth 1 }
 	{ LineStyle Dashed }
@@ -565,9 +573,9 @@ Line 48
 	{ End1 FilledArrow }
 	{ End2 FilledArrow }
 	{ Points 2 }
-	{ Point 260 431 }
-	{ Point 260 356 }
-	{ NamePosition 246 393 }
+	{ Point 270 491 }
+	{ Point 270 416 }
+	{ NamePosition 256 453 }
 	{ Color "black" }
 	{ LineWidth 1 }
 	{ LineStyle Solid }
@@ -588,9 +596,9 @@ Line 49
 	{ End1 Empty }
 	{ End2 OpenArrow }
 	{ Points 2 }
-	{ Point 241 469 }
-	{ Point 160 550 }
-	{ NamePosition 191 502 }
+	{ Point 251 529 }
+	{ Point 170 610 }
+	{ NamePosition 201 562 }
 	{ Color "black" }
 	{ LineWidth 1 }
 	{ LineStyle Dotted }
@@ -611,9 +619,9 @@ Line 50
 	{ End1 Empty }
 	{ End2 OpenArrow }
 	{ Points 2 }
-	{ Point 260 469 }
-	{ Point 260 551 }
-	{ NamePosition 246 510 }
+	{ Point 270 529 }
+	{ Point 270 611 }
+	{ NamePosition 256 570 }
 	{ Color "black" }
 	{ LineWidth 1 }
 	{ LineStyle Dotted }
@@ -634,9 +642,9 @@ Line 51
 	{ End1 Empty }
 	{ End2 OpenArrow }
 	{ Points 2 }
-	{ Point 279 469 }
-	{ Point 361 551 }
-	{ NamePosition 329 503 }
+	{ Point 289 529 }
+	{ Point 371 611 }
+	{ NamePosition 339 563 }
 	{ Color "black" }
 	{ LineWidth 1 }
 	{ LineStyle Dotted }
@@ -657,9 +665,9 @@ Line 53
 	{ End1 Empty }
 	{ End2 OpenArrow }
 	{ Points 2 }
-	{ Point 279 116 }
-	{ Point 378 201 }
-	{ NamePosition 337 151 }
+	{ Point 289 176 }
+	{ Point 388 261 }
+	{ NamePosition 347 211 }
 	{ Color "black" }
 	{ LineWidth 1 }
 	{ LineStyle Dotted }
@@ -680,9 +688,9 @@ Line 25
 	{ End1 FilledArrow }
 	{ End2 FilledArrow }
 	{ Points 2 }
-	{ Point 178 330 }
-	{ Point 222 330 }
-	{ NamePosition 200 320 }
+	{ Point 188 390 }
+	{ Point 232 390 }
+	{ NamePosition 210 380 }
 	{ Color "black" }
 	{ LineWidth 1 }
 	{ LineStyle Solid }
@@ -697,15 +705,33 @@ TextBox 55
 {
 	{ View 21 }
 	{ Subject 54 }
-	{ Position 130 130 }
-	{ Size 113 28 }
+	{ Position 160 50 }
+	{ Size 192 20 }
 	{ Color "black" }
 	{ LineWidth 1 }
 	{ LineStyle Invisible }
 	{ FillStyle Unfilled }
 	{ FillColor "white" }
 	{ FixedName False }
-	{ Font "-*-helvetica-medium-r-normal--12*" }
+	{ Font "-*-helvetica-medium-r-normal--14*" }
+	{ TextAlignment Center }
+	{ TextColor "black" }
+	{ NameUnderlined False }
+}
+
+TextBox 57
+{
+	{ View 21 }
+	{ Subject 56 }
+	{ Position 60 750 }
+	{ Size 24 20 }
+	{ Color "black" }
+	{ LineWidth 1 }
+	{ LineStyle Invisible }
+	{ FillStyle Unfilled }
+	{ FillColor "white" }
+	{ FixedName False }
+	{ Font "-*-helvetica-medium-r-normal--10*" }
 	{ TextAlignment Center }
 	{ TextColor "black" }
 	{ NameUnderlined False }
