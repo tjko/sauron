@@ -227,10 +227,10 @@
           For example, to subscribe <email>sauron-users@lists.jyu.fi</>
           you would need to send following empty e-mail:
           </para>
-	  <programlisting>
+	  <screen>
            To: sauron-users-request@lists.jyu.fi
            Subject: subscribe
-          </programlisting>
+          </screen>
 	 </informalexample>
       </para>
     </section>
@@ -286,7 +286,8 @@
           <listitem><para>
             Perl modules (these can be found from CPAN):
             <itemizedlist>
-	      <listitem><para>CGI v2.752 or later (older versions should work fine too)</></>
+	      <listitem><para>CGI v2.752 or later 
+                              (older versions should work fine too)</></>
 	      <listitem><para>Digest::MD5 v2.20 or later</></>
 	      <listitem><para>Net::Netmask v1.9002 or later</></>
 	      <listitem><para>Pg v1.9.0 or later (PostgreSQL interface)</></>
@@ -345,10 +346,14 @@
         
         <para>
         Next step is to install Sauron from the sources. By default
-        sauron program files will be installed under /usr/local/sauron,
-        and configuration files under /usr/local/etc/sauron. If you
+        sauron program files will be installed under 
+        <filename class=directory>/usr/local/sauron</>,
+        and configuration files under 
+        <filename class=directory>/usr/local/etc/sauron</>. If you
         want to install sauron under some other directories you need
-        to specify --prefix and --sysconfdie arguments when invoking 
+        to specify 
+        <parameter class=command>--prefix</> and
+        <parameter class=command>--sysconfdir</> arguments when invoking 
         configure script. To install Sauron under default directories
         issue following commands:
         <screen>
@@ -375,7 +380,219 @@
     </section>
 
     <section>
-      <title>Initial Configuration</>
+      <title>Sauron Configuration</>
+      <para>
+      Sauron configuration settings are stored in <filename>config</>
+      file, which is usually located in
+      <filename class=directory>/usr/local/etc/sauron/</>
+      or in <filename class=directory>/etc/sauron/</> (if Sauron
+      is installed from RPM). This configuration file is parsed
+      actually as a Perl code, so it is possible to set the configuration
+      variables conditionally if desired.
+      </para>
+      <para>
+      Configuration file contains common configuration settings for
+      all Sauron components (except browser.cgi which uses it's own
+      configuration file <filename>config-browser</>). Here we cover
+      only the basic settings that you need to set before using Sauron.
+      For more advanced settings, see the configuration file where 
+      all the advanced configuration options are documented.
+
+      <variablelist><title>General Configuration Options</>
+	<varlistentry><term>DB_CONNECT</>
+         <listitem><para>
+           Database connection parameters string. This defines the database
+           to connect to, and optionally database username and password
+           to use. See <xref linkend="db-config-sec">
+           how to setup a database for Sauron. 
+         </para>
+         <para>
+           To setup connection to a database named <database>sauron</>
+           in localhost, you might vant to set this variable to:
+           <screen>
+           "dbname=sauron user=foo password=bar"
+           </screen>
+           Or, if you're connecting to a database at remote computer:
+           <screen>
+           "host=remotehost port=5432 dbname=sauron user=foo password=bar"
+           </screen>
+         </para>
+         <para>
+           <table frame=all><title>Database Connection String Paramaters</>
+             <tgroup cols=3 align=left colsep=1 rowsep=1>
+             <colspec colname=c1>
+             <colspec colname=c2>
+             <colspec colname=c3>
+	     <thead>
+             <row>
+              <entry>Parameter</>
+              <entry>Default value</>
+              <entry>Description</>
+             </row>
+             </thead>
+             <tbody>
+             <row>
+              <entry>host</><entry>localhost</>
+              <entry>Hostname of the database server.</>
+             </row>
+             <row>
+              <entry>port</><entry>5432</>
+              <entry>Port to connect on database server.</>
+             </row>
+             <row>
+              <entry>dbname</><entry>current userid</>
+              <entry>Database name to connect.</>
+             </row>
+             <row>
+              <entry>user</><entry>current userid</>
+              <entry>Database username.</>
+             </row>
+             <row>
+              <entry>password</><entry></>
+              <entry>Password.</>
+             </row>
+             </tbody>
+             </tgroup>
+           </table>
+		     
+         </para></listitem>
+        </varlistentry>
+
+	<varlistentry><term>PROG_DIR</>
+         <listitem><para>
+           Base directory for Sauron installation. This should be
+           set to the directory where program files where installed.
+           Usually this is either 
+           <filename class=directory>/usr/local/sauron</> or
+           <filename class=directory>/opt/sauron</> (if installed from RPM).
+         </para></listitem>
+        </varlistentry>
+
+	<varlistentry><term>LOG_DIR</>
+         <listitem><para>
+           Directory for log files. Currently only the web interface
+           (<filename>sauron.cgi</>) uses this directory to write to 
+           <filename>sauron.log</> file in this directory. 
+           Remember to make sure that the <filename>saurno.cgi</> has
+           permissions to write into this file.
+         </para></listitem>
+        </varlistentry>
+
+	<varlistentry><term>SERVER_ID</>
+         <listitem><para>
+           Unique identifier for this Sauron installation. This identifier
+           is used by the web interface to generate unique cookies names,
+           so you can access several different Sauron web interfaces 
+           simulteneously from your browser. This identifier is also displayed
+           by the web interface, to help you to identify which Sauron web
+           interface you're currently connnected to. 
+         </para></listitem>
+        </varlistentry>
+
+      </variablelist>
+      </para>
+    </section>
+
+    <section id="db-config-sec">
+      <title>Database Configuration</>
+      <para>
+      To use Sauron, you need to create a database for it in PostgreSQL.
+      Unless you plan on restoring existing Sauron database from a database
+      dump, you also need to setup necessary tables for Sauron to use.
+      </para>
+
+      <section>
+      <title>Creating database for Sauron</>
+      <para>
+        Choose name for your database (for example: <filename>sauron</>)
+        and create empty databse in PostgreSQL using <application>createdb</>
+        program.
+        <screen>
+        createdb sauron
+        </screen>
+      </para>
+      <para>
+        After creating the database, you may either restore existing Sauron
+        database dump or start from <quote>scratch</> and create necessary
+        tables for Sauron as described in following Sections.
+      </para>
+      </section>
+
+      <section>
+      <title>Initializing Database</>
+      <para>
+        Before using sauron, you need to initialized the database. For this
+        there is <application>createtables</> utility, that is included
+        with Sauron. To initialize the database, simply run following command
+        in Sauron program directory:
+        <screen>
+        ./createtables
+        </screen>
+        This command will create all the necessary tables needed by Sauron.
+        You can check that everything worked by issuing the following command:
+        <screen>
+        ./status
+        </screen>
+        This should produce output similar to following showing that the
+        database connection works:
+        <screen>
+Sauron v0.5.0 status
+
+Database connection:   OK
+Database version:      1.0
+CGI interface:         Enabled
+        </screen>
+      </para>
+      </section>
+
+      <section>
+      <title>Initializing Global Tables</>
+      <para>
+        Sauron has several global tables that contain data that is used
+        by all servers stored in a Sauron database. These tables contain
+        a table (<filename>ether_info</>) that contains mappings of
+        <acronym>OUI</>'s to Manufacturers which is used to display
+        the manufacturers of <acronym>NICs</> based on the
+        <hardware>Ethernet</> <acronym>MAC</> address.
+        There is also a table (<filename>root_servers</>) that contains
+        global (default) root server information, and optionally also
+        server specific root server information.
+      </para>
+ 
+      <para>
+        To populate OUI (<filename>ether_info</>) table with the
+        included files, issue following commands in the Sauron top-level
+        directory:
+        <screen>
+        ./import-ethers contrib/Ethernet.txt
+        ./import-ethers --force contrib/additional-ether-codes.txt
+        </screen>
+        You may also want to download <acronym>IEEE</>'s 
+        up to date public list of OUIs from 
+        <ulink url="http://standards.ieee.org/regauth/oui/index.shtml">
+          <citetitle>IEEE's web site</></ulink>, and install it as follows:
+        <screen>
+        ./import-ethers oui.txt
+        </screen>
+      </para>
+ 
+      <para>
+        You should also add default root servers into <filename>root_servers</>
+        table. This can be done as follows:
+        <screen>
+        ./import-roots default contrib/named.root
+        </screen>
+        NOTE! remember to check for newer version of this file at
+        <ulink url="ftp://ftp.rs.internic.net/domain/">
+          <citetitle>ftp.rs.internic.net</>
+        </ulink>.
+      </para>
+      </section>
+
+    </section>
+
+    <section>
+      <title>WWW Server Configuration</>
       <para>
       
       </para>
