@@ -1,4 +1,7 @@
-# configuration
+# Sauron sampleconfiguration
+#
+# $Id$
+#
 $VER = "0.1a";
 
 $LOG_DIR = "/tmp/";
@@ -12,6 +15,16 @@ $DB_CONNECT = "host=ns1.jyu.fi port=5432 dbname=sauron user=tjko password=farsid
 
 $USER_TIMEOUT = 3600;
 
+
+#########################################################################
+# DNS browser
+
+$BROWSER_CONF = { foo=>'servername,zonename', 
+	          foo2=>'server1,zone2.org' };
+
+
+#########################################################################
+# misc
 
 $LOOPBACK_NET = "127.0.0.0/24";
 $LOOPBACK_ZONE = "loopback.";
