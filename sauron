@@ -838,6 +838,10 @@ sub make_dhcp() {
 	   "WHERE z.server=$serverid AND h.zone=z.id AND a.host=h.id " .
 	   " AND h.ether NOTNULL;",\@q);
   for $i (0..$#q) {
+    unless ($q[$i][0] =~ /^[0-9A-F]{12}$/) {
+      error("Invalid ethernet address ($q[$i][0]) skipped");
+      next;
+    }
     $etherhash{$q[$i][0]}=[] unless ($etherhash{$q[$i][0]});
     push @{$etherhash{$q[$i][0]}}, $q[$i][1];
   }
@@ -978,7 +982,7 @@ sub make_dhcp() {
 	      #$dhcp=db_decode_list_str($ghosts[$k][5]);
 	      $dhcpid=$ghosts[$k][5];
 	      if ($ethers{$ether}>0) {
-		#error("dublicate interface $ip for $ether ($host)");
+		error("dublicate interface $ip for $ether ($host)");
 		next;
 	      }
 	      $ethers{$ether}++;

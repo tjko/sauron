@@ -19,6 +19,9 @@ CREATE TABLE servers (
 					       complete named.conf */
 	no_roots	BOOL DEFAULT false, /* if true, no root server (hint)
 					       zone entry is generated */
+	dhcp_mode	INT DEFAULT 1, /* DHCP subnet map creation mode:
+						0 = use VLANs,
+						1 = use networks */
 
 	/* named.conf options...more to be added as needed... */
 	directory	TEXT, /* base directory for named (optional) */

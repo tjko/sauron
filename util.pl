@@ -189,6 +189,12 @@ sub pwd_check($$) {
   my($password,$pwd) = @_;
   my($salt,$t);
 
+  if ($pwd =~ /^CRYPT:(\S{13})$/) {
+    $pwd=$1;
+    return -1 if (crypt($password,$pwd) ne $pwd);
+    return 0;
+  }
+
   $salt=$1 if ($pwd =~ /^MD5:(\S+):(\S+)$/);
   return -2 if ($salt eq '');
   $t=pwd_crypt($password,$salt);
