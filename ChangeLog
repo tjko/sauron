@@ -1,6 +1,8 @@
 $Id$
 
 0.7.1beta
+	- CGI interface: added enable/disable buttons for easy
+	  togling between host and host reservation
 	- CGI interface: added ability to search by date(ranges)
 	  (by host creation/modification and last dhcp lease)
 	- CGI interface: now advertises "Save Defaults" command to

@@ -497,6 +497,34 @@ sub menu_handler {
     }
     return;
   }
+  elsif ($sub eq 'Disable') {
+    return unless ($id > 0);
+    goto show_host_record if (check_perms('delhost',$host{domain}));
+    if (update_host({id=>$id,type=>101}) < 0) {
+      alert2("Failed to update host record (id=$id)");
+    } else {
+      update_history($state->{uid},$state->{sid},1,
+		    "DISABLE: $host_types{$host{type}} ",
+		    "domain: $host{domain}, ip:$host{ip}[1][1], " .
+		    "ether: $host{ether}",$host{id});
+      print h3("Host disabled (converted to a host reservation)");
+    }
+    goto show_host_record;
+  }
+#  elsif ($sub eq 'Enable') {
+#    return unless ($id > 0);
+#    goto show_host_record if (check_perms('host',$host{domain}));
+#    if (update_host({id=>$id,type=>1}) < 0) {
+#      alert2("Failed to update host record (id=$id)");
+#    } else {
+#      update_history($state->{uid},$state->{sid},1,
+#		    "ENABLE: $host_types{$host{type}} ",
+#		    "domain: $host{domain}, ip:$host{ip}[1][1], " .
+#		    "ether: $host{ether}",$host{id});
+#      print h3("Host enabled (converted from a host reservation)");
+#    }
+#    goto show_host_record;
+#  }
   elsif ($sub eq 'Alias') { # add static alias
     if ($id > 0) {
       $data{alias}=$id;
@@ -614,7 +642,8 @@ sub menu_handler {
     display_form(\%host,\%host_form);
     return;
   }
-  elsif ($sub eq 'Edit') {
+  elsif ($sub eq 'Edit' || $sub eq 'Enable') {
+    $host{type}=1 if ($sub eq 'Enable');
     return unless ($id > 0);
     goto show_host_record if (check_perms('host',$host{domain}));
     my $hform=(check_perms('zone','RWX',1) ?
@@ -682,7 +711,8 @@ sub menu_handler {
 	      alert2(db_lasterrormsg());
 	    } else {
 	      update_history($state->{uid},$state->{sid},1,
-			    "EDIT: $host_types{$host{type}} ",
+			     ($sub eq 'Enable' ? 'ENABLE' : 'EDIT') .
+			     ": $host_types{$host{type}} ",
 			     ($host{domain} eq $oldhost{domain} ?
 			      "domain: $host{domain} " :
 			      "domain: $oldhost{domain} --> $host{domain} ") .
@@ -1311,6 +1341,8 @@ sub menu_handler {
 	    " ";
       print submit(-name=>'sub',-value=>'Move'), " " if ($host{type} == 1);
       print submit(-name=>'sub',-value=>'Alias'), " " if ($host{type} == 1);
+      print submit(-name=>'sub',-value=>'Disable'), " " if ($host{type} == 1);
+      print submit(-name=>'sub',-value=>'Enable'), " " if ($host{type} == 101);
     }
     print end_form,"<br><br>";
     return;
