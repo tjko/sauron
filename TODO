@@ -6,7 +6,6 @@ general:
 	- IPv6 support
         - add database format version check in db_connect{,2}
 	- change database routines to be less PostgreSQL dependant
-	- support for "DHCP only" entries without IP
 	- add DNSSEC (tsig) support
 
 import:
