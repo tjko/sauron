@@ -973,6 +973,15 @@ sub copy_zone($$$$) {
 ############################################################################
 # hosts table functions
 
+sub get_host_id($$) {
+  my($zoneid,$domain)=@_;
+  my(@q);
+
+  $domain=db_encode_str($domain);
+  db_query("SELECT id FROM hosts WHERE zone=$zoneid AND domain=$domain",\@q);
+  return ($q[0][0] > 0 ? $q[0][0] : -1);
+}
+
 sub get_host($$) {
   my ($id,$rec) = @_;
   my ($res,$t,$wrec,$mrec,%h,@q);

@@ -187,7 +187,7 @@ sub process_zonefile($$$$) {
     } 
     elsif ($type eq 'SRV') {
       die("invalid SRV record: $fline") 
-	unless ($line[0]=~/^\d+$/ && $line[1]=~/^\d$/ && $line[2]=~/^\d$+/
+	unless ($line[0]=~/^\d+$/ && $line[1]=~/^\d+$/ && $line[2]=~/^\d$+/
 		&& $line[3] ne '');
       push @{$rec->{SRV}}, "$line[0] $line[1] $line[2] $line[3]";
     } 

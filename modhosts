@@ -40,7 +40,7 @@ sub fatal($) {
 
 $result = GetOptions("help|h","cidr=s","name=s","move=s","delete",
 		     "info=s","rename=s","commit","excludeip=s",
-		     "excludename=s");
+		     "excludename=s","type=s");
 
 if ($opt_help || @ARGV < 2) {
   print "syntax: $0 <server> <zone> [options]\n\n",
@@ -48,6 +48,7 @@ if ($opt_help || @ARGV < 2) {
 	"\t--cidr=<cidr>\t\tselect hosts within CIDR block\n",
 	"\t--name=<regexp>\t\tselect hostnames matching the regexp\n",
 	"\t--info=<regexp>\t\tselect host with matching info\n\n",
+	"\t--type=<type>\t\tselect only hosts of this type\n",
 	"\t--delete\t\tdelete matching hosts\n",
 	"\t--move=<CIDR>,<IP>\tmove hosts to given net starting from IP\n",
 	"\t--rename=<regexp>\trename hosts with given substitution 'regexp'\n",
@@ -92,6 +93,17 @@ if ($opt_cidr) {
 }
 
 
+if ($opt_type) {
+  $opt_type=lc($opt_type);
+  if ($opt_type eq 'host') { $type=1; }
+  elsif ($opt_type eq 'cname') { $type=4; }
+  elsif ($opt_type eq 'arec') { $type=7; }
+  elsif ($opt_type eq 'srv') { $type=8; }
+  else {
+    fatal("unknown type for option --type");
+  }
+  $type = " AND h.type = $type ";
+}
 
 if ($opt_name) {
   $name=" AND h.domain ~* '$opt_name' ";
@@ -136,10 +148,10 @@ if ($opt_excludeip) {
 
 
 $sql="SELECT h.id,h.domain,h.type $cidr_f FROM hosts h $cidr_t " .
-     "WHERE h.zone=$zoneid $cidr_r $cidr $name $info " .
+     "WHERE h.zone=$zoneid $cidr_r $cidr $name $info $type " .
      "ORDER BY h.domain;";
 
-#print "$sql\n";
+print "$sql\n" if ($opt_verbose);
 
 db_query($sql,\@q);
 print db_errormsg() . "\n" if (db_errormsg());

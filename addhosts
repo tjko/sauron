@@ -68,6 +68,7 @@ $server=$ARGV[0];
 $zone=$ARGV[1];
 $filename=$ARGV[2];
 $gid=-1;
+$noreverse = ($opt_noreverse ? 1 : 0);
 
 $serverid=get_server_id($server);
 fatal("cannot find server '$server'") unless ($serverid > 0);
@@ -136,13 +137,14 @@ foreach $domain (sort keys %zonedata) {
     $id=-1;
   }
 
-  unless (@{$rec->{A}} > 0 || $rec->{CNAME}) {
+  unless (@{$rec->{A}} > 0 || $rec->{CNAME} || @{$rec->{SRV}} > 0) {
     print "unknown record type SKIPPED!\n";
   }
 
   unless ($id > 0) {
     undef %host;
     $new_type = ($rec->{CNAME} ? 4 : 1);
+    $new_type = 8 if (@{$rec->{SRV}} > 0);
     $host{domain}=$host;
     $host{type}=$new_type;
     $host{zone}=$zoneid;
@@ -160,7 +162,7 @@ foreach $domain (sort keys %zonedata) {
   if ($host{type}==1) {
     for $i (0..$#{$a}) {
       print " IP: $$a[$i]\n" if ($opt_verbose);
-      push @{$host{ip}}, [0,$$a[$i],'t','t',2];
+      push @{$host{ip}}, [0,$$a[$i],($noreverse ? 'f':'t'),'t',2];
     }
   }
   elsif ($host{type}==9) {
@@ -170,9 +172,19 @@ foreach $domain (sort keys %zonedata) {
     }
   }
   elsif ($host{type}==4) {
-    $host{cname}=-1;
-    $host{cname_txt}=$rec->{CNAME};
-    print " CNAME: $rec->{CNAME}\n";
+    $aliasname=remove_origin($rec->{CNAME},$origin);
+    $aliasid=get_host_id($zoneid,$aliasname);
+    print " CNAME: $rec->{CNAME} ($aliasname) $aliasid \n";
+    $host{alias}=($aliasid > 0 ? $aliasid : -1);
+    $host{cname_txt}=$rec->{CNAME} unless ($aliasid > 0)
+  }
+  elsif ($host{type}==8) {
+    $a=$rec->{SRV};
+    for $i (0..$#{$a}) {
+      @l = split (/\s+/,$$a[$i]);
+      print "SRV: $l[0] $l[1] $l[2] $l[3]\n" if ($opt_verbose);
+      push @{$host{srv_l}}, [0, $l[0],$l[1],$l[2],$l[3],'',2];
+    }
   }
 
   if ($rec->{INFO}) {
@@ -191,8 +203,10 @@ foreach $domain (sort keys %zonedata) {
   $host{info}=$infof[3] if ($infof[3]);
   $host{grp}=$gid;
 
-  fatal("cannot update host (id=$id) $res") if (($res=update_host(\%host))<0);
-
+  if (($res=update_host(\%host))<0) {
+    print db_errormsg()."\n";
+    fatal("cannot update host (id=$id) $res") 
+  }
 }
 
 
