@@ -534,6 +534,8 @@ sub menu_handler {
     print submit(-name=>'sub',-value=>'Ping Sweep')
             unless (check_perms('level',$main::ALEVEL_NMAP,1));
     print hidden('net_id',$id),end_form,"</TD><TD>";
+    my $old_menu = param('menu');
+    my $old_sub = param('sub');
     param('menu','hosts');
     param('sub','browse');
     print startform(-method=>'GET',-action=>$selfurl),
@@ -543,6 +545,8 @@ sub menu_handler {
 	  hidden('bh_net',$net{net}),hidden('bh_submit','Search'),
           submit(-name=>'foobar',-value=>'Show Hosts'),end_form,
 	  "</TD></TR></TABLE>";
+    param('menu',$old_menu);
+    param('sub',$old_sub);
     return;
   }
 
