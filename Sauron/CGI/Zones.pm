@@ -10,6 +10,7 @@ use Sauron::DB;
 use Sauron::CGIutil;
 use Sauron::BackEnd;
 use Sauron::Sauron;
+use Sauron::Util;
 use Sauron::CGI::Utils;
 use strict;
 use vars qw($VERSION @ISA @EXPORT);
