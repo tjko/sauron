@@ -4,7 +4,7 @@
 # $Id$
 #
 use Digest::MD5;
-use strict;
+#use strict;
 
 # returns nonzero in case given domainname is valid
 sub valid_domainname($) {
@@ -56,8 +56,8 @@ sub arpa2cidr($) {
 
   $s=4;
   for($i=4;$i>0;$i--) {
-    next if ($$i eq '');
-    $cidr.=$$i;
+    next if (${$i} eq '');
+    $cidr.=${$i};
     $s--;
   }
   for($i=$s;$i>0;$i--) {

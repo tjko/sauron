@@ -88,7 +88,7 @@ sub update_array_field($$$$$$) {
   return -1 unless (ref($rec) eq 'HASH');
   return -2 unless ($$rec{'id'} > 0);
   $list=$$rec{$keyname};
-  return -3 unless ($list);
+  return 0 unless ($list);
   @f=split(",",$fields);
 
   for $i (1..$#{$list}) {

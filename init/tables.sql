@@ -20,10 +20,12 @@ CREATE TABLE servers (
        id	   SERIAL PRIMARY KEY,
        name	   TEXT UNIQUE NOT NULL CHECK(name <> ''),
 
+       zones_only  BOOL DEFAULT false,
+       no_roots	   BOOL DEFAULT false,
+
 	/* named.conf options...more to be added as needed... */
        directory      TEXT,
        named_ca	      TEXT,
-       allow_transfer CIDR[],
        pzone_path     TEXT DEFAULT '',
        szone_path     TEXT DEFAULT 'NS2/', 
 
@@ -31,10 +33,10 @@ CREATE TABLE servers (
        hostmaster     TEXT,  /* hostmaster name for sibling zone SOAs
 	                        unless overided in zone */
 
-       dhcp 	      TEXT[],
        comment	      TEXT
 	
        /* allow_transfer (cird_entries) */
+       /* dhcp */
 ) INHERITS(pokemon);
 
 
@@ -62,15 +64,9 @@ CREATE TABLE zones ( /* zone table; contains zones */
        expire	   INT4 DEFAULT 604800,
        minimum	   INT4 DEFAULT 86400,
        ttl	   INT4 DEFAULT -1,
-       ns	   TEXT[],
-       mx	   TEXT[],
-       txt	   TEXT[],
-       dhcp	   TEXT[], /* entries to include for each host in zone */
        comment	   TEXT,
 
-       reverses	   INT4[],  /* not really needed? */
        reversenet  CIDR,
-       masters	   CIDR[], /* used on slave zones */
        parent	   INT4 DEFAULT -1,
 
        /* allow_update (cidr_entries) */
@@ -78,6 +74,7 @@ CREATE TABLE zones ( /* zone table; contains zones */
        /* ns (ns_entries) */
        /* mx (mx_entries) */
        /* txt (txt_entries) */
+       /* dhcp (dhcp_entries) */
 
        CONSTRAINT  zones_key PRIMARY KEY (name,server)
 ) INHERITS(pokemon);
@@ -140,11 +137,7 @@ CREATE TABLE hosts (
        hinfo_hw	   TEXT,
        hinfo_sw	   TEXT,
        wks	   INT4 DEFAULT -1, /* ptr to rr_wks table entry */
-       wks_txt	   TEXT[],
        mx	   INT4 DEFAULT -1, /* ptr to rr_mx table entry */
-       mx_txt	   TEXT[],
-       ns	   TEXT[],
-       txt	   TEXT[],
        rp_mbox	   TEXT DEFAULT '.',
        rp_txt	   TEXT DEFAULT '.',
        router      INT4 DEFAULT 0, /* router if > 0, also router priority
@@ -153,8 +146,6 @@ CREATE TABLE hosts (
 		
        ether	   CHAR(12),
        info	   TEXT,
-       dhcp	   TEXT[],
-       printer	   TEXT[],
 			       
        comment	   TEXT,
 
@@ -271,7 +262,7 @@ CREATE TABLE mx_entries (
 	id	    SERIAL PRIMARY KEY,
 	type        INT4 NOT NULL, /* 1=zone,2=host,3=rr_mx */
         ref         INT4 NOT NULL, /* ptr to table speciefied by type field */
-        pri	    INT4 NOT NULL CHECK (pri > 0),
+        pri	    INT4 NOT NULL CHECK (pri >= 0),
 	mx	    TEXT,
         comment     TEXT
 );

@@ -70,7 +70,7 @@ while (<NAMEDCONF>) {
 	next;
     }
 
-    if ( /^\s*zone \"(.*?)\"( in)?\s*{/ ) {
+    if ( /^\s*zone\s+\"(.*?)\"(\s+(in|hs|hesiod|chaos))?\s*{/ ) {
 	#print "begin 'zone $1'\n";
 	push @block, "zone $1";
 	push @zones, $1;
@@ -93,6 +93,8 @@ while (<NAMEDCONF>) {
    $prev = "";
    $prev = $block[$#block -1] if ($#block > 0);			       
 
+   $line=$_;
+   $line =~ s/(^\s+|;\s*$)//g;			
 		       
    if ($cur =~ "options")  {
        if ( /directory\s+\"(.*?)\"\s*;/ ) {
@@ -102,10 +104,9 @@ while (<NAMEDCONF>) {
        }
    }
    if ($prev =~ "options") {
-       if ($cur =~ "allow-transfer" && 
-	   /(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/ ) {
-	   #print "allow transfer ip=$1\n";
-	   push @allow_transfer, $1;
+       if ($cur =~ "allow-transfer" && ($ip=is_cidr($line)) ) {
+	   #print "allow transfer ip=$ip\n";
+	   push @allow_transfer, $ip;
 	   next;
        }
    }
@@ -129,9 +130,9 @@ while (<NAMEDCONF>) {
 	   next;
        }
    }
-   if ($prev =~ /^zone (.*)$/) {
+   if ($prev =~ /^zone\s+(.*)$/) {
        $curzone=$1;
-       if ($cur =~ "masters" && ($ip=is_cidr($_))) {
+       if ($cur =~ "masters" && ($ip=is_cidr($line))) {
 	   #print "master ($curzone) ip=$ip\n";
 	   $ref = $masters{$curzone};
 	   unless ($ref) {
@@ -141,7 +142,7 @@ while (<NAMEDCONF>) {
 	   push @{$ref}, $ip;
 	   next;
        }
-       if ($cur =~ "allow-update" && ($ip=is_cidr($_))) {
+       if ($cur =~ "allow-update" && ($ip=is_cidr($line))) {
 	   #print "allow-update ($curzone) ip=$ip\n";
 	   $ref = $allowupdate{$curzone};
 	   unless ($ref) {
@@ -165,7 +166,7 @@ print "Found $c zones (rootserverfile=$named_ca)\n";
 die("no directory option in named.conf!") if ($directory eq '');
 chdir($directory) || die ("cannot chdir to: $directory");
 
-
+db_begin();
 
 ##################################
 # create server record
@@ -175,14 +176,10 @@ $sqlstr = "INSERT INTO servers " .
       "VALUES ('$servername','imported from named.conf',".
       "'$named_ca','$directory','$user','$user');";
 
-
-$res = db_exec($sqlstr);
-
 die("Cannot create server record '$servername' (already exists?)")
-	 if ($res < 0);
+	 if (db_exec($sqlstr) < 0);
 
 $res = db_exec("SELECT id,name FROM servers WHERE name='$servername';");
-
 die("unexpected error: Cannot get server record id!") if ($res != 1);
 
 $serverid = db_getvalue(0,0);
@@ -200,12 +197,6 @@ for($i=0; $i <= $#allow_transfer; $i+=1) {
 		  "(type,ref,ip) VALUES(1,$serverid,'$ip');"));
   }
 }
-
-$res = db_exec(        # VOI POISTAA!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-	    "UPDATE servers SET allow_transfer='{$arr}' WHERE id=$serverid;");
-
-die ("cannot update allow_transfer column for record id=$serverid") 
-	 if ($res<0);
 
 $serverid_save = $serverid;
 
@@ -292,9 +283,6 @@ for ($i=0; $i <= $#zones; $i+=1) {
       die("cannot insert master IPs id=$zoneid!") if (db_exec($sqlstr)<0);
     }
 
-    $masters_list=db_encode_list_str($masters{$zones[$i]}); # voi POISTAA!!!!
-    $sqlstr="UPDATE zones SET masters=$masters_list WHERE id=$zoneid;";
-    die("cannot update zone record id=$zoneid!") if (db_exec($sqlstr)<0);
     next;
   }
 
@@ -320,24 +308,22 @@ for ($i=0; $i <= $#zones; $i+=1) {
   $mailbox = $soa[1];
   $hostmaster = $mailbox if (! $hostmaster );
   $primaryservername = $soa[0] if ( ! $primaryservername );
-  $nslist = db_build_list_str($rec->{NS}); # voi POISTA!!!!!!!
+
   foreach $rtmp (@{$rec->{NS}}) {
     $sqlstr="INSERT INTO ns_entries (type,ref,ns) ".
       "VALUES(1,$zoneid,'$rtmp');";
     die("cannot insert NS entries id=$zoneid!") if (db_exec($sqlstr)<0);
   }
   if ($rev eq 'true') {
-    $mxlist='';
-    $txtlist='';
+    # do nothing
   } else {
-    $mxlist = db_build_list_str($rec->{MX}); # voi POISTAA!!!!!!
     foreach $rtmp (@{$rec->{MX}}) {
       next unless $rtmp =~ /^\s*(\d+)\s+(\S+)\s*$/;
       $sqlstr="INSERT INTO mx_entries (type,ref,pri,mx) ".
 	"VALUES(1,$zoneid,$1,'$2');";
       die("cannot insert MX entries id=$zoneid!") if (db_exec($sqlstr)<0);
     }
-    $txtlist = db_build_list_str($rec->{TXT}); # voi POISTA!!!!!!!
+
     foreach $rtmp (@{$rec->{TXT}}) {
       $sqlstr="INSERT INTO txt_entries (type,ref,txt) ".
 	"VALUES(1,$zoneid,'$rtmp');";
@@ -353,8 +339,7 @@ for ($i=0; $i <= $#zones; $i+=1) {
   $sqlstr = "UPDATE zones SET " .
             "class='$class', ttl=$ttl, hostmaster=$mailbox," .
 	    "serial=$soa[2], refresh=$soa[3], retry=$soa[4], expire=$soa[5]," .
-	    "minimum=$soa[6], ns='{$nslist}', mx='{$mxlist}'," .
-	    "txt='{$txtlist}' " .
+	    "minimum=$soa[6] " .
 	    " WHERE id=$zoneid;";
 
   $res = db_exec($sqlstr);
@@ -368,12 +353,11 @@ for ($i=0; $i <= $#zones; $i+=1) {
     #handle reverse zone
 
     # add subnet delegations
-    db_begin();
+    #db_begin();
     foreach $host (keys %zonedata) {
       $rec = $zonedata{$host};
       next if ($rec->{CNAME} eq '' && @{$rec->{NS}}<1);
 
-      $nslist = db_build_list_str($rec->{NS});
       $host2=remove_origin($host,$origin);
       $cname="'$rec->{CNAME}'";
       $cname='NULL' if ($cname eq '');
@@ -381,11 +365,9 @@ for ($i=0; $i <= $#zones; $i+=1) {
       $hosttype=2 unless ($nslist eq '');
 
       $sqlstr = "INSERT INTO hosts " .
-	"(cuser,muser,zone,type,domain,class,ns,cname_txt) " .
+	"(cuser,muser,zone,type,domain,class,cname_txt) " .
 	"VALUES(" .
-	"'$user','$user',$zoneid,$hosttype,'$host2','$class'," .
-	"'{$nslist}',$cname" .
-	");";
+	"'$user','$user',$zoneid,$hosttype,'$host2','$class',$cname);";
 
       $res = db_exec($sqlstr);
       die("cannot insert (reverse) host record '$host'") if ($res < 0);
@@ -403,14 +385,14 @@ for ($i=0; $i <= $#zones; $i+=1) {
       
       print STDERR "@";
     }
-    die("Cannot commit (reverse) host record inserts!") if (db_commit()<0);
+    #die("Cannot commit (reverse) host record inserts!") if (db_commit()<0);
 
 
     # figure out what name to use in reverse lookups of IPs with multiple
     # domainnames
 
     if (! $mips_searched) { # search for IPs with multiple names only once
-      db_vacuum();
+      #db_vacuum();
       $mips_searched=1;
       find_multi_ips($serverid);
     }
@@ -448,7 +430,7 @@ for ($i=0; $i <= $#zones; $i+=1) {
 	    $rhash{$rhost}=$rid;
 	  }
 
-	  db_begin();
+	  #db_begin();
 	  foreach $rhost (keys %rhash) {
 	    $rid=$rhash{$rhost};
 	    $rflag = 'false';
@@ -459,7 +441,7 @@ for ($i=0; $i <= $#zones; $i+=1) {
 	    die("cannot update rr_a record id=$rid host=$rhost") if ($res < 0);
 	    warn("fail: $sqlstr") if (db_status() ne 'UPDATE 1');
 	  }
-	  die("cannot commit rr_a record updates!") if (db_commit() < 0);
+	  #die("cannot commit rr_a record updates!") if (db_commit() < 0);
 	}
 	else {
 	  warn("cannot find $rip in zone $zone!");
@@ -468,32 +450,8 @@ for ($i=0; $i <= $#zones; $i+=1) {
     }
 
 
-    $netdesc=$net->desc();
-    print "searching for zones to build reverse $origin ($netdesc)\n";
-    undef @reversemap;
-    $sqlstr = "SELECT zones.id, COUNT(*) FROM rr_a,hosts,zones " .
-	"WHERE rr_a.host = hosts.id AND hosts.zone=zones.id " .
-	"AND zones.server=$serverid AND zones.reverse=false " .
-	"AND zones.type='M' AND rr_a.ip << '$netdesc' " .
-	"GROUP BY zones.id HAVING COUNT(*) > 0;";
-    $res = db_exec($sqlstr);
-    if ($res > 0) {
-      print "found $res zones containing IPs for this net\n";
-      for($j=0;$j<$res;$j++) { 
-	$rid=db_getvalue($j,0);
-	$rcount=db_getvalue($j,1);
-	#print "id=$rid count=$rcount\n";
-	push @reversemap, $rid;
-      }
-
-      $reverselist = db_build_list_str(\@reversemap);
-    } else {
-      $reverselist = 'NULL';
-    }
-    
     $reversenet=arpa2cidr($zone);
-    $sqlstr = "UPDATE zones SET reverses='{$reverselist}'," .
-              "reversenet='$reversenet' WHERE id=$zoneid;";
+    $sqlstr = "UPDATE zones SET reversenet='$reversenet' WHERE id=$zoneid;";
     $res = db_exec($sqlstr);
     die("cannot update zone record (id=$zoneid)!") if ($res < 0);
 
@@ -517,7 +475,7 @@ for ($i=0; $i <= $#zones; $i+=1) {
     $wkshash{$wkslist}+=1 if (length($wkslist) > 0);
   }
 
-  db_begin();
+  #db_begin();
   foreach $wks (keys %wkshash) {
     $c=$wkshash{$wks};
     #print "wks: '$wks' $c\n";
@@ -544,9 +502,9 @@ for ($i=0; $i <= $#zones; $i+=1) {
       die("cannot insert WKS entries id=$c!") if (db_exec($sqlstr)<0);
     }
   }
-  die("Cannot commit rr_wks inserts!") if (db_commit() < 0);
+  #die("Cannot commit rr_wks inserts!") if (db_commit() < 0);
 
-  db_begin();
+  #db_begin();
   foreach $mx (keys %mxhash) {
     $c=$mxhash{$mx};
     #print "mx: '$mx' $c\n";
@@ -573,14 +531,14 @@ for ($i=0; $i <= $#zones; $i+=1) {
       die("cannot insert MX entries id=$c!") if (db_exec($sqlstr)<0);
     }
   }
-  die("Cannot commit rr_mx inserts!") if (db_commit() < 0);
+  #die("Cannot commit rr_mx inserts!") if (db_commit() < 0);
 
   
   # insert records in hosts table....
   $c = keys %zonedata;
   print STDERR "Inserting $c records...";
   $j=0; $str='';
-  db_begin();
+  #db_begin();
   
   foreach $host (keys %zonedata) {
     $rec = $zonedata{$host};
@@ -640,12 +598,10 @@ for ($i=0; $i <= $#zones; $i+=1) {
     #print STDERR "$host: many IPs\n" if (@{$rec->{A}} > 1); 
 
     $sqlstr = "INSERT INTO hosts " .
-        "(cuser,muser,zone,type,domain,class,ns,mx,wks,txt,".
-	" hinfo_hw,hinfo_sw) " .
+        "(cuser,muser,zone,type,domain,class,mx,wks,hinfo_hw,hinfo_sw) " .
 	"VALUES(" .
 	"'$user','$user',$zoneid,$hosttype,'$host2','$class'," .
-	"'{$nslist}',$mx,$wks,'{$txtlist}'," .
-	"'$hinfo1','$hinfo2'" .
+	"$mx,$wks,'$hinfo1','$hinfo2'" .
 	");";
     #print RRFILE "$sqlstr\n";
     $j+=1;
@@ -664,7 +620,7 @@ for ($i=0; $i <= $#zones; $i+=1) {
     $res = db_exec($str);
     die("Cannot insert host record '$host'") if ($res < 0);
   }
-  die("Cannot commit host record inserts!") if (db_commit() < 0);
+  #die("Cannot commit host record inserts!") if (db_commit() < 0);
   
   # fetch id's of records inserted earlier
   $sqlstr = "SELECT id,domain FROM hosts WHERE zone=$zoneid;";
@@ -686,7 +642,7 @@ for ($i=0; $i <= $#zones; $i+=1) {
   
   # insert alias (CNAME) records
   $j=0; $str='';
-  db_begin();
+  #db_begin();
   
   foreach $host (keys %zonedata) {
     $rec = $zonedata{$host};
@@ -727,12 +683,12 @@ for ($i=0; $i <= $#zones; $i+=1) {
     $res = db_exec($str);
     die("Cannot insert alias host record '$host'") if ($res < 0);
   }
-  die("Cannot commit alias record inserts!") if (db_commit() < 0);
+  #die("Cannot commit alias record inserts!") if (db_commit() < 0);
 
     
   # add A records in rr_a
   $j=0; $str='';
-  db_begin();
+  #db_begin();
 
   foreach $host (keys %zonedata) {
     $rec = $zonedata{$host};
@@ -771,11 +727,11 @@ for ($i=0; $i <= $#zones; $i+=1) {
     die("cannot insert A record '$host'") if ($res < 0);
     print STDERR "|";
   }
-  die("Cannot commit A record inserts!") if (db_commit() < 0);
+  #die("Cannot commit A record inserts!") if (db_commit() < 0);
 
 
   # add MX & WKS template pointers to host entries
-  db_begin();
+  #db_begin();
   $j=0;
   foreach $host (keys %zonedata) {
     $rec = $zonedata{$host};
@@ -798,11 +754,11 @@ for ($i=0; $i <= $#zones; $i+=1) {
       $j++;
     }
   }  
-  die("Cannot commit MX & WKS tempate pointer updates!") if (db_commit() < 0);
+  #die("Cannot commit MX & WKS tempate pointer updates!") if (db_commit() < 0);
 
 
   # add NS & TXT entries to ns_entries & txt_entries tables accordingly
-  db_begin();
+  #db_begin();
   $j=0;
   foreach $host (keys %zonedata) {
     $rec = $zonedata{$host};
@@ -845,19 +801,19 @@ for ($i=0; $i <= $#zones; $i+=1) {
       $j=0;
     }
   }  
-  die("Cannot commit MX & WKS tempate pointer updates!") if (db_commit() < 0);
+  #die("Cannot commit MX & WKS tempate pointer updates!") if (db_commit() < 0);
   print "\n";
 
 
     
   print "Updating glue records...\n";
-  db_begin();
+  #db_begin();
   for $host (@gluelist) {
     $res = db_exec("UPDATE hosts SET type=6 WHERE zone=$zoneid " .
 		   "AND domain='$host';");
     warn("Cannot update host record for '$host'!") if ($res < 0);
   }
-  warn("Cannot update glue record(s)!") if (db_commit() < 0);
+  #warn("Cannot update glue record(s)!") if (db_commit() < 0);
 
 } # for($i... zone loop
 
@@ -877,6 +833,8 @@ for ($i=0; $i <= $#zones; $i+=1) {
 $res = db_exec("UPDATE servers SET hostmaster='$hostmaster'," .
 	       "hostname='$primaryservername' WHERE id=$serverid;");
 die("Cannot update server record!") if ($res < 0);
+
+die("Cannot commit import to database!") if (db_commit() < 0);
 
 print STDERR "Vacuuming...";
 db_vacuum();
