@@ -34,6 +34,9 @@ $ALEVEL_VLANS = 5;  # authorization level needed to see vlan info
 
 # $SAURON_DTDHACK = 1;
 
+# by default use secure cookies (set 0, if you need to use plain http)
+$SAURON_SECURE_COOKIES = 1;
+
 #########################################################################
 # misc
 

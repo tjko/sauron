@@ -975,6 +975,7 @@ error("Invalid log path") unless (-d $LOG_DIR);
 $frame_mode=0;
 $pathinfo = path_info();
 $script_name = script_name();
+($script_path = $script_name) =~ s/[^\/]+$//;
 $s_url = script_name();
 $selfurl = $s_url . $pathinfo;
 $menu=param('menu');
@@ -992,7 +993,7 @@ if ($scookie) {
 
 unless ($scookie) {
   logmsg("notice","new connection from: $remote_addr");
-  $new_cookie=make_cookie();
+  $new_cookie=make_cookie($script_path);
   print header(-cookie=>$new_cookie,-target=>'_top'),
         start_html(-title=>"Sauron Login",-BGCOLOR=>'white');
   login_form("Welcome",$ncookie);
@@ -1076,11 +1077,11 @@ $SAURON_CHARSET='iso-8859-1' unless ($SAURON_CHARSET);
 print header(-type=>"text/html; charset=$SAURON_CHARSET");
 if ($SAURON_DTD_HACK) {
     print "<!DOCTYPE HTML PUBLIC \"-//IETF//DTD HTML//EN\">\n",
-          "<html><head><title>Sauron $VER</title>\n",
+          "<html><head><title>Sauron ($SERVER_ID)</title>\n",
           "<meta NAME=\"keywords\" CONTENT=\"Sauron DNS DHCP tool\">\n",
           "</head><body bgcolor=\"$bgcolor\">\n";
 } else {
-    print start_html(-title=>"Sauron $VER",-BGCOLOR=>$bgcolor,-dtd=>{},
+    print start_html(-title=>"Sauron ($SERVER_ID)",-BGCOLOR=>$bgcolor,-dtd=>{},
 		     -meta=>{'keywords'=>'Sauron DNS DHCP tool'});
 }
 
@@ -1106,7 +1107,7 @@ else { print p,"Unknown menu '$menu'"; }
 
 
 if ($debug_mode) {
-  print "<hr><FONT size=-1><p>script name: " . script_name() ." $formmode\n";
+  print "<hr><FONT size=-1><p>script name: " . script_name() ." ($script_path) $formmode\n";
   print "<br>extra path: " . path_info() ."<br>framemode=$frame_mode\n",
          "<br>cookie='$scookie'\n",
         "<br>s_url='$s_url' '$selfurl'\n",
@@ -3296,8 +3297,11 @@ sub logout() {
   $u=$state{'user'};
   update_lastlog($state{uid},$state{sid},2,$remote_addr,$remote_host);
   logmsg("notice","user ($u) logged off from $remote_addr");
-  $c=cookie(-name=>"sauron-$SERVER_ID",-value=>'logged off',-expires=>'+1s',
-	    -path=>$s_url);
+  $c=cookie(-name=>"sauron-$SERVER_ID",
+	    -value=>'logged off',
+	    -expires=>'+1s',
+	    -path=>$script_path,
+	    -secure=>($SAURON_SECURE_COOKIES ? 1 :0));
   remove_state($scookie);
   print header(-target=>'_top',-cookie=>$c),
         start_html(-title=>"Sauron Logout",-BGCOLOR=>'white'),
@@ -3643,9 +3647,10 @@ sub frame_2() {
 }
 
 #####################################################################
-sub make_cookie() {
-  my($val);
-  my($ctx);
+sub make_cookie($) {
+  my($path) = @_;
+
+  my($val,$ctx);
 
   $val=rand 100000;
 
@@ -3663,7 +3668,8 @@ sub make_cookie() {
   save_state($val);
   $ncookie=$val;
   return cookie(-name=>"sauron-$SERVER_ID",-expires=>'+7d',
-		-value=>$val,-path=>$s_url);
+		-value=>$val,-path=>$path,
+		-secure=>($SAURON_SECURE_COOKIES ? 1 :0));
 }
 
 sub save_state($) {
