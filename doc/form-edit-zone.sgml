@@ -1,0 +1,137 @@
+<table frame=all id="edit-zone-dialog">
+<title>Edit Zone Dialog</>
+<tgroup cols=3>
+<thead>
+<row><entry>Field</><entry>Description</><entry>Example</></>
+</thead>
+<tbody>
+<row>
+  <entry>Zone name</>
+  <entry>Zone name (without the dot in the end)</>
+  <entry>middle.earth</>
+</row>
+<row>
+  <entry>Comments</>
+  <entry>optional comments about the zone</>
+  <entry>company main zone</>
+</row>
+<row>
+  <entry>Info TXT record auto generation</>
+  <entry>Flag that controls the automatic generation of
+            descriptive TXT records for each host from the
+            host info fields (User,Dept,Location,Info)</>
+  <entry>Yes</>
+</row>
+<row>
+  <entry><quote>Dummy</> zone</>
+  <entry>Flag when set, causes this zone to be treated as a 
+         <quote>dummy</> zone that only appears in the 
+         <filename>named.conf</> but the zone file will not be generated
+         by Sauron.</>
+  <entry>No</>
+</row>
+<row>
+  <entry>Class</>
+  <entry>Zone class; IN (Internet), CHAOS, HESIOD, HS</>
+  <entry>IN</>
+</row>
+<row>
+  <entry>Hostmaster</>
+  <entry>Zone specific hostmaster's email address. If empty hostmaster's
+         email address from server record is used.</>
+  <entry></>
+</row>
+<row>
+  <entry>Check-names</>
+  <entry>BIND's <quote>check-names</> option;
+         default, fail, ignore, warn</>
+  <entry>default</>
+</row>
+<row>
+  <entry>Notify</>
+  <entry>BIND's <quote>notify</> option;
+         default, yes, no</>
+  <entry>default</>
+</row>
+<row>
+  <entry>Refresh</>
+  <entry>SOA record refresh value. If empy, value from the server
+         record is used instead</>
+  <entry></>
+</row>
+<row>
+  <entry>Retry</>
+  <entry>SOA record retry value. If empy, value from the server
+         record is used instead</>
+  <entry></>
+</row>
+<row>
+  <entry>Expire</>
+  <entry>SOA record expire value. If empy, value from the server
+         record is used instead</>
+  <entry></>
+</row>
+<row>
+  <entry>Minimum (negative caching TTL)</>
+  <entry>SOA record minimun value. If empy, value from the server
+         record is used instead</>
+  <entry></>
+</row>
+<row>
+  <entry>Default TTL</>
+  <entry>Default TTL for RRs in this zone. If empy, value from the server
+         record is used instead</>
+  <entry></>
+</row>
+<row>
+  <entry>IP addresses (A)</>
+  <entry>Zone A record(s).</>
+  <entry>192.168.1.1</>
+</row>
+<row>
+  <entry>Name servers (NS)</>
+  <entry>Zone NS records (there should always be at least two name servers
+         defined for a zone)</>
+  <entry><para>ns1.middle.earth</><para>ns2.middle.earth</></entry>
+</row>
+<row>
+  <entry>Mail exchanges (MX)</>
+  <entry>Zone MX records</>
+  <entry><para>10 mail1</><para>10 mail2</><para>20 mailbackup</></entry>
+</row>
+<row>
+  <entry>Info (TXT)</>
+  <entry>Zone TXT records.</>
+  <entry></>
+</row>
+<row>
+  <entry>Allow dynamic updates</>
+  <entry>BIND allow-update option</>
+  <entry></>
+</row>
+<row>
+  <entry>Allow queries from</>
+  <entry>BIND allow-query option</>
+  <entry></>
+</row>
+<row>
+  <entry>Allow zone-transfers from</>
+  <entry>BIND allow-transfer option</>
+  <entry></>
+</row>
+<row>
+  <entry>[Stealth] Servers to notify</>
+  <entry>BIND also-notify option</>
+  <entry></>
+</row>
+<row>
+  <entry>Zone specific DHCP entries</>
+  <entry>dhcpd options for all hosts in this zone</>
+  <entry></>
+</row>
+
+</tbody>
+</tgroup>
+</table> 
+
+

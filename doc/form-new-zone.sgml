@@ -1,0 +1,24 @@
+<table frame=all id="new-zone-dialog">
+<title>New Zone Dialog</>
+<tgroup cols=3>
+<thead>
+<row><entry>Field</><entry>Description</><entry>Example</></>
+</thead>
+<tbody>
+<row><entry>Zone name</>
+     <entry>Zone name (without the dot in the end)</>
+     <entry>middle.earth</>
+</row>
+<row><entry>Type</>
+     <entry>Zone type; Master=master zone, Slave=slave zone</>
+     <entry>Master</>
+</row>
+<row><entry>Reverse</>
+     <entry>Reverse zone flag; Yes=reverse zone, No=normal zone</>
+     <entry>No</>
+</row>
+</tbody>
+</tgroup>
+</table> 
+
+

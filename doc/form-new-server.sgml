@@ -1,0 +1,36 @@
+<table frame=all id="new-server-dialog">
+<title>New Server Dialog</>
+<tgroup cols=3>
+<thead>
+<row><entry>Field</><entry>Description</><entry>Example</></>
+</thead>
+<tbody>
+        <row><entry>Name</>
+             <entry>Short name of the server (this handle can contain
+                    only letters, numbers, and hyphens)</>
+             <entry>ns1</>
+        </row>
+        <row><entry>Hostname</><entry>Domainname of the server (FQDN)</>
+             <entry>ns1.middle.earth.</>
+        </row>
+        <row><entry>IP address</><entry>IP address of the server</>
+             <entry>192.168.1.1</>
+        </row>
+        <row><entry>Hostmaster</>
+             <entry>Default hostmaster email address for all zones in the
+                    server (replace <quote>@</> in the email address 
+                    with <quote>.</>)</>
+             <entry>hostmaster.middle.earth.</>
+        </row>
+        <row><entry>Configuration directory</>
+             <entry>Base directory for BIND configuration files</>
+             <entry><filename class=directory>/var/named</></>
+        </row>
+        <row><entry>Comment</>
+             <entry>Long description of the server (optional)</>
+             <entry>primary name server</>
+        </row>
+</tbody>
+</tgroup>
+</table>
+
