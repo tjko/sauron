@@ -1,6 +1,6 @@
 /* Sauron table templates
  *
- *
+ * $Id$
  */
 
 
@@ -47,7 +47,7 @@ CREATE TABLE zones ( // zone table; contains zones
 				     // (F)orward, ...
        reverse	   BOOL DEFAULT false,
        nnotify	   BOOL DEFAULT true,
-       class	   CHAR(8) DEFAULT 'in',
+       class	   CHAR(2) DEFAULT 'in',
        name	   TEXT NOT NULL CHECK (name <> ''),
        hostmaster  TEXT,
        serial	   CHAR(10) DEFAULT '1999123001',
@@ -118,7 +118,7 @@ CREATE TABLE hosts (
        
        domain	   TEXT NOT NULL CHECK(domain <> ''),
        ttl	   INT4 DEFAULT -1,
-       class	   CHAR(8) DEFAULT 'IN',
+       class	   CHAR(2) DEFAULT 'IN',
        
        // a	   CIDR,
        grp	   INT4 DEFAULT -1,  // ptr to group

@@ -285,9 +285,35 @@ sub make_bind() {
     if ($rev eq 't') {
       # reverse zone
       print "reversenet " . $zone{'reversenet'} . "\n";
-      print cidr2arpa($zone{'reversenet'}) . "\n";
+      $rorigin = cidr2arpa($zone{'reversenet'}) . ".";
       foreach $rzoneid (@{$zone{'reverses'}}) {
-	print "rzoneid=$rzoneid\n";
+	undef @q;
+	db_query("SELECT name FROM zones WHERE id=$rzoneid;",\@q);
+	if (@q < 1) {
+	  warn("cannot find zone (id=$rzoneid)!");
+	  next;
+	}
+	$rzone_name=$q[0][0];
+	print ZONEFILE ";\n; reverse map from zone: $rzone_name\n;\n";
+
+	undef @q;
+	db_query("SELECT ip,domain FROM hosts,zones,rr_a " .
+		 "WHERE hosts.zone=zones.id AND rr_a.host=hosts.id " .
+		 "AND zones.id=$rzoneid AND rr_a.reverse='t' " .
+		 "AND ip << '$zone{'reversenet'}' " .
+		 "ORDER BY ip;",\@q);
+	if (@q > 0) {
+	  for $i (0 .. $#q) {
+	    $rip=remove_origin(cidr2arpa($q[$i][0]).".",$rorigin);
+	    $rdomain=$q[$i][1];
+	    if ($rdomain eq '@') {
+	      $rdomain = "$rzone_name.";
+	    } else {
+	      $rdomain .= ".$rzone_name." unless ($rdomain =~ /\.$/);
+	    }
+	    print ZONEFILE "$rip\t$ttl\t$class\tPTR\t$rdomain\n";
+	  }
+	}
       }
 
     } else {
@@ -437,6 +463,7 @@ sub make_bind() {
 
     }
 
+    print ZONEFILE ";\n;\n; eof\n";
     close(ZONEFILE);
   }
 

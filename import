@@ -207,7 +207,7 @@ for ($i=0; $i <= $#zones; $i+=1) {
   $zone=$zones[$i];
   next if ($zone eq '.');
   $zone =~ s/\.$//g;
-  $origin = $zone . '.';
+  if ($zone =~ /\.$/) { $origin=$zone; } else { $origin = $zone . '.'; }
   $rev='false';
   $rev='true' if ($zone =~ /\.in-addr\.arpa/);
 
@@ -224,7 +224,7 @@ for ($i=0; $i <= $#zones; $i+=1) {
 
 
   $type='M';
-  $type='S' if ($types{$zone} eq 'slave');
+  $type='S' if ($types{$zones[$i]} eq 'slave');
 
   $sqlstr="INSERT INTO zones " .
     "(cuser,muser,server,type,reverse,name) " .
@@ -246,7 +246,7 @@ for ($i=0; $i <= $#zones; $i+=1) {
   push(@loopbacks_list,$zoneid) if ($loopback eq 'true');
 
   # handle slave zones
-  unless ($types{$zone} eq 'master') {
+  unless ($type eq 'M') {
     print "slave zone\n";
     next;
   }
@@ -255,7 +255,7 @@ for ($i=0; $i <= $#zones; $i+=1) {
 
   #handle master zones
   undef %zonedata;
-  process_zonefile("fh0000",$files{$zone},$zone,\%zonedata);
+  process_zonefile("fh0000",$files{$zones[$i]},$zone,\%zonedata);
 
   $rec = $zonedata{$origin};
   die ("No SOA record found in zone $zone!") if (! $rec);
@@ -345,8 +345,8 @@ for ($i=0; $i <= $#zones; $i+=1) {
 	$rec=$zonedata{$rip};
 	if ($rec) {
 	  print "$ip:$rip --> $rec->{PTR}\n";
-	  $sqlstr = "SELECT rr_a.id," .
-	          "hosts.domain || '.' || zones.name || '.' AS dname " .
+	  $sqlstr = "SELECT rr_a.id, hosts.domain, zones.name " .
+#	          "hosts.domain || '.' || zones.name || '.' AS dname " .
 		  "FROM rr_a,hosts,zones,servers " .
 	          "WHERE rr_a.host=hosts.id AND hosts.zone=zones.id " .
 		  "AND zones.server=servers.id AND servers.id=$serverid AND " .
@@ -358,6 +358,9 @@ for ($i=0; $i <= $#zones; $i+=1) {
 	  for($j=0;$j<$res;$j++) {
 	    $rid = db_getvalue($j,0);
 	    $rhost = db_getvalue($j,1);
+	    if ($rhost eq '@') { $rhost=''; } else { $rhost.='.'; }
+	    $rhost .= db_getvalue($j,2) . "." unless ($rhost =~ /\.$/);
+
 	    $rhash{$rhost}=$rid;
 	  }
 

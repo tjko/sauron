@@ -126,11 +126,20 @@ sub db_decode_list_str($) {
   my($list,$c,$i);
 
   $list=[];
-  return $list unless ($str =~ /^\{\".+\"\}$/);
+  return $list unless ($str =~ /^\{(\d|\d.+\d|\".+\")\}$/);
 
-  $str =~ s/(^\{\"|\"\}$)//g;
-  @{$list} = split("\",\"",$str);
-  $c=@{$list};	     
+  if ($str =~ /^\{\d/) { 
+    # number list
+    $str =~ s/(^\{|\}$)//g;
+    @{$list} = split(",",$str);
+    $c=@{$list};
+  }
+  else {
+    # string list
+    $str =~ s/(^\{\"|\"\}$)//g;
+    @{$list} = split("\",\"",$str);
+    $c=@{$list};
+  }
 
   for($i=0;$i < $c;$i++) {
     $$list[$i] =~ s/\\\"/\"/g;
