@@ -11,6 +11,11 @@ use Sauron::DB;
 use Sauron::Util;
 use Sauron::BackEnd;
 use Sauron::Sauron;
+require Sauron::CGIutil;
+require Sauron::UtilDhcp;
+require Sauron::UtilZone;
+require CGI;
+require Net::DNS;
 
 load_config();
 
@@ -19,7 +24,7 @@ load_config();
 $argcount=@ARGV;
 
 $result = GetOptions("cgi-enable","cgi-disable=s","help|h","pending:s",
-		     "quiet");
+		     "quiet","versions");
 
 if ($opt_help || not $result) {
   print "syntax: $0 [options]\n\n",
@@ -29,10 +34,33 @@ if ($opt_help || not $result) {
     " --pending=<servername>       display pending hosts for a server\n\n",
     " --cgi-disable='message'      disable CGI interface\n",
     " --cgi-enable                 enable CGI interface\n",
+    " --versions                   display module versions\n",
     " --quiet                      no verbose output\n";
   print "\n" if ($opt_help || $opt_cgi_enable); # to get rid of warnings :)
   exit(0);
 }
+
+if ($opt_versions) {
+  print "Sauron: ",sauron_version(),"\n\n";
+
+  print "CGI: ",$CGI::VERSION,"\n";
+  print "Digest::MD5: ",$Digest::MD5::VERSION,"\n";
+  print "Pg: ",$Pg::VERSION,"\n";
+  print "Net::DNS: ",$Net::DNS::VERSION,"\n";
+  print "Net::Netmask: ",$Net::Netmask::VERSION,"\n\n";
+
+  print "Sauron::Sauron: ",($Sauron::Sauron::VERSION =~ /,v\s+(\S+)\s/),"\n";
+  print "Sauron::BackEnd: ",($Sauron::BackEnd::VERSION =~ /,v\s+(\S+)\s/),"\n";
+  print "Sauron::CGIutil: ",($Sauron::CGIutil::VERSION =~ /,v\s+(\S+)\s/),"\n";
+  print "Sauron::DB: ",($Sauron::DB::VERSION =~ /,v\s+(\S+)\s/),"\n";
+  print "Sauron::Util: ",($Sauron::Util::VERSION =~ /,v\s+(\S+)\s/),"\n";
+  print "Sauron::UtilDhcp: ",($Sauron::UtilDhcp::VERSION =~ /,v\s+(\S+)\s/),
+        "\n";
+  print "Sauron::UtilZone: ",($Sauron::UtilZone::VERSION =~ /,v\s+(\S+)\s/),
+        "\n\n";
+  exit;
+}
+
 
 fatal("DB_CONNECT not defined in configuration!") unless ($DB_CONNECT);
 $db_ok = db_connect2($DB_CONNECT);
