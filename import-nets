@@ -1,0 +1,244 @@
+#!/usr/bin/perl -I/usr/local/sauron
+#
+# import-nets -- imports (updates) networks (and VLANs) from a CSV file
+#
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2003.
+# $Id$
+#
+use Getopt::Long;
+use Sauron::DB;
+use Sauron::BackEnd;
+use Sauron::Util;
+use Sauron::Sauron;
+
+$|=1;
+load_config();
+
+GetOptions("help|h","name=s","descr=s","cidr=s","dhcp=s",
+           "vlanno=s","vlan=s","vlandesc=s","verbose","commit","filter=s");
+
+if ($opt_help || @ARGV < 2) {
+  print "syntax: $0 [OPTIONS] <servername> <inputfile>\n\n",
+        "\toptions:\n",
+	"\t--cidr=<n>\t\tcolumn # for network CIDRs\n",
+	"\t--name=<n>\t\tcolumn # for network names\n",
+	"\t--descr=<n>\t\tcolumn # for network descriptions\n",
+	"\t--dhcp=<n>\t\tcolumn # for dhcp flags (0|1,t|f,yes|no)\n",
+	"\t--vlan=<n>\t\tcolumn # for VLAN names\n",
+	"\t--vlanno=<n>\t\tcolumn # for VLAN numbers\n",
+	"\t--vlandesc=<n>\tcolumn # for VLAN descriptions\n",
+	"\n",
+        "\t--filter=<n>,<regexp>\tselect only lines where column n matches\n",
+        "\t\t\t\tto the regular expression\n",
+	"\n";
+  exit(($opt_help ? 0 : 1));
+}
+
+$server=shift;
+$filename=shift;
+$opt_commit=($opt_commit ? 1 : 0);
+
+$user = (getpwuid($<))[0];
+set_muser($user);
+
+fatal("cannot read input file: $filename")
+  if ($filename ne '-' && ! -r $filename);
+
+fatal("DB_CONNECT not defined in configuration!") unless ($DB_CONNECT);
+db_connect($DB_CONNECT);
+
+$serverid=get_server_id($server);
+fatal("cannot find server: $server") unless ($serverid > 0);
+
+
+if ($opt_filter) {
+  unless (($filter_col,$filter) = ($opt_filter =~ /^(\d+),(.*)$/)) {
+    fatal("invalid arguments to option --filter");
+  }
+}
+
+
+if ($opt_cidr) {
+  fatal("invalid parameter for --cidr") unless ($opt_cidr =~ /^\d+$/);
+  $fields{$opt_cidr}="cidr";
+}
+
+if ($opt_name) {
+  fatal("invalid parameter for --name") unless ($opt_name =~ /^\d+$/);
+  $fields{$opt_name}="name";
+}
+
+if ($opt_descr) {
+  fatal("invalid parameter for --descr") unless ($opt_descr =~ /^\d+$/);
+  $fields{$opt_descr}="descr";
+}
+
+if ($opt_dhcp) {
+  fatal("invalid parameter for --dhcp") unless ($opt_dhcp =~ /^\d+$/);
+  $fields{$opt_dhcp}="dhcp";
+}
+
+if ($opt_vlan) {
+  fatal("invalid parameter for --vlan") unless ($opt_vlan =~ /^\d+$/);
+  $fields{$opt_vlan}="vlan";
+}
+
+if ($opt_vlanno) {
+  fatal("invalid parameter for --vlanno") unless ($opt_vlanno =~ /^\d+$/);
+  $fields{$opt_vlanno}="vlanno";
+}
+
+if ($opt_vlandesc) {
+  fatal("invalid parameter for --vlandesc") unless ($opt_vlandesc =~ /^\d+$/);
+  $fields{$opt_vlandesc}="vlandesc";
+}
+
+fatal("at least following options must be used: --cidr, --name, --descr")
+  unless ($opt_cidr && $opt_name && $opt_descr);
+fatal("--vlan must be used if using --vlanno")
+  if ($opt_vlanno && not $opt_vlan);
+fatal("--vlan must be used if using --vlandesc")
+  if ($opt_vlandec && not $opt_vlan);
+
+open(FILE,$filename) || fatal("cannot open file: $filename");
+
+while(<FILE>) {
+  chomp;
+  next if /^\s*$/;
+  @l = parse_csv($_);
+
+  if ($opt_filter) {
+    next unless ($l[$filter_col-1] =~ /$filter/);
+  }
+
+  if ($opt_cidr) {
+    $net=$l[$opt_cidr-1];
+    unless (is_cidr($net)) {
+      error("$filename($.): invalid net: $net");
+      next;
+    }
+  }
+  if ($opt_name) {
+    $name=lc($l[$opt_name-1]);
+    unless ($name =~ /^[a-z0-9\-]+$/) {
+      error("$filename($.): invalide net name: $name");
+      next;
+    }
+  }
+  if ($opt_name) { $descr=lc($l[$opt_descr-1]); }
+  if ($opt_dhcp) {
+    $dhcp=$l[$opt_dhcp-1];
+    if ($dhcp =~ /^(1|y|yes|t|true)$/) { $dhcp='t'; }
+    elsif ($dhcp =~ /^(0|n|no|t|false)$/) { $dhcp='f'; }
+    else {
+      error("$filename($.): invalid dhcp flag: $dhcp");
+      next;
+    }
+  }
+  if ($opt_vlan) {
+    $vlan=lc($l[$opt_vlan-1]);
+    unless ($vlan =~ /^[a-z0-9\-]+$/) {
+      error("$filename($.): invalide vlan name: $vlan");
+      next;
+    }
+    $vlans{$vlan}=[-1,'',-1] unless (defined($vlans{$vlan}));;
+  }
+  if ($opt_vlanno) {
+    $vlanno=$l[$opt_vlanno-1];
+    unless ($vlanno =~ /^\d+$/) {
+      error("$filename($.): invalid vlan no: $vlanno");
+      next;
+    }
+    if ($vlans{$vlan}[0] > 0 && $vlans{$vlan}[0] != $vlanno) {
+      error("$filename($.): vlan no ($vlanno) for vlan $vlan differs from " .
+	    "previous definition ($vlans{$vlan}[0])");
+      next;
+    }
+    $vlans{$vlan}[0]=$vlanno unless ($vlans{$vlan}[0] > 0);
+  }
+  if ($opt_vlandesc) {
+    $vlandesc=$l[$opt_vlandesc-1];
+    $vlans{$vlan}[1]=$vlandesc if ($vlandesc);
+  }
+
+  print "$filename($.): net=$net,name=$name,descr=\"$descr\",dhcp=$dhcp,",
+        "vlan=$vlan,vlanno=$vlanno,vlandesc=\"$vlandesc\"\n" if ($opt_verbose);
+
+  push @data,[$net,$name,$descr,$dhcp,$vlan,$vlanno,$vlandesc];
+}
+
+close(FILE);
+
+
+print @data . " valid records found in CSV file.\n";
+
+
+db_begin();
+db_ignore_begin_and_commit(1);
+
+# create/update VLANs...
+foreach $vlan (sort keys %vlans) {
+  $id=get_vlan_by_name($serverid,$vlan);
+  $vlanno=$vlans{$vlan}[0];
+  print ""  .($id > 0 ? "Updating" : "Creating") .
+        " VLAN: $vlan ($vlanno)...\n";
+
+  undef %vlan;
+  $vlan{server}=$serverid;
+  $vlan{name}=$vlan;
+  $vlan{description}=$vlans{$vlan}[1];
+  $vlan{vlanno}=$vlanno if ($vlanno > 0);
+
+  if ($id > 0) {
+    $vlan{id}=$id;
+    fatal("failed to update vlan: $vlan ") if (update_vlan(\%vlan) < 0);
+  } else {
+    fatal("failed to add vlan: $vlan") if (($id=add_vlan(\%vlan)) < 0);
+  }
+
+  $vlans{$vlan}[2]=$id;
+}
+
+
+# create/update nets...
+for $i (0..$#data) {
+  ($net,$name,$descr,$dhcp,$vlan) = @{$data[$i]};
+  $id=get_net_by_cidr($serverid,$net);
+
+  print "".($id>0?"Updating":"Creating")." net: $net ($name,\"$descr\",$dhcp,",
+        "$vlan)...\n";
+
+  fatal("cannot find VLAN id for vlan: $vlan (shouldn't happen)")
+    unless ($vlans{$vlan} && $vlans{$vlan}[2] > 0);
+  $vlanid=$vlans{$vlan}[2];
+
+  undef %net;
+  $net{server}=$serverid;
+  $net{net}=$net;
+  $net{netname}=$name;
+  $net{name}=$descr if ($descr);
+  $net{no_dhcp}=($dhcp eq 't' ? 'f':'t');
+  $net{vlan}=$vlanid;
+
+  if ($id > 0) {
+    $net{id}=$id;
+    fatal("failed to update net: $net") if (update_net(\%net) < 0);
+  } else {
+    fatal("failed to create net: $net") if (add_net(\%net) < 0);
+  }
+
+}
+
+
+
+
+unless ($opt_commit) {
+  print "No changes made.\n";
+  exit;
+}
+
+db_ignore_begin_and_commit(0);
+fatal("failed to commit changes to database") if (db_commit() < 0);
+
+
+# eof
