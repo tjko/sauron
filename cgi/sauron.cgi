@@ -1505,7 +1505,13 @@ sub zones_menu() {
     return if (check_perms('zone','R'));
     print h2("Pending changes to host records:");
 
-    undef @q;
+    # check for removed hosts...
+    get_zone($zoneid,\%zone);
+    if ($zone{rdate} > $zone{serial_date}) {
+      push @plist, ['','&lt;removed host(s)&gt;','',
+		    localtime($zone{rdate}).'',''];
+    }
+
     db_query("SELECT h.id,h.domain,h.cdate,h.mdate,h.cuser,h.muser,h.type " .
 	     "FROM hosts h, zones z " .
 	     "WHERE z.id=$zoneid AND h.zone=z.id " .
