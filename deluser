@@ -26,19 +26,16 @@ do "$config_file" || die("cannot load config: $config_file");
 
 ##############################################
 
-my(
-   $opt_help,$opt_user,
-   $result,$id,$res,
-   $i,$t,@q
-   );
+my($opt_help,$opt_user,$id,$res,$i,$t,@q);
 
-$result = GetOptions("user=s","help|h");
+GetOptions("user=s","help|h");
 
 if ($opt_help) {
   print "syntax: $0 [--help] [--user=<username>]\n";
   exit(0);
 }
 
+fatal("DB_CONNECT not defined in configuration!") unless ($DB_CONNECT);
 db_connect($DB_CONNECT);
 
 

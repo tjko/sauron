@@ -27,7 +27,7 @@ do "$config_file" || die("cannot load config: $config_file");
 
 ###################################################################
 
-$result = GetOptions("help|h","update|u");
+GetOptions("help|h","update|u");
 
 if ($opt_help || @ARGV < 2) {
   print "syntax: $0 [--help] [--update] <servername | default> <named.root>\n";
@@ -39,6 +39,7 @@ $file=$ARGV[1];
 
 fatal("cannot read input file '$file'") unless (-r $file);
 
+fatal("DB_CONNECT not defined in configuration!") unless ($DB_CONNECT);
 db_connect($DB_CONNECT);
 
 if ($servername eq 'default') {

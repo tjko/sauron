@@ -24,18 +24,18 @@ if (-r "/etc/sauron/config") {
 
 do "$config_file" || die("cannot load config: $config_file");
 
-$cdate = time;
-$user = (getpwuid($<))[0];
 
 ##############################################
 
+# $user = (getpwuid($<))[0];
 $result = GetOptions("help|h","name=s","group=s");
 
-if ($opt_help) {
+if ($opt_help || $result < 1) {
   print "syntax: $0 [--help] [--group=name] [--name=\"<groupname>\"]\n";
   exit(0);
 }
 
+fatal("DB_CONNECT not defined in configuration!") unless ($DB_CONNECT);
 db_connect($DB_CONNECT);
 
 
@@ -56,7 +56,6 @@ unless ($opt_name) {
   $i=1;
 }
 
-$user = (getpwuid($<))[0];
 
 if ($i) { # ask confirmation only in interactive session...
   print "\t Groupname: $opt_group\n",

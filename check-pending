@@ -28,7 +28,7 @@ $MAXLINES = 100;
 
 
 $result = GetOptions("help|h");
-if ($opt_help || @ARGV < 2) {
+if ($opt_help || @ARGV < 2 || $result < 1) {
     print "syntax: $0 [--help] <servername> <emailaddress>\n\n";
     exit(1);
 }
@@ -40,8 +40,10 @@ fatal("invalid email address: $to_address")
   unless ($to_address =~ /^\S+\@\S+$/);
 fatal("Mailer not defined in configuration!") unless ($SAURON_MAILER);
 fatal("Cannot find mailer program: $SAURON_MAILER") unless (-x $SAURON_MAILER);
+fatal("Mail from address not defined in configuration!")
+  unless ($SAURON_MAIL_FROM);
 fatal("Cannot find program: $PROG_DIR/status") unless (-x "$PROG_DIR/status");
-
+$SAURON_MAILER_ARGS='' unless (defined($SAURON_MAILER_ARGS));
 
 open(PIPE,"$PROG_DIR/status --quiet --pending=$server |")
     || fatal("status command pipe failed");

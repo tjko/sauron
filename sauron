@@ -29,6 +29,8 @@ $bind_conf=0;
 $dhcp_conf=0;
 $printer_conf=0;
 
+$SAURON_DHCP2_MODE = 0 unless (defined($SAURON_DHCP2_MODE));
+$SAURON_MAILER_ARGS = '' unless (defined($SAURON_MAILER_ARGS));
 $dhcp2_mode = ($SAURON_DHCP2_MODE ? 1 : 0);
 
 %yes_no_enum = (D=>'',Y=>'yes',N=>'no');
@@ -48,119 +50,6 @@ $ZFORMAT = "%-22s %6s %2s  %-6s %s\n";
 
 $failover_peer_name = 'foobar';
 
-##############################
-
-$VER = sauron_version();
-
-
-$result=GetOptions("help|h","all|a","bind|b","dhcp|d","printer|p","mail",
-		   "updateserial","noupdateserial","verbose","dhcp2","clean");
-
-if ($opt_help || @ARGV < 1 || $result < 1) {
-    print "syntax: $0 [--help] [options] <servername> [<target directory>]\n";
-    print "\n\toptions:\n",
-      "\t--all            generate all configuration files\n",
-      "\t--bind           generate BIND (named) configuration files\n",
-      "\t--dhcp           generate DHCP (dhcpd) configuration files\n",
-      "\t--clean          cleanup expired records and vacuum database\n",
-      "\t--printer        generate PRINTER (lpd) configuration files\n\n",
-      "\t--updateserial   force serial update on master zones\n\n",
-      "\t--dhcp2          enable DHCPv2 compatibilty mode\n\n",
-      "\t--mail           enable email notification sending\n\n";
-    exit(1);
-}
-
-
-$dhcp_conf=1 if ($opt_dhcp || $opt_all);
-$bind_conf=1 if ($opt_bind || $opt_all);
-$printer_conf=1 if ($opt_printer || $opt_all);
-$verbose=($opt_verbose ? 1 : 0);
-$dhcp2_mode=1 if ($opt_dhcp2);
-
-$servername = $ARGV[0];
-if (@ARGV > 1) {
-	$targetdir = $ARGV[1];
-	$targetdir .= "/" unless ($targetdir =~ /\/$/);
-} else {
-	$targetdir = "./";
-}
-$user = (getpwuid($<))[0];
-$host = `hostname`;
-$host =~ s/\n//g;
-
-
-fatal("target directory is a file! ($targetdir)") if (-f $targetdir);
-fatal("target directory does not exists ($targetdir)") if (! -d $targetdir);
-fatal("no permissions to target directory!") 
-	unless (-r $targetdir && -x $targetdir && -w $targetdir);
-
-print "server name: $servername\n";
-print "target directory: $targetdir\n";
-
-print "DHCP v2 compatibility mode enabled\n" if ($dhcp2_mode);
-chdir($targetdir) || fatal("Cannot change to directory '$targetdir'!");
-
-$mailnotify_mode = ($opt_mail ? 1 : 0);
-$mailnotify_mode = 0 unless ($SAURON_MAILER && -x $SAURON_MAILER);
-$mailnotify_mode = 0 unless ($SAURON_MAIL_FROM);
-print "Email notification sending: " .
-      ($mailnotify_mode ? 'enabled':'disabled') . "\n" if ($verbose);
-
-db_connect($DB_CONNECT);
-
-$time_now_ticks = time;
-
-
-$serverid = get_server_id($servername);
-fatal("Cannot find server '$servername' from database.") if ($serverid < 0);
-fatal("Cannot get server record!") if (get_server($serverid,\%server));
-
-
-$dhcp_auto_domainnames = $server{dhcp_flags_ad};
-$failover_mode = ($server{dhcp_flags_fo} ? 1 : 0);
-
-$zonelist = get_zone_list($serverid,0,0);
-undef %zonelist_hash;
-foreach $zone (@{$zonelist}) { $zonelist_hash{$$zone[0]}=$zone; }
-
-$normalzones = @{$zonelist};
-if ($server{masterserver} > 0) {
-  print "this server is slave (for id=$server{masterserver})\n" if ($verbose);
-  fatal("Cannot get master server record!")
-    if (get_server($server{masterserver},\%masterserver));
-  push @{master_server_ips}, [$masterserver{hostaddr}];
-
-  $zonelist2 = get_zone_list($server{masterserver},0,0);
-  # add selected zones from master server to slave...
-  foreach $zone (@{$zonelist2}) {
-    #print "zone: $$zone[0]\n";
-    if ($zonelist_hash{$$zone[0]}) {
-      print "skipping duplicate zone from master ($$zone[0])\n"	if ($verbose);
-      next;
-    }
-    next unless ($$zone[2] =~ /^[MS]$/);
-    push @{$zonelist}, $zone;
-  }
-
-  $dhcp_auto_domainnames = $masterserver{dhcp_flags_ad};
-
-  # disable dynamic addresses unless failover protocol is enabled...
-  if ($masterserver{dhcp_flags_fo}) { $failover_mode=2; }
-  else {
-    $dhcp2_mode=1;
-    print "disabling dynamic pools for slave\n";
-  }
-}
-$zones = @{$zonelist};
-
-print "Server '$servername' has $zones zones.\n";
-
-clean_up() if ($opt_clean);
-make_bind() if ($bind_conf);
-make_printcap() if ($printer_conf);
-make_dhcp() if ($dhcp_conf);
-
-exit(0);
 
 ###########################################################################
 
@@ -607,7 +496,7 @@ sub make_bind() {
 	  } elsif ($val) {
 	    $dnet = arpa2cidr("$val.$zonename");
 	    fatal("invalid reverse delegation '$val'")
-	      if ($dneg eq '0.0.0.0/0');
+	      if ($dnet eq '0.0.0.0/0' || $dnet eq '');
 	    #print "dnet: $dnet\n";
 	    $net = new Net::Netmask($dnet);
 	    $net->storeNetblock(\%delegnets);
@@ -770,8 +659,6 @@ sub make_bind() {
 	       "ORDER BY h.domain, w.proto;",\@q);
       error(db_errormsg()) if (db_errormsg());
       if (@q > 0) {
-	$wks_count=@q;
-	#print "found $wks_count wks entries!\n";
 	for $i (0 .. $#q) {
 	  $rec=$wkshash{$q[$i][0]};
 	  if (!$rec) {
@@ -817,8 +704,6 @@ sub make_bind() {
 	       "ORDER BY r.id,m.pri,m.mx;",\@q);
       error(db_errormsg()) if (db_errormsg());
       if (@q > 0) {
-	$mx_count=@q;
-	#print "found $mx_count mx entries!\n";
 	for $i (0 .. $#q) {
 	  $rec=$mxhash{$q[$i][0]};
 	  if (!$rec) {
@@ -827,8 +712,6 @@ sub make_bind() {
 	  }
 	  push @{$mxhash{$q[$i][0]}}, "$q[$i][1] $q[$i][2]";
 	}
-	#print "mxhash $mx_count : " . (keys %mxhash) . "\n";
-	#foreach $foo (keys %mxhash) {  print "mx hash: $foo\n"; }
       }
       undef %mxhash2;
       undef @q;
@@ -1345,6 +1228,8 @@ sub make_dhcp() {
     for $i (0..$#subnets) {
       $vlanhash{$subnets[$i][3]}++;
     }
+    undef @vlan_list_lst;
+    undef %vlan_list_hash;
     get_vlan_list($serverid,\%vlan_list_hash,\@vlan_list_lst);
     foreach $vlan (sort keys %vlanhash) {
       $netname=$vlan_list_hash{$vlan};
@@ -1638,6 +1523,122 @@ sub make_printcap() {
   close(PCAPFILE);
 }
 
+
+
+##########################################################################
+# main program
+
+$VER = sauron_version();
+
+$result=GetOptions("help|h","all|a","bind|b","dhcp|d","printer|p","mail",
+		   "updateserial","noupdateserial","verbose","dhcp2","clean");
+
+if ($opt_help || @ARGV < 1 || $result < 1) {
+    print "syntax: $0 [--help] [options] <servername> [<target directory>]\n";
+    print "\n\toptions:\n",
+      "\t--all            generate all configuration files\n",
+      "\t--bind           generate BIND (named) configuration files\n",
+      "\t--dhcp           generate DHCP (dhcpd) configuration files\n",
+      "\t--clean          cleanup expired records and vacuum database\n",
+      "\t--printer        generate PRINTER (lpd) configuration files\n\n",
+      "\t--updateserial   force serial update on master zones\n\n",
+      "\t--dhcp2          enable DHCPv2 compatibilty mode\n\n",
+      "\t--mail           enable email notification sending\n\n";
+    exit(1);
+}
+
+
+$dhcp_conf=1 if ($opt_dhcp || $opt_all);
+$bind_conf=1 if ($opt_bind || $opt_all);
+$printer_conf=1 if ($opt_printer || $opt_all);
+$verbose=($opt_verbose ? 1 : 0);
+$dhcp2_mode=1 if ($opt_dhcp2);
+
+$servername = $ARGV[0];
+if (@ARGV > 1) {
+	$targetdir = $ARGV[1];
+	$targetdir .= "/" unless ($targetdir =~ /\/$/);
+} else {
+	$targetdir = "./";
+}
+$user = (getpwuid($<))[0];
+$host = `hostname`;
+$host =~ s/\n//g;
+
+
+fatal("target directory is a file! ($targetdir)") if (-f $targetdir);
+fatal("target directory does not exists ($targetdir)") if (! -d $targetdir);
+fatal("no permissions to target directory!") 
+	unless (-r $targetdir && -x $targetdir && -w $targetdir);
+
+print "server name: $servername\n";
+print "target directory: $targetdir\n";
+
+print "DHCP v2 compatibility mode enabled\n" if ($dhcp2_mode);
+chdir($targetdir) || fatal("Cannot change to directory '$targetdir'!");
+
+$mailnotify_mode = ($opt_mail ? 1 : 0);
+$mailnotify_mode = 0 unless ($SAURON_MAILER && -x $SAURON_MAILER);
+$mailnotify_mode = 0 unless ($SAURON_MAIL_FROM);
+print "Email notification sending: " .
+      ($mailnotify_mode ? 'enabled':'disabled') . "\n" if ($verbose);
+
+fatal("DB_CONNECT not defined in configuration!") unless ($DB_CONNECT);
+db_connect($DB_CONNECT);
+
+$time_now_ticks = time;
+
+
+$serverid = get_server_id($servername);
+fatal("Cannot find server '$servername' from database.") if ($serverid < 0);
+fatal("Cannot get server record!") if (get_server($serverid,\%server));
+
+
+$dhcp_auto_domainnames = $server{dhcp_flags_ad};
+$failover_mode = ($server{dhcp_flags_fo} ? 1 : 0);
+
+$zonelist = get_zone_list($serverid,0,0);
+undef %zonelist_hash;
+foreach $zone (@{$zonelist}) { $zonelist_hash{$$zone[0]}=$zone; }
+
+$normalzones = @{$zonelist};
+if ($server{masterserver} > 0) {
+  print "this server is slave (for id=$server{masterserver})\n" if ($verbose);
+  fatal("Cannot get master server record!")
+    if (get_server($server{masterserver},\%masterserver));
+  push @{master_server_ips}, [$masterserver{hostaddr}];
+
+  $zonelist2 = get_zone_list($server{masterserver},0,0);
+  # add selected zones from master server to slave...
+  foreach $zone (@{$zonelist2}) {
+    #print "zone: $$zone[0]\n";
+    if ($zonelist_hash{$$zone[0]}) {
+      print "skipping duplicate zone from master ($$zone[0])\n"	if ($verbose);
+      next;
+    }
+    next unless ($$zone[2] =~ /^[MS]$/);
+    push @{$zonelist}, $zone;
+  }
+
+  $dhcp_auto_domainnames = $masterserver{dhcp_flags_ad};
+
+  # disable dynamic addresses unless failover protocol is enabled...
+  if ($masterserver{dhcp_flags_fo}) { $failover_mode=2; }
+  else {
+    $dhcp2_mode=1;
+    print "disabling dynamic pools for slave\n";
+  }
+}
+$zones = @{$zonelist};
+
+print "Server '$servername' has $zones zones.\n";
+
+clean_up() if ($opt_clean);
+make_bind() if ($bind_conf);
+make_printcap() if ($printer_conf);
+make_dhcp() if ($dhcp_conf);
+
+exit(0);
 
 
 # eof

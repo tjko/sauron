@@ -1193,6 +1193,8 @@ sub get_host_id($$) {
   return ($q[0][0] > 0 ? $q[0][0] : -1);
 }
 
+sub get_host($$); # declare it here since get_host uses sometimes recursion
+
 sub get_host($$) {
   my ($id,$rec) = @_;
   my ($res,$t,$wrec,$mrec,%h,@q);

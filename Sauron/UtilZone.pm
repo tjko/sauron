@@ -13,6 +13,8 @@ use IO::File;
 use Sauron::Util;
 use strict;
 
+sub process_zonefile($$$$);
+
 my $debug = 0;
 
 # parse zone file, build hash of all domain names in zone containing
@@ -24,7 +26,7 @@ my $debug = 0;
 sub process_zonefile($$$$) {
   my ($filename,$origin,$zonedata,$ext_flag)=@_;
 
-  my ($domain,$i,$c,$prev,@line,$ttl,$class,$fline,$type);
+  my ($domain,$i,$c,$prev,$ttl,$class,$fline,$type);
   my ($rec,$zone_ttl);
   my (@line,@tmpline,$tmporigin,$tmp,$paren,$quote);
   my $fh = IO::File->new();

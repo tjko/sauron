@@ -25,7 +25,7 @@ do "$config_file" || die("cannot load config: $config_file");
 
 ##############################################
 
-$result = GetOptions("help|h","verbose|v","notransaction|n");
+GetOptions("help|h","verbose|v","notransaction|n");
 
 $count=@ARGV;
 
@@ -38,6 +38,7 @@ if ($opt_help || $count < 1) {
   exit(0);
 }
 
+fatal("DB_CONNECT not defined in configuration!") unless ($DB_CONNECT);
 db_connect($DB_CONNECT);
 db_debug(0);
 

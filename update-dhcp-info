@@ -31,7 +31,7 @@ do "$config_file" || die("cannot load config: $config_file");
 
 ###################################################################
 
-$result = GetOptions("help|h","verbose|v");
+GetOptions("help|h","verbose|v");
 
 if ($opt_help || @ARGV < 2) {
   print "syntax: $0 [--help] [--verbose] <servername> <logfile>\n";
@@ -45,7 +45,7 @@ $year=(localtime(time))[5];
 
 
 fatal("cannot read input file '$file'") unless (-r $file);
-
+fatal("DB_CONNECT not defined in configuration!") unless ($DB_CONNECT);
 db_connect($DB_CONNECT);
 
 $serverid=get_server_id($servername);

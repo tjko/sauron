@@ -28,7 +28,6 @@ do "$config_file" || die("cannot load config: $config_file");
 
 ##############################################
 
-$mdate = time;
 $user = (getpwuid($<))[0];
 set_muser($user);
 
@@ -36,7 +35,7 @@ $result = GetOptions("help|h","name=s","commit","noreverse",
 		    "newonly","outofzone","verbose","force=s",
 		    "group=s","info=s");
 
-if ($opt_help || @ARGV < 2) {
+if ($opt_help || @ARGV < 2 || $result < 1) {
   print "syntax: $0 <server> <zone> <file> [options]\n\n",
         "options:\n",
 	"\t--name=<regexp>\t\thostname filter (regexp)\n",
@@ -54,6 +53,7 @@ if ($opt_help || @ARGV < 2) {
   exit(0);
 }
 
+fatal("DB_CONNECT not defined in configuration!") unless ($DB_CONNECT);
 db_connect($DB_CONNECT);
 
 $server=$ARGV[0];

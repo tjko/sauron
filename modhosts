@@ -28,13 +28,12 @@ do "$config_file" || die("cannot load config: $config_file");
 
 ##############################################
 
-$mdate = time;
 $user = (getpwuid($<))[0];
 
-$result = GetOptions("help|h","cidr=s","name=s","move=s","delete",
-		     "info=s","rename=s","commit","excludeip=s",
-		     "excludename=s","type=s","ether=s","etherempty",
-		     "setedate=s","verbose","setgroup=s");
+GetOptions("help|h","cidr=s","name=s","move=s","delete",
+	   "info=s","rename=s","commit","excludeip=s",
+	   "excludename=s","type=s","ether=s","etherempty",
+	   "setedate=s","verbose","setgroup=s");
 
 if ($opt_help || @ARGV < 2) {
   print "syntax: $0 <server> <zone> [options]\n\n",
@@ -57,6 +56,7 @@ if ($opt_help || @ARGV < 2) {
 }
 
 
+fatal("DB_CONNECT not defined in configuration!") unless ($DB_CONNECT);
 db_connect($DB_CONNECT);
 
 set_muser($user);
@@ -157,7 +157,7 @@ if ($opt_rename) {
 
 if ($opt_excludeip) {
   @exclude_ips = split(/,/,$opt_excludeip);
-  $ecount=@exclude_ips;
+  # $ecount=@exclude_ips;
   foreach $ip (@exclude_ips) {
     print "Excluded IP: $ip\n";
     fatal("Invalid exclude IP sepcified: $ip") unless (is_cidr($ip));
@@ -169,7 +169,7 @@ $sql="SELECT h.id,h.domain,h.type,h.ether $cidr_f FROM hosts h $cidr_t " .
      "WHERE h.zone=$zoneid $cidr_r $cidr $name $ether $info $type " .
      "ORDER BY h.domain;";
 
-print "$sql\n" if ($opt_verbose);
+print "$sql\n" if ($verbose);
 
 db_query($sql,\@q);
 print db_errormsg() . "\n" if (db_errormsg());

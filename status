@@ -43,6 +43,7 @@ if ($opt_help || not $result) {
   exit(0);
 }
 
+fatal("DB_CONNECT not defined in configuration!") unless ($DB_CONNECT);
 $db_ok = db_connect2($DB_CONNECT);
 
 $VER=sauron_version();
@@ -154,9 +155,9 @@ unless ($opt_quiet) {
 }
 
 
+$USER_TIMEOUT=3600 unless ($USER_TIMEOUT > 0);
 $timeout=$USER_TIMEOUT;
-$timeout=3600 unless ($timeout > 0);
-$t=time;
+
 get_who_list(\@who,$timeout);
 
 if (@who > 0) {

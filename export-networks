@@ -27,12 +27,13 @@ do "$config_file" || die("cannot load config: $config_file");
 
 ###################################################################
 
+$VER = sauron_version();
 $user = (getpwuid($<))[0];
 $host = `hostname`;
 $host =~ s/\n//g;
 $time_now = localtime;
 
-$result = GetOptions("help|h","verbose|v","all|a","comments");
+GetOptions("help|h","verbose|v","all|a","comments");
 
 if ($opt_help || @ARGV < 1) {
   print "syntax: $0 [--help] [--verbose] [--comments] [--all] <servername>\n";
@@ -43,6 +44,7 @@ $verbose=1 if (defined $opt_verbose);
 $servername=$ARGV[0];
 $no_comments = ($opt_comments ? 0 : 1);
 
+fatal("DB_CONNECT not defined in configuration!") unless ($DB_CONNECT);
 db_connect($DB_CONNECT);
 
 $serverid=get_server_id($servername);
@@ -62,9 +64,10 @@ db_query("SELECT net,netname,comment,name " .
 $found=@q;
 print STDERR "Found $found network(s)\n" if ($verbose);
 
-print "#\n# /etc/networks  -- automagically generated (by Sauron $VER)\n",
-      "#                   created by $user\@$host at $time_now\n",
-      "#\n# network-name                           network-number\n#\n";
+print "# /etc/networks  -- automagically generated (by Sauron $VER)\n",
+      "#\n# created by $user\@$host at $time_now\n#\n",
+      "# network-name                           network-number\n",
+      "# ------------                           --------------\n#\n";
 
 
 for $i (0..$#q) {

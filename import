@@ -33,7 +33,7 @@ do "$config_file" || die("cannot load config: $config_file");
 
 ##############################
 
-$result = GetOptions("help|h","orphans=s","notransaction","verbose|v","dir=s");
+GetOptions("help|h","orphans=s","notransaction","verbose|v","dir=s");
 
 if ($opt_help || @ARGV < 2) {
     print "syntax: $0 [options] <servername> <named.conf file>\n";
@@ -54,8 +54,12 @@ $user = (getpwuid($<))[0];
 $cdate = time;
 %zonedata = {};
 
-set_muser($user);
+LOOPBACK_NET='127.0.0.0/24' unless ($LOOPBACK_NET);
+LOOPBACK_ZONE='localhost.' unless ($LOOPBACK_ZONE);
+fatal("DB_CONNECT not defined in configuration!") unless ($DB_CONNECT);
+
 db_connect($DB_CONNECT);
+set_muser($user);
 
 fatal("cannot open named.conf ($namedf)") unless (-r $namedf);
 
@@ -270,8 +274,6 @@ print "server id=$serverid\n" if ($verbose);
 fatal("cannot update server (allow-transfer)")
    if (update_server({id=>$serverid,allow_transfer=>\@allow_transfer}) < 0);
 
-$serverid_save = $serverid;
-
 
 #########################################
 # create zones
@@ -305,11 +307,9 @@ for ($i=0; $i <= $#zones; $i+=1) {
 
   if ($zone =~ /$LOOPBACK_ZONE|$loopback_reverse/) {
     $loopback = 'true';
-    #$serverid = 0;
     print "loopback ";
   } else {
     $loopback = 'false';
-    #$serverid = $serverid_save;
   }
 
 
@@ -349,7 +349,7 @@ for ($i=0; $i <= $#zones; $i+=1) {
   fatal("cannot update zone: $zone (id=$zoneid)\n")
     if (update_zone(\%tmphash) < 0);
 
-  push(@loopbacks_list,$zoneid) if ($loopback eq 'true');
+  # push(@loopbacks_list,$zoneid) if ($loopback eq 'true');
 
   # handle slave (& other) zones
   unless ($type eq 'M') {

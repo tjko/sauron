@@ -41,6 +41,7 @@ if ($opt_help || @ARGV < 1) {
 $file=$ARGV[0];
 
 fatal("cannot read input file '$file'") unless (-r $file);
+fatal("DB_CONNECT not defined in configuration!") unless ($DB_CONNECT);
 
 db_connect($DB_CONNECT);
 #db_debug(1);
