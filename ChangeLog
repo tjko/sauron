@@ -1,6 +1,7 @@
 $Id$
 
 0.7.2beta
+	- dbformat changes: new fields: users.person
 	- new utility: export-ip-list for generating lists of active
 	  IPs in given (sub)nets (for automatically updating access/accounting
 	  lists in firewalls)

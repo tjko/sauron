@@ -27,7 +27,9 @@ CREATE TABLE user_rights (
 				10=groupmask,
                                 11=deletemask (hostname),
 	                        12=reqhostfield,
-	                        13=privilege flags (AREC,CNAME,MX,...) */
+	                        13=privilege flags (AREC,CNAME,MX,...),
+				100=remit (asset management),
+				101=asset management flags  */
 	rref	INT NOT NULL, /* ptr to table specified by type field */
 	rule	CHAR(40) /* R,RW,RWS or regexp */     
 );

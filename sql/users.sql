@@ -9,6 +9,8 @@ CREATE TABLE users (
 	id		SERIAL PRIMARY KEY, /* unique ID */
 	gid		INT4 DEFAULT -1, /* ptr to user group 
 					    -->user_groups.id */
+	person		INT4 DEFAULT -1, /* ptr to person table
+					  (asset management) */
 	username	TEXT NOT NULL CHECK(username <> ''), /* login name */
 	password	TEXT, /* encrypted password (MD5 or Crypt) */
 	name		TEXT, /* long user name */
@@ -22,7 +24,6 @@ CREATE TABLE users (
 	search_opts	TEXT, /* default search options */
 	flags		INT4 DEFAULT 0, /* user account flasgs:
 					   0x01 = email notifications on */
-
 	comment		TEXT,
 
 	CONSTRAINT	username_key UNIQUE(username)
