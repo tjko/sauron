@@ -62,6 +62,7 @@ sub set_defaults() {
   $main::SAURON_ICON_PATH = '/sauron/icons';
   $main::SAURON_BGCOLOR = 'white';
   $main::SAURON_FGCOLOR = 'black';
+  $main::SAURON_AUTH_MODE = 0;
   $main::SAURON_AUTH_PROG = '';
   $main::SAURON_DHCP_CHK_PROG = '';
   $main::SAURON_DHCP_CHK_ARGS = '-q -t -cf';
@@ -123,6 +124,7 @@ sub print_config() {
   print "SAURON_ICON_PATH=",$main::SAURON_ICON_PATH,"\n";
   print "SAURON_BGCOLOR=",$main::SAURON_BGCOLOR,"\n";
   print "SAURON_FGCOLOR=",$main::SAURON_FGCOLOR,"\n";
+  print "SAURON_AUTH_MODE=",$main::SAURON_AUTH_MODE,"\n";
   print "SAURON_AUTH_PROG=",$main::SAURON_AUTH_PROG,"\n";
   print "SAURON_DHCP_CHK_PROG=",$main::SAURON_DHCP_CHK_PROG,"\n";
   print "SAURON_DHCP_CHK_ARGS=",$main::SAURON_DHCP_CHK_ARGS,"\n";

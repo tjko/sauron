@@ -173,6 +173,7 @@ $menu=param('menu');
 #$menu='login' unless ($menu);
 $remote_addr = $ENV{'REMOTE_ADDR'};
 $remote_host = remote_host();
+$remote_user = remote_user();
 
 html_error("Invalid log path (LOG_DIR)") unless (-d $LOG_DIR);
 html_error("Cannot write to log file")
@@ -201,10 +202,12 @@ if ($scookie) {
 unless ($scookie) {
   logmsg("notice","new connection from: $remote_addr");
   $new_cookie=make_cookie($script_path);
+  $scookie=$ncookie;
   print header(-cookie=>$new_cookie,-charset=>$SAURON_CHARSET,
 	       -target=>'_top',-expires=>'now'),
         start_html(-title=>"Sauron Login",-BGCOLOR=>'white');
-  login_form("Welcome",$ncookie);
+  login_auth() if ($SAURON_AUTH_MODE==1);
+  login_form("Welcome",$scookie);
 }
 
 if ($state{'mode'} eq '1' && param('login') eq 'yes') {
@@ -219,16 +222,19 @@ if ($state{'auth'} ne 'yes' || $pathinfo eq '/login') {
   update_lastlog($state{uid},$state{sid},4,$remote_addr,$remote_host);
   print header(-charset=>$SAURON_CHARSET,-target=>'_top',-expires=>'now'),
         start_html(-title=>"Sauron Login",-BGCOLOR=>'white');
+  login_auth() if ($SAURON_AUTH_MODE==1);
   login_form("Welcome (again)",$scookie);
 }
 
-if ((time() - $state{'last'}) > $SAURON_USER_TIMEOUT) {
-  logmsg("notice","connection timed out for $remote_addr " .
-	 $state{'user'});
-  update_lastlog($state{uid},$state{sid},3,$remote_addr,$remote_host);
-  print header(-charset=>$SAURON_CHARSET,-target=>'_top',-expires=>'now'),
-        start_html(-title=>"Sauron Login",-BGCOLOR=>'white');
-  login_form("Your session timed out. Login again",$scookie);
+if ($SAURON_AUTH_MODE==0) {
+  if ((time() - $state{'last'}) > $SAURON_USER_TIMEOUT) {
+    logmsg("notice","connection timed out for $remote_addr " .
+	   $state{'user'});
+    update_lastlog($state{uid},$state{sid},3,$remote_addr,$remote_host);
+    print header(-charset=>$SAURON_CHARSET,-target=>'_top',-expires=>'now'),
+      start_html(-title=>"Sauron Login",-BGCOLOR=>'white');
+    login_form("Your session timed out. Login again",$scookie);
+  }
 }
 
 unless ($SAURON_NO_REMOTE_ADDR_AUTH) {
@@ -1273,6 +1279,7 @@ if ($debug_mode) {
         "<br>s_url='$s_url', selfurl='$selfurl'\n",
         "<br>url: " . url(),
         "<br>remote_addr=$remote_addr",
+        "<br>remote_user=$remote_user",
         "<p><table><tr valign=\"top\"><td><table border=1>Parameters:";
   @names = param();
   foreach $var (@names) { print Tr(td($var),td(param($var)));  }
@@ -3841,8 +3848,14 @@ sub login_auth() {
   $ticks=time();
   $state{'auth'}='no';
   $state{'mode'}='0';
-  $u=param('login_name');
-  $p=param('login_pwd');
+
+  if ($SAURON_AUTH_MODE == 1) {
+    $u=$remote_user;
+    $p='foobar';
+  } else {
+    $u=param('login_name');
+    $p=param('login_pwd');
+  }
   $p=~s/\ \t\n//g;
   print "<P><CENTER>";
   if (! (valid_safe_string($u,255) && valid_safe_string($p,255))) {
@@ -3857,7 +3870,10 @@ sub login_auth() {
   else {
     unless (get_user($u,\%user)) {
       $pwd_chk = -1;
-      if ($SAURON_AUTH_PROG) {
+      if ($SAURON_AUTH_MODE==1) {
+	$pwd_chk=0;
+      }
+      elsif ($SAURON_AUTH_PROG) {
 	if (-x $SAURON_AUTH_PROG) {
 	  $pwd_chk = pwd_external_check($SAURON_AUTH_PROG,$u,$p);
 	} else {
@@ -3878,11 +3894,11 @@ sub login_auth() {
 	$state{'superuser'}='yes' if ($user{superuser} eq 't' ||
 				      $user{superuser} == 1);
 	if ($state{'serverid'} > 0) {
-	  $state{'server'}=$h{'name'} 
+	  $state{'server'}=$h{'name'}
 	    unless(get_server($state{'serverid'},\%h));
 	}
 	if ($state{'zoneid'} > 0) {
-	  $state{'zone'}=$h{'name'} 
+	  $state{'zone'}=$h{'name'}
 	    unless(get_zone($state{'zoneid'},\%h));
 	}
 
@@ -3949,6 +3965,7 @@ sub login_auth() {
   print "</TABLE>\n" unless ($frame_mode);
   print end_html();
   save_state($scookie);
+  load_state($scookie) if ($SAURON_AUTH_MODE==1);
   fix_utmp($SAURON_USER_TIMEOUT*2);
   exit;
 }

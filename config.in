@@ -16,6 +16,7 @@ $LOG_DIR = "$PROG_DIR/logs/";
 # database connection setup
 #$DB_CONNECT = "host=localhost port=5432 dbname=sauron user=foo password=bar";
 #$DB_CONNECT = "dbname=sauron user=foo password=bar";
+#$DB_CONNECT = "dbname=sauron user=foo";
 $DB_CONNECT = "dbname=sauron";
 
 # unique server ID (if using multiple www-server)
@@ -69,6 +70,15 @@ $SERVER_ID = "fooserver";
 #        1 = standard Unix crypt
 #
 # $SAURON_PWD_MODE = 1;
+
+# User authentication mode:
+#    0 = (default) Uses internal authentication, authenticates agains
+#        encrypted passwords stored in the database (or using external
+#        authentication program if SAURON_AUTH_PROG is defined).
+#    1 = Use Apache (external) authentication, trusts REMOTE_USER
+#        environment variables set by httpd.
+#
+# $SAURON_AUTH_MODE = 0;
 
 # External authentication command/script.
 # This script should read one line from STDIN that contains username

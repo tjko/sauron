@@ -1,5 +1,8 @@
 $Id$
 
+0.7.1beta
+	- added support for Apache (external) authentication
+	
 0.7.0
 	- added new utility import-nets for importing/updating
 	  nets (and VLANs) from a CSV file
