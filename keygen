@@ -1,0 +1,227 @@
+#!/usr/bin/perl -I/usr/local/sauron
+#
+# keygen -- utility for creating TSIG/DNSSEC keys
+#
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2005.
+# $Id$
+#
+require 5;
+use Getopt::Long;
+use Sauron::DB;
+use Sauron::Util;
+use Sauron::Sauron;
+use Sauron::BackEnd;
+use Digest::MD5;
+use MIME::Base64;
+use Crypt::RC5;
+
+load_config();
+
+GetOptions("help|h","setmasterkey:s","add:s","del:s","regen:s","list:s");
+
+if ($opt_help || not (defined($opt_add) || defined $opt_del || 
+		   defined $opt_regen || defined $opt_list || 
+		   defined $opt_setmasterkey) ) {
+  print "syntax: $0 <server> [OPTIONS]\n",
+        "interactive options:\n\n",
+        "\t--setmasterkey\tset sauron master key\n",
+        "\t--add\t\tadd a key\n",
+        "\t--del\t\tdelete a key\n",
+        "\t--regen\t\tregenerate (non-static) key(s)\n",
+        "\t--list\t\tlist keys\n\n",
+        "non-interactive options:\n\n",
+        "\t--setmasterkey=<passphrase>\n",
+        "\t--list=<server>\n",
+        "\t--regen=<server>,<keytype>\n",
+        "\t--del=<server>,<keyname>\n",
+        "\t--add=<server>,<keyname>,TSIG,<keylen>,[<passphrase>]\n",
+        "\n";
+  exit(0);
+}
+
+umask 077;
+
+db_connect();
+
+if (defined $opt_setmasterkey) {
+    my $keyfile=$CONFIG_FILE . ".key";
+    if (-f $keyfile) {
+	my $fmode = (stat($keyfile))[2];
+	fatal("existing keyfile with unsafe permissions: $keyfile")
+	    if ($fmode & 0027);
+    }
+
+    unless ($opt_setmasterkey) {
+	print "Enter passphrase: ";
+	chomp($opt_setmasterkey=<STDIN>);
+	fatal("Cannot use empty passphrase") unless ($opt_setmasterkey);
+    }
+	
+    my $ctx = Digest::MD5->new;
+    $ctx->add($opt_setmasterkey);
+    $opt_setmasterkey='';
+    my $key = encode_base64($ctx->digest);
+
+    open(FILE,">$keyfile") || fatal("cannot write to file: $keyfile");
+    print FILE "Key: $key\n";
+    close(FILE);
+    print "Sauron master key set.\n";
+    exit;
+}
+
+if (defined $opt_add) {
+    fatal("Sauron master key not defined/available " .
+	  "(generate using --setmasterkey)") unless ($SAURON_KEY);
+
+    my ($server,$name,$type,$len,$key) = split(/,/,$opt_add);
+    $server=getserver($server);
+    $name=getname($name);
+
+    fatal("Key with same name allready exists: $name")
+	if (get_key_by_name($server,$name) > 0);
+
+    $type=gettype($type);
+    if ($type eq 'TSIG') {
+	$len=getlen($len,1,512,128);
+    } else {
+	fatal("unsupported key type");
+    }
+    
+    if ($key) {
+	fatal("Key must be in Base64 (MIME) format")
+	    unless ($key =~ /^[a-zA-Z0-9+\/=]+$/);
+    } else {
+	print "Generating key...\n";
+	$key=generate_key($name,$type,$len);
+
+	my $ref = Crypt::RC5->new($SAURON_KEY,16);
+	$key=encode_base64($ref->encrypt(decode_base64($key)));
+    }
+
+    exit;
+    fatal("failed to add key: $name")
+	if (add_key({type=>1,ref=>$server,name=>$name,protocol=>2,
+		     algorithm=>157,keysize=>$len,secretkey=>$key}) < 1);
+    
+    print "Key added successfully.\n";
+    exit;
+}
+
+fatal("unknown option?");
+
+
+sub getserver($) {
+    my($ans) = @_;
+    my($ret);
+    unless ($ans) {
+	print "Server name: ";
+	chomp($ans = <STDIN>);
+    }
+    $ret=get_server_id($ans);
+    fatal("cannot find server: $ans") unless($ret > 0);
+    return $ret;
+}
+
+sub getname() {
+    my($ans) = @_;
+    unless ($ans) {
+	print "Key name: ";
+	chomp($ans = <STDIN>);
+    }
+    fatal("invalid key name: $ans") unless (valid_texthandle($ans));
+    return $ans;
+}
+
+sub gettype($) {
+    my($ans) = @_;
+    unless ($ans) {
+	print "Key type [TSIG]: ";
+	chomp($ans = <STDIN>);
+	$ans = 'TSIG' unless ($ans);
+    }
+    fatal("invalid/unsupported key type: $ans")
+	unless ($ans =~ /^(TSIG)$/);
+    return $ans;
+}
+
+sub getlen($$$$) {
+    my($ans,$min,$max,$def) = @_;
+    unless ($ans ne '') {
+	print "Key length ($min-$max) [$def]: ";
+	chomp($ans = <STDIN>);
+    }
+    $ans=$def unless ($ans);
+    fatal("key site out of range ($min-$max): $ans")
+	unless ($ans >= $min && $ans <= $max);
+    return $ans;
+}
+
+sub make_tmpdir() {
+    my $ctx = Digest::MD5->new;
+    my $prefix = '/tmp/sauron.';
+    my $tmpdir;
+
+    while ($tmpdir eq '') {
+	$ctx->add($$);
+	$ctx->add(rand(999999999));
+	$tmpdir=$prefix.$ctx->hexdigest;
+	$tmpdir='' if (-e $tmpdir);
+    } 
+
+    mkdir($tmpdir,0700) || 
+	fatal("failed to create temporary directory: $tmpdir");
+    return $tmpdir;
+}
+
+
+sub generate_key($$$) {
+    my($name,$type,$len) = @_;
+    my $key;
+
+    fatal("SAURON_DNSSEC_KEYGEN_PROG configuration option not defined")
+	unless ($SAURON_DNSSEC_KEYGEN_PROG);
+    fatal("Cannot execute: $SAURON_DNSSEC_KEYGEN_PROG")
+	unless (-x $SAURON_DNSSEC_KEYGEN_PROG);
+
+    my $opts = $SAURON_DNSSEC_KEYGEN_ARGS;
+
+    if ($type eq 'TSIG') {
+	$args = "-a HMAC-MD5 -b $len -n USER"; 
+    } else {
+	fatal("support this keytype not implemented yet: $type");
+    }
+
+    my $tmpdir=make_tmpdir();
+    chdir($tmpdir) || fatal("cannot access tmp dir: $tmpdir");
+
+    my $keyid = '';
+    open(PIPE,"$SAURON_DNSSEC_KEYGEN_PROG $args $opts keygen |") ||
+	fatal("pipe failed");
+    while(<PIPE>) {
+	chomp;
+        $keyid=$1 if (/^(Kkeygen\S+)\s*$/);
+    }
+    close(PIPE);
+    fatal("failed to generate key!") unless ($keyid);
+
+    my $keyfile = $tmpdir."/".$keyid.".key";
+    my $keyfile2 = $tmpdir."/".$keyid.".private";
+
+    open(FILE,$keyfile) || fatal("failed to open: $keyfile");
+    while(<FILE>) {
+	chomp;
+	$key = $1 if (/^\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+(\S+)/);
+    }
+    close(FILE);
+
+
+    unlink($keyfile) || error("failed to remove: $keyfile");
+    unlink($keyfile2) || error("failed to remove: $keyfile2");
+    rmdir($tmpdir) || error("failed to remove: $tmpdir");
+
+    return $key;
+}
+
+
+# eof :-)
+
