@@ -90,7 +90,7 @@ PROGS = sauron addgroup adduser deluser modhosts \
 	expire-hosts createtables
 
 MODULES = Sauron/Util.pm Sauron/DB.pm Sauron/BackEnd.pm Sauron/CGIutil.pm \
-	  Sauron/UtilZone.pm Sauron/Sauron.pm
+	  Sauron/UtilZone.pm Sauron/Sauron.pm Sauron/UtilDhcp.pm
 
 
 CONTRIB_FILES = contrib/additional-ether-codes.txt \
