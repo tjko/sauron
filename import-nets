@@ -122,7 +122,7 @@ while(<FILE>) {
   if ($opt_name) {
     $name=lc($l[$opt_name-1]);
     unless ($name =~ /^[a-z0-9\-]+$/) {
-      error("$filename($.): invalide net name: $name");
+      error("$filename($.): invalid net name: $name");
       next;
     }
   }
@@ -137,9 +137,9 @@ while(<FILE>) {
     }
   }
   if ($opt_vlan) {
-    $vlan=lc($l[$opt_vlan-1]);
-    unless ($vlan =~ /^[a-z0-9\-]+$/) {
-      error("$filename($.): invalide vlan name: $vlan");
+    $vlan=$l[$opt_vlan-1];
+    unless ($vlan =~ /^[A-Za-z0-9_\-]+$/) {
+      error("$filename($.): invalid vlan name: $vlan");
       next;
     }
     $vlans{$vlan}=[-1,'',-1] unless (defined($vlans{$vlan}));;

@@ -104,7 +104,7 @@ my %vlan_form=(
  data=>[
   {ftype=>0, name=>'VLAN (Layer-2 Network / Shared Network)'},
   {ftype=>1, tag=>'name', name=>'Name', type=>'texthandle',
-   len=>32, conv=>'L', empty=>0},
+   len=>32, empty=>0},
   {ftype=>4, tag=>'id', name=>'ID', no_edit=>0},
   {ftype=>1, tag=>'vlanno', name=>'VLAN No.', type=>'priority',
    len=>5, empty=>1},
