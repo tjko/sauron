@@ -13,7 +13,7 @@ use Sauron::Util;
 use Sauron::UtilZone;
 use Sauron::BackEnd;
 
-($PG_DIR,$PG_NAME) = ($0 =~ /^(.*\/)(.*)$/);
+my ($PG_DIR,$PG_NAME) = ($0 =~ /^(.*\/)(.*)$/);
 $0 = $PG_NAME;
 
 if (-r "/etc/sauron/config") {
@@ -326,7 +326,7 @@ for ($i=0; $i <= $#zones; $i+=1) {
   $tmphash{type}=$type;
   $tmphash{reverse}=$rev;
   $tmphash{name}=$zone;
-  $tmphash{chknames}=$chekc_names;
+  $tmphash{chknames}=$check_names;
   $tmphash{nnotify}=$nnotify;
   $tmphash{also_notify}=$alsonotify{$zones[$i]} if ($alsonotify{$zones[$i]});
   $tmphash{masters}=$masters{$zones[$i]}  if ($masters{$zones[$i]});
