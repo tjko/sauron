@@ -1017,6 +1017,7 @@ sub update_zone($) {
   if ($r < 0) { db_rollback(); return $r; }
   $id=$rec->{id};
 
+  return -199 unless ($rec->{type});
   if ($rec->{type} eq 'M') {
     $hid=get_host_id($id,'@');
     return -200 unless ($hid > 0);
