@@ -96,7 +96,7 @@ if ($opt_ether) {
     $ether= " AND h.ether ~ '$opt_ether' ";
 }
 if ($opt_etherempty) {
-    $ether= " AND (h.ether = '' OR h.ether = NULL) ";
+    $ether= " AND (h.ether = '' OR h.ether IS NULL) ";
 }
 
 if ($opt_setedate) {
