@@ -258,6 +258,7 @@ unless ($menu) {
   $menu='servers' unless ($serverid > 0);
 }
 
+init_plugins($SAURON_PLUGINS);
 
 if ($pathinfo ne '') {
   $frame_mode=1 if ($pathinfo =~ /^\/frame/);
@@ -269,7 +270,6 @@ if ($pathinfo ne '') {
 }
 
 
-init_plugins($SAURON_PLUGINS);
 cgi_util_set_zone($zoneid,$zone);
 cgi_util_set_server($serverid,$server);
 set_muser($state{user});
@@ -590,6 +590,12 @@ sub login_auth() {
                   "<BR> &nbsp; &nbsp; -- $newslist[$i][1] $date </I></FONT>"));
 	  }
 	  print "</TABLE><BR>";
+	}
+
+	# advertise "save defaults" option for users not having any defaults...
+	unless ($state{serverid} > 0 && $state{zoneid} > 0) {
+	  print h4("Hint! You can save your server and zone selection using " .
+		   "the \"Save Defaults\" command in Login menu.");
 	}
 
 	print "</CENTER></td></tr></table>\n";
