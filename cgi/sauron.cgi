@@ -16,7 +16,7 @@ $CGI::DISABLE_UPLOADS = 1; # no uploads
 $CGI::POST_MAX = 100000; # max 100k posts
 
 #$|=1;
-$debug_mode = 1;
+$debug_mode = 0;
 
 if (-f "/etc/sauron/config") {
   $conf_dir='/etc/sauron';
@@ -247,7 +247,7 @@ do "$PROG_DIR/back_end.pl";
 
   {ftype=>0, name=>'Group/Template selections', iff=>['type','[15]']},
   {ftype=>10, tag=>'grp', name=>'Group', iff=>['type','[15]']},
-  {ftype=>6, tag=>'mx', name=>'MX template', iff=>['type','1']},
+  {ftype=>6, tag=>'mx', name=>'MX template', iff=>['type','[13]']},
   {ftype=>7, tag=>'wks', name=>'WKS template', iff=>['type','1']},
 
   {ftype=>0, name=>'Host specific',iff=>['type','[12]']},
@@ -526,7 +526,7 @@ do "$PROG_DIR/back_end.pl";
    enum=>{t=>'Subnet',f=>'Net'}},
   {ftype=>1, tag=>'net', name=>'Net (CIDR)', type=>'cidr'},
   {ftype=>1, tag=>'vlan', name=>'VLAN', type=>'text', len=>15,
-   iff=>['subnet','t']},
+   empty=>1, iff=>['subnet','t']},
   {ftype=>1, tag=>'comment', name=>'Comment', type=>'text',
    len=>60, empty=>1},
   {ftype=>0, name=>'Auto assign address range', iff=>['subnet','t']},
@@ -539,7 +539,11 @@ do "$PROG_DIR/back_end.pl";
    enum=>{f=>'Enabled',t=>'Disabled'}},
   {ftype=>2, tag=>'dhcp_l', name=>'Net specific DHCP entries', 
    type=>['text','text'], fields=>2,
-   len=>[40,20], empty=>[0,1], elabels=>['DHCP','comment']}
+   len=>[40,20], empty=>[0,1], elabels=>['DHCP','comment']},
+
+  {ftype=>0, name=>'Record info', no_edit=>0},
+  {ftype=>4, name=>'Record created', tag=>'cdate_str', no_edit=>1},
+  {ftype=>4, name=>'Last modified', tag=>'mdate_str', no_edit=>1}
  ]
 );
 
@@ -619,7 +623,7 @@ do "$PROG_DIR/back_end.pl";
   {ftype=>4, tag=>'id', name=>'ID'},
   {ftype=>1, tag=>'comment', name=>'Comment', type=>'text',len=>60, empty=>1},
   {ftype=>2, tag=>'wks_l', name=>'WKS', 
-   type=>['text','text','text'], fields=>3, len=>[10,30,10], empty=>[0,0,1], 
+   type=>['text','text','text'], fields=>3, len=>[10,30,10], empty=>[0,1,1], 
    elabels=>['Protocol','Services','comment']}
  ]
 );
@@ -878,7 +882,7 @@ sub servers_menu() {
       if (delete_server($serverid) < 0) {
 	print h2("Cannot delete server!");
       } else {
-	print h2('Server deleted succesfully!');
+	print h2('Server deleted successfully!');
 	$state{'zone'}=''; $state{'zoneid'}=-1;
 	$state{'server'}=''; $state{'serverid'}=-1;
 	save_state($scookie);
@@ -1040,7 +1044,7 @@ sub zones_menu() {
 	  print '<FONT color="red">',h2('Zone copy failed (result=$res!'),
 	        '</FONT>';
 	} else {
-	  print h2("Zone succesfully copied (id=$res).");
+	  print h2("Zone successfully copied (id=$res).");
 	}
 	return;
       } else {
@@ -2528,7 +2532,7 @@ sub edit_magic($$$$$$$) {
 	      "<br>result code=$res",
 	      "<br>error: " . db_errormsg() ."</FONT>";
       } else {
-	print h2("$name record succefully updated");
+	print h2("$name record successfully updated");
 	#&$get_func($id,\%h);
 	#display_form(\%h,$form);
 	return 1;
@@ -2572,7 +2576,7 @@ sub add_magic($$$$$$) {
 	print "<FONT color=\"red\">",h1("Adding $name record failed!"),
 	      "<br>result code=$res</FONT>";
       } else {
-	print h3("$name record succefully added");
+	print h3("$name record successfully added");
 	return $res;
       }
     } else {

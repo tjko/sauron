@@ -130,7 +130,7 @@ do "$PROG_DIR/back_end.pl";
 sub logmsg($$) {
   my($type,$msg)=@_;
 
-  open(LOGFILE,">>$LOG_DIR/sauron.log");
+  open(LOGFILE,">>$LOG_DIR/sauron-browser.log");
   print LOGFILE localtime(time) . " sauron: $msg\n";
   close(LOGFILE);
 
@@ -196,7 +196,9 @@ print "<TABLE width=\"100%\" cellpadding=3 cellspacing=0 border=0 ",
       "<TD height=24><FONT color=\"#ffffff\">Sauron DNS browser</FONT>",
       "</TD><TD><FONT color=\"#ffffff\">Zone: $zone</FONT></TD>",
       "<TD align=\"right\"><FONT color=\"#ffffff\">$timestamp</FONT>",
-      "</TD></TR><TR><TD colspan=3>";
+      "</TD></TR>",
+      "<TR><TD colspan=3 align=\"right\">$help_str</TD></TR>",
+      "<TR><TD colspan=3>";
 
 @search_types=('Host (regexp)',
 	       'IP (or CIDR)',
@@ -212,10 +214,11 @@ if (param('reset')) {
 print startform(-method=>'POST',-action=>$selfurl),
       "Search type: ",
       popup_menu(-name=>'type',-values=>\@search_types), " ",
-      textfield(-name=>'mask',-size=>40,-maxlength=>40), " ",
+      textfield(-name=>'mask',-size=>30,-maxlength=>40), " ",
       submit(-name=>'search',-value=>'Search'), " ",
       submit(-name=>'reset',-value=>'Clear'),
-      " &nbsp; &nbsp; $help_str &nbsp;",end_form,"</TD></TR></TABLE>\n";
+      end_form,"</TD></TR>",
+      "</TABLE>\n";
 
 if (($id=param('id')) > 0) {
   display_host($id);
@@ -292,7 +295,7 @@ sub do_search() {
     $rule = " h.ether = '$mask' " if ($mask =~ /^[A-F0-9]{12}$/);
   }
 
-  $sql  = "SELECT h.id,h.type,h.domain,a.ip,'',h.ether,h.info,h.huser, ".
+  $sql  = "SELECT h.id,h.type,h.domain,a.ip,''::text,h.ether,h.info,h.huser, ".
           " h.dept,h.location " .
           "FROM hosts h, a_entries a " .
 	  "WHERE h.zone=$zoneid AND a.host=h.id AND h.type=1 AND $rule ";

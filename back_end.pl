@@ -1598,17 +1598,29 @@ sub get_net($$) {
 
   return -100 if (get_record("nets",
                       "server,name,net,subnet,rp_mbox,rp_txt,no_dhcp,comment,".
-		      "range_start,range_end,vlan",$id,$rec,"id"));
+		      "range_start,range_end,vlan,cdate,cuser,mdate,muser",
+		      $id,$rec,"id"));
 
   get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comment",
 		  "type=4 AND ref=$id ORDER BY dhcp",$rec,'dhcp_l');
 
+  $rec->{cdate_str}=($rec->{cdate} > 0 ?
+		     localtime($rec->{cdate}).' by '.$rec->{cuser} : 'UNKOWN');
+  $rec->{mdate_str}=($rec->{mdate} > 0 ?
+		     localtime($rec->{mdate}).' by '.$rec->{muser} : '');
   return 0;
 }
 
 sub update_net($) {
   my($rec) = @_;
   my($r,$id);
+
+  delete $rec->{mdate_str};
+  delete $rec->{cdate_str};
+  delete $rec->{cdate};
+  delete $rec->{cuser};
+  $rec->{mdate}=time;
+  $rec->{muser}=$muser;
 
   db_begin();
   $r=update_record('nets',$rec);
@@ -1627,6 +1639,8 @@ sub update_net($) {
 sub add_net($) {
   my($rec) = @_;
 
+  $rec->{cdate}=time;
+  $rec->{cuser}=$muser;
   return add_record('nets',$rec);
 }
 
