@@ -9,7 +9,8 @@ Group: Applications/Internet
 BuildRoot: %{_tmppath}/%{name}-%{version}-buildroot
 BuildRequires: perl >= 5.6.0
 Requires: perl >= 5.6.0, perl-CGI, postgresql-perl, perl-Digest-HMAC
-Requires: perl-Net-Netmask, perl-Term-ReadKey
+Requires: perl-Net-Netmask
+BuildArch: noarch
 
 %description
 Sauron is a scalable system for management of DNS & DHCP services. Sauron
@@ -33,16 +34,18 @@ fi
 
 %install
 rm -rf $RPM_BUILD_ROOT
-INSTALL_ROOT=$RPM_BUILD_ROOT make install
+make install INSTALL_ROOT=$RPM_BUILD_ROOT
 
 %clean
 rm -rf $RPM_BUILD_ROOT
 
 %files
 %defattr(-,root,root)
-/opt/sauron
+/opt/sauron/*
 /etc/sauron/config.in
+/etc/sauron/config-browser.in
 %config /etc/sauron/config
+%config /etc/sauron/config-browser
 %doc README COPYRIGHT COPYING ChangeLog
 
 %changelog

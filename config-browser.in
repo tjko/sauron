@@ -7,7 +7,7 @@ $VER = "0.5";
 #########################################################################
 # general configuration options
 
-$PROG_DIR = "/opt/sauron/";
+$PROG_DIR = "/usr/local/sauron/";
 
 #$DB_CONNECT = "host=localhost port=5432 dbname=sauron user=foo password=bar";
 #$DB_CONNECT = "dbname=sauron user=foo password=bar";

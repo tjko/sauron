@@ -9,6 +9,8 @@ PKGNAME = sauron
 DBASE = sauron
 
 SHELL = /bin/sh
+PERL  = @PERL@
+LN_S  = @LN_S@
 
 DEFS = @DEFS@
 
@@ -165,6 +167,12 @@ install: all make_dirs
 	if [ ! -f $(INSTALL_ROOT)/$(etcdir)/config ]; then \
 	    $(INSTALL) -m 644 config.in $(INSTALL_ROOT)/$(etcdir)/config; \
 	fi
+	$(INSTALL) -m 644 config-browser.in \
+		$(INSTALL_ROOT)/$(etcdir)/config-browser.in
+	if [ ! -f $(INSTALL_ROOT)/$(etcdir)/config-browser ]; then \
+	    $(INSTALL) -m 644 config-browser.in \
+		$(INSTALL_ROOT)/$(etcdir)/config-browser; \
+	fi
 	$(INSTALL) -m 755 $(PROGS) $(INSTALL_ROOT)/$(bindir)
 	$(INSTALL) -m 644 $(MISCFILES) $(INSTALL_ROOT)/$(bindir)
 	$(INSTALL) -m 755 $(CGIFILES) $(INSTALL_ROOT)/$(bindir)/cgi
@@ -175,7 +183,12 @@ install: all make_dirs
 	@[ -f $(INSTALL_ROOT)/$(bindir)/modgroup ] && \
 		 rm -f $(INSTALL_ROOT)/$(bindir)/modgroup || :
 	@ln -s moduser $(INSTALL_ROOT)/$(bindir)/modgroup
-
+# fix paths in perl files
+	@echo "Fixing paths in perl files..."
+	@for f in $(PROGS) $(CGIFILES); do \
+		echo $(INSTALL_ROOT)/$(bindir)/$$f; \
+		$(PERL) -p -i -e 's@^#!/usr/bin/perl -I/usr/local/sauron@#!$(PERL) -I$(bindir)@;' $(INSTALL_ROOT)/$(bindir)/$$f; \
+	done
 
 make_dirs:
 	$(INSTALL) -m 755 -d $(INSTALL_ROOT)/$(etcdir)
