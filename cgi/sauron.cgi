@@ -505,6 +505,8 @@ do "$conf_dir/config" || die("cannot load configuration!");
   {ftype=>2, tag=>'printer_l', name=>'PRINTER entries', 
    type=>['text','text'], fields=>2,len=>[40,20], empty=>[0,1], 
    elabels=>['PRINTER','comment'], iff=>['type','5']},
+  {ftype=>1, tag=>'router', name=>'Router (priority)', type=>'priority', 
+   len=>10, empty=>0,definfo=>['0','No'], iff=>['type','1']},
   {ftype=>0, name=>'Group/Template selections', iff=>['type','[15]']},
   {ftype=>10, tag=>'grp', name=>'Group', iff=>['type','[15]']},
   {ftype=>6, tag=>'mx', name=>'MX template', iff=>['type','1']},
@@ -2087,8 +2089,17 @@ sub hosts_menu() {
     return;
   }
   elsif ($sub eq 'add') {
-    return if (check_perms('zone','RW'));
     $type=param('type');
+    $data{type}=$type;
+    $data{zone}=$zoneid;
+    $data{router}=0;
+    $data{grp}=-1; $data{mx}=-1; $data{wks}=-1;
+    $data{mx_l}=[]; $data{ns_l}=[]; $data{printer_l}=[]; $data{srv_l}=[];
+    $data{dept}=$perms{defdept} if ($perms{defdept});
+    $data{expiration}=time()+$perms{elimit}*86400 if ($perms{elimit} > 0);
+
+  copy_add_label:
+    return if (check_perms('zone','RW'));
     return if (($type!=1 && $type!=101) && check_perms('zone','RWX'));
     return if ($type==101 && check_perms('level',$ALEVEL_RESERVATIONS));
     $newhostform = (check_perms('zone','RWX',1) ? \%restricted_new_host_form :
@@ -2109,15 +2120,13 @@ sub hosts_menu() {
 	unshift @new_host_netsl, 'MANUAL';
       }
     }
-    $data{type}=$type;
-    $data{zone}=$zoneid;
-    $data{grp}=-1; $data{mx}=-1; $data{wks}=-1;
-    $data{mx_l}=[]; $data{ns_l}=[]; $data{printer_l}=[]; $data{srv_l}=[];
-    $data{dept}=$perms{defdept} if ($perms{defdept});
-    $data{expiration}=time()+$perms{elimit}*86400 if ($perms{elimit} > 0);
 
     if (param('addhost_cancel')) {
       print h2("$host_types{$type} record creation canceled.");
+      if (param('copy_id')) {
+	param('h_id',param('copy_id'));
+	goto show_host_record;
+      }
       return;
     }
     elsif (param('addhost_submit')) {
@@ -2196,10 +2205,35 @@ sub hosts_menu() {
 
     print startform(-method=>'POST',-action=>$selfurl),
           hidden('menu','hosts'),hidden('sub','add'),hidden('type',$type);
+    print hidden('copy_id') if (param('copy_id'));
     form_magic('addhost',\%data,$newhostform);
     print submit(-name=>'addhost_submit',-value=>'Create'), " ",
           submit(-name=>'addhost_cancel',-value=>'Cancel'),end_form;
     return;
+  }
+  elsif ($sub eq 'Copy') {
+    return unless ($id > 0);
+    %data=%host;
+    delete $data{ip};
+    delete $data{ether};
+    delete $data{serial};
+    delete $data{asset_id};
+    $data{ip}=$host{ip}[1][1];
+    $type=$host{type};
+    param('copy_id',$id);
+    param('sub','add');
+    if ($host{domain} =~ /^([^\.]+)(\..*)$/) {
+      $p1=$1; $p2=$2;
+      if ($p1 =~ /^([^\d]+)(\d+)$/) {
+	$data{domain}=$1.($2+1).$p2;
+      } else {
+	$data{domain}=$p1.'2'.$p2;
+      }
+    }
+    if (($newip=next_free_ip($serverid,$data{ip}))) {
+      $data{ip}=$newip;
+    }
+    goto copy_add_label;
   }
 
 
@@ -2236,7 +2270,7 @@ sub hosts_menu() {
       print submit(-name=>'sub',-value=>'Edit'), " ",
             submit(-name=>'sub',-value=>'Delete'), " ",
 #	    submit(-name=>'sub',-value=>'Rename'), " ",
-#	    submit(-name=>'sub',-value=>'Copy'),
+	    submit(-name=>'sub',-value=>'Copy'),
 	    " ";
       print submit(-name=>'sub',-value=>'Move'), " " if ($host{type} == 1);
       print submit(-name=>'sub',-value=>'Alias'), " " if ($host{type} == 1);
