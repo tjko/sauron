@@ -102,6 +102,9 @@ COMMANDS
    changes in database and sends notification of pending changes
    to address defined in configuration.
 
+ delgroup
+   Removes user group from the system.
+
  deluser
    Removes users accounts from the system. (accounts can also be locked
    with moduser command).
@@ -120,6 +123,11 @@ COMMANDS
  import
    Reads complete named (BIND) configuration file set and generates
    new server and related zones into Sauron.
+
+ import-dhcp
+   Utility for updating existing server using dhcpd configuration; 
+   adds Ethernet addressess for hosts and to builds network map for
+   the server.
 
  import-ethers
    Utility for adding OUI (Ethernet card manufacturer) information

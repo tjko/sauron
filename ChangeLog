@@ -1,5 +1,15 @@
 $Id$
 
+0.6.0
+	- added delgroup utility
+	- status: now returns with exit code 2, when  run using 
+	  option --pending=server and there are pending host changes
+	  (returns 0 otherwise, or 1 if there was an error)
+	  option 
+	- initial draft of User's Guide now included
+	- Sauron::UtilDhcp module was missing from Makefile.in
+	- various typo fixes
+
 0.5.1
 	- sauron: new --check option to automatically validating
 	  generated named.conf/zones & dhcpd.conf files

@@ -83,7 +83,7 @@ SQL_MISC =      sql/DEFAULTS.sql sql/misc.sql sql/copy_tables.sql \
 		sql/drop_tables.sql sql/hinfo_hw.sql sql/hinfo_sw.sql
 
 
-PROGS = sauron addgroup adduser deluser modhosts \
+PROGS = sauron addgroup adduser deluser delgroup modhosts \
 	import import-ethers import-jyu import-roots \
 	last moduser runsql status update-dhcp-info \
 	export-networks generatehosts addhosts check-pending \

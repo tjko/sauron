@@ -1,0 +1,74 @@
+#!/usr/bin/perl -I/usr/local/sauron
+#
+# delgroup - utility to delete user groups
+#
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2003.
+# $Id$
+#
+require 5;
+use Getopt::Long;
+use Sauron::DB;
+use Sauron::Util;
+use Sauron::BackEnd;
+use Sauron::Sauron;
+
+load_config();
+
+##############################################
+
+my($id,$res,$i,$t,@q);
+
+GetOptions("group=s","newgroup=s","help|h");
+
+if ($opt_help) {
+  print "syntax: $0 [--help] [--group=<groupname>] [--newgroup=<groupname>]\n";
+  print "\n" if ($opt_help);
+  exit(0);
+}
+
+fatal("DB_CONNECT not defined in configuration!") unless ($DB_CONNECT);
+db_connect($DB_CONNECT);
+
+
+unless ($opt_group) {
+  print "Enter group to be deleted: ";
+  chomp($opt_group = <STDIN>);
+  $i=1;
+}
+fatal("Invalid groupname '$opt_group'!") unless ($opt_group =~ /^\S+$/);
+
+fatal("Cannot find user group '$opt_group'!")
+	  unless (($id=get_user_group_id($opt_group)) > 0);
+
+$newid=-1;
+if ($opt_newgroup) {
+  fatal("Cannot find user group '$opt_newgroup'!")
+    unless (($newid=get_user_group_id($opt_newgroup)) > 0);
+}
+
+fatal("cannot specify group being deleted with --newgroup option!")
+  if ($id == $newid);
+
+get_user_group($id,\%group);
+
+
+if ($i) { # ask confirmation only in interactive session...
+  print "\tGroupname: $group{name} (id=$id)\n",
+        "\t  comment: $group{comment}\n";
+  print "\nNew group for users in this group: $opt_newgroup\n\n" 
+    if ($newid > 0);
+ 
+  print "Delete this group [y/n]?";
+  chomp ($t=<STDIN>);
+  unless ($t eq 'y' || $t eq 'Y') {
+    print "Group not deleted!\n";
+    exit(1);
+  }
+}
+
+fatal("Cannot delete group!".db_lasterrormsg()) if (delete_user_group($id,$newid) < 0);
+
+print "Group $opt_group deleted succesfully.\n";
+exit(0);
+
+# eof

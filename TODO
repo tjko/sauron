@@ -5,7 +5,6 @@ general:
 	  from text files in standard zonefile format...
 	- IPv6 support
         - add database format version check in db_connect{,2}
-	- implement delgroup utility
 
 import:
 	- real parser for both imports
@@ -21,7 +20,8 @@ sauron.cgi:
 	- add quick search like in browser.cgi
 	- remove confirm from logout
 	- templates for adding hosts
-	
+	- advertise "Save settings" feature if user doesn't have any
+          default settings	
 
 
 browser.cgi:
