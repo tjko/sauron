@@ -2,7 +2,7 @@
 #
 # addhosts - utility to add host records
 #
-# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2001.
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2001,2003.
 # $Id$
 #
 require 5;
@@ -48,8 +48,8 @@ if ($opt_help || @ARGV < 2 || $result < 1) {
 	"\t\t\t\tset info fields for all hosts\n",
 	"\t--force=<type>\t\tforce record type:\n",
 	"\t\t\t\t\tdhcp-only\n",
-	"\t--commit\t\tcommit changes (w/o this no changes are made)\n",
-	"\n";
+	"\t--commit\t\tcommit changes (w/o this no changes are made)\n";
+  print "\n" if ($opt_help);
   exit(0);
 }
 
@@ -60,7 +60,7 @@ $server=$ARGV[0];
 $zone=$ARGV[1];
 $filename=$ARGV[2];
 $gid=-1;
-$noreverse = ($opt_noreverse ? 1 : 0);
+$opt_noreverse = ($opt_noreverse ? 1 : 0);
 
 $serverid=get_server_id($server);
 fatal("cannot find server '$server'") unless ($serverid > 0);
@@ -99,7 +99,10 @@ process_zonefile($filename,$origin,\%zonedata,1);
 $domains=keys(%zonedata);
 print "Found $domains domain(s) in zonefile: $filename\n";
 exit unless ($domains > 0);
-
+if ($opt_verbose) {
+  print "Testing mode no changes made to database.\n" unless ($opt_commit);
+  print "Processing only new records.\n" if ($opt_newonly);
+}
 
 db_begin();
 db_ignore_begin_and_commit(1);
@@ -154,7 +157,7 @@ foreach $domain (sort keys %zonedata) {
   if ($host{type}==1) {
     for $i (0..$#{$a}) {
       print " IP: $$a[$i]\n" if ($opt_verbose);
-      push @{$host{ip}}, [0,$$a[$i],($noreverse ? 'f':'t'),'t',2];
+      push @{$host{ip}}, [0,$$a[$i],($opt_noreverse ? 'f':'t'),'t',2];
     }
   }
   elsif ($host{type}==9) {
@@ -197,7 +200,7 @@ foreach $domain (sort keys %zonedata) {
 
   if (($res=update_host(\%host))<0) {
     print db_errormsg()."\n";
-    fatal("cannot update host (id=$id) $res") 
+    fatal("cannot update host (id=$id) $res")
   }
 }
 
