@@ -3,11 +3,13 @@
  * $Id$
  */
 
-/** This table contains CIDRs used in server various contexts.  **/
+/** This table contains CIDRs (and ACL/Key references) used in server 
+     in various contexts.  **/
 
 CREATE TABLE cidr_entries (
 	id	    SERIAL PRIMARY KEY, /* unique ID */
 	type        INT4 NOT NULL, /* type:
+				      0=acls
 				      1=server (allow-transfer),
 				      2=zone (allow-update),
 				      3=zone (masters),
@@ -20,11 +22,23 @@ CREATE TABLE cidr_entries (
 				      10=server (listen-on), 
 				      11=server (forwarders),
 				      12=zone (forwarders),
-				      13=zone (transfer-source) */
+				      13=reserved */
         ref	    INT4 NOT NULL, /* ptr to table speciefied by type field
+					-->acls.id
 					-->servers.id
 					-->zones.id  */
-	ip	    CIDR, /* CIDR value */
+	mode	    INT4 DEFAULT 0, /* rule mode flag:
+						0 = CIDR/IP
+						1 = ACL
+						2 = Key */
+	ip	    CIDR,            /* CIDR value */
+	acl	    INT4 DEFAULT -1, /* ptr to acls table record (ACL):
+					-->acls.id */
+	tkey	    INT4 DEFAULT -1, /* ptr to keys table record (Key):
+					-->keys.id */
+	op	    INT4 DEFAULT 0, /* rule operand:
+					0 = none,
+					1 = NOT */ 
 	comment     TEXT
 );
 

@@ -4,27 +4,27 @@
 
 /* vmps */
 ALTER TABLE vmps DROP CONSTRAINT vmps_key;
+DROP INDEX vmps_id_key;
 ALTER TABLE vmps ADD CONSTRAINT vmps_key UNIQUE(name,server);
 ALTER TABLE vmps ADD PRIMARY KEY(id);
-DROP INDEX vmps_id_key;
 
 /* vlans */
 ALTER TABLE vlans DROP CONSTRAINT vlans_key;
+DROP INDEX vlans_id_key;
 ALTER TABLE vlans ADD CONSTRAINT vlans_key UNIQUE(name,server);
 ALTER TABLE vlans ADD PRIMARY KEY(id);
-DROP INDEX vlans_id_key;
 
 /* nets */
 ALTER TABLE nets DROP CONSTRAINT nets_key;
+DROP INDEX nets_id_key;
 ALTER TABLE nets ADD CONSTRAINT nets_key UNIQUE(net,server);
 ALTER TABLE nets ADD PRIMARY KEY(id);
-DROP INDEX nets_id_key;
 
 /* zones */
-ALTER TABLE zones DROP CONSTRAINT zones_key;
+ALTER TABLE zones DROP CONSTRAINT zones_pkey;
+DROP INDEX zones_id_key;
 ALTER TABLE zones ADD CONSTRAINT zones_key UNIQUE(name,server);
 ALTER TABLE zones ADD PRIMARY KEY(id);
-DROP INDEX zones_id_key;
 
 
 /* keys table creation */
@@ -76,6 +76,45 @@ CREATE TABLE keys (
 	CONSTRAINT  keyname_key UNIQUE(name,ref,type)
 ) INHERITS(common_fields);
 
+
+/* acls table creation */
+
+CREATE TABLE acls (
+       id	    SERIAL PRIMARY KEY, /* unique ID */
+       server	    INT4 NOT NULL, /* ptr to a servers table record
+					-->servers.id */
+
+       name	    TEXT NOT NULL CHECK(name <> ''), /* ACL name */
+       type	    INT4 NOT NULL DEFAULT 0,  /* reserved */
+       comment	    TEXT,
+
+       CONSTRAINT   acls_key UNIQUE(name,server)
+) INHERITS(common_fields);
+
+
+/* update cidr_entries table to accommodate ACL use */
+
+ALTER TABLE cidr_entries ADD COLUMN mode INT4;
+ALTER TABLE cidr_entries ALTER COLUMN mode SET DEFAULT 0;
+UPDATE cidr_entries SET mode=0;
+
+ALTER TABLE cidr_entries ADD COLUMN acl INT4;
+ALTER TABLE cidr_entries ALTER COLUMN acl SET DEFAULT -1;
+UPDATE cidr_entries SET acl=-1;
+
+ALTER TABLE cidr_entries ADD COLUMN tkey INT4;
+ALTER TABLE cidr_entries ALTER COLUMN tkey SET DEFAULT -1;
+UPDATE cidr_entries SET tkey=-1;
+
+ALTER TABLE cidr_entries ADD COLUMN op INT4;
+ALTER TABLE cidr_entries ALTER COLUMN op SET DEFAULT 0;
+UPDATE cidr_entries SET op=0;
+
+
+/* update zones table */
+
+ALTER TABLE zones ADD COLUMN transfer_source INET;
+/* DELETE FROM cidr_entries WHERE type=13; */
 
 
 /* UPDATE settings SET value='1.3' where setting='dbversion'; */
