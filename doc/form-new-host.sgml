@@ -1,0 +1,102 @@
+<table frame=all id="new-host-dialog">
+<title>Add Host Dialog</>
+<tgroup cols=3>
+<thead>
+<row><entry>Field</><entry>Description</><entry>Example</></>
+</thead>
+<tbody>
+<row><entry>Hostname</>
+     <entry>Hostname (without the zonename part of the host's FQDN)</>
+     <entry>ws001</>
+</row>
+<row><entry>Subnet</>
+     <entry>Select <quote>Manual IP</> for manually specifying host's IP
+            number, or select desired network for automatically selecting
+            next available IP number from within that networks auto assign
+            range.</>
+     <entry>&lt;Manual IP&gt;</>
+</row>
+<row><entry>IP</>
+     <entry>Host's IP number (only if <quote>Manual IP</> selected
+            in subnet field).</>
+     <entry></>
+</row>
+<row><entry>Router (priority)</>
+     <entry>This field should be zero for hosts. For router interfaces,
+            this should be set to positive priority value
+            (1=highest priority). Priority is used for choosing
+            "best" router interface when generating DHCP config
+            for each subnet.</>
+     <entry>0</>
+</row>
+<row><entry>Group</>
+     <entry>Group which this host belongs to.</>
+     <entry>None</>
+</row>
+<row><entry>MX template</>
+     <entry>MX template to use for this host.</>
+     <entry>None</>
+</row>
+<row><entry>WKS template</>
+     <entry>WKS template to use for this host.</>
+     <entry>None</>
+</row>
+<row><entry>User</>
+     <entry>primary user/use for this host (informational)</>
+     <entry>Gandalf the White</>
+</row>
+<row><entry>Dept.</>
+     <entry>department this host belongs to (informational)</>
+     <entry>Mages Guild</>
+</row>
+<row><entry>Location</>
+     <entry>current location of the host (informational)</>
+     <entry>White Tower</>
+</row>
+<row><entry>Info</>
+     <entry>extra information about the host (informational)</>
+     <entry></>
+</row>
+<row><entry>HINFO hardware</>
+     <entry>Host hardware description</>
+     <entry>PC</>
+</row>
+<row><entry>HINFO software</>
+     <entry>Host software (OS) description</>
+     <entry>MS-WINDOWS-2000</>
+</row>
+<row><entry>Ethernet address</>
+     <entry>Host NIC hardware (MAC) address 
+            (this must be unique within zone)</>
+     <entry>00:00:01:23:45:66</>
+</row>
+<row><entry>Asset ID</>
+     <entry>This field is reserved for organizational asset ID tag
+            (this must be unique within server)</>
+     <entry></>
+</row>
+<row><entry>Model</>
+     <entry>Host model information (informational)</>
+     <entry></>
+</row>
+<row><entry>Serial no.</>
+     <entry>Host serial number (informational)</>
+     <entry></>
+</row>
+<row><entry>Misc.</>
+     <entry>miscellaneous information about the host (informational)</>
+     <entry></>
+</row>
+<row><entry>Expiration date</>
+     <entry>Host will automatically disappear from DNS & DHCP configurations
+            after it has expired (<filename>sauron</> can automatically
+            clean expired hosts from database when run with
+            <option>--clean</> option)</>
+     <entry></>
+</row>
+
+</tbody>
+</tgroup>
+</table> 
+
+
