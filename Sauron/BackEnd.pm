@@ -94,6 +94,7 @@ $VERSION = '$Id$ ';
              get_user_group
              delete_user_group
 
+	     get_net_by_cidr
 	     get_net_list
 	     get_net
 	     update_net
@@ -105,6 +106,7 @@ $VERSION = '$Id$ ';
 	     add_vlan
 	     delete_vlan
 	     get_vlan_list
+	     get_vlan_by_name
 
 	     get_vmps_by_name
 	     get_vmps
@@ -2425,6 +2427,17 @@ sub delete_user_group($$) {
 ############################################################################
 # nets functions
 
+sub get_net_by_cidr($$) {
+  my($serverid,$cidr) = @_;
+  my(@q);
+
+  return -100 unless ($serverid > 0);
+  return -101 unless (is_cidr($cidr));
+  db_query("SELECT id FROM nets WHERE server=$serverid AND net='$cidr'",\@q);
+  return ($q[0][0] > 0 ? $q[0][0] : -1);
+}
+
+
 sub get_net_list($$) {
   my ($serverid,$subnets) = @_;
   my (@q,$list,$i);
@@ -2651,6 +2664,16 @@ sub get_vlan_list($$$) {
   }
 }
 
+sub get_vlan_by_name($$) {
+  my($serverid,$name) = @_;
+  my(@q);
+
+  return -100 unless ($serverid > 0);
+  return -101 unless ($name);
+  $name=db_encode_str($name);
+  db_query("SELECT id FROM vlans WHERE server=$serverid AND name=$name",\@q);
+  return ($q[0][0] > 0 ? $q[0][0] : -1);
+}
 
 ############################################################################
 # VMPS functions

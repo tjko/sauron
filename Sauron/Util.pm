@@ -1,6 +1,6 @@
 # Sauron::Util.pm
 #
-# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000-2002.
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000-2003.
 # $Id$
 #
 package Sauron::Util;
@@ -39,6 +39,7 @@ $VERSION = '$Id$ ';
 	     run_command
 	     run_command_quiet
 	     print_csv
+	     parse_csv
 	     join_strings
 	     new_serial
 	    );
@@ -558,6 +559,21 @@ sub print_csv($$)
   }
 
   return $line;
+}
+
+
+sub parse_csv($) {  # code based on the Perl cookbook example...
+    my($str) = @_;
+    my @new = ();
+
+    push (@new,$+) while $str =~ m{
+        "([^\"\\]*(?:\\.[^\"\\]*)*)",?
+#       | ([^,]+(\\,[^,\\]*)*?),?
+        | ([^,]+),?
+        | ,
+    }gx;
+    push(@new,undef) if (substr($str,-1,1) eq ',');
+    return @new;
 }
 
 
