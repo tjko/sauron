@@ -15,7 +15,7 @@ use Net::Netmask;
 $CGI::DISABLE_UPLOADS = 1; # no uploads
 $CGI::POST_MAX = 100000; # max 100k posts
 
-$SAURON_CGI_VER = ' $Revision$ ';
+$SAURON_CGI_VER = ' $Revision$ $Date$ ';
 
 #$|=1;
 $debug_mode = 0;
@@ -2667,6 +2667,8 @@ sub about_menu() {
     print "</PRE></FONT>";
   }
   else {
+    $SAURON_CGI_VER =~ s/(\$|\d{1,2}:\d{1,2}:\d{1,2})//g;
+
     print "<P><BR><CENTER>",
         "<a href=\"http://sauron.jyu.fi/\" target=\"sauron\">",
         "<IMG src=\"$ICON_PATH/logo_large.png\" border=\"0\" alt=\"Sauron\">",
@@ -2989,7 +2991,7 @@ sub top_menu($) {
   if ($frame_mode) { print "$SERVER_ID &nbsp;"; } 
   else {
     printf "%s &nbsp; &nbsp; %d.%d.%d %02d:%02d ",
-           $SERVER_ID,$mday,$mon,$year+1900,$hour,$min;
+           $SERVER_ID,$mday,$mon+1,$year+1900,$hour,$min;
   }
   print "</FONT></TD></TR></TABLE>";
 }
