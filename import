@@ -161,7 +161,8 @@ foreach $line (@NAMEDCONF) {
     }
   }
    if ($prev =~ "options") {
-       if ($cur =~ "allow-transfer" && ($ip=is_cidr($line)) ) {
+       if ($cur =~ "allow-transfer" && is_cidr($line) ) {
+	   $ip=$line;
 	   #print "allow transfer ip=$ip\n" if ($opt_verbose);
 	   push @allow_transfer, [0,$ip,''];
 	   next;
@@ -194,7 +195,8 @@ foreach $line (@NAMEDCONF) {
    }
    if ($prev =~ /^zone\s+(.*)$/) {
        $curzone=$1;
-       if ($cur =~ "masters" && ($ip=is_cidr($line))) {
+       if ($cur =~ "masters" && is_cidr($line) ) {
+           $ip=$line;
 	   #print "master ($curzone) ip=$ip\n";
 	   $ref = $masters{$curzone};
 	   unless ($ref) {
@@ -204,7 +206,8 @@ foreach $line (@NAMEDCONF) {
 	   push @{$ref}, [0,$ip,''];
 	   next;
        }
-       if ($cur =~ "allow-update" && ($ip=is_cidr($line))) {
+       if ($cur =~ "allow-update" && is_cidr($line) ) {
+	   $ip=$line;
 	   #print "allow-update ($curzone) ip=$ip\n";
 	   $ref = $allowupdate{$curzone};
 	   unless ($ref) {
@@ -214,7 +217,8 @@ foreach $line (@NAMEDCONF) {
 	   push @{$ref}, [0,$ip,''];
 	   next;
        }
-       if ($cur =~ "also-notify" && ($ip=is_cidr($line))) {
+       if ($cur =~ "also-notify" && is_cidr($line) ) {
+	   $ip=$line;
 	   #print "also-notify ($curzone) ip=$ip\n";
 	   $ref = $alsonotify{$curzone};
 	   unless ($ref) {
