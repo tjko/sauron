@@ -2068,7 +2068,8 @@ sub hosts_menu() {
       }
 
       print h3("Please wait...Running Ping sweep.");
-
+      update_history($state{uid},$state{sid},2,"Hosts PING Sweep",
+		     "zone: $zone ($pingiplist[0]..$pingiplist[-1])",$zoneid);
       $r = run_ping_sweep(\@pingiplist,\%nmaphash,$state{user});
       if ($r < 0) {
 	alert2("Ping Sweep not configured!");
@@ -2102,10 +2103,7 @@ sub hosts_menu() {
       #$hostname=add_origin($q[$i][4],$zone);
       $hostname="<A HREF=\"$selfurl?menu=hosts&h_id=$q[$i][2]\">".
 	        "$q[$i][4]</A>";
-      $info=$q[$i][6];
-      if ($q[$i][7]) { 	$info.=", " if($info); 	$info.=$q[$i][7]; }
-      if ($q[$i][8]) { 	$info.=", " if($info); 	$info.=$q[$i][8]; }
-      if ($q[$i][9]) { 	$info.=", " if($info); 	$info.=$q[$i][9]; }
+      $info = join_strings(', ',(@{$q[$i]})[6,7,8,9]);
 
       $trcolor='#eeeeee';
       $trcolor='#ffffcc' if ($i % 2 == 0);
@@ -2113,10 +2111,14 @@ sub hosts_menu() {
       $trcolor='#ccffff' if (param('bh_type')==1 && $type == 101);
 
       if ($pingsweep) {
-	if ($nmaphash{$ip} =~ /^Up/) {
-	  $nro = "<FONT color=\"green\" size=-1>Up</FONT>";
+	if ($type == 1) {
+	  if ($nmaphash{$ip} =~ /^Up/) {
+	    $nro = "<FONT color=\"green\" size=-1>Up</FONT>";
+	  } else {
+	    $nro = "<FONT color=\"red\" size=-1>Down $nmaphash{$ip}</FONT>";
+	  }
 	} else {
-	  $nro = "<FONT color=\"red\" size=-1>Down $nmaphash{$ip}</FONT>";
+	  $nro = "&nbsp;";
 	}
       } else {
 	$nro = "<FONT size=-1>".($i+1)."</FONT>";
@@ -2157,6 +2159,7 @@ sub hosts_menu() {
 
       print startform(-method=>'POST',-action=>$selfurl),
 	    hidden('menu','hosts'),hidden('sub','browse'),
+	    hidden('bh_page',$page),
 	    hidden('lastsearch','1'),hidden('pingsweep','1');
       print submit(-name=>'foobar',-value=>'Ping Sweep');
       print end_form;
@@ -2729,6 +2732,8 @@ sub nets_menu() {
       return;
     }
     print h3("Ping Sweep for $net{net}...");
+    update_history($state{uid},$state{sid},4,"Net PING Sweep",
+		   "net: $net{net}",$net{id});
     undef @pingiplist;
     push @pingiplist, $net{net};
     $r = run_ping_sweep(\@pingiplist,\%nmaphash,$state{user});
@@ -2761,6 +2766,10 @@ sub nets_menu() {
 	        join_strings(', ',(@{$netmap{$ip}})[6,3,4,5]) . "</font>";
 	push @pingsweep, [$status,$ip,$domain,$info];
       }
+
+      print startform(-method=>'POST',-action=>$selfurl),
+	    hidden('menu','nets'),hidden('net_id',$id),
+            submit(-name=>'foobar',-value=>' <-- '),end_form;
       display_list(['Status','IP','Domain','Info'],
 		   \@pingsweep,0);
       print p,br;
