@@ -16,25 +16,30 @@ $ORIGIN 10.10.in-addr.arpa.
                 IN	NS	ns2.middle.earth.
 
 
+1.30		IN	PTR	default-gw.net030.middle.earth.
 101.30		IN	PTR	terminal1.middle.earth.
 102.30		IN	PTR	terminal2.middle.earth.
 103.30		IN	PTR	terminal3.middle.earth.
 104.30		IN	PTR	terminal4.middle.earth.
 105.30		IN	PTR	terminal5.middle.earth.
+1.31		IN	PTR	default-gw.net031.middle.earth.
+1.32		IN	PTR	default-gw.net032.middle.earth.
+1.100		IN	PTR	default-gw.net100.middle.earth.
 10.100		IN	PTR	ns1.middle.earth.
 20.100		IN	PTR	mail1.middle.earth.
 50.100		IN	PTR	server-1.middle.earth.
 51.100		IN	PTR	server-2.middle.earth.
 52.100		IN	PTR	server-3.middle.earth.
 100.100		IN	PTR	ws1.middle.earth.
-100.101		IN	PTR	ws2.middle.earth.
-100.102		IN	PTR	ws3.middle.earth.
-100.103		IN	PTR	ws4.middle.earth.
-100.104		IN	PTR	ws5.middle.earth.
-100.105		IN	PTR	ws6.middle.earth.
-100.106		IN	PTR	ws7.middle.earth.
-100.107		IN	PTR	ws8.middle.earth.
+101.100		IN	PTR	ws2.middle.earth.
+102.100		IN	PTR	ws3.middle.earth.
+103.100		IN	PTR	ws4.middle.earth.
+104.100		IN	PTR	ws5.middle.earth.
+105.100		IN	PTR	ws6.middle.earth.
+106.100		IN	PTR	ws7.middle.earth.
+107.100		IN	PTR	ws8.middle.earth.
 
+1.101		IN	PTR	default-gw.net101.middle.earth.
 10.101		IN	PTR	ns2.middle.earth.
 20.101		IN	PTR	mail2.middle.earth.
 

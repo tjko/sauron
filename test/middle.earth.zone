@@ -65,16 +65,15 @@ mail1			IN	A	10.10.100.20
 
 mail2			IN	A	10.10.101.20
 			IN	HINFO	PC UNIX-LINUX
-			IN	MX	10 mail1
+			IN	MX	10 mail2
 			IN	WKS	10.10.100.21 tcp smtp
 
 
 
 www			IN	CNAME	server-1
-
-smtp			IN	A	mail1
-			IN	A	mail2
-
+smtp			IN	CNAME	server-3
+imap			IN	CNAME 	server-3
+pop3			IN	CNAME	server-3
 
 
 server-1		IN	A	10.10.100.50
@@ -97,6 +96,16 @@ terminal2		IN	A	10.10.30.102
 terminal3		IN	A	10.10.30.103
 terminal4		IN	A	10.10.30.104
 terminal5		IN	A	10.10.30.105
+
+
+default-gw.net030	IN	A	10.10.30.1
+default-gw.net031	IN	A	10.10.31.1
+default-gw.net032	IN	A	10.10.32.1
+default-gw.net098	IN	A	10.10.98.1
+default-gw.net100	IN	A	10.10.100.1
+default-gw.net101	IN	A	10.10.101.1
+default-gw.net120	IN	A	10.10.120.1
+
 
 
 ; eof
