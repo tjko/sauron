@@ -6,6 +6,7 @@
 package Sauron::CGI::Nets;
 require Exporter;
 use CGI qw/:standard *table -no_xhtml/;
+use Sauron::Util;
 use Sauron::DB;
 use Sauron::CGIutil;
 use Sauron::BackEnd;
@@ -30,6 +31,8 @@ my %new_net_form=(
    len=>60, empty=>0},
   {ftype=>4, tag=>'subnet', name=>'Type', type=>'enum',
    enum=>{t=>'Subnet',f=>'Net'}},
+  {ftype=>4, tag=>'dummy', name=>'Virtual subnet', type=>'enum',
+   enum=>{t=>'Yes',f=>'No'},iff=>['subnet','t']},
   {ftype=>1, tag=>'net', name=>'Net (CIDR)', type=>'cidr'},
   {ftype=>1, tag=>'comment', name=>'Comment', type=>'text',
    len=>60, empty=>1}
@@ -46,9 +49,12 @@ my %net_form=(
   {ftype=>4, tag=>'id', name=>'ID'},
   {ftype=>4, tag=>'subnet', name=>'Type', type=>'enum',
    enum=>{t=>'Subnet',f=>'Net'}},
+  {ftype=>4, tag=>'dummy', name=>'Virtual subnet', type=>'enum',
+   enum=>{t=>'Yes',f=>'No'},iff=>['subnet','t']},
   {ftype=>1, tag=>'net', name=>'Net (CIDR)', type=>'cidr'},
   {ftype=>3, tag=>'vlan', name=>'VLAN', type=>'enum', conv=>'L',
-   enum=>\%vlan_list_hash, elist=>\@vlan_list_lst, restricted=>1},
+   enum=>\%vlan_list_hash, elist=>\@vlan_list_lst, restricted=>1,
+   iff=>['dummy','f']},
   {ftype=>1, tag=>'alevel', name=>'Authorization level', type=>'priority', 
    len=>3, empty=>0},
   {ftype=>3, tag=>'private_flag', name=>'Private (hide from browser)',
@@ -60,12 +66,13 @@ my %net_form=(
    empty=>1, iff=>['subnet','t']},
   {ftype=>1, tag=>'range_end', name=>'Range end', type=>'ip',
    empty=>1, iff=>['subnet','t']},
-  {ftype=>0, name=>'DHCP'},
+  {ftype=>0, name=>'DHCP',iff=>['dummy','f']},
   {ftype=>3, tag=>'no_dhcp', name=>'DHCP', type=>'enum', conv=>'L',
-   enum=>{f=>'Enabled',t=>'Disabled'}},
-  {ftype=>2, tag=>'dhcp_l', name=>'Net specific DHCP entries', 
+   enum=>{f=>'Enabled',t=>'Disabled'},iff=>['dummy','f']},
+  {ftype=>2, tag=>'dhcp_l', name=>'Net specific DHCP entries',
    type=>['text','text'], fields=>2, maxlen=>[200,20],
-   len=>[50,20], empty=>[0,1], elabels=>['DHCP','comment']},
+   len=>[50,20], empty=>[0,1], elabels=>['DHCP','comment'],
+   iff=>['dummy','f']},
 
   {ftype=>0, name=>'Record info', no_edit=>1},
   {ftype=>4, name=>'Record created', tag=>'cdate_str', no_edit=>1},
@@ -316,6 +323,7 @@ sub menu_handler {
   elsif ($sub eq 'addnet') {
     return if (check_perms('superuser',''));
     $data{subnet}='f';
+    $data{dummy}='f';
     $data{server}=$serverid;
     $res=add_magic('addnet','Network','nets',\%new_net_form,
 		   \&add_net,\%data);
@@ -330,8 +338,24 @@ sub menu_handler {
   elsif ($sub eq 'addsub') {
     return if (check_perms('superuser',''));
     $data{subnet}='t';
+    $data{dummy}='f';
     $data{server}=$serverid;
     $res=add_magic('addnet','Subnet','nets',\%new_net_form,
+		   \&add_net,\%data);
+    if ($res > 0) {
+      #show_hash(\%data);
+      #print "<p>$res $data{name}";
+      $id=$res;
+      goto show_net_record;
+    }
+    return;
+  }
+  elsif ($sub eq 'addvsub') {
+    return if (check_perms('superuser',''));
+    $data{subnet}='t';
+    $data{dummy}='t';
+    $data{server}=$serverid;
+    $res=add_magic('addnet','Virtual Subnet','nets',\%new_net_form,
 		   \&add_net,\%data);
     if ($res > 0) {
       #show_hash(\%data);
@@ -523,10 +547,10 @@ sub menu_handler {
   }
 
  browse_nets:
-  db_query("SELECT id,name,net,subnet,comment,no_dhcp,vlan,netname,alevel " .
-	   "FROM nets " .
+  db_query("SELECT id,name,net,subnet,comment,no_dhcp,vlan,netname,alevel," .
+	   "dummy FROM nets " .
 	   "WHERE server=$serverid AND alevel <= $perms->{alevel} " .
-	   "ORDER BY subnet,net;",\@q);
+	   "ORDER BY net;",\@q);
   if (@q < 1) {
     print h2("No networks found!");
     return;
@@ -544,23 +568,52 @@ sub menu_handler {
         th("Net"),th("NetName"),th("Description"),th("Type"),
         th("DHCP"),($novlans?'':th("VLAN")),th("Lvl"),"</TR>";
 
-  for $i (0..$#q) {
-      $dhcp=(($q[$i][5] eq 't' || $q[$i][5] == 1) ? 'No' : 'Yes' );
-      if ($q[$i][3] eq 't' || $q[$i][3] == 1) {
-	print $dhcp eq 'Yes' ? "<TR bgcolor=\"#eeeebf\">" :
-	       "<TR bgcolor=\"#eeeeee\">";
-	$type='Subnet';
-      } else {
-	print "<TR bgcolor=\"#ddffdd\">";
-	$type='Net';
-      }
+  my @path;
+  push @path, '0.0.0.0/0';
+  my $listmode = param('list');
 
-      $vlan=($q[$i][6] > 0 ? $vlan_list_hash{$q[$i][6]} : '&nbsp;');
-      $netname=($q[$i][7] eq '' ? '&nbsp;' : $q[$i][7]);
-      $name=($q[$i][1] eq '' ? '&nbsp;' : $q[$i][1]);
-      $comment=$q[$i][4];
-      $comment='&nbsp;' if ($comment eq '');
-      print "<td><a href=\"$selfurl?menu=nets&net_id=$q[$i][0]\">",
+  for $i (0..$#q) {
+    if ($listmode =~ /^(sub|)$/) {
+      next if ($q[$i][9] =~ /(t|1)/);
+    }
+    if ($listmode =~ /^\s*$/) {
+      next if ($q[$i][3] =~ /(t|1)/);
+    }
+
+    my $parent = $path[-1];
+    if (is_cidr_within_cidr($q[$i][2],$parent)) {
+      push @path, $q[$i][2];
+    } else {
+      do {
+	pop @path;
+	$parent = $path[-1];
+      } while (@path > 0 && not is_cidr_within_cidr($q[$i][2],$parent));
+      push @path, $q[$i][2];
+    }
+
+
+    $dhcp=(($q[$i][5] eq 't' || $q[$i][5] == 1) ? 'No' : 'Yes' );
+    if ($q[$i][3] =~ /(1|t)/) {
+      if ($q[$i][9] =~ /(1|t)/) {
+	print "<TR bgcolor=\"#bfeeee\">";
+	$type='Virtual';
+      } else {
+	print $dhcp eq 'Yes' ? "<TR bgcolor=\"#eeeebf\">" :
+	  "<TR bgcolor=\"#eeeeee\">";
+	$type='Subnet';
+      }
+    } else {
+      print "<TR bgcolor=\"#ddffdd\">";
+      $type='Net';
+    }
+
+    my $spacer = "&nbsp;&nbsp;" x ($#path -1);
+    $vlan=($q[$i][6] > 0 ? $vlan_list_hash{$q[$i][6]} : '&nbsp;');
+    $netname=($q[$i][7] eq '' ? '&nbsp;' : $q[$i][7]);
+    $name=($q[$i][1] eq '' ? '&nbsp;' : $q[$i][1]);
+    $comment=$q[$i][4];
+    $comment='&nbsp;' if ($comment eq '');
+    print "<td>$spacer<a href=\"$selfurl?menu=nets&net_id=$q[$i][0]\">",
 	  "$q[$i][2]</a></td>",td($netname),
           td("<FONT size=-1>$name</FONT>"), td("<FONT size=-1>$type</FONT>"),
           td("<FONT size=-1>$dhcp</FONT>"),

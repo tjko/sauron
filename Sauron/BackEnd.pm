@@ -150,7 +150,7 @@ sub fix_bools($$) {
 }
 
 sub sauron_db_version() {
-  return "1.1"; # required db format version for this backend
+  return "1.2"; # required db format version for this backend
 }
 
 sub set_muser($) {
@@ -2477,7 +2477,7 @@ sub get_net($$) {
   return -100 if (get_record("nets",
                       "server,name,net,subnet,rp_mbox,rp_txt,no_dhcp,comment,".
 		      "range_start,range_end,vlan,cdate,cuser,mdate,muser,".
-                      "netname,alevel,type", $id,$rec,"id"));
+                      "netname,alevel,type,dummy", $id,$rec,"id"));
 
   fix_bools($rec,"subnet,no_dhcp");
   get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comment",

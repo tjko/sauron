@@ -75,8 +75,12 @@ $debug_mode = $SAURON_DEBUG_MODE;
 		     ],
 	    'nets'=>[
 		     ['Networks',''],
+		     ['&nbsp; + Subnets','list=sub'],
+		     ['&nbsp; + All','list=all'],
+		     [],
 		     ['Add net','sub=addnet'],
 		     ['Add subnet','sub=addsub'],
+		     ['Add virtual subnet','sub=addvsub'],
 		     [],
 		     ['VLANs','sub=vlans'],
 		     ['Add vlan','sub=addvlan'],

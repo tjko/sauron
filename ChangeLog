@@ -1,6 +1,9 @@
 $Id$
 
 0.7.1beta
+	- database format changes (1.2):
+	   - settings: renamed column 'key' --> 'setting'
+	   - nets: new columnd 'dummy'
 	- new configuration valiablre SAURON_CHR that allows
           limiting what can be used in some host record
 	  fields (dept,location,asset_id) by server and by
