@@ -7,6 +7,8 @@
 
 CREATE TABLE users (
 	id		SERIAL PRIMARY KEY, /* unique ID */
+	gid		INT4 DEFAULT -1, /* ptr to user group 
+					    -->usergroups.id */
 	username	TEXT UNIQUE NOT NULL CHECK(username <> ''), /* login
 									name */
 	password	TEXT, /* encrypted password (MD5) */

@@ -25,6 +25,7 @@ DROP TABLE arec_entries;
 DROP TABLE utmp;
 DROP TABLE users;
 DROP TABLE user_rights;
+DROP TABLE user_groups;
 DROP TABLE ether_info;
 DROP TABLE settings;
 DROP TABLE hinfo_templates;
@@ -53,6 +54,7 @@ DROP SEQUENCE arec_entries_id_seq;
 /* DROP SEQUENCE host_info_id_seq; */
 DROP SEQUENCE users_id_seq;
 DROP SEQUENCE user_rights_id_seq;
+DROP SEQUENCE user_groups_id_seq;
 DROP SEQUENCE hinfo_templates_id_seq;
 DROP SEQUENCE root_servers_id_seq;
 
