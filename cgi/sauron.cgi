@@ -3776,10 +3776,13 @@ sub left_menu($) {
 sub frame_set() {
   print header(-charset=>$SAURON_CHARSET);
 
-  print "<HTML><FRAMESET border=\"0\" rows=\"95,*\" >\n" .
-        "  <TITLE>Sauron ($SERVER_ID)</TITLE>" .
-        "  <FRAME src=\"$script_name/frame1\" noresize>\n" .
-        "  <FRAME src=\"$script_name/frames2\" name=\"bottom\">\n" .
+  print "<HTML>" .
+        "<HEAD><TITLE>Sauron ($SERVER_ID)</TITLE></HEAD>" .
+        "<FRAMESET border=\"0\" rows=\"90,*\" >\n" .
+        "  <FRAME src=\"$script_name/frame1\" noresize scrolling=\"no\" " .
+	"   frameborder=\"0\" marginheight=\"0\" marginwidth=\"0\">\n" .
+        "  <FRAME src=\"$script_name/frames2\" name=\"bottom\" " .
+	"   frameborder=\"0\" marginheight=\"0\" marginwidth=\"0\">\n" .
         "  <NOFRAMES>\n" .
         "    Frame free version available \n" .
 	"      <A HREF=\"$script_name\">here</A> \n" .
@@ -3794,10 +3797,13 @@ sub frame_set2() {
   $menu="?menu=" . param('menu') if ($menu);
 
   print "<HTML>" .
-        "<FRAMESET border=\"0\" cols=\"17%,*\">\n" .
-        "  <TITLE>Sauron ($SERVER_ID)</TITLE>" .
-	"  <FRAME src=\"$script_name/frame2$menu\" name=\"menu\" noresize>\n" .
-        "  <FRAME src=\"$script_name/frame3$menu\" name=\"main\">\n" .
+        "<FRAMESET border=\"0\" cols=\"120,*\">\n" .
+#        "  <TITLE>Sauron ($SERVER_ID)</TITLE>" .
+	"  <FRAME src=\"$script_name/frame2$menu\" name=\"menu\" noresize " .
+	"   scrolling=\"no\" frameborder=\"0\" " .
+	"   marginheight=\"5\" marginwidth=\"5\">\n" .
+        "  <FRAME src=\"$script_name/frame3$menu\" name=\"main\" " .
+	"   frameborder=\"0\" marginheight=\"5\" marginwidth=\"5\">\n" .
         "  <NOFRAMES>\n" .
         "    Frame free version available \n" .
 	"      <A HREF=\"$script_name\">here</A> \n" .
