@@ -122,7 +122,7 @@ while (<NAMEDCONF>) {
 push @NAMEDCONF, $partial if ($partial);
 close(NAMEDCONF);
 
-push @allow_transfer, [0];
+push @allow_transfer, [];
 
 foreach $line (@NAMEDCONF) {
   $_ = $line;
@@ -170,7 +170,7 @@ foreach $line (@NAMEDCONF) {
    if ($prev =~ "options") {
        if ($cur =~ "allow-transfer" && ($ip=is_cidr($line)) ) {
 	   #print "allow transfer ip=$ip\n" if ($verbose);
-	   push @allow_transfer, [0,$ip,'',2];
+	   push @allow_transfer, [0,$ip,''];
 	   next;
        }
    }
@@ -205,35 +205,35 @@ foreach $line (@NAMEDCONF) {
 	   #print "master ($curzone) ip=$ip\n";
 	   $ref = $masters{$curzone};
 	   unless ($ref) {
-	     $masters{$curzone}=[[0]];
+	     $masters{$curzone}=[];
 	     $ref = $masters{$curzone};
 	   }
-	   push @{$ref}, [0,$ip,'',2];
+	   push @{$ref}, [0,$ip,''];
 	   next;
        }
        if ($cur =~ "allow-update" && ($ip=is_cidr($line))) {
 	   #print "allow-update ($curzone) ip=$ip\n";
 	   $ref = $allowupdate{$curzone};
 	   unless ($ref) {
-	     $allowupdate{$curzone}=[[0]];
+	     $allowupdate{$curzone}=[];
 	     $ref = $allowupdate{$curzone};
 	   }
-	   push @{$ref}, [0,$ip,'',2];
+	   push @{$ref}, [0,$ip,''];
 	   next;
        }
        if ($cur =~ "also-notify" && ($ip=is_cidr($line))) {
 	   #print "also-notify ($curzone) ip=$ip\n";
 	   $ref = $alsonotify{$curzone};
 	   unless ($ref) {
-	     $alsonotify{$curzone}=[[0]];
+	     $alsonotify{$curzone}=[];
 	     $ref = $alsonotify{$curzone};
 	   }
-	   push @{$ref}, [0,$ip,'',2];
+	   push @{$ref}, [0,$ip,''];
 	   next;
        }
    }
 
-    print "UNPROCESSED($cur): $_\n";
+    print "UNPROCESSED line ($cur): $_\n";
 }
 
 $c = @zones;
@@ -262,17 +262,13 @@ $serverid = add_server({
 			comment=>'imported from named.conf',
 			named_ca=>$named_ca,
 			directory=>$directory,
-			version=>$version
+			version=>$version,
+			allow_transfer=>\@allow_transfer
 		       });
 
-fatal("Cannot create server record '$servername' (already exists?)")
-	 if ($serverid < 0);
-
+fatal("Cannot create server record '$servername' ($serverid)")
+			       if ($serverid < 0);
 print "server id=$serverid\n" if ($verbose);
-
-# build & update allow_transfer field
-fatal("cannot update server (allow-transfer)")
-   if (update_server({id=>$serverid,allow_transfer=>\@allow_transfer}) < 0);
 
 
 #########################################
@@ -324,38 +320,34 @@ for ($i=0; $i <= $#zones; $i+=1) {
   $nnotify='N' if ($notify{$zones[$i]} eq 'no');
   $nnotify='Y' if ($notify{$zones[$i]} eq 'yes');
 
-  $zoneid=add_zone({
-		    server=>$serverid,
-		    type=>$type,
-		    reverse=>$rev,
-		    name=>$zone,
-		    chknames=>$check_names,
-		    nnotify=>$nnotify
-		    });
-  if ($zoneid < 0) {
+
+  undef %tmphash;
+  $tmphash{server}=$serverid;
+  $tmphash{type}=$type;
+  $tmphash{reverse}=$rev;
+  $tmphash{name}=$zone;
+  $tmphash{chknames}=$chekc_names;
+  $tmphash{nnotify}=$nnotify;
+  $tmphash{also_notify}=$alsonotify{$zones[$i]} if ($alsonotify{$zones[$i]});
+  $tmphash{masters}=$masters{$zones[$i]}  if ($masters{$zones[$i]});
+  $tmphash{allow_update}=$allowupdate{$zones[$i]}
+    if ($allowupdate{$zones[$i]});
+
+  if (($zoneid = add_zone(\%tmphash)) < 0) {
     print "zone allready exists! skipping\n";
     next;
   }
   print " (id=$zoneid) ";
   $oips_zid=$zoneid  if ($opt_orphans eq "$zone");
 
-  undef %tmphash;
-  $tmphash{id}=$zoneid;
-  $tmphash{allow_update}=$allowupdate{$zones[$i]}
-    if ($allowupdate{$zones[$i]});
-  $tmphash{also_notify}=$alsonotify{$zones[$i]} if ($alsonotify{$zones[$i]});
-  $tmphash{masters}=$masters{$zones[$i]}  if ($masters{$zones[$i]});
-
-  fatal("cannot update zone: $zone (id=$zoneid)\n")
-    if (update_zone(\%tmphash) < 0);
-
-  # push(@loopbacks_list,$zoneid) if ($loopback eq 'true');
 
   # handle slave (& other) zones
   unless ($type eq 'M') {
     print "slave zone\n";
     next;
   }
+
+  fatal("cannot get zone record ($zone)") if (get_zone($zoneid,\%zone) < 0);
 
 
   $zonenamemask.='|' if ($zonenamemask);
@@ -448,9 +440,8 @@ for ($i=0; $i <= $#zones; $i+=1) {
 
 
   # add host record for zone....
-  fatal("Cannot insert host record for zone $zone")
-    if (($zonehostid=add_host({zone=>$zoneid,type=>1,domain=>'@',
-			       comment=>'zone record'})) < 0);
+  fatal("Cannot find host record for zone $zone")
+    if (($zonehostid=$zone{zonehostid}) < 0);
 
   undef @gluelist;
   undef %mxhash;
@@ -723,7 +714,7 @@ for ($i=0; $i <= $#zones; $i+=1) {
 # add host records for orphaned PTR records
 
 if ($oips_zid > 0) {
-  print "Adding host records for orphaned PTRs...\n";
+  print "Adding host records for orphaned PTRs...(zone id=$oips_zid)\n";
 
   foreach $ip (keys %ipworld) {
     for $j (0..$#{$ipworld{$ip}}) {
@@ -742,6 +733,7 @@ if ($oips_zid > 0) {
 $res = update_server({id=>$serverid, hostmaster=>$hostmaster,
 		      hostname=>$primaryservername});
 fatal("Cannot update server record!") if ($res < 0);
+
 
 unless ($opt_notransaction) {
   db_ignore_begin_and_commit(0);

@@ -8,14 +8,10 @@ general:
 	- IPv6 support
 	- fix "wrong year" bug in update-dhcp-info
 	- add DHCP v3 support to update-dhcp-info
-	- fix addgroup / implement delgroup
 
 import:
-	- fix import(s) to work with new table layout
 	- remove unneccessary (?) quoting (\"...) from dhcp (and other) records
-	- add allow-query/allow-transfer/also-notify support for zones
 	- real parser for both imports
-        - rewrite parse-host-rows in perl (feasible?)
 
 
 sauron:

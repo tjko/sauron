@@ -3918,57 +3918,39 @@ sub add_default_zones($$) {
 
 
   %zone=(name=>'localhost',type=>'M',reverse=>'f',server=>$serverid,
-	 ns=>[[0,'localhost.','']],ip=>[[0,'127.0.0.1','t','t','']],
-	 allow_update=>[[0,'127.0.0.1','']]);
+	 ns=>[[0,'localhost.','']],ip=>[[0,'127.0.0.1','t','t','']]);
   print "Adding zone: $zone{name}...";
-  if (($id=add_zone(\%zone)) < 0) { 
+  if (($id=add_zone(\%zone)) < 0) {
     print "failed (zone already exists? $id)\n";
-    #print db_errormsg() , "\n";
   } else {
     print "OK (id=$id)\n";
-#    $zone{id}=$id;
-#    $zone{ns}=[[],[0,'localhost.','',2]];
-#    print "update failed\n" if (update_zone(\%zone) < 0);
-#
-#    %host=(domain=>'@',zone=>$id,type=>1,ip=>[[0,'127.0.0.1','t','t','']]);
-#    print "host add failed\n" if (add_host(\%host) < 0);
-  }
-  return;
-
-  %zone=(name=>'127.in-addr.arpa',type=>'M',reverse=>'t',server=>$serverid);
-  print "Adding zone: $zone{name}...";
-  if (($id=add_zone(\%zone)) < 0) { 
-    print "failed (zone already exists? $id)\n";
-    #print db_errormsg() , "\n";
-  } else {
-    print "OK (id=$id)\n";
-    $zone{id}=$id;
-    $zone{ns}=[[],[0,'localhost.','',2]];
-    print "update failed\n" if (update_zone(\%zone) < 0);
   }
 
-  %zone=(name=>'0.in-addr.arpa',type=>'M',reverse=>'t',server=>$serverid);
+  %zone=(name=>'127.in-addr.arpa',type=>'M',reverse=>'t',server=>$serverid,
+	ns=>[[0,'localhost.','']]);
   print "Adding zone: $zone{name}...";
-  if (($id=add_zone(\%zone)) < 0) { 
+  if (($id=add_zone(\%zone)) < 0) {
     print "failed (zone already exists? $id)\n";
-    #print db_errormsg() , "\n";
   } else {
     print "OK (id=$id)\n";
-    $zone{id}=$id;
-    $zone{ns}=[[],[0,'localhost.','',2]];
-    print "update failed\n" if (update_zone(\%zone) < 0);
   }
 
-  %zone=(name=>'255.in-addr.arpa',type=>'M',reverse=>'t',server=>$serverid);
+  %zone=(name=>'0.in-addr.arpa',type=>'M',reverse=>'t',server=>$serverid,
+	ns=>[[0,'localhost.','']]);
   print "Adding zone: $zone{name}...";
-  if (($id=add_zone(\%zone)) < 0) { 
+  if (($id=add_zone(\%zone)) < 0) {
     print "failed (zone already exists? $id)\n";
-    #print db_errormsg() , "\n";
   } else {
     print "OK (id=$id)\n";
-    $zone{id}=$id;
-    $zone{ns}=[[],[0,'localhost.','',2]];
-    print "update failed\n" if (update_zone(\%zone) < 0);
+  }
+
+  %zone=(name=>'255.in-addr.arpa',type=>'M',reverse=>'t',server=>$serverid,
+	ns=>[[0,'localhost.','']]);
+  print "Adding zone: $zone{name}...";
+  if (($id=add_zone(\%zone)) < 0) {
+    print "failed (zone already exists? $id)\n";
+  } else {
+    print "OK (id=$id)\n";
   }
 
 }			

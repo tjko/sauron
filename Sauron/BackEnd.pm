@@ -372,7 +372,7 @@ sub add_array_field($$$$$$) {
   return -3 unless (@f > 0);
 
   for $i (0..$#{$rec->{$keyname}}) {
-    next if (@{$rec->{$keyname}->[$i]} == 0);
+    next if (@{$rec->{$keyname}->[$i]} <= 1);
     return -10 unless (@{$rec->{$keyname}->[$i]} >= (@f + 1));
     $flag = 0;
     $sqlstr = "INSERT INTO $table ($fields,$rfields) VALUES(";
@@ -619,30 +619,40 @@ sub update_server($) {
   $r=update_record('servers',$rec);
   if ($r < 0) { db_rollback(); return $r; }
   $id=$rec->{id};
+
+  # allow_transfer
   $r=update_array_field("cidr_entries",3,"ip,comment,type,ref",
 			 'allow_transfer',$rec,"1,$id");
   if ($r < 0) { db_rollback(); return -12; }
+  # dhcp
   $r=update_array_field("dhcp_entries",3,"dhcp,comment,type,ref",'dhcp',$rec,
 		        "1,$id");
   if ($r < 0) { db_rollback(); return -13; }
+  # txt
   $r=update_array_field("txt_entries",3,"txt,comment,type,ref",
 			'txt',$rec,"3,$id");
   if ($r < 0) { db_rollback(); return -14; }
+  # allow_query
   $r=update_array_field("cidr_entries",3,"ip,comment,type,ref",
 			 'allow_query',$rec,"7,$id");
   if ($r < 0) { db_rollback(); return -15; }
+  # allow_recursion
   $r=update_array_field("cidr_entries",3,"ip,comment,type,ref",
 			 'allow_recursion',$rec,"8,$id");
   if ($r < 0) { db_rollback(); return -16; }
+  # blackhole
   $r=update_array_field("cidr_entries",3,"ip,comment,type,ref",
 			 'blackhole',$rec,"9,$id");
   if ($r < 0) { db_rollback(); return -17; }
+  # listen_on
   $r=update_array_field("cidr_entries",3,"ip,comment,type,ref",
 			 'listen_on',$rec,"10,$id");
   if ($r < 0) { db_rollback(); return -18; }
+  # forwarder
   $r=update_array_field("cidr_entries",3,"ip,comment,type,ref",
 			 'forwarders',$rec,"11,$id");
   if ($r < 0) { db_rollback(); return -19; }
+  # logging
   $r=update_array_field("txt_entries",3,"txt,comment,type,ref",
 			 'logging',$rec,"10,$id");
   if ($r < 0) { db_rollback(); return -19; }
@@ -652,10 +662,56 @@ sub update_server($) {
 
 sub add_server($) {
   my($rec) = @_;
+  my($res,$id);
 
   $rec->{cdate}=time;
   $rec->{cuser}=$muser;
-  return add_record('servers',$rec);
+
+  db_begin();
+  $res = add_record('servers',$rec);
+  if ($res < 0) { db_rollback(); return -1; }
+  $id=$res;
+
+  # allow_transfer
+  $res = add_array_field('cidr_entries','ip,comment','allow_transfer',$rec,
+			 'type,ref',"1,$id");
+  if ($res < 0) { db_rollback(); return -10; }
+  # dhcp
+  $res = add_array_field('dhcp_entries','dhcp,comment','dhcp',$rec,
+			 'type,ref',"1,$id");
+  if ($res < 0) { db_rollback(); return -11; }
+  # txt
+  $res = add_array_field('txt_entries','txt,comment','txt',$rec,
+			 'type,ref',"3,$id");
+  if ($res < 0) { db_rollback(); return -12; }
+  # allow_query
+  $res = add_array_field('cidr_entries','ip,comment','allow_query',$rec,
+			 'type,ref',"7,$id");
+  if ($res < 0) { db_rollback(); return -13; }
+  # allow_recursion
+  $res = add_array_field('cidr_entries','ip,comment','allow_recursion',$rec,
+			 'type,ref',"8,$id");
+  if ($res < 0) { db_rollback(); return -14; }
+  # blackhole
+  $res = add_array_field('cidr_entries','ip,comment','blackhole',$rec,
+			 'type,ref',"9,$id");
+  if ($res < 0) { db_rollback(); return -15; }
+  # listen_on
+  $res = add_array_field('cidr_entries','ip,comment','listen_on',$rec,
+			 'type,ref',"10,$id");
+  if ($res < 0) { db_rollback(); return -16; }
+  # forwarders
+  $res = add_array_field('cidr_entries','ip,comment','forwarders',$rec,
+			 'type,ref',"11,$id");
+  if ($res < 0) { db_rollback(); return -17; }
+  # logging
+  $res = add_array_field('txt_entries','txt,comment','logging',$rec,
+			 'type,ref',"10,$id");
+  if ($res < 0) { db_rollback(); return -18; }
+
+
+  return -100 if (db_commit() < 0);
+  return $id;
 }
 
 sub delete_server($) {
@@ -864,6 +920,8 @@ sub get_zone($$) {
 		      "type=2 AND ref=$hid ORDER BY id",$rec,'txt');
       get_array_field("a_entries",4,"id,ip,reverse,forward",
 		      "IP,reverse,forward","host=$hid ORDER BY ip",$rec,'ip');
+
+      $rec->{zonehostid}=$hid;
     }
   }
 
@@ -900,6 +958,7 @@ sub update_zone($) {
 
   del_std_fields($rec);
   delete $rec->{pending_info};
+  delete $rec->{zonehostid};
 
   if ($rec->{reverse} eq 't') {
       $new_net=arpa2cidr($rec->{name});
