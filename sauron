@@ -432,8 +432,8 @@ sub make_bind() {
     if ($rev eq 'f') {
       print ZONEFILE ";\n; zone mail exchanges\n;\n" if (@{$zone{mx}} > 1);
       for $i (1..$#{$zone{mx}}) {
-	printf ZONEFILE $ZFORMAT, '',$ttl,$class,'MX',
-	                          "$zone{mx}[$i][1] $zone{mx}[$i][2]";
+	($val=$zone{mx}[$i][2]) =~ s/\$DOMAIN/$zonename./g;
+	printf ZONEFILE $ZFORMAT, '',$ttl,$class,'MX', "$zone{mx}[$i][1] $val";
       }
 
       print ZONEFILE ";\n; contact info (server)\n;\n" if (@{$server{txt}}>1);
@@ -622,6 +622,7 @@ sub make_bind() {
 	  $domain=$q[$i][0];
 	  $ttl=$q[$i][3];
 	  $ttl='' unless ($ttl > 0);
+	  $q[$i][2] =~ s/\$DOMAIN/$domain/g;
 	  printf ZONEFILE $ZFORMAT, $val,$ttl,$class,'MX',
 	                            "$q[$i][1] $q[$i][2]";
 	}
@@ -643,6 +644,7 @@ sub make_bind() {
 	  $domain=$q[$i][0];
 	  $ttl=$q[$i][3];
 	  $ttl='' unless ($ttl > 0);
+	  $q[$i][2] =~ s/\$DOMAIN/$domain/g;
 	  printf ZONEFILE $ZFORMAT, $val,$ttl,$class,'MX',
 	                            "$q[$i][1] $q[$i][2]";
 	}
