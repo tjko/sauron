@@ -1,3 +1,4 @@
+#
 # Sample browser.cgi configuration file
 #
 # $Id$
@@ -6,40 +7,45 @@
 #########################################################################
 # general configuration options
 
+# base directory for Sauron install
 $PROG_DIR = "/usr/local/sauron/";
 
+# database connection setup
 #$DB_CONNECT = "host=localhost port=5432 dbname=sauron user=foo password=bar";
 #$DB_CONNECT = "dbname=sauron user=foo password=bar";
 $DB_CONNECT = "dbname=sauron";
 
-
-#########################################################################
-# WWW DNS browser (browser.cgi) configuration options 
-
+# define which zones are available to browse and via which path
+# under browser.cgi (for example foo --> http://host/cgi-bin/browser.cgi/foo/)
 $BROWSER_CONF = { 
 		  foo=>['servername','zonename'], 
 	          foo2=>['server1','zone2.orgg'] 
 		};
 
+# optional "help" link to display for each browser zone
 $BROWSER_HELP = { 
 		  foo=>['Help','http://www.zone2.orgg/browserhelp.thml'] ,
 		  foo2=>['Info','/browserhelp.thml'] 
 		};
 
-$BROWSER_MAX = 100;
+#########################################################################
+# advanced browser configuratio options
+
+# maximum number of matches to display
+# $BROWSER_MAX = 100;
 
 # specify charset for CGI interface (default is iso-8859-1)
 # $BROWSER_CHARSET = 'iso-8859-15';
 
 # specify which fields info fields to display 
-$BROWSER_SHOW_FIELDS = 'huser,location,info,dept';
+# $BROWSER_SHOW_FIELDS = 'huser,location,info,dept';
 
 # completely hide hosts from networks with private flag
 # $BROWSER_HIDE_PRIVATE = 1;
 
 # fields to hide from hosts in networks with private flag
 # (meaningful only if BROWSER_HIDE_PRIVATE=0)
-$BROWSER_HIDE_FIELDS = 'huser,location';
+# $BROWSER_HIDE_FIELDS = 'huser,location';
 
 1;
 # eof
