@@ -321,6 +321,9 @@ sub make_bind() {
     undef @q;
     db_query("SELECT MAX(h.mdate) FROM hosts h WHERE h.zone=$zoneid;",\@q);
     $hosts_mdate = ($q[0][0] > 0 ? $q[0][0] : 0);
+    undef @q;
+    db_query("SELECT MAX(h.cdate) FROM hosts h WHERE h.zone=$zoneid;",\@q);
+    $hosts_mdate = $q[0][0] if ($q[0][0] > $hosts_mdate);
 
     $serial=$zone{serial};
     $serial_date=($zone{serial_date} > 0 ? $zone{serial_date} : 0);
@@ -735,12 +738,9 @@ sub make_bind() {
 	  $mx=$mxhash{$domain};
 	  $mx=$mxhash2{$domain} if ($mxhash2{$domain});
 	  $info=$q[$i][5];
-	  $info.=", " if ($q[$i][5]);
-	  $info.=$q[$i][6];
-	  $info.=" " if ($q[$i][6]);
-	  $info.=$q[$i][7];
-	  $info.=", " if ($q[$i][7]);
-	  $info.=$q[$i][8];
+	  if ($q[$i][6]) { $info.=", " if ($info); $info.=$q[$i][6]; }
+	  if ($q[$i][7]) { $info.=" " if ($info); $info.=$q[$i][7]; }
+	  if ($q[$i][8]) { $info.=", " if ($info); $info.=$q[$i][8]; }
 	  if ($dnames{$domain}) {
 	    #error("duplicate A record $ip for $domain ($dnames{$domain}).");
 	    printf ZONEFILE $ZFORMAT, $domain,$ttl,$class,'A',$ip;

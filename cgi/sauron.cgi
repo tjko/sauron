@@ -1216,8 +1216,11 @@ sub hosts_menu() {
 	}
       }
       print h2("Move host to another IP");
-      $newip=auto_address($serverid,param('move_net'));
+      $tmpnet=new Net::Netmask(param('move_net'));
+      $newip=auto_address($serverid,$tmpnet->desc());
       unless(is_cidr($newip)) {
+	logmsg("notice","auto_address($serverid,".param('move_net').
+	       ") failed!");
 	print h3($newip);
 	$newip=$host{ip}[1][1];
       }
@@ -1550,8 +1553,13 @@ sub hosts_menu() {
 	      delete $data{ip};
 	      $data{ip}=[[$ip,'t','t','']];
 	    } else {
-	      $ip=auto_address($serverid,$data{net});
-	      unless (is_cidr($ip)) { alert1("Cannot get IP: $ip"); return; }
+	      $tmpnet=new Net::Netmask($data{net});
+	      $ip=auto_address($serverid,$tmpnet->desc());
+	      unless (is_cidr($ip)) { 
+		logmsg("notice","auto_address($serverid,$data{net}) failed!");
+		alert1("Cannot get IP: $ip");
+		return;
+	      }
 	      $data{ip}=[[$ip,'t','t','']];
 	    }
 	  } elsif ($data{type} == 6) {
