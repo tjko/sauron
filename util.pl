@@ -19,17 +19,19 @@ sub valid_domainname_check($$) {
   }
 
   if ($mode == 1) {
+    # test for valid zone name
     if ($dom =~ /([^a-z0-9\-\._])/) {
       #warn("invalid character '$1' in domainname: '$domain'");
       return 0;
     }
 
-    unless ($dom =~ /^[a-z_]/) {
+    unless ($dom =~ /^[a-z0-9_]/) {
       #warn("domainname starts with invalid character: '$domain'");
       return 0;
     }
   }
   elsif ($mode == 2) {
+    # test for valid SRV record domain name
     if ($dom =~ /([^a-z0-9\-\.\*_])/) {
       warn("invalid character '$1' in domainname: '$domain'");
       return 0;
@@ -83,6 +85,19 @@ sub is_cidr($) {
 sub arpa2cidr($) {
   my($arpa) = @_;
   my($i,$s,$cidr);
+  my($r_begin,$r_end,$range);
+
+  # support for smaller than class-C delegations
+  if ($arpa =~ /^(\d+)\-(\d+)(\..*)$/) {
+      $r_begin=$1;
+      $r_end=$2;
+      $range=$r_end - $r_begin + 1;
+      $arpa=$1 . $3;
+      return '0.0.0.0/0' 
+	  unless ($range==2 || $range==4 || $range==8 || $range==16 || 
+		  $range==32 || $range==64 || $range==128);
+      $range=int(log($range)/log(2));
+  }
   
   return '0.0.0.0/0' unless $arpa =~ 
     /^(\d{1,3}\.)?(\d{1,3}\.)?(\d{1,3}\.)?(\d{1,3}\.)in-addr\.arpa/;
@@ -99,7 +114,11 @@ sub arpa2cidr($) {
   }
   $cidr =~ s/\.$//g;
   #print $s;
-  $s=(32-($s*8));
+  if ($range) { 
+    $s=32-$range; 
+  } else { 
+    $s=(32-($s*8)); 
+  }
   return $cidr . "/" . $s;
 }
 

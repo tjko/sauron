@@ -730,7 +730,7 @@ sub get_zone($$) {
 
 sub update_zone($) {
   my($rec) = @_;
-  my($r,$id);
+  my($r,$id,$new_net);
 
   delete $rec->{cdate_str};
   delete $rec->{mdate_str};
@@ -739,6 +739,14 @@ sub update_zone($) {
   delete $rec->{pending_info};
   $rec->{mdate}=time;
   $rec->{muser}=$muser;
+
+  if ($rec->{reverse} eq 't') {
+      $new_net=arpa2cidr($rec->{name});
+      if (($new_net eq '0.0.0.0/0') or ($new_net eq '')) {
+	  return -100;
+      }
+      $rec->{reversenet}=$new_net;
+  }
 
   db_begin();
   $r=update_record('zones',$rec);
