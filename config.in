@@ -34,6 +34,15 @@ $REMOVE_EXPIRED_DELAY = 30;  # sauron --clean will remove all hosts that
 
 # set to enable ping command in web interface
 # $SAURON_PING_PROG = '/bin/ping';
+# $SAURON_PING_ARGS = '-c5';  
+# $SAURON_PING_TIMEOUT = '15';  
+# $SAURON_PING_ALEVEL = 0;  # authorization level needed to use ping
+
+# set to enable traceroute command in web interface
+# $SAURON_TRACEROUTE_PROG = '/usr/sbin/traceroute';
+# $SAURON_TRACEROUTE_ARGS = '';  
+# $SAURON_TRACEROUTE_TIMEOUT = 15;
+# $SAURON_TRACEROUTE_ALEVEL = 0; # authorization level needed to use traceroute
 
 # specify charset for CGI interface (default is iso-8859-1)
 # $SAURON_CHARSET = 'iso-8859-15';

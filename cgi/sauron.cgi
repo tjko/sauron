@@ -1793,8 +1793,8 @@ sub hosts_menu() {
           submit(-name=>'h_cancel',-value=>'Cancel'),end_form;
     return;
   }
-  elsif ($sub eq 'Show Network Settings') {
-    goto show_host_record unless ($host{type} == 1);
+  elsif ($sub eq 'Network Settings') {
+    goto show_host_record unless ($id > 0 && $host{type} == 1);
     get_host_network_settings($serverid,$host{ip}[1][1],\%data);
     print "Current network settings for: $host{domain}<p>";
     display_form(\%data,\%host_net_info_form);
@@ -1802,14 +1802,18 @@ sub hosts_menu() {
     goto show_host_record;
   }
   elsif ($sub eq 'Ping') {
-    goto show_host_record unless ($host{type} == 1);
+    return if check_perms('level',$SAURON_PING_ALEVEL);
+    goto show_host_record unless ($id > 0 && $host{type} == 1);
     if ($SAURON_PING_PROG && -x $SAURON_PING_PROG) {
       ($ip=$host{ip}[1][1]) =~ s/\/32\s*$//;
       if (is_cidr($ip)) {
 	update_history($state{uid},$state{sid},1,
 		       "PING: $host{domain}","ip: $ip",$host{id});
 	print "Pinging $host{domain} ($ip)...<br><pre>";
-	$r = run_command($SAURON_PING_PROG,["-c5",$ip],15);
+	$SAURON_PING_ARGS = '-c5' unless ($SAURON_PING_ARGS);
+	$SAURON_PING_TIMEOUT = 15 unless ($SAURON_PING_TIMEOUT > 0);
+	$r = run_command($SAURON_PING_PROG,[$SAURON_PING_ARGS,$ip],
+			 $SAURON_PING_TIMEOUT);
 	print "</pre><br>";
 	print "<FONT color=\"red\">PING TIMED OUT!</FONT><BR>" if ($r > 0);
       } else {
@@ -1817,6 +1821,32 @@ sub hosts_menu() {
       }
     } else {
       alert2("Ping not configured!");
+    }
+  }
+  elsif ($sub eq 'Traceroute') {
+    return if check_perms('level',$SAURON_TRACEROUTE_ALEVEL);
+    goto show_host_record unless ($id > 0 && $host{type} == 1);
+    if ($SAURON_TRACEROUTE_PROG && -x $SAURON_TRACEROUTE_PROG) {
+      ($ip=$host{ip}[1][1]) =~ s/\/32\s*$//;
+      if (is_cidr($ip)) {
+	update_history($state{uid},$state{sid},1,
+		       "TRACEROUTE: $host{domain}","ip: $ip",$host{id});
+	print "Tracing route to $host{domain} ($ip)...<br><pre>";
+	undef @arguments;
+	push @arguments, $SAURON_TRACEROUTE_ARGS if ($SAURON_TRACEROUTE_ARGS);
+	push @arguments, $ip;
+	$SAURON_TRACEROUTE_TIMEOUT = 15 
+	  unless ($SAURON_TRACEROUTE_TIMEOUT > 0);
+	$r = run_command($SAURON_TRACEROUTE_PROG,\@arguments,
+			 $SAURON_TRACEROUTE_TIMEOUT);
+	print "</pre><br>";
+	print "<FONT color=\"red\">TRACEROUTE TIMED OUT!</FONT><BR>"
+	  if ($r > 0);
+      } else {
+	alert2("Missing/invalid IP address");
+      }
+    } else {
+      alert2("Traceroute not configured!");
     }
   }
   elsif ($sub eq 'browse') {
@@ -2176,8 +2206,12 @@ sub hosts_menu() {
     print "<table width=\"99%\"><tr><td align=\"left\">",
           submit(-name=>'sub',-value=>'Refresh'),
 	  "</td><td align=\"right\">";
-    print submit(-name=>'sub',-value=>'Show Network Settings'), " ",
-          submit(-name=>'sub',-value=>'Ping') if ($host{type} == 1);
+    print submit(-name=>'sub',-value=>'Network Settings'), " "
+      if ($host{type} == 1);
+    print submit(-name=>'sub',-value=>'Ping'), " "
+      if ($host{type} == 1 && $SAURON_PING_PROG);
+    print submit(-name=>'sub',-value=>'Traceroute')
+      if ($host{type} == 1 && $SAURON_PING_PROG);
     print "</td></tr></table>";
 
     display_form(\%host,\%host_form);
