@@ -100,7 +100,7 @@ sub db_exec($) {
 
 sub db_query($$) {
   my ($sqlstr,$aref) = @_;
-  my ($sth,@row);
+  my ($sth,@row,$types,$i);
 
   undef @{$aref};
 
@@ -114,7 +114,13 @@ sub db_query($$) {
     return -2;
   }
 
+  $types = $sth->{TYPE};
+
   while (@row = $sth->fetchrow_array) {
+    for $i (0..$#row) {
+      # fix values in boolean type columns
+      $row[$i]=($row[$i] ? 't':'f') if ($$types[$i] == 16);
+    }
     push @{$aref}, [@row];
   }
   $sth->finish;
