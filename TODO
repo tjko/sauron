@@ -4,6 +4,7 @@ general:
 	  number of host entries, and to import interactively hosts
 	  from text files in standard zonefile format...
 	- IPv6 support
+	- adduser: display group
 
 import:
 	- real parser for both imports
