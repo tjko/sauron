@@ -18,7 +18,7 @@ CREATE TABLE lastlog (
 					  4=reconnect  */
 	ldate		INT DEFAULT -1, /* logout date */
 	ip		INET,	        /* remote IP */
-	host		CHAR(40)	/* remote host */
+	host		TEXT		/* remote host */
 );
 
 

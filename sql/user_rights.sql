@@ -14,7 +14,7 @@ CREATE TABLE user_rights (
 				-->user_groups.id
 				-->users.id */
 	rtype	INT NOT NULL, /* type:
-				0=group (membership) (reserved),
+				0=group (membership),
 				1=server,
 				2=zone,
 				3=net,

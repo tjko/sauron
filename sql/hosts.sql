@@ -54,7 +54,8 @@ CREATE TABLE hosts (
        ether	   CHAR(12),        /* Ethernet address (MAC) */
        ether_alias INT4 DEFAULT -1, /* ptr to another host record
 					(for ETHER address) */
-       dhcp_date   INT4,       /* last time host requested IP */
+       dhcp_date   INT4,       /* last time host was issued a lease (IP) */
+       dhcp_last   INT4,       /* last time host "seen" by DHCP server */
        dhcp_info   TEXT,       /* reserved */
        info	   TEXT,       /* Host info (appears as TXT record) */
        location	   TEXT,       /* Host location info */
@@ -65,6 +66,9 @@ CREATE TABLE hosts (
        serial	   TEXT,       /* serial number */
        misc	   TEXT,       /* misc info */
        asset_id	   TEXT,       /* asset ID */
+
+       vmps        INT DEFAULT -1, /* ptr to vmps table 
+	 				-->vmps.id */
 			       
        comment	   TEXT,       /* comment */
 
