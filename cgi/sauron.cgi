@@ -23,9 +23,6 @@ $debug_mode = 0;
 if (-f "/etc/sauron/config") {
   $conf_dir='/etc/sauron';
 }
-elsif (-f "/opt/etc/sauron/config") {
-  $conf_dir='/opt/etc/sauron';
-}
 elsif (-f "/usr/local/etc/sauron/config") {
   $conf_dir='/usr/local/etc/sauron';
 }

@@ -21,15 +21,17 @@ import:
 
 sauron:
 	- more sanity checks
+	- fix random ordering of IPs in 'fixed-address' lines in dhcpd.conf
 
 sauron.cgi:
 	- fix timeout problem with huge zone/server deletes...(faster server :)
 	- add search by dhcp_date field...
 	- add quick search like in browser.cgi
 	- add "network settings" button to host display
+        - add "show hosts" button to network entry display
 	- hide "VLAN" info from normal users
 	- add VLAN-table for managing "vlan"'s
-	
+	- display conflicting domainname/MAC when host update/insert fails
 	
 
 browser.cgi:
