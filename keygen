@@ -39,75 +39,23 @@ if ($opt_help || not (defined($opt_add) || defined $opt_del ||
   exit(0);
 }
 
+my $user = (getpwuid($<))[0];
+set_muser($user);
 umask 077;
 
 db_connect();
 
-if (defined $opt_setmasterkey) {
-    my $keyfile=$CONFIG_FILE . ".key";
-    if (-f $keyfile) {
-	my $fmode = (stat($keyfile))[2];
-	fatal("existing keyfile with unsafe permissions: $keyfile")
-	    if ($fmode & 0027);
-    }
+# --setmasterkey
 
-    unless ($opt_setmasterkey) {
-	print "Enter passphrase: ";
-	chomp($opt_setmasterkey=<STDIN>);
-	fatal("Cannot use empty passphrase") unless ($opt_setmasterkey);
-    }
-	
-    my $ctx = Digest::MD5->new;
-    $ctx->add($opt_setmasterkey);
-    $opt_setmasterkey='';
-    my $key = encode_base64($ctx->digest);
+if (defined $opt_setmasterkey) { setmasterkey($opt_setmasterkey); }
+elsif (defined $opt_add) { addkey($opt_add); }
+elsif (defined $opt_del) { delkey($opt_del); }
+elsif (defined $opt_list) { listkeys($opt_list); }
+else { fatal("unknown option?"); }
 
-    open(FILE,">$keyfile") || fatal("cannot write to file: $keyfile");
-    print FILE "Key: $key\n";
-    close(FILE);
-    print "Sauron master key set.\n";
-    exit;
-}
+exit;
 
-if (defined $opt_add) {
-    fatal("Sauron master key not defined/available " .
-	  "(generate using --setmasterkey)") unless ($SAURON_KEY);
-
-    my ($server,$name,$type,$len,$key) = split(/,/,$opt_add);
-    $server=getserver($server);
-    $name=getname($name);
-
-    fatal("Key with same name allready exists: $name")
-	if (get_key_by_name($server,$name) > 0);
-
-    $type=gettype($type);
-    if ($type eq 'TSIG') {
-	$len=getlen($len,1,512,128);
-    } else {
-	fatal("unsupported key type");
-    }
-    
-    if ($key) {
-	fatal("Key must be in Base64 (MIME) format")
-	    unless ($key =~ /^[a-zA-Z0-9+\/=]+$/);
-    } else {
-	print "Generating key...\n";
-	$key=generate_key($name,$type,$len);
-
-	my $ref = Crypt::RC5->new($SAURON_KEY,16);
-	$key=encode_base64($ref->encrypt(decode_base64($key)));
-    }
-
-    exit;
-    fatal("failed to add key: $name")
-	if (add_key({type=>1,ref=>$server,name=>$name,protocol=>2,
-		     algorithm=>157,keysize=>$len,secretkey=>$key}) < 1);
-    
-    print "Key added successfully.\n";
-    exit;
-}
-
-fatal("unknown option?");
+##########################################################################
 
 
 sub getserver($) {
@@ -122,7 +70,7 @@ sub getserver($) {
     return $ret;
 }
 
-sub getname() {
+sub getname($) {
     my($ans) = @_;
     unless ($ans) {
 	print "Key name: ";
@@ -139,6 +87,7 @@ sub gettype($) {
 	chomp($ans = <STDIN>);
 	$ans = 'TSIG' unless ($ans);
     }
+
     fatal("invalid/unsupported key type: $ans")
 	unless ($ans =~ /^(TSIG)$/);
     return $ans;
@@ -222,6 +171,169 @@ sub generate_key($$$) {
     return $key;
 }
 
+
+
+sub setmasterkey($) {
+    my($masterkey) = @_;
+    my $keyfile=$CONFIG_FILE . ".key";
+    my $oldkey;
+
+    if (-f $keyfile) {
+	my $fmode = (stat($keyfile))[2];
+	fatal("existing keyfile with unsafe permissions: $keyfile")
+	    if ($fmode & 0027);
+
+	open(FILE,"$keyfile") || fatal("failed to open: $keyfile");
+	while(<FILE>) {
+	    $oldkey=$1 if (/^Key:\s+(\S+)\s*$/);
+	}
+	close(FILE);
+	
+	if ($oldkey) {
+	    fatal("invalid (not Base64 encoded) masterkey in $keyfile")
+		unless ($oldkey =~ /^[a-zA-Z0-9+\/=]+$/);
+	    $oldkey=decode_base64($oldkey);
+
+	    print 
+		"WARNING! Backup database and config.key before attempting\n",
+		"to change Sauron masterkey! Continue (N/y) ?";
+	    my $cont = <STDIN>;
+	    chomp($cont);
+	    fatal("operation aborted") unless ($cont =~ /^[Yy]$/);
+	}
+    }
+
+    unless ($masterkey) {
+	print "Enter passphrase: ";
+	chomp($masterkey=<STDIN>);
+	fatal("Cannot use empty passphrase") unless ($masterkey);
+    }
+	
+    my $ctx = Digest::MD5->new;
+    $ctx->add($masterkey);
+    $masterkey='';
+    my $key = $ctx->digest;
+
+    if ($oldkey) {
+	# re-encrypt existing keys in database
+	print "Re-encrypting existing keys in database...\n";
+	my (@keys,$i);
+	db_begin();
+	if  (db_query("SELECT id,secretkey FROM keys",\@keys) < 0) {
+	    db_rollback();
+	    fatal("failed to read existing keys from database");
+	}
+	for $i (0..$#keys) {
+	    if ($keys[$i][1]) {
+		my $ref1 = Crypt::RC5->new($oldkey,16);
+		my $okey=$ref1->decrypt(decode_base64($keys[$i][1]));
+		my $ref2 = Crypt::RC5->new($key,16);
+		my $nkey=encode_base64($ref2->encrypt($okey));
+		chomp($nkey);
+		if (db_exec("UPDATE keys SET secretkey='$nkey' " .
+			    "WHERE id=$keys[$i][0]\n") < 0) {
+		    db_rollback();
+		    fatal("failed to update key id=$keys[$i][0]");
+		}
+	    }
+	}
+    }
+
+
+    unless (open(FILE,">$keyfile")) {
+	db_rollback();
+	fatal("cannot write to file: $keyfile");
+    }
+    print FILE "Key: ".encode_base64($key)."\n";
+    close(FILE);
+    fatal("failed to commit key updates to database!")
+	if (db_commit() < 0);
+    print "Sauron master key set.\n";
+}
+
+
+
+sub addkey() {
+    my($add) = @_;
+    my($algo,$mode);
+
+    fatal("Sauron master key not defined/available " .
+	  "(generate using --setmasterkey)") unless ($SAURON_KEY);
+
+    my ($server,$name,$type,$len,$key) = split(/,/,$add);
+    $server=getserver($server);
+    $name=getname($name);
+
+    fatal("Key with same name allready exists: $name")
+	if (get_key_by_name($server,$name) > 0);
+
+    $type=gettype($type);
+    if ($type eq  'TSIG') {
+	$len=getlen($len,1,512,128);
+	$algo=157;
+    } else {
+	fatal("unsupported key type");
+    }
+    
+    if ($key) {
+	fatal("Key must be in Base64 (MIME) format")
+	    unless ($key =~ /^[a-zA-Z0-9+\/=]+$/);
+	$mode=1;
+    } else {
+	print "Generating key...\n";
+	$key=generate_key($name,$type,$len);
+	# print "orignal key=$key\n";
+	my $ref = Crypt::RC5->new($SAURON_KEY,16);
+	$key=encode_base64($ref->encrypt(decode_base64($key)));
+	# print "encrypte key=$key\n";
+	$mode=0;
+    }
+
+    chomp($key);
+    fatal("failed to add key: $name")
+	if (add_key({type=>1,ref=>$server,name=>$name,protocol=>2,mode=>$mode,
+		     algorithm=>$algo,keysize=>$len,secretkey=>$key}) < 1);
+    
+    print "Key added successfully.\n";
+}
+
+sub listkeys($) {
+    my($args) = @_;
+    my($i,@q,$typerule);
+
+    my ($server,$type) = split(/,/,$args);
+    $server=getserver($server);
+    $type=gettype($type) unless ($type eq '' && $args ne '');
+    if ($type > 0) {
+	$typerule = " AND algorithm=$type ";
+    }
+
+    db_query("SELECT id,type,name,keytype,nametype,protocol,algorithm," .
+	     " mode,keysize,publickey,secretkey " .
+	     "FROM keys " .
+	     "WHERE type=1 AND ref=$server $typerule ORDER by name",\@q);
+    if (@q < 1) {
+	print "No keys found.\n";
+	return;
+    }
+    for $i (0..$#q) {
+	print "$i. ".join(',',@{$q[$i]})."\n";
+    }
+}
+
+
+sub delkey($) {
+    my($args) = @_;
+
+    my ($server,$name) = split(/,/,$args);
+    $server=getserver($server);
+    $name=getname($name);
+
+    my $id = get_key_by_name($server,$name);
+    fatal("cannot find key: $name") unless ($id > 0);
+    fatal("failed to remove key: $name") if (delete_key($id) < 0);
+    print "Key successfully deleted: $name (id=$id)\n";
+}
 
 # eof :-)
 
