@@ -1686,7 +1686,7 @@ sub hosts_menu() {
       save_state($scookie);
     }
     elsif (param('lastsearch')) {
-      if ($state{searchopts} =~ /^(\d+),(\d+),(\d+),(\d+),(\S*),(\S*)$/) {
+      if ($state{searchopts} =~ /^(\d+),(\d+),(\d+),(-?\d+),(\S*),(\S*)$/) {
 	param('bh_type',$1);
 	param('bh_order',$2) unless (param('bh_order'));
 	param('bh_size',$3);
@@ -2013,7 +2013,7 @@ sub hosts_menu() {
 
   %bdata=(domain=>'',net=>'ANY',nets=>\%nethash,nets_k=>\@netkeys,
 	    type=>1,order=>2,stype=>0,size=>3);
-  if ($state{searchopts} =~ /^(\d+),(\d+),(\d+),(\d+),(\S*),(\S*)$/) {
+  if ($state{searchopts} =~ /^(\d+),(\d+),(\d+),(-?\d+),(\S*),(\S*)$/) {
     $bdata{type}=$1;
     $bdata{order}=$2;
     $bdata{size}=$3;
