@@ -14,19 +14,6 @@ use Sauron::Sauron;
 $|=1;
 load_config();
 
-sub parse_csv($) {  # code based on the Perl cookbook example...
-    my($str) = @_;
-    my @new = ();
-
-    push (@new,$+) while $str =~ m{
-        "([^\"\\]*(?:\\.[^\"\\]*)*)",?
-#       | ([^,]+(\\,[^,\\]*)*?),?
-        | ([^,]+),?
-        | ,
-    }gx;
-    push(@new,undef) if (substr($str,-1,1) eq ',');
-    return @new;
-}
 
 sub fix_ether($) {
   my($mac) = @_;
