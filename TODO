@@ -1,22 +1,24 @@
 
+general:
+	add ACL support to server/zone 
 
 
 import:
-
 	- add SRV stuff
 	- remove unneccessary (?) quoting (\"...) from dhcp (and other) records
+	- add allow-query/allow-transfer/also-notify support for zones
 
 import-jyu:
 	- add AREC support
 
 sauron:
-
 	- better support for small reverse subnet delegations
 	- check MX generation for "MX only" records not using MX templates
-	
+	- add allow-query/allow-transfer/also-notify support for zones
+
 
 sauron.cgi:
 	- access control support
-	- fix timeout problem with hug zone/server deletes...
+	- fix timeout problem with huge zone/server deletes...(faster server :)
 
 

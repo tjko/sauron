@@ -42,6 +42,8 @@ do "$PROG_DIR/back_end.pl";
   {ftype=>0, name=>'Server' },
   {ftype=>1, tag=>'name', name=>'Server name', type=>'text', len=>20},
   {ftype=>4, tag=>'id', name=>'Server ID'},
+  {ftype=>3, tag=>'zones_only', name=>'Output mode', type=>'enum',
+   conv=>'L', enum=>{t=>'Generate named.zones',f=>'Generate full named.conf'}},
   {ftype=>1, tag=>'comment', name=>'Comments',  type=>'text', len=>60,
    empty=>1},
   {ftype=>0, name=>'DNS'},
@@ -58,6 +60,8 @@ do "$PROG_DIR/back_end.pl";
   {ftype=>2, tag=>'allow_transfer', name=>'Allow-transfer', fields=>2,
    type=>['cidr','text'], len=>[20,30], empty=>[0,1], 
    elabels=>['IP','comment']},
+  {ftype=>2, tag=>'txt', name=>'Default zone TXT', type=>['text','text'], 
+   fields=>2, len=>[40,15], empty=>[0,1], elabels=>['TXT','comment']},
   {ftype=>0, name=>'DHCP'},
   {ftype=>2, tag=>'dhcp', name=>'Global DHCP', type=>['text','text'], 
    fields=>2, len=>[35,20], empty=>[0,1],elabels=>['dhcptab line','comment']} 
@@ -121,6 +125,18 @@ do "$PROG_DIR/back_end.pl";
    iff2=>['reverse','f']},
   {ftype=>2, tag=>'allow_update', 
    name=>'Allow dynamic updates (allow-update)', type=>['cidr','text'],
+   fields=>2, len=>[40,15], empty=>[0,1], elabels=>['CIDR','comment'],
+   iff=>['type','M']},
+  {ftype=>2, tag=>'allow_query', 
+   name=>'Allow queries from (allow-query)', type=>['cidr','text'],
+   fields=>2, len=>[40,15], empty=>[0,1], elabels=>['CIDR','comment'],
+   iff=>['type','M']},
+  {ftype=>2, tag=>'allow_transfer', 
+   name=>'Allow zone-transfers from (allow-transfer)', type=>['cidr','text'],
+   fields=>2, len=>[40,15], empty=>[0,1], elabels=>['CIDR','comment'],
+   iff=>['type','M']},
+  {ftype=>2, tag=>'also_notify', 
+   name=>'(Stealth) Servers to notify (also-notify)', type=>['ip','text'],
    fields=>2, len=>[40,15], empty=>[0,1], elabels=>['IP','comment'],
    iff=>['type','M']},
 
@@ -134,7 +150,7 @@ do "$PROG_DIR/back_end.pl";
 
 
 %host_types=(0=>'Any type',1=>'Host',2=>'Delegation',3=>'Plain MX',
-	     4=>'Alias',5=>'Printer',6=>'Glue record');
+	     4=>'Alias',5=>'Printer',6=>'Glue record',7=>'AREC Alias');
 
 
 %host_form = (
@@ -144,10 +160,12 @@ do "$PROG_DIR/back_end.pl";
   {ftype=>5, tag=>'ip', name=>'IP address', iff=>['type','[16]']},
   {ftype=>9, tag=>'alias_d', name=>'Alias for', idtag=>'alias',
    iff=>['type','4']},
+  {ftype=>8, tag=>'alias_a', name=>'Alias for host(s)', fields=>2, 
+   elabels=>['Alias','Info'], iff=>['type','7']},
   {ftype=>4, tag=>'id', name=>'Host ID'},
   {ftype=>4, tag=>'type', name=>'Type', type=>'enum', enum=>\%host_types},
-  {ftype=>3, tag=>'cname', name=>'Alias type', type=>'enum', conv=>'L',
-   enum=>{t=>'CNAME',f=>'AREC'}, iff=>['type','4']},
+#  {ftype=>3, tag=>'cname', name=>'Alias type', type=>'enum', conv=>'L',
+#   enum=>{t=>'CNAME',f=>'AREC'}, iff=>['type','4']},
   {ftype=>4, tag=>'class', name=>'Class'},
   {ftype=>1, tag=>'ttl', name=>'TTL', type=>'int', len=>10},
   {ftype=>1, tag=>'info', name=>'Info', type=>'text', len=>50, empty=>1,
@@ -212,10 +230,16 @@ do "$PROG_DIR/back_end.pl";
   {ftype=>1, tag=>'ip', 
    name=>'IP<FONT size=-1>(only if "Manual IP" selected)</FONT>', 
    type=>'ip', len=>15, empty=>1, iff=>['type','1']},
-  {ftype=>2, tag=>'mx_l', name=>'Mail exchanges (MX)', 
-   type=>['priority','mx','text'], fields=>3, len=>[5,30,20], 
-   empty=>[0,0,1], 
+  {ftype=>1, tag=>'glue',name=>'IP',type=>'ip', len=>15, iff=>['type','6']},
+  {ftype=>2, tag=>'mx_l', name=>'Mail exchanges (MX)',
+   type=>['priority','mx','text'], fields=>3, len=>[5,30,20], empty=>[0,0,1],
    elabels=>['Priority','MX','comment'], iff=>['type','3']},
+  {ftype=>2, tag=>'ns_l', name=>'Name servers (NS)', type=>['text','text'],
+   fields=>2,
+   len=>[30,20], empty=>[0,1], elabels=>['NS','comment'], iff=>['type','2']},
+  {ftype=>2, tag=>'printer_l', name=>'PRINTER entries', 
+   type=>['text','text'], fields=>2,len=>[40,20], empty=>[0,1], 
+   elabels=>['PRINTER','comment'], iff=>['type','5']},
   {ftype=>0, name=>'Group/Template selections', iff=>['type','[15]']},
   {ftype=>10, tag=>'grp', name=>'Group', iff=>['type','[15]']},
   {ftype=>6, tag=>'mx', name=>'MX template', iff=>['type','1']},
@@ -231,10 +255,10 @@ do "$PROG_DIR/back_end.pl";
   {ftype=>0, name=>'Equipment info',iff=>['type','1']},
   {ftype=>101, tag=>'hinfo_hw', name=>'HINFO hardware', type=>'hinfo', len=>20,
    sql=>"SELECT hinfo FROM hinfo_templates WHERE type=0 ORDER BY pri,hinfo;",
-   iff=>['type','1']},
+   lastempty=>1, empty=>1, iff=>['type','1']},
   {ftype=>101, tag=>'hinfo_sw', name=>'HINFO sowftware', type=>'hinfo',len=>20,
    sql=>"SELECT hinfo FROM hinfo_templates WHERE type=1 ORDER BY pri,hinfo;",
-   iff=>['type','1']},
+   lastempty=>1, empty=>1, iff=>['type','1']},
   {ftype=>1, tag=>'ether', name=>'Ethernet address', type=>'mac', len=>12,
    iff=>['type','1'], empty=>1},
   {ftype=>1, tag=>'model', name=>'Model', type=>'text', len=>30, empty=>1, 
@@ -249,10 +273,10 @@ do "$PROG_DIR/back_end.pl";
 
 %new_alias_form = (
  data=>[
-  {ftype=>0, name=>'New ALIAS' },
+  {ftype=>0, name=>'New CNAME Alias' },
   {ftype=>1, tag=>'domain', name=>'Hostname', type=>'domain', len=>40},
-  {ftype=>3, tag=>'cname', name=>'Type', type=>'enum', 
-   enum=>{t=>'CNAME',f=>'AREC'}},
+#  {ftype=>3, tag=>'cname', name=>'Type', type=>'enum', 
+#   enum=>{t=>'CNAME',f=>'AREC'}},
   {ftype=>0, name=>'Alias for'},
   {ftype=>4, tag=>'aliasname', name=>'Host'},
   {ftype=>4, tag=>'alias', name=>'ID'}
@@ -866,6 +890,7 @@ sub hosts_menu() {
 
   $sub=param('sub');
   $host_form{alias_l_url}="$selfurl?menu=hosts&h_id=";
+  $host_form{alias_a_url}="$selfurl?menu=hosts&h_id=";
   $host_form{alias_d_url}="$selfurl?menu=hosts&h_id=";
 
   if ($sub eq 'Delete') {
@@ -883,7 +908,7 @@ sub hosts_menu() {
 	return;
       }
       $data{aliasname}=$host{domain};
-      $data{cname}='t';
+      #$data{cname}='t';
     }
     $data{type}=4;
     $data{zone}=$zoneid;
@@ -1143,11 +1168,10 @@ sub hosts_menu() {
       $data{net}='MANUAL';
     }
     $data{type}=$type;
-    $data{grp}=-1;
-    $data{mx}=-1;
-    $data{wks}=-1;
     $data{zone}=$zoneid;
-    $data{mx_l}=[];
+    $data{grp}=-1; $data{mx}=-1; $data{wks}=-1;
+    $data{mx_l}=[]; $data{ns_l}=[]; $data{printer_l}=[];
+
 
     if (param('addhost_cancel')) {
       print h2("$host_types{$type} record creation canceled.");
@@ -1173,6 +1197,9 @@ sub hosts_menu() {
 	      unless (is_cidr($ip)) { alert1("Cannot get IP: $ip"); return; }
 	      $data{ip}=[[$ip,'t','t','']];
 	    }
+	  } elsif ($data{type} == 6) {
+	    $ip=$data{glue}; delete $data{glue};
+	    $data{ip}=[[$ip,'t','t','']];
 	  }
 	  delete $data{net};
 	  #show_hash(\%data);
@@ -2277,7 +2304,7 @@ sub left_menu($) {
     print p,li("<a href=\"$url\">Search</a>"),
           li("<a href=\"$url&sub=browse&lastsearch=1\">Last Search</a>"),
           p,li("<a href=\"$url&sub=add&type=1\">Add host</a>"),
-          li("<a href=\"$url&sub=add&type=3\">Add MX entry</a>"),
+          p,li("<a href=\"$url&sub=add&type=3\">Add MX entry</a>"),
           li("<a href=\"$url&sub=add&type=2\">Add delegation</a>"),
           li("<a href=\"$url&sub=add&type=6\">Add glue rec.</a>"),
           li("<a href=\"$url&sub=add&type=5\">Add printer</a>");
@@ -2936,6 +2963,10 @@ sub form_magic($$$) {
 	push @lst,$q[$i][0];
 	$lsth{$q[$i][0]}=$q[$i][0];
       }
+      if ($rec->{lastempty}) {
+	push @lst,'';
+	$lsth{''}='<none>';
+      }
       param($p1."_l",$lst[0]) if (($lst[0] ne '') && (not param($p1."_l")));
 
       if ($lsth{param($p1)}) {
@@ -3014,14 +3045,20 @@ sub display_form($$) {
       print Tr,"<TD WIDTH=\"",$form->{nwidth},"\">",$rec->{name},"</TD><TD>",
             "$val</TD>\n";
     } elsif ($rec->{ftype} == 2) {
-      print Tr,td($rec->{name}),"<TD><TABLE>",Tr;
+      print Tr,td($rec->{name}),
+	"<TD><TABLE width=\"100%\" bgcolor=\"#e0e0e0\">",Tr;
       $a=$data->{$rec->{tag}};
       for $k (1..$rec->{fields}) { 
 	#print "<TH>",$$a[0][$k-1],"</TH>";
       }
       for $j (1..$#{$a}) {
 	print Tr;
-	for $k (1..$rec->{fields}) { print td($$a[$j][$k]); }
+	for $k (1..$rec->{fields}) {
+	  $val=$$a[$j][$k];
+	  $val =~ s/\/32$// if ($rec->{type}[$k-1] eq 'ip');
+	  $val='&nbsp;' unless ($val);
+	  print td($val);
+	}
       }
       print "</TABLE></TD>\n";
     } elsif ($rec->{ftype} == 3) {
@@ -3061,7 +3098,7 @@ sub display_form($$) {
       #for $k (1..$rec->{fields}) { print "<TH>",$$a[0][$k-1],"</TH>";  }
       for $j (1..$#{$a}) {
 	$k=' ';
-	$k=' (AREC)' if ($$a[$j][2] eq 'f');
+	$k=' (AREC)' if ($$a[$j][2] eq '7');
 	print "<TR>",td("<a href=\"$url$$a[$j][0]\">".$$a[$j][1]."</a> "),
 	          td($k),"</TR>";
       }

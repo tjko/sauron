@@ -9,7 +9,8 @@ $Id$
 000102  3Com (PCI cards)
 0020DA  Xylan / IBM
 0030C1	Hewlett-Packard (switches, printers, ...)
-005056	VMware Inc. (virtual adapters)
 003065  Apple Macintosh	
+005056	VMware Inc. (virtual adapters)
+0050DA  3Com (3c905C-TX PCI cards)
 444553	Microsoft internal (virtual PPP adapter)
 524153	Windows NT: RAS-service

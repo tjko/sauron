@@ -11,8 +11,8 @@ CREATE TABLE hosts (
        id	   SERIAL, 
        zone	   INT4 NOT NULL,
        type	   INT4 DEFAULT 0, /* 0=misc,1=host,2=subdomain (delegation),
-				      3=mx entry, 4=alias, 5=printer,
-  				      6=glue record */
+				      3=mx entry, 4=alias (cname), 5=printer,
+  				      6=glue record, 7=alias (arec) */
        
        domain	   TEXT NOT NULL CHECK(domain <> ''),
        ttl	   INT4 DEFAULT -1,
@@ -20,7 +20,6 @@ CREATE TABLE hosts (
        
        grp	   INT4 DEFAULT -1,  /* ptr to group */
        alias	   INT4 DEFAULT -1,  /* ptr to another rr record */
-       cname       BOOL, /* if true CNAME alias, otherwise A record alias */
        cname_txt   TEXT,
        hinfo_hw	   TEXT,
        hinfo_sw	   TEXT,

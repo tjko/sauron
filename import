@@ -637,17 +637,17 @@ for ($i=0; $i <= $#zones; $i+=1) {
       die("cannot find host '$dom' from hash! (unexpected error)");
     }
   }
-  
 
-  
+
+
   # insert alias (CNAME) records
   $j=0; $str='';
   #db_begin();
-  
+
   foreach $host (keys %zonedata) {
     $rec = $zonedata{$host};
     next if ($rec->{CNAME} eq '');
-    
+
     $rec2 = $zonedata{$rec->{CNAME}};
     if (! $rec2) {
       #warn("cannot find aliased host $host --> $rec->{CNAME}\n");
@@ -658,13 +658,12 @@ for ($i=0; $i <= $#zones; $i+=1) {
       $alias=$rec2->{ID};
     }
     $host2=remove_origin($host,$origin);
-    
+
     $sqlstr = "INSERT INTO hosts " .
-      "(cuser,muser,zone,type,domain,class,alias,cname_txt,cname) ".
+      "(cuser,muser,zone,type,domain,class,alias,cname_txt) ".
 	"VALUES(" .
 	"'$user','$user',$zoneid,4,'$host2','$class'," .
-	"$alias,$cname2,true" .
-	");";
+	"$alias,$cname2);";
 
     delete $zonedata{$host};
 

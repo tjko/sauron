@@ -4,7 +4,7 @@
 #
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000.
 # $Id$
-#              
+#
 # fileformat (similar to BIND Master File format):
 # {<domain>|@|<blank>} [<ignored (ttl)>] [<ignored (class)] <type> <rdata>
 #
@@ -19,7 +19,7 @@
 #       TYPE            <machine's model/type>
 #       SERIAL          <machine's serial no.>
 #       MUUTA[0-9]      <other information about machine>
-#	  
+#
 require 5;
 use Net::Netmask;
 use Getopt::Std;
@@ -135,6 +135,75 @@ if ($rec) {
   delete $zonedata{$origin};
 }
 
+# find out-of-zone records
+foreach $host (keys %zonedata) {
+  $rec=$zonedata{$host};
+  next unless ($host eq remove_origin($host,$origin));
+  next if ($host =~ /\.in-addr\.arpa\.?$/);
+  next unless (@{$rec->{A}} > 0);
+
+  # skip ones that already are in database
+  undef @q; 
+  db_query("SELECT id FROM hosts WHERE zone=$zoneid AND domain='$host';",\@q);
+  next if ($q[0][0] > 0);
+
+  print "out-of-zone: $host\n";
+
+
+  die("cannot insert record $host!")
+    if (db_exec("INSERT INTO hosts (zone,type,domain) " .
+		"VALUES($zoneid,1,'$host'); ") < 0);
+  $oid=db_lastoid();
+  undef @q;
+  db_query("SELECT id FROM hosts WHERE OID=$oid;",\@q);
+  die("cannot get for inserted record!") if (@q < 1);
+  $id=$q[0][0];
+  for $i (0..$#{$rec->{A}}) {
+    $ip=$rec->{A}[$i];
+    die("cannot insert A record for host!")
+      if (db_exec("INSERT INTO rr_a (host,ip,reverse,forward) " .
+		  "VALUES($id,'$ip',true,true);") < 0);
+  }
+
+  #delete $zonedata{$host};
+}
+
+
+
+# update AREC aliases
+foreach $host (keys %zonedata) {
+  $rec=$zonedata{$host};
+  next unless (@{$rec->{AREC}} > 0);
+  print "ARECs for $host :\n";
+  undef @q;
+  $arec_h=remove_origin($host,$origin);
+  db_query("SELECT id FROM hosts WHERE zone=$zoneid AND domain='$arec_h';",
+	   \@q);
+  $a_id=$q[0][0];
+  die("cannot get id for host $host!") unless ($a_id > 0);
+
+  for $i (0..$#{$rec->{AREC}}) {
+    $arec=$rec->{AREC}[$i];
+    print "\t$i $arec id=";
+    undef @q;
+    db_query(
+       "SELECT id,type FROM hosts WHERE zone=$zoneid AND domain='$arec';",\@q);
+    $id=$q[0][0];
+    print "$id ";
+    unless ($id > 0) {
+      print "FAILED!\n";
+      next;
+    }
+    die("cannot delete A records for host id=$id!") 
+      if (db_exec("DELETE FROM rr_a WHERE host=$id;") < 0);
+    die("cannot update host record id=$id!")
+      if (db_exec("UPDATE hosts SET type=7 WHERE id=$id;") < 0);
+    die("cannot add AREC entry")
+      if (db_exec("INSERT INTO arec_entries (host,arec) VALUES($id,$a_id);")
+	  < 0);
+    print "OK\n";
+  }
+}
 
 
 # find virtual routers...

@@ -10,7 +10,8 @@ CREATE TABLE servers (
        id	   SERIAL PRIMARY KEY,
        name	   TEXT UNIQUE NOT NULL CHECK(name <> ''),
 
-       zones_only  BOOL DEFAULT false,
+       zones_only  BOOL DEFAULT false, /* if true, generate named.zones file
+			              otherwise generate complete named.conf */
        no_roots	   BOOL DEFAULT false,
 
 	/* named.conf options...more to be added as needed... */
