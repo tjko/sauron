@@ -1,0 +1,73 @@
+#!/usr/bin/perl -I/usr/local/sauron
+#
+# createtables -- utlity to create all the necessary
+#                 tables for Sauron
+#
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2002.
+# $Id$
+#
+require 5;
+use Getopt::Long;
+use Sauron::DB;
+use Sauron::Util;
+use Sauron::BackEnd;
+
+my ($PG_DIR,$PG_NAME) = ($0 =~ /^(.*\/)(.*)$/);
+$0 = $PG_NAME;
+
+
+@TABLES  =  qw@ sql/common.sql
+		sql/servers.sql
+		sql/zones.sql
+		sql/hosts.sql
+		sql/groups.sql
+		sql/nets.sql
+		sql/cidr_entries.sql sql/dhcp_entries.sql sql/ether_info.sql
+		sql/mx_entries.sql sql/mx_templates.sql
+		sql/ns_entries.sql
+		sql/printer_classes.sql sql/printer_entries.sql
+		sql/a_entries.sql sql/txt_entries.sql sql/srv_entries.sql
+	        sql/users.sql sql/user_rights.sql sql/user_groups.sql
+		sql/wks_entries.sql sql/wks_templates.sql
+		sql/utmp.sql sql/hinfo_templates.sql
+		sql/arec_entries.sql sql/root_servers.sql
+		sql/history.sql sql/lastlog.sql sql/news.sql
+		sql/vlans.sql
+
+                sql/DEFAULTS.sql sql/misc.sql sql/copy_tables.sql
+		sql/hinfo_hw.sql sql/hinfo_sw.sql
+
+               @;
+
+
+
+if (-r "/etc/sauron/config") {
+  $config_file="/etc/sauron/config";
+} elsif (-r "/usr/local/etc/sauron/config") {
+  $config_file="/usr/local/etc/sauron/config";
+} else {
+  die("cannot find config file in /etc/sauron or /usr/local/etc/sauron");
+}
+
+do "$config_file" || die("cannot load config: $config_file");
+
+##############################################
+
+db_connect($DB_CONNECT);
+
+print "Create initial table for sauron [y/n]? ";
+chomp($a=lc(<STDIN>));
+exit unless ($a eq 'y');
+
+print "Creating tables for sauron...\n";
+
+for $i (0..$#TABLES) {
+  print "Running: $TABLES[$i]...\n";
+  $res=system("$PROG_DIR/runsql","$PROG_DIR/$TABLES[$i]");
+  fatal("failed to create all tables") if ($res);
+}
+
+
+exit;
+
+# eof :-)
