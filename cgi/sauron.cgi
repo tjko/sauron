@@ -414,7 +414,7 @@ do "$conf_dir/config" || die("cannot load configuration!");
   {ftype=>4, name=>'Last modified', tag=>'mdate_str', no_edit=>1},
   {ftype=>1, name=>'Expiration date', tag=>'expiration', len=>30,
    type=>'expiration', empty=>1, iff=>['type','[147]']},
-  {ftype=>4, name=>'Last seen by DHCP server', tag=>'dhcp_date_str', 
+  {ftype=>4, name=>'Last lease issued by DHCP server', tag=>'dhcp_date_str',
    no_edit=>1, iff=>['type','[19]']}
  ]
 );
