@@ -40,7 +40,7 @@ INSTALLATION
 	make docs	(optional)
 	make install
 
-  2) Create database for sauron to user in PostgreSQL
+  2) Create database for sauron to use in PostgreSQL
      	(use createdb command to create the database, see postgres
 	 documentation for more help)
 
