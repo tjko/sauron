@@ -12,7 +12,9 @@ general:
 	- method for cleaning up ever-growing history/lastlog tables
 	- allow long usernames
 	- add Internationalized Domain Names (IDN) support
-
+	- user_rights: hostmasks should be either global, by server, or
+	  by zone....
+	- allow moving of hosts between zones ("move")
 	  
 
 import:
