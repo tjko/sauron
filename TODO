@@ -28,6 +28,8 @@ sauron.cgi:
 	- add quick search like in browser.cgi
 	- add "network settings" button to host display
 	- hide "VLAN" info from normal users
+	- add VLAN-table for managing "vlan"'s
+	
 	
 
 browser.cgi:
