@@ -2,7 +2,7 @@
 #
 # expire-hosts - utility to expire hosts w/o recent dhcp activity
 #
-# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2002.
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2002,2003.
 # $Id$
 #
 require 5;
@@ -50,14 +50,13 @@ if ($opt_help || @ARGV < 1) {
   exit(0);
 }
 
-
 fatal("DB_CONNECT not defined in configuration!") unless ($DB_CONNECT);
 db_connect($DB_CONNECT);
 
 set_muser($user);
 
 $server=shift;
-$verbose=($opt_verbose?1:0);
+$opt_verbose=($opt_verbose?1:0);
 
 $serverid=get_server_id($server);
 fatal("cannot find server '$server'") unless ($serverid > 0);
@@ -74,14 +73,16 @@ if ($opt_treshold) {
   fatal("invalid treshold specified") unless ($opt_treshold > 0);
 } else {
   $opt_treshold=90;
-  print "Using default treshold of 90 days\n" unless ($opt_norecord);
+  print "Using default treshold of $opt_treshold days\n"
+    unless ($opt_norecord);
 }
 
 $date = time() - $opt_treshold * 86400;
+$date2 = time() - 15 * 86400;
 
 if ($opt_norecord) {
   $date = 0;
-  print "Expiring hosts with no recorded dhcp activity\n" if ($verbose);
+  print "Expiring hosts with no recorded dhcp activity\n" if ($opt_verbose);
 }
 
 if ($opt_edate) {
@@ -108,7 +109,7 @@ if ($opt_cidr) {
 }
 
 if ($opt_netname) {
-  print "Checking hosts in these networks:\n" if ($verbose);
+  print "Checking hosts in these networks:\n" if ($opt_verbose);
   $opt_netname = db_encode_str($opt_netname);
   db_query("SELECT id,net,netname,range_start,range_end FROM nets " .
 	   "WHERE server=$serverid AND netname ~ $opt_netname ORDER BY net",
@@ -122,7 +123,7 @@ if ($opt_netname) {
     next unless (is_cidr($nets[$i][3]) && is_cidr($nets[$i][4]));
 
     printf "%-18s %-25s (%-15s-%-15s)\n",
-           $net,$nets[$i][2],$nets[$i][3],$nets[$i][4] if ($verbose);
+           $net,$nets[$i][2],$nets[$i][3],$nets[$i][4] if ($opt_verbose);
     $netnames .= " OR " if ($netnames);
     $netnames .= " a.ip << '$net' ";
     push @chklist, [ip2int($nets[$i][3]), ip2int($nets[$i][4])];
@@ -141,12 +142,12 @@ if ($opt_name) {
 
 
 $sql="SELECT h.id,h.domain,h.ether,h.ether_alias," .
-     " h.expiration,h.dhcp_date,a.ip " .
+     " h.expiration,h.dhcp_date,h.cdate,h.mdate,a.ip " .
      "FROM hosts h, a_entries a, zones z " .
      "WHERE h.zone=z.id AND z.server=$serverid AND a.host=h.id " .
      " $cidr $netnames $name ORDER BY h.domain;";
 
-#print "$sql\n" if ($verbose);
+#print "$sql\n" if ($opt_verbose);
 
 db_query($sql,\@q);
 fatal(db_errormsg()) if (db_errormsg());
@@ -157,7 +158,8 @@ exit unless ($count > 0);
 $ecount=0;
 
 for $i (0..$#q) {
-  ($id,$domain,$ether,$etheralias,$expiration,$ddate,$ip) = @{$q[$i]};
+  ($id,$domain,$ether,$etheralias,$expiration,$ddate,$cdate,$mdate,$ip) =
+    @{$q[$i]};
 
   next if ($etheralias > 0);
   if ($opt_netname) {
@@ -174,10 +176,12 @@ for $i (0..$#q) {
   }
 
   print "Skipping host w/o Ethernet address $domain $ip\n"
-    unless ($ether && $verbose);
+    unless ($ether && $opt_verbose);
 
+  $mdate=($cdate > $mdate ? $cdate : $mdate);
   $ddate=0 unless ($ddate > 0);
   next if ($ddate == 0 && not $opt_norecord);
+  next if ($mdate > $date2); # ignore hosts modified recently
   next if ($expiration > 0 && $expiration <= $etime);
   next unless ($ddate <= $date);
 
