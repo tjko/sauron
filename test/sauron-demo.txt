@@ -1,7 +1,10 @@
 
 sauron-demo.dump file contains dump of sample Sauron database.
 This database contains a sample database which demonstrates some features
-of Sauron.
+of Sauron. 
+
+NOTE! This dump vas created on PostgreSQL v7.3.2, so the dump may
+not necessarily work with earlier versions of PostgreSQL.
 
 To try out sauron with this demo databse, you need to first create a
 database for sauron (ie. "sauron-demo") and then load this dump with 
