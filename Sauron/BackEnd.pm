@@ -121,7 +121,7 @@ use strict;
 my($muser);
 
 sub sauron_version() {
-  return "0.5.0"; # current back end version
+  return "0.5.1"; # current back end version
 }
 
 sub sauron_db_version() {
