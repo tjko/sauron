@@ -518,7 +518,6 @@ sub make_bind() {
       # generate reverse map for master reverse zones
 
       $rorigin = cidr2arpa($zone{'reversenet'}) . ".";
-      print "reversenet " . $zone{'reversenet'} . " ($rorigin)\n";
 
       undef %riphash;
       undef @q;
@@ -1143,7 +1142,7 @@ sub make_dhcp() {
   undef @q;
   db_query("SELECT h.id,d.dhcp FROM hosts h,zones z,dhcp_entries d " .
 	   "WHERE z.server=$serverid AND h.zone=z.id AND d.type=3 " .
-	   " AND d.ref=h.id;",\@q);
+	   " AND d.ref=h.id ORDER BY h.id,d.id",\@q);
   for $i (0..$#q) {
     $dhcphosth{$q[$i][0]}=[] unless ($dhcphosth{$q[$i][0]});
     push @{$dhcphosth{$q[$i][0]}}, $q[$i][1];
@@ -1155,7 +1154,7 @@ sub make_dhcp() {
   print DHCPFILE "\n# global options\n\n";
   undef @q;
   db_query("SELECT d.dhcp FROM dhcp_entries d " .
-	   "WHERE d.type=1 AND d.ref=$serverid;",\@q);
+	   "WHERE d.type=1 AND d.ref=$serverid ORDER BY d.id",\@q);
   for $i (0..$#q) {
     print DHCPFILE "$q[$i][0];\n";
   }
@@ -1175,7 +1174,7 @@ sub make_dhcp() {
 	               "(option dhcp-client-identifier, hardware);\n";
 	undef @q;
 	db_query("SELECT dhcp FROM dhcp_entries " .
-		 "WHERE type=5 and ref=$dclasses[$i][0] ORDER BY dhcp",\@q);
+		 "WHERE type=5 and ref=$dclasses[$i][0] ORDER BY id",\@q);
 	for $j (0..$#q) {	print DHCPFILE "\t$q[$j][0];\n"; }
 	print DHCPFILE "}\n";
 
@@ -1219,7 +1218,7 @@ sub make_dhcp() {
     for $i (0..$#dpools) {
       undef @q;
       db_query("SELECT dhcp FROM dhcp_entries " .
-	       "WHERE type=5 AND ref=$dpools[$i][0] ORDER BY dhcp",\@q);
+	       "WHERE type=5 AND ref=$dpools[$i][0] ORDER BY id",\@q);
       $dpools_dhcp{$i}=[];
       for $j (0..$#q) { push @{$dpools_dhcp{$i}}, $q[$j][0]; }
     }
@@ -1232,9 +1231,9 @@ sub make_dhcp() {
   print DHCPFILE "\n# network map\n\n";
   undef @subnets;
   undef @nets;
-  db_query("SELECT net,name,id,vlan " . 
+  db_query("SELECT net,name,id,vlan " .
 	   "FROM nets WHERE server=$serverid AND no_dhcp=false " .
-	   "AND subnet=false ORDER BY net;",\@nets);
+	   "AND subnet=false ORDER BY net",\@nets);
   if (@nets < 1) {
     fatal("No nets, that use DHCP, defined for this server!");
   }
@@ -1246,7 +1245,8 @@ sub make_dhcp() {
       print DHCPFILE "shared-network \"$netname\" {\n";
       undef @net_dhcp;
       db_query("SELECT d.dhcp FROM dhcp_entries d " .
-	       "WHERE d.type=4 AND d.ref=$nets[$i][2];",\@net_dhcp);
+	       "WHERE d.type=4 AND d.ref=$nets[$i][2] ORDER BY d.id",
+	       \@net_dhcp);
       for $j (0..$#net_dhcp) { print DHCPFILE "\t$net_dhcp[$i][0];\n"; }
       print DHCPFILE "\n";
     }
@@ -1319,7 +1319,7 @@ sub make_dhcp() {
 	print DHCPFILE "group {  # $group\n";
 	undef @qqq;
 	db_query("SELECT d.dhcp FROM dhcp_entries d " .
-		 "WHERE d.type=5 AND d.ref=$gid;",\@qqq);
+		 "WHERE d.type=5 AND d.ref=$gid ORDER BY d.id",\@qqq);
 	for $k (0..$#qqq) {
 	  $qqq[$k][0] =~ s/\\"/"/g;
 	  print DHCPFILE "\t$qqq[$k][0];\n";
@@ -1512,7 +1512,7 @@ sub print_subnets() {
 
     undef @qqq;
     db_query("SELECT d.dhcp FROM dhcp_entries d " .
-	     "WHERE d.type=4 AND d.ref=$dhcpid;",\@qqq);
+	     "WHERE d.type=4 AND d.ref=$dhcpid ORDER BY d.id",\@qqq);
     for $k (0..$#qqq) {
       print DHCPFILE "\t\t$qqq[$k][0];\n";
     }

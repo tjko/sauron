@@ -624,7 +624,7 @@ sub get_server($$) {
   get_array_field("cidr_entries",3,"id,ip,comment","IP,Comments",
 		  "type=11 AND ref=$id ORDER BY ip",$rec,'forwarders');
   get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comments",
-		  "type=1 AND ref=$id ORDER BY dhcp",$rec,'dhcp');
+		  "type=1 AND ref=$id ORDER BY id",$rec,'dhcp');
   get_array_field("txt_entries",3,"id,txt,comment","TXT,Comments",
 		  "type=3 AND ref=$id ORDER BY id",$rec,'txt');
   get_array_field("txt_entries",3,"id,txt,comment","TXT,Comments",
@@ -996,7 +996,7 @@ sub get_zone($$) {
   }
 
   get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comments",
-		  "type=2 AND ref=$id ORDER BY dhcp",$rec,'dhcp');
+		  "type=2 AND ref=$id ORDER BY id",$rec,'dhcp');
   get_array_field("cidr_entries",3,"id,ip,comment","CIDR,Comments",
 		  "type=2 AND ref=$id ORDER BY ip",$rec,'allow_update');
   get_array_field("cidr_entries",3,"id,ip,comment","IP,Comments",
@@ -1552,7 +1552,7 @@ sub get_host($$) {
   get_array_field("txt_entries",3,"id,txt,comment","TXT,Comments",
 		  "type=2 AND ref=$id ORDER BY id",$rec,'txt_l');
   get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comments",
-		  "type=3 AND ref=$id ORDER BY dhcp",$rec,'dhcp_l');
+		  "type=3 AND ref=$id ORDER BY id",$rec,'dhcp_l');
   get_array_field("printer_entries",3,"id,printer,comment","PRINTER,Comments",
 		  "type=2 AND ref=$id ORDER BY printer",$rec,'printer_l');
   get_array_field("srv_entries",6,"id,pri,weight,port,target,comment",
@@ -2160,7 +2160,7 @@ sub get_group($$) {
 			     $id,$rec,"id"));
 
   get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comments",
-		  "type=5 AND ref=$id ORDER BY dhcp",$rec,'dhcp');
+		  "type=5 AND ref=$id ORDER BY id",$rec,'dhcp');
   get_array_field("printer_entries",3,"id,printer,comment","PRINTER,Comments",
 		  "type=1 AND ref=$id ORDER BY printer",$rec,'printer');
 
@@ -2403,7 +2403,7 @@ sub get_net($$) {
                       "netname,alevel,type", $id,$rec,"id"));
 
   get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comment",
-		  "type=4 AND ref=$id ORDER BY dhcp",$rec,'dhcp_l');
+		  "type=4 AND ref=$id ORDER BY id",$rec,'dhcp_l');
 
   $rec->{private_flag} = ($rec->{type} & 0x01 ? 1 : 0);
   add_std_fields($rec);
@@ -2509,7 +2509,7 @@ sub get_vlan($$) {
 		      "cdate,cuser,mdate,muser", $id,$rec,"id"));
 
   get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comment",
-		  "type=6 AND ref=$id ORDER BY dhcp",$rec,'dhcp_l');
+		  "type=6 AND ref=$id ORDER BY id",$rec,'dhcp_l');
 
   add_std_fields($rec);
   return 0;
