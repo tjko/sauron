@@ -371,7 +371,11 @@ foreach $host (keys %zonedata) {
   if (@{$rec->{A}} > 0) {
     $hostname = remove_origin($host,$origin);
     $lastid=$hostidhash{$hostname};
-    die("cannot find id for host $hostname in hostidhash!") if (! $lastid);
+    if (! $lastid) {
+      warn("cannot find id for host $hostname in hostidhash!") ;
+      delete $zonedata{$host};
+      next;
+    }
 
     $ether = "'$rec->{ETHER}'";
     $ether = 'NULL' if ($ether eq "''");

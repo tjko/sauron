@@ -5,9 +5,9 @@ $PROG_DIR = "/home/tjko/work/sauron/";
 $ICON_PATH = "/sauron/icons";
 $CGI_STATE_PATH = "/home/tjko/work/sauron/cgi/state";
 
-#$DB_CONNECT = "host=localhost port=5432 dbname=sauron user=tjko password=kala";
+$DB_CONNECT = "host=ns1.jyu.fi port=5432 dbname=sauron user=tjko password=farside";
 
-$DB_CONNECT = "dbname=sauron user=tjko password=kala";
+#$DB_CONNECT = "dbname=sauron user=tjko password=kala";
 
 $USER_TIMEOUT = 3600;
 
