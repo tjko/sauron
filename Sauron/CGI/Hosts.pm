@@ -737,7 +737,7 @@ sub menu_handler {
     print h2("Edit host:"),p,startform(-method=>'POST',-action=>$selfurl),
 	  hidden('menu','hosts'),hidden('sub','Edit');
     form_magic('h',\%host,$hform);
-    print submit(-name=>'h_submit',-value=>'Make changes')," ",
+    print submit(-name=>'h_submit',-value=>'Apply')," ",
           submit(-name=>'h_cancel',-value=>'Cancel'),end_form;
     return;
   }

@@ -171,7 +171,7 @@ exit unless ($count > 0);
 if ($opt_delete || $opt_rename || $opt_move || $opt_setgroup ||
     $opt_setedate) {
   if ($opt_commit) {
-    print "Are you sure you want to make changes to database? [y/N]? ";
+    print "Are you sure you want to apply changes to database? [y/N]? ";
     chomp ($answer = <STDIN>);
     exit unless ($answer eq 'y' || $answer eq 'Y');
   }

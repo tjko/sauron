@@ -328,7 +328,7 @@ sub edit_magic($$$$$$$) {
           startform(-method=>'POST',-action=>$selfurl),
           hidden('menu',$menu),hidden('sub','Edit');
   form_magic($prefix,\%h,$form);
-  print submit(-name=>$prefix . '_submit',-value=>'Make changes'), "  ",
+  print submit(-name=>$prefix . '_submit',-value=>'Apply'), "  ",
         submit(-name=>$prefix . '_cancel',-value=>'Cancel'),
         end_form;
 
