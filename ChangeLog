@@ -1,6 +1,10 @@
 $Id$
 
 0.7.2beta
+	- sauron: fixed router entry generatio (dhcpd.conf) if more than
+	  one network (nt subnet) is defined for server
+	- CGI interface: fixed "disappearing" DHCP fields when editing
+	  subnet entry when using DBD::Pg interface
 	- generatehosts: fix to :N: parameter handling by Ken McKinlay
 	- new utility: export-hosts to export host data in CSV format
 	- moduser: added ability to add group(s) to user from command line
