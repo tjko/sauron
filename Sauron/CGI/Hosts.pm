@@ -541,7 +541,7 @@ sub menu_handler {
 	  $host{location}=param('new_loc')
 	    unless (param('new_loc') =~ /^\s*$/);
 	  $host{info}=param('new_info') unless (param('new_info') =~ /^\s*$/);
-	  unless (update_host(\%host)) {
+	  unless (($res=update_host(\%host)) < 0) {
 	    update_history($state->{uid},$state->{sid},1,
 			   "MOVE: $host_types{$host{type}} ",
 		   "domain: $host{domain}, IP: $old_ip --> $host{ip}[1][1]",
@@ -549,7 +549,7 @@ sub menu_handler {
 	    print h2('Host moved.');
 	    goto show_host_record;
 	  } else {
-	    alert1('Host update failed!');
+	    alert1("Host update failed! ($res)");
 	  }
 	}
       }
