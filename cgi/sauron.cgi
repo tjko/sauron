@@ -3778,9 +3778,9 @@ sub frame_set() {
 
   print "<HTML>" .
         "<HEAD><TITLE>Sauron ($SERVER_ID)</TITLE></HEAD>" .
-        "<FRAMESET rows=\"90,*\" >\n" .
+        "<FRAMESET border=\"0\" rows=\"90,*\" >\n" .
         "  <FRAME src=\"$script_name/frame1\" noresize scrolling=\"no\" " .
-	"   frameborder=\"0\" marginheight=\"0\" marginwidth=\"0\">\n" .
+	"   frameborder=\"0\" marginheight=\"5\" marginwidth=\"5\">\n" .
         "  <FRAME src=\"$script_name/frames2\" name=\"bottom\" " .
 	"   frameborder=\"0\" marginheight=\"0\" marginwidth=\"0\">\n" .
         "  <NOFRAMES>\n" .
@@ -3797,7 +3797,7 @@ sub frame_set2() {
   $menu="?menu=" . param('menu') if ($menu);
 
   print "<HTML>" .
-        "<FRAMESET cols=\"120,*\">\n" .
+        "<FRAMESET border=\"0\" cols=\"120,*\">\n" .
 #        "  <TITLE>Sauron ($SERVER_ID)</TITLE>" .
 	"  <FRAME src=\"$script_name/frame2$menu\" name=\"menu\" noresize " .
 	"   scrolling=\"no\" frameborder=\"0\" " .
