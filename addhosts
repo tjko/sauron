@@ -41,16 +41,20 @@ sub fatal($) {
 set_muser($user);
 
 $result = GetOptions("help|h","name=s","commit","noreverse",
-		    "newonly","outofzone","verbose","force=s");
+		    "newonly","outofzone","verbose","force=s",
+		    "group=s","info=s");
 
 if ($opt_help || @ARGV < 2) {
   print "syntax: $0 <server> <zone> <file> [options]\n\n",
         "options:\n",
 	"\t--name=<regexp>\t\thostname filter (regexp)\n",
 	"\t--newonly\t\tprocess only new records\n",
-	"\t--noreverse\t\do not add reverse records\n",
+	"\t--noreverse\t\tdo not add reverse records\n",
 	"\t--outofzone\t\tallow out of zone records\n",
 	"\t--verbose\t\tproduce more verbose output\n",
+	"\t--group=<name>\t\tassign new hosts to given group\n",
+	"\t--info=<user>:<dept>:<location>:<extra>\n",
+	"\t\t\t\tset info fields for all hosts\n",
 	"\t--force=<type>\t\tforce record type:\n",
 	"\t\t\t\t\tdhcp-only\n",
 	"\t--commit\t\tcommit changes (w/o this no changes are made)\n",
@@ -63,6 +67,7 @@ db_connect();
 $server=$ARGV[0];
 $zone=$ARGV[1];
 $filename=$ARGV[2];
+$gid=-1;
 
 $serverid=get_server_id($server);
 fatal("cannot find server '$server'") unless ($serverid > 0);
@@ -71,6 +76,16 @@ $zoneid=get_zone_id($zone,$serverid);
 fatal("cannot find zone '$zone'") unless ($zoneid > 0);
 
 fatal("cannot read file: $filename") unless (-r $filename);
+
+if ($opt_group) {
+  fatal("cannot find group '$opt_group'") 
+    if (($gid=get_group_by_name($serverid,$opt_group)) < 0);
+}
+
+if ($opt_info) {
+  @infof = split(/:/,$opt_info);
+  fatal("invalid paremeters for info option ") if (@infof > 4);
+}
 
 
 $force_type=0;
@@ -161,16 +176,22 @@ foreach $domain (sort keys %zonedata) {
   }
 
   if ($rec->{INFO}) {
-    print " info: $rec->{INFO}\n";
-    $host{info}=$rec->{INFO} if ($opt_verbose);
+    print " info: $rec->{INFO}\n" if ($opt_verbose);
+    $host{info}=$rec->{INFO};
   }
 
   if ($rec->{ETHER}) {
-    print " ether: $rec->{ETHER}\n";
-    $host{ether}=$rec->{ETHER} if ($opt_verbose);
+    print " ether: $rec->{ETHER}\n" if ($opt_verbose);
+    $host{ether}=$rec->{ETHER};
   }
 
-  fatal("cannot update host (id=$id)") if (update_host(\%host) < 0);
+  $host{huser}=$infof[0] if ($infof[0]);
+  $host{dept}=$infof[1] if ($infof[1]);
+  $host{location}=$infof[2] if ($infof[2]);
+  $host{info}=$infof[3] if ($infof[3]);
+  $host{grp}=$gid;
+
+  fatal("cannot update host (id=$id) $res") if (($res=update_host(\%host))<0);
 
 }
 

@@ -1581,6 +1581,16 @@ sub delete_hinfo_template($) {
 ############################################################################
 # group functions
 
+sub get_group_by_name($$) {
+  my($serverid,$name)=@_;
+  my(@q);
+  return -1 unless ($serverid > 0);
+  db_query("SELECT id FROM groups WHERE server=$serverid AND name='$name'",
+	   \@q);
+  return -2 unless (@q > 0);
+  return ($q[0][0]);
+}
+
 sub get_group($$) {
   my ($id,$rec) = @_;
 
