@@ -91,6 +91,19 @@ sub domain_in_use($$) {
   return 0;
 }
 
+sub hostname_in_use($$) {
+  my($zoneid,$hostname)=@_;
+  my(@q,$domain);
+
+  return -1 unless ($zoneid > 0);
+  return -2 unless ($hostname =~ /^([A-Za-z0-9\-]+)(\.|$)/);
+  $domain=$1;		 
+  db_query("SELECT h.id FROM hosts h ".
+	   "WHERE h.zone=$zoneid AND domain ~* '^$domain(\\\\.|\$)';",\@q);
+  return $q[0][0] if ($q[0][0] > 0);
+  return 0;
+}
+
 sub new_sid() {
   my($sid);
 
@@ -946,7 +959,7 @@ sub copy_zone($$$$) {
 
 sub get_host($$) {
   my ($id,$rec) = @_;
-  my ($res,$t,$wrec,$mrec,%h);
+  my ($res,$t,$wrec,$mrec,%h,@q);
 
   $res = get_record("hosts",
 	       "zone,type,domain,ttl,class,grp,alias,cname_txt," .
@@ -1037,8 +1050,16 @@ sub get_host($$) {
 
   $rec->{cdate_str}=($rec->{cdate} > 0 ?
 		     localtime($rec->{cdate}).' by '.$rec->{cuser} : 'UNKOWN');
-  $rec->{mdate_str}=($rec->{mdate} > 0 ?
-		     localtime($rec->{mdate}).' by '.$rec->{muser} : '');
+
+  if ($rec->{mdate} > 0) {
+    $rec->{mdate_str}=localtime($rec->{mdate}).' by '.$rec->{muser};
+    db_query("SELECT z.serial_date FROM hosts h, zones z " .
+	     "WHERE h.zone=z.id AND h.id=$id;",\@q);
+    $rec->{mdate_str}="<FONT color=\"#ff0000\">" . $rec->{mdate_str} .
+                      " (PENDING)</FONT>"  if ($q[0][0] < $rec->{mdate});
+  } else {
+    $rec->{mdate_str}='';
+  }
 
   $rec->{dhcp_date_str}=($rec->{dhcp_date} > 0 ?
 			 localtime($rec->{dhcp_date}) : '');
