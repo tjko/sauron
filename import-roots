@@ -71,9 +71,9 @@ foreach $host (keys %zonedata) {
     #print "A: " . join(",",@{$rec->{A}}) . "\n";
     for $i (0..$#{$rec->{A}}) {
       $ip=$rec->{A}[$i];
-      db_exec("INSERT INTO root_servers (server,ttl,domain,type,value) " .
-	      " VALUES($serverid,$ttl,'$host','A','$ip');");
-      die("cannot insert A record") if ($res < 0);
+      $res=db_exec("INSERT INTO root_servers (server,ttl,domain,type,value) " .
+		   " VALUES($serverid,$ttl,'$host','A','$ip');");
+      fatal("cannot insert A record") if ($res < 0);
       $acount++;
     }
   }
@@ -81,9 +81,9 @@ foreach $host (keys %zonedata) {
     #print "NS: " . join(",",@{$rec->{NS}}) . "\n";
     for $i (0..$#{$rec->{NS}}) {
       $ns=$rec->{NS}[$i];
-      db_exec("INSERT INTO root_servers (server,ttl,domain,type,value) " .
+      $res=db_exec("INSERT INTO root_servers (server,ttl,domain,type,value) " .
 	      " VALUES($serverid,$ttl,'$host','NS','$ns');");
-      die("cannot insert NS record") if ($res < 0);
+      fatal("cannot insert NS record") if ($res < 0);
       $ncount++;
     }
   }
