@@ -6,12 +6,13 @@
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>, 2000.
 # All Rights Reserved.
 #
+use Sys::Syslog;
 use CGI qw/:standard *table/;
 use CGI::Carp 'fatalsToBrowser'; # debug stuff
 use Digest::MD5;
 
 $CGI::DISABLE_UPLOADS =1; # no uploads
-$CGI::POST_MAX = 10000; # max 100k posts
+$CGI::POST_MAX = 100000; # max 100k posts
 
 
 $debug_mode = 1;
@@ -189,6 +190,17 @@ error("invalid directory configuration")
  heading_bg=>'#aaaaff'
 );
 
+sub logmsg($$) {
+  my($type,$msg)=@_;
+
+  open(LOGFILE,">>/tmp/sauron.log");
+  print LOGFILE "sauron: $msg\n";
+  close(LOGFILE);
+  
+  #openlog("sauron","cons,pid","user");
+  #syslog($type,"foo: %s\n",$msg);
+  #closelog();
+}
 
 
 #####################################################################
@@ -202,15 +214,18 @@ $s_url = script_name();
 $selfurl = $s_url . $pathinfo;
 $menu=param('menu');
 $menu='login' unless ($menu);
+$remote_addr = $ENV{'REMOTE_ADDR'};
 
 $scookie = cookie(-name=>'sauron');
 if ($scookie) {
   unless (load_state($scookie)) { 
+    logmsg("notice","invalid cookie ($scookie) supplied by $remote_addr"); 
     undef $scookie;
   }
 }
 
 unless ($scookie) {
+  logmsg("notice","new connection from: $remote_addr");
   $new_cookie=make_cookie();
   print header(-cookie=>$new_cookie,-target=>'_top'),
         start_html(-title=>"Sauron Login",-BGCOLOR=>'white');
@@ -218,25 +233,29 @@ unless ($scookie) {
 }
 
 if ($state{'mode'} eq '1' && param('login') eq 'yes') {
+  logmsg("debug","login authentication: $remote_addr");
   print header(-target=>'_top'),
         start_html(-title=>"Sauron Login",-BGCOLOR=>'white');
   login_auth(); 
 }
 
 if ($state{'auth'} ne 'yes' || $pathinfo eq '/login') {
+  logmsg("notice","reconnect from: $remote_addr");
   print header(-target=>'_top'),
         start_html(-title=>"Sauron Login",-BGCOLOR=>'white');
   login_form("Welcome (2)",$scookie);
 }
 
 if ((time() - $state{'last'}) > $USER_TIMEOUT) {
+  logmsg("notice","connection timed out for $remote_addr " .
+	 $state{'user'});
   print header(-target=>'_top'),
         start_html(-title=>"Sauron Login",-BGCOLOR=>'white');
   login_form("Your session timed out. Login again",$scookie);
 }
 
-error("Unauthorized Access denied!") 
-  if ($ENV{'REMOTE_ADDR'} != $state{'addr'}) ;
+error("Unauthorized Access denied! $remote_addr") 
+  if ($remote_addr ne $state{'addr'}) ;
 
 $server=$state{'server'};
 $serverid=$state{'serverid'};
@@ -286,7 +305,7 @@ if ($debug_mode) {
          "<br>cookie='$scookie'\n",
         "<br>s_url='$s_url' '$selfurl'\n",
         "<br>url()=" . url(),
- #       "<p>self_url()=" . self_url(),
+#       "<p>remote_addr=$remote_addr",
         "<p>";
   @names = param();
   foreach $var (@names) {
@@ -723,8 +742,11 @@ sub login_menu() {
 #####################################################################
 
 sub logout() {
-  my($c);
-  $c=cookie(-name=>'sauron',-value=>'',-expires=>'0s');
+  my($c,$u);
+  $u=$state{'user'};
+  logmsg("notice","user ($u) logged off from $remote_addr");
+  $c=cookie(-name=>'sauron',-value=>'logged off',-expires=>'+1s',
+	    -path=>$s_url);
   remove_state($scookie);
   print header(-target=>'_top',-cookie=>$c),
         start_html(-title=>"Sauron Logout",-BGCOLOR=>'white'),
@@ -785,6 +807,7 @@ sub login_auth() {
 	  print p,h1("Login ok!"),p,
 	        "Come in... <a href=\"$s_url/frames\">frames version</a> ",
 	        "or <a href=\"$s_url\">table version</a>";
+	  logmsg("notice","user ($u) logged in from " . $ENV{'REMOTE_ADDR'});
 	}
       }
     } 
@@ -1002,6 +1025,7 @@ sub load_state($) {
   if (@q > 0) {
     $state{'uid'}=$q[0][0];
     $state{'addr'}=$q[0][1];
+    $state{'addr'} =~ s/\/32\s*$//;
     $state{'auth'}='yes' if ($q[0][2] eq 't');
     $state{'mode'}=$q[0][3];
     if ($q[0][4] > 0) {
