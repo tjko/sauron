@@ -40,7 +40,7 @@ $ZFORMAT = "%-22s %6s %2s  %-6s %s\n";
 ##############################
 
 $result=GetOptions("help|h","all|a","bind|b","dhcp|d","printer|p",
-		  "updateserial","noupdateserial","verbose");
+		  "updateserial","noupdateserial","verbose","dhcp2");
 
 if ($opt_help || @ARGV < 1 || $result < 1) {
     print "syntax: $0 [--help] [options] <servername> [<target directory>]\n";
@@ -49,7 +49,8 @@ if ($opt_help || @ARGV < 1 || $result < 1) {
       "\t--bind           generate BIND (named) configuration files\n",
       "\t--dhcp           generate DHCP (dhcpd) configuration files\n",
       "\t--printer        generate PRINTER (lpd) configuration files\n\n",
-      "\t--updateserial   force serial update on master zones\n\n",;
+      "\t--updateserial   force serial update on master zones\n\n",
+      "\t--dhcp2          enable DHCPv2 compatibilty mode\n\n";
     exit(1);
 }
 
@@ -58,6 +59,7 @@ $dhcp_conf=1 if ($opt_dhcp || $opt_all);
 $bind_conf=1 if ($opt_bind || $opt_all);
 $printer_conf=1 if ($opt_printer || $opt_all);
 $verbose=($opt_verbose ? 1 : 0);
+$dhcp2_mode=1 if ($opt_dhcp2);
 
 $servername = $ARGV[0];
 if (@ARGV > 1) {
@@ -79,6 +81,7 @@ fatal("no permissions to target directory!")
 print "server name: $servername\n";
 print "target directory: $targetdir\n";
 
+print "DHCP v2 compatibility mode enabled\n" if ($dhcp2_mode);
 chdir($targetdir) || fatal("Cannot change to directory '$targetdir'!");
 
 db_connect();

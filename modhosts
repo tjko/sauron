@@ -41,7 +41,7 @@ sub fatal($) {
 $result = GetOptions("help|h","cidr=s","name=s","move=s","delete",
 		     "info=s","rename=s","commit","excludeip=s",
 		     "excludename=s","type=s","ether=s","etherempty",
-		     "setedate=s","verbose");
+		     "setedate=s","verbose","setgroup=s");
 
 if ($opt_help || @ARGV < 2) {
   print "syntax: $0 <server> <zone> [options]\n\n",
@@ -56,6 +56,7 @@ if ($opt_help || @ARGV < 2) {
 	"\t--move=<CIDR>,<IP>\tmove hosts to given net starting from IP\n",
 	"\t--rename=<regexp>\trename hosts with given substitution 'regexp'\n",
 	"\t--setedate=<days>\tset host expiration date to today+days\n",
+	"\t--setgroup=<name>\tassign host to a group\n",
 	"\n",
 	"\t--commit\t\tcommit changes (w/o this NO changes are made)\n",
 	"\n";
@@ -110,6 +111,11 @@ if ($opt_setedate) {
 	unless ($opt_setedate =~ /^\d+$/);
     $new_edate = time() + int($opt_setedate * 86400);
     print "SET expiration date to: ".localtime($new_edate)." ($new_edate)\n";
+}
+
+if ($opt_setgroup) {
+    fatal("cannot find group '$opt_setgroup'")
+	if (($gid=get_group_by_name($serverid,$opt_setgroup)) < 0);
 }
 
 if ($opt_type) {
@@ -179,7 +185,8 @@ $count=@q;
 print "Found $count hosts(s) matching the criteria.\n";
 exit unless ($count > 0);
 
-if ($opt_delete || $opt_rename || $opt_move) {
+if ($opt_delete || $opt_rename || $opt_move || $opt_setgroup ||
+    $opt_setedate) {
   if ($opt_commit) {
     print "Are you sure you want to make changes to database? [y/N]? ";
     $answer = ReadLine 0;
@@ -228,7 +235,7 @@ for $i (0..$#q) {
     print "\tDelete: $q[$i][1]\n";
     fatal("cannot delete host: $q[$i][1]") if (delete_host($id));
   }
-  elsif ($opt_rename || $opt_move || $opt_setedate) {
+  elsif ($opt_rename || $opt_move || $opt_setedate || $opt_setgroup) {
     $host{domain}=$domain;
     if ($opt_move) {
       for $j (1..$#{$host{ip}}) {
@@ -242,7 +249,12 @@ for $i (0..$#q) {
     }
 
     $host{expiration}=$new_edate if ($opt_setedate);
+    if ($opt_setgroup) {
+	print "Changing group $host{grp} --> $gid\n";
+	$host{grp}=$gid;
+    }
 
+    print "Updating $q[$i][1]...\n";
     fatal("cannot update host: $q[$i][1]\n".db_errormsg()."\n") 
 	if (update_host(\%host));
   }
