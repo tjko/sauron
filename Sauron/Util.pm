@@ -410,14 +410,22 @@ sub run_command($$$)
 }
 
 
-sub print_csv($)
+sub print_csv($$)
 {
-  my($lst) = @_;
-  my($i,$val,$line);
+  my($lst,$mode) = @_;
+  my($i,$val,$line,$quote);
 
   for $i (0..$#{$lst}) {
     $val = $$lst[$i];
-    if ($val =~ /\s|,/) {
+    $quote = 0;
+
+    if ($mode==1) {
+      $quote=1;
+    } else {
+      $quote = 1 unless ($val =~ /^[\+\-]{0,1}\d+(\.\d*)?$/);
+    }
+
+    if ($quote) {
       $val =~ s/\"/""/g;
       $val = "\"$val\"";
     }

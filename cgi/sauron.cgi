@@ -3,7 +3,7 @@
 # sauron.cgi
 # $Id$
 # [едц~]
-# Copyright (c) Timo Kokkonen <tjko@iki.fi>, 2000,2001.
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>, 2000-2003.
 # All Rights Reserved.
 #
 use CGI qw/:standard *table -no_xhtml/;
@@ -2021,14 +2021,16 @@ sub hosts_menu() {
       printf print_csv(['Domain','Type','IP','Ether','User','Dept.',
 	                 'Location','Info','Hardware','Software',
 			 'Model','Serial','Misc','AssetID',
-			 'cdate','mdate','edate','dhcpdate']) . "\n";
+			 'cdate','mdate','edate','dhcpdate'],1) . "\n";
       for $i (0..$#q) {
+	$q[$i][5]=dhcpether($q[$i][5])
+	  unless (dhcpether($q[$i][5]) eq '00:00:00:00:00:00');
 	printf print_csv([ $q[$i][4],$host_types{$q[$i][3]},$q[$i][0],
 	                   $q[$i][5],$q[$i][7],$q[$i][8],$q[$i][9],
 			   $q[$i][6],$q[$i][16],$q[$i][17],
 			   $q[$i][18],$q[$i][19],$q[$i][20],$q[$i][21],
 			   $q[$i][12],$q[$i][13],$q[$i][14],$q[$i][15]
-			 ]) . "\n";
+			 ],1) . "\n";
       }
       return;
     }
