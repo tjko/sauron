@@ -25,8 +25,7 @@ elsif (-f "/usr/local/etc/sauron/config") {
   $conf_dir='/usr/local/etc/sauron'; 
 }
 else {
-  print STDERR "cannot find configuration file!\n";
-  exit(-1);
+  error("cannot find configuration file!");
 }
 
 do "$conf_dir/config" || error("cannot load configuration!");
@@ -70,6 +69,57 @@ error("invalid directory configuration")
  heading_bg=>'#aaaaff'
 );
 
+%zone_form = (
+ data=>[
+  {ftype=>0, name=>'Zone' },
+  {ftype=>1, tag=>'name', name=>'Zone name', type=>'domain', len=>30},
+  {ftype=>1, tag=>'comment', name=>'Comments', type=>'text', len=>60,
+   empty=>1},
+  {ftype=>4, tag=>'type', name=>'Type', type=>'enum', conv=>'U',
+   enum=>{M=>'Master', S=>'Slave', H=>'Hint', F=>'Forward'}},
+  {ftype=>4, tag=>'reverse', name=>'Reverse', type=>'enum', 
+   enum=>{f=>'No',t=>'Yes'}, iff=>['type','M']},
+  {ftype=>3, tag=>'class', name=>'Class', type=>'enum', conv=>'L',
+   enum=>{in=>'IN (internet)',hs=>'HS',hesiod=>'HESIOD',chaos=>'CHAOS'}},
+  {ftype=>2, tag=>'masters', name=>'Masters', type=>['cidr','text'], fields=>2,
+   len=>[15,45], empty=>[0,1], elabels=>['IP','comment'], iff=>['type','S']},
+  {ftype=>1, tag=>'hostmaster', name=>'Hostmaster', type=>'domain', len=>30,
+   empty=>1, iff=>['type','M']},
+  {ftype=>4, tag=>'serial', name=>'Serial', iff=>['type','M']},
+  {ftype=>1, tag=>'refresh', name=>'Refresh', type=>'int', len=>10, 
+   iff=>['type','M']},
+  {ftype=>1, tag=>'retry', name=>'Rery', type=>'int', len=>10, 
+   iff=>['type','M']},
+  {ftype=>1, tag=>'expire', name=>'Expire', type=>'int', len=>10, 
+   iff=>['type','M']},
+  {ftype=>1, tag=>'minimum', name=>'Minimum', type=>'int', len=>10, 
+   iff=>['type','M']},
+  {ftype=>1, tag=>'ttl', name=>'Default TTL', type=>'int', len=>10, 
+   iff=>['type','M']},
+  {ftype=>2, tag=>'ns', name=>'Name servers (NS)', type=>['text','text'], 
+   fields=>2,
+   len=>[30,20], empty=>[0,1], elabels=>['NS','comment'], iff=>['type','M']},
+  {ftype=>2, tag=>'mx', name=>'Mail exchanges (MX)', 
+   type=>['int','text','text'], fields=>3, len=>[5,30,20], empty=>[0,0,1], 
+   elabels=>['Priority','MX','comment'], iff=>['type','M']},
+  {ftype=>2, tag=>'txt', name=>'Info (TXT)', type=>['text','text'], fields=>2,
+   len=>[40,15], empty=>[0,1], elabels=>['TXT','comment'], iff=>['type','M']},
+  {ftype=>2, tag=>'allow_update', 
+   name=>'Allow dynamic updates (allow-update)', type=>['cidr','text'],
+   fields=>2,
+   len=>[40,15], empty=>[0,1], elabels=>['IP','comment']},
+
+  {ftype=>0, name=>'DHCP', iff=>['type','M']},
+  {ftype=>2, tag=>'dhcp', name=>'Zone specific DHCP entries', 
+   type=>['text','text'], fields=>2,
+   len=>[40,20], empty=>[0,1], elabels=>['DHCP','comment'], iff=>['type','M']}
+ ],	      
+ bgcolor=>'#00ffff',
+ border=>'0',		
+ width=>'100%',
+ nwidth=>'30%',
+ heading_bg=>'#aaaaff'
+);
 
 
 #####################################################################
@@ -284,7 +334,23 @@ sub zones() {
     print p,"del...";
   }
   elsif ($sub eq 'edit') {
-    print p,"edit...";
+    $zone=$state{'zone'};
+    $zoneid=$state{'zoneid'};
+    if ($zoneid eq '') {
+      print p,"Zone not selected";
+      goto select_zone;
+    }
+
+    unless (param('zn_re_edit') eq '1') {
+      get_zone($zoneid,\%zone);
+    }
+
+    print h2("Edit zone:"),p,
+          startform(-method=>'POST',-action=>$selfurl),
+          hidden('menu','zones'),hidden('sub','edit');
+    form_magic('zn',\%zone,\%zone_form);
+    print submit(-name=>'zn_submit',-value=>'Make changes'),end_form;
+
   }
   else {
     $zone=param('selected_zone');
@@ -301,93 +367,9 @@ sub zones() {
       $state{'zone'}=$zone;
       $state{'zoneid'}=$zoneid;
       save_state($scookie);
-      
-      $type=$zn{'type'};
-      if ($type eq 'M') { $type='Master'; $color='#f0f000'; }
-      elsif ($type eq 'S') { $type='Slave'; $color='#a0a0f0'; }
-      $rev='No';
-      $rev='Yes' if ($zn{'reverse'} eq 't');
 
-      print "<TABLE bgcolor=$color width=\"100%\">",
-         Tr,"<TH align=left width=30% bgcolor=white>Zone<TH>",
-         Tr,td(['Zone name',$zn{'name'}]),
-         Tr,td(['Zone Id',$zn{'id'}]),
-         Tr,td(['Comments',$zn{'comment'}]),
-         Tr,td(['Type',$type]),
-         Tr,td(['Reverse',$zn{'reverse'}]),
-         Tr,
-         Tr,td(['Class',"\U$zn{'class'}"]);
-      if ($type eq 'Master') {
-	print 
-         Tr,td(['Hostmaster',$zn{'hostmaster'}]),
-         Tr,td(['Serial',$zn{'serial'}]),
-         Tr,td(['Refresh',$zn{'refresh'}]),
-         Tr,td(['Retry',$zn{'retry'}]),
-         Tr,td(['Expire',$zn{'expire'}]),
-         Tr,td(['Minimum',$zn{'minimum'}]),
-         Tr,td(['TTL',$zn{'ttl'}]),
-	 Tr,td("Name servers (NS)"),td;
-	$list=$zn{'ns'};
-	for $i (0 .. $#{$list}) {
-	  print $$list[$i],"<br>";
-	}
-	if ($rev eq 'Yes') {
-	  print Tr,td(['Reversenet',$zn{'reversenet'}]),
-	        Tr,td("Zones used to build reverse"),td;
-	  $list2=get_zone_list($serverid);
-	  $list=$zn{'reverses'};
-	  for $i (0 .. $#{$list}) {
-	    $name='N/A';
-	    for $j (0 .. $#{$list2}) {
-	      $name=$$list2[$j][0] if ($$list[$i] eq $$list2[$j][1]);
-	    }
-	    print $$list[$i]," ($name)<br>";
-	  }
-	} else {
-	  print Tr,td("Mail exchanges (MX)"),td;
-	  $list=$zn{'mx'};
-	  for $i (0 .. $#{$list}) {
-	    print $$list[$i],"<br>";
-	  }
-	  print Tr,td("Info (TXT)"),td;
-	  $list=$zn{'txt'};
-	  for $i (0 .. $#{$list}) {
-	    print $$list[$i],"<br>";
-	  }
-	  print Tr,td("DHCP"),td;
-	  $list=$zn{'dhcp'};
-	  for $i (0 .. $#{$list}) {
-	    print $$list[$i],"<br>";
-	  }
-	}
-      } else {
-	print Tr,td("Masters"),td;
-	$list=$zn{'masters'};
-	for $i (0 .. $#{$list}) {
-	  print $$list[$i],"<br>";
-	}
-      }
+      display_form(\%zn,\%zone_form);
       
-      #         Tr,Tr,"<TH align=left width=30% bgcolor=white>BIND",
-#         Tr,td(['Hostmaster',$serv{'hostmaster'}]),
-#         Tr,td(['Hostname',$serv{'hostname'}]),
-#         Tr,td(['Directory',$serv{'directory'}]),
-#         Tr,td(['Primary zone-file path',$serv{'pzone_path'}]),
-#         Tr,td(['Slave zone-file path',$serv{'szone_path'}]),
-#         Tr,td(['Root-server file',$serv{'named_ca'}]),
-#         Tr,td('Allow transfer'),td;
-#      $at=$serv{'allow_transfer'};
-#      for $i (0 .. $#{$at}) {
-#	print $$at[$i] . "<br>";
-#      }
-#      print Tr,Tr,"<TH align=left width=30% bgcolor=white>DHCP",
-#            Tr,td('Global settings'),td;
-#      $dh=$serv{'dhcp'};
-#      for $i (0 .. $#{$dh}) {
-#	print $$dh[$i] . "<br>";
-#      }
-
-      print "</TABLE>";
     }
     else {
      select_zone:
@@ -672,40 +654,7 @@ sub remove_state($) {
   undef %state;
 }
 
-#####################################################################
-
-sub param_array($$) {
-  my($pref,$a) = @_;
-  my($i);
-
-  param($pref,scalar @{$a});
-  for $i (0..$#{$a}) {
-    param("$pref$i",$$a[$i]);
-  }
-}
-
-sub form_array($$) {
-  my($pref,$size) = @_;
-  my($i,$count,$p,$o);
-
-  $j=0;
-  $count=param("$pref");
-  for ($i=0;$i<$count;$i++) {
-    $p=param("$pref$i");
-    $p2="${pref}${i}del";
-  
-    if (param($p2) ne "delete") {
-      param("$pref$j",$p);
-      print textfield(-name=>"$pref$j",-size=>$size,-value=>"$p"),
-            submit(-name=>"${pref}${j}del",-value=>"delete"),"<br>";
-      $j++;
-    }
-  }
-
-  param("$pref",$j);
-  print hidden(-name=>$pref,-value=>$j);
-  
-}
+############################################################################
 
 
 #####################################################################
@@ -731,9 +680,13 @@ sub form_check_field($$$) {
   }
 
 
-  if ($type eq 'fqdn') {
-    return 'FQDN required!' 
-      unless (valid_domainname($value) && $value=~/\.$/);
+  if ($type eq 'fqdn' || $type eq 'domain') {
+    if ($type eq 'domain') {
+      return 'valid domain name required!' unless (valid_domainname($value));
+    } else {
+      return 'FQDN required!' 
+	unless (valid_domainname($value) && $value=~/\.$/);
+    }
   } elsif ($type eq 'path') {
     return 'valid pathname required!'
       unless ($value =~ /^(|\S+\/)$/);
@@ -741,6 +694,10 @@ sub form_check_field($$$) {
     return 'valid CIDR (IP) required!' unless (is_cidr($value));
   } elsif ($type eq 'text') {
     return '';
+  } elsif ($type eq 'enum') {
+    return '';
+  } elsif ($type eq 'int') {
+    return 'integer required!' unless ($value =~ /^-?\d+$/);
   } else {
     return "unknown typecheck for form_check_field: $type !";
   }
@@ -825,9 +782,14 @@ sub form_check_form($$$) {
 }
 
 
+#####################################################################
+# form_magic($prefix,$data,$form)
+# 
+# generates HTML form
+#
 sub form_magic($$$) {
   my($prefix,$data,$form) = @_;
-  my($i,$j,$k,$n,$key,$rec,$a,$formdata,$h_bg,$e_str,$p1,$p2);
+  my($i,$j,$k,$n,$key,$rec,$a,$formdata,$h_bg,$e_str,$p1,$p2,$val,$e);
 
   $formdata=$form->{data};
   if ($form->{heading_bg}) { $h_bg=$form->{heading_bg}; }
@@ -837,22 +799,37 @@ sub form_magic($$$) {
   unless (param($prefix . "_re_edit") eq '1' || ! $data) {
     for $i (0..$#{$formdata}) {
       $rec=$$formdata[$i];
+      $val=$data->{$rec->{tag}};
+      $val="\L$val" if ($rec->{conv} eq 'L');
+      $val="\U$val" if ($rec->{conv} eq 'U');
+      $p1=$prefix."_".$rec->{tag};
+
       if ($rec->{ftype} == 1) { 
-	param($prefix."_".$rec->{tag},$data->{$rec->{tag}});
+	param($p1,$val);
       }
       elsif ($rec->{ftype} == 2) {
 	$a=$data->{$rec->{tag}};
 	for $j (1..$#{$a}) {
-	  param($prefix."_".$rec->{tag}."_".$j."_id",$$a[$j][0]);
+	  param($p1."_".$j."_id",$$a[$j][0]);
 	  for $k (1..$rec->{fields}) {
-	    param($prefix."_".$rec->{tag}."_".$j."_".$k,$$a[$j][$k]);
+	    param($p1."_".$j."_".$k,$$a[$j][$k]);
 	  }
 	}
-	param($prefix."_".$rec->{tag}."_count",$#{$a});
+	param($p1."_count",$#{$a});
       }
       elsif ($rec->{ftype} == 0) {
+	# do nothing...
       }
-      else { error("internal error (form_magic)");  }
+      elsif ($rec->{ftype} == 3) {
+	param($p1,$val);
+      }
+      elsif ($rec->{ftype} == 4) {
+	#$val=${$rec->{enum}}{$val}  if ($rec->{type} eq 'enum');
+	param($p1,$val);
+      }
+      else { 
+	error("internal error (form_magic)");  
+      }
     }
   }   
 
@@ -869,6 +846,12 @@ sub form_magic($$$) {
   for $i (0..$#{$formdata}) {
     $rec=$$formdata[$i];
     $p1=$prefix."_".$rec->{tag};
+
+    if ($rec->{iff}) {
+      $val=param($prefix."_".${$rec->{iff}}[0]);
+      $e=${$rec->{iff}}[1];
+      next unless ($val =~ /^($e)$/);
+    }
 
     if ($rec->{ftype} == 0) {
       print "<TR><TH COLSPAN=2 ALIGN=\"left\" BGCOLOR=\"$h_bg\">",
@@ -916,15 +899,29 @@ sub form_magic($$$) {
       }
       print td(submit(-name=>$prefix."_".$rec->{tag}."_add",-value=>'Add'));
       print "</TABLE></TD>\n";
+    } elsif ($rec->{ftype} == 3) {
+      print Tr,td($rec->{name}),td(
+               popup_menu(-name=>$p1,-values=>[keys %{$rec->{enum}}],
+		        -default=>param($p1),-labels=>$rec->{enum}) );
+    } elsif ($rec->{ftype} == 4) {
+      $val=param($p1);
+      $val=${$rec->{enum}}{$val}  if ($rec->{type} eq 'enum');
+      print Tr,td($rec->{name}),td($val),hidden($p1,param($p1));
     }
   }
 
   print "</TABLE>";
 }
 
+
+#####################################################################
+# display_form($data,$form)
+# 
+# generates HTML code that displays the form 
+#
 sub display_form($$) {
   my($data,$form) = @_;
-  my($i,$j,$k,$a,$rec,$formdata,$h_bg);
+  my($i,$j,$k,$a,$rec,$formdata,$h_bg,$val,$e);
 
   $formdata=$form->{data};
 
@@ -940,6 +937,16 @@ sub display_form($$) {
 
     if ($form->{heading_bg}) { $h_bg=$form->{heading_bg}; }
     else { $h_bg=$SAURON_BGCOLOR; }
+    if ($rec->{iff}) {
+      $val=$data->{${$rec->{iff}}[0]};
+      $e=${$rec->{iff}}[1];
+      next unless ($val =~ /^($e)$/);
+    }
+
+    $val=$data->{$rec->{tag}};
+    $val="\L$val" if ($rec->{conv} eq 'L');
+    $val="\U$val" if ($rec->{conv} eq 'U');
+    $val=${$rec->{enum}}{$val}  if ($rec->{type} eq 'enum');
 
     if ($rec->{ftype} == 0) {
       print "<TR><TH COLSPAN=2 ALIGN=\"left\" ",
@@ -948,7 +955,7 @@ sub display_form($$) {
     } elsif ($rec->{ftype} == 1) {
       #print Tr,td([$rec->{name},$data->{$rec->{tag}}]);
       print Tr,"<TD WIDTH=\"",$form->{nwidth},"\">",$rec->{name},"</TD><TD>",
-            $data->{$rec->{tag}},"</TD>\n";
+            "$val</TD>\n";
     } elsif ($rec->{ftype} == 2) {
       print Tr,td($rec->{name}),"<TD><TABLE>",Tr;
       $a=$data->{$rec->{tag}};
@@ -960,6 +967,9 @@ sub display_form($$) {
 	for $k (1..$rec->{fields}) { print td($$a[$j][$k]); }
       }
       print "</TABLE></TD>\n";
+    } elsif ($rec->{ftype} == 4 || $rec->{ftype} == 3) {
+      print Tr,"<TD WIDTH=\"",$form->{nwidth},"\">",$rec->{name},"</TD><TD>",
+            "$val</TD>\n";
     } else {
       error("internal error (display_form)");
     }

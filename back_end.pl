@@ -265,14 +265,30 @@ sub get_zone_list($$$) {
 
 sub get_zone($$) {
   my ($id,$rec) = @_;
-  
-  return get_record("zones",
+  my ($res);
+ 
+  $res = get_record("zones",
 	       "server,active,dummy,type,reverse,class,name," .
 	       "hostmaster,serial,refresh,retry,expire,minimum,ttl," .
-	       "chknames," .
-	       "\@ns,\@mx,\@txt,\@dhcp,comment,\@reverses,reversenet," .
-	       "\@masters",
+	       "chknames,reversenet,comment", 
+#	       "\@ns,\@mx,\@txt,\@dhcp,comment,\@reverses,reversenet," .
+#	       "\@masters",
 	       $id,$rec,"id");
+
+  return -1 if ($res < 0);
+
+  get_array_field("ns_entries",3,"id,ns,comment","NS,Comments",
+		  "type=1 AND ref=$id ORDER BY ns",$rec,'ns');
+  get_array_field("mx_entries",4,"id,pri,mx,comment","Priority,MX,Comments",
+		  "type=1 AND ref=$id ORDER BY pri,mx",$rec,'mx');
+  get_array_field("txt_entries",3,"id,txt,comment","TXT,Comments",
+		  "type=1 AND ref=$id ORDER BY id",$rec,'txt');
+  get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comments",
+		  "type=2 AND ref=$id ORDER BY dhcp",$rec,'dhcp');
+  get_array_field("cidr_entries",3,"id,ip,comment","IP,Comments",
+		  "type=2 AND ref=$id ORDER BY ip",$rec,'allow_update');
+  get_array_field("cidr_entries",3,"id,ip,comment","IP,Comments",
+		  "type=3 AND ref=$id ORDER BY ip",$rec,'masters');
 }
 
 sub update_zone($) {
