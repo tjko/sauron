@@ -31,6 +31,9 @@ $BROWSER_MAX = 100;
 # specify charset for CGI interface (default is iso-8859-1)
 # $BROWSER_CHARSET = 'iso-8859-15';
 
+# specify which fields info fields to display 
+$BROWSER_SHOW_FIELDS = 'huser,location,info,dept';
+
 # completely hide hosts from networks with private flag
 # $BROWSER_HIDE_PRIVATE = 1;
 

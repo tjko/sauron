@@ -38,6 +38,8 @@ else {
 do "$conf_dir/config-browser" || die("cannot load configuration!");
 die("invalid configuration file") unless ($DB_CONNECT);
 $BROWSER_CHARSET = 'iso-8859-1' unless ($BROWSER_CHARSET);
+$BROWSER_SHOW_FIELDS = 'huser,location,info,dept' unless ($BROWSER_SHOW_FIELDS);
+
 
 %yes_no_enum = (D=>'Default',Y=>'Yes', N=>'No');
 
@@ -64,13 +66,13 @@ $BROWSER_CHARSET = 'iso-8859-1' unless ($BROWSER_CHARSET);
 #  {ftype=>1, tag=>'ttl', name=>'TTL', type=>'int', len=>10, empty=>1,
 #   definfo=>['','Default']},
   {ftype=>1, tag=>'info', name=>'Info', type=>'text', len=>50, empty=>1,
-   iff=>['type','1']},
+   iff=>['type','1'], no_empty=>1},
   {ftype=>1, tag=>'huser', name=>'User', type=>'text', len=>25, empty=>1,
-   iff=>['type','1']},
+   iff=>['type','1'], no_empty=>1},
   {ftype=>1, tag=>'dept', name=>'Department', type=>'text', len=>25, empty=>1,
-   iff=>['type','1']},
+   iff=>['type','1'], no_empty=>1},
   {ftype=>1, tag=>'location', name=>'Location', type=>'text', len=>25,
-   empty=>1, iff=>['type','1']},
+   empty=>1, iff=>['type','1'], no_empty=>1},
   {ftype=>0, name=>'Equipment info', iff=>['type','1']},
   {ftype=>1, tag=>'hinfo_hw', name=>'Hardware (HINFO)', type=>'hinfo', len=>20,
    empty=>1, iff=>['type','1']},
@@ -266,8 +268,11 @@ sub do_search() {
     $alias=1;
   }
   elsif ($type =~ /^Info/) {
-    $rule = " (h.location ~* $mask_str OR h.huser ~* $mask_str" .
-            " OR h.dept ~* $mask_str OR h.info ~* $mask_str)  ";
+    push @irules, "h.location ~* $mask_str"  if ($BROWSER_SHOW_FIELDS =~ /location/);
+    push @irules, "h.user ~* $mask_str"  if ($BROWSER_SHOW_FIELDS =~ /huser/);
+    push @irules, "h.dept ~* $mask_str"  if ($BROWSER_SHOW_FIELDS =~ /dept/);
+    push @irules, "h.info ~* $mask_str"  if ($BROWSER_SHOW_FIELDS =~ /info/);
+    $rule = " (" . join(' OR ',@irules) . ") ";
     $info_search = 1;
   }
   elsif ($type =~ /^IP/) {
@@ -380,20 +385,35 @@ sub do_search() {
       $ip=$q[$i][3];
       $ip =~ s/\/32//;
       $ether=($q[$i][5] ? "<PRE>$q[$i][5]</PRE>" : '&nbsp;');
+      $info='';
 
       # check if host ip falls within a net with private flag on
       if (findNetblock($ip,$blocktable)) {
 	#print "PRIVATE: $ip $name<br>";
 	next if ($BROWSER_HIDE_PRIVATE || $info_search);
-	$info=$q[$i][8];
+	$info.=$q[$i][7] unless ($BROWSER_HIDE_FIELDS =~ /huser/);
+	unless ($BROWSER_HIDE_FIELDS =~ /dept/) {
+	    $info.=", " if ($info && $q[$i][8]);
+	    $info.=$q[$i][8];
+	}
+	unless ($BROWSER_HIDE_FIELDS =~ /location/) {
+	    $info.=", " if ($info && $q[$i][9]);
+	    $info.=$q[$i][9];
+	}
       } else {
-	$info=$q[$i][6];
-	$info.=", " if ($info && $q[$i][7]);
-	$info.=$q[$i][7];
-	$info.=", " if ($info && $q[$i][8]);
-	$info.=$q[$i][8];
-	$info.=", " if ($info && $q[$i][9]);
-	$info.=$q[$i][9];
+        $info.=$q[$i][6] if ($BROWSER_SHOW_FIELDS =~ /info/);
+	if ($BROWSER_SHOW_FIELDS =~ /huser/) {
+	    $info.=", " if ($info && $q[$i][7]);
+	    $info.=$q[$i][7];
+	}
+	if ($BROWSER_SHOW_FIELDS =~ /dept/) {
+	    $info.=", " if ($info && $q[$i][8]);
+	    $info.=$q[$i][8];
+	}
+	if ($BROWSER_SHOW_FIELDS =~ /location/) {
+	    $info.=", " if ($info && $q[$i][9]);
+	    $info.=$q[$i][9];
+	}
       }
       $info="&nbsp;" unless ($info);
       $info=substr($info,0,80) if (length($info) > 80);
@@ -430,6 +450,11 @@ sub display_host($) {
   }
   $url=self_url();
   $url =~ s/id=\d+//;
+
+  $host{huser}='' unless ($BROWSER_SHOW_FIELDS =~ /huser/);
+  $host{dept}='' unless ($BROWSER_SHOW_FIELDS =~ /dept/);
+  $host{info}='' unless ($BROWSER_SHOW_FIELDS =~ /info/);
+  $host{location}='' unless ($BROWSER_SHOW_FIELDS =~ /location/);
 
   # check if host has A record within network marked as private
   for $i (1..$#{$host{ip}}) {
