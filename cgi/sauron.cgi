@@ -15,7 +15,7 @@ $CGI::DISABLE_UPLOADS =1; # no uploads
 $CGI::POST_MAX = 100000; # max 100k posts
 
 
-$debug_mode = 1;
+$debug_mode = 0;
 
 if (-f "/etc/sauron/config") { 
   $conf_dir='/etc/sauron'; 
@@ -65,11 +65,11 @@ do "$PROG_DIR/back_end.pl";
   {ftype=>2, tag=>'dhcp', name=>'Global DHCP', type=>['text','text'], 
    fields=>2, len=>[35,20], empty=>[0,1],elabels=>['dhcptab line','comment']} 
  ],
- bgcolor=>'#00ffff',
+ bgcolor=>'#eeeebf',
  border=>'0',		
  width=>'100%',
  nwidth=>'30%',
- heading_bg=>'#aaaaff'
+ heading_bg=>'#ca4444'
 );
 
 %zone_form = (
@@ -118,11 +118,11 @@ do "$PROG_DIR/back_end.pl";
    type=>['text','text'], fields=>2,
    len=>[40,20], empty=>[0,1], elabels=>['DHCP','comment'], iff=>['type','M']}
  ],	      
- bgcolor=>'#bfee00',
+ bgcolor=>'#eeeebf',
  border=>'0',		
  width=>'100%',
  nwidth=>'30%',
- heading_bg=>'#aaaaff'
+ heading_bg=>'#bfee00'
 );
 
 
@@ -215,7 +215,7 @@ $script_name = script_name();
 $s_url = script_name();
 $selfurl = $s_url . $pathinfo;
 $menu=param('menu');
-$menu='login' unless ($menu);
+#$menu='login' unless ($menu);
 $remote_addr = $ENV{'REMOTE_ADDR'};
 
 $scookie = cookie(-name=>'sauron');
@@ -264,6 +264,12 @@ $serverid=$state{'serverid'};
 $zone=$state{'zone'};
 $zoneid=$state{'zoneid'};
 
+unless ($menu) {
+  $menu='hosts';
+  $menu='zones' unless ($zoneid > 0);
+  $menu='servers' unless ($serverid > 0);
+}
+
 
 if ($pathinfo ne '') {
   logout() if ($pathinfo eq '/logout');
@@ -275,10 +281,11 @@ if ($pathinfo ne '') {
 }
 
 
-print header,
-      start_html(-title=>"Sauron $VER",-BGCOLOR=>'white'),
+print header(-type=>'text/html; charset=iso-8859-1'),
+      start_html(-title=>"Sauron $VER",-BGCOLOR=>'white',
+		 -meta=>{'keywords'=>'GNU Sauron DNS DHCP tool'}),
       "\n\n<!-- Sauron $VER -->\n",
-      "\n<!-- Copyright (c) Timo Kokkonen <tjko\@iki.fi>  2000. -->\n\n";
+      "<!-- Copyright (c) Timo Kokkonen <tjko\@iki.fi>  2000,2001. -->\n\n";
 
 unless ($frame_mode) {
   top_menu(0);
@@ -344,41 +351,10 @@ sub servers_menu() {
     print p,"del...";
   }
   elsif ($sub eq 'edit') {
-    if ($serverid eq '') {
-      print p,"Server not selected";
-      goto select_server;
-    }
-
-    if (param('srv_submit') ne '') {
-      get_server($serverid,\%serv);
-      unless (form_check_form('srv',\%serv,\%server_form)) {
-	$res=update_server(\%serv);
-	if ($res < 0) {
-	  print "<FONT color=\"red\">",h1("Server record update failed!"),
-	        "</FONT>";
-	  print p,"server update result code=$res";
-	} else {
-	  print h2("Server record succesfully updated:");
-	}
-	get_server($serverid,\%serv);
-	display_form(\%serv,\%server_form);
-	return;
-      }
-      print "<FONT color=\"red\">",
-            h2('Invalid data in form!'),
-            "</FONT>";
-    }
-
-    unless (param('srv_re_edit') eq '1') {
-      get_server($serverid,\%serv);
-    }
-    
-    print h2("Edit server: $server"),p,
-            startform(-method=>'POST',-action=>$selfurl),
-            hidden('menu','servers'),hidden('sub','edit');
-    form_magic('srv',\%serv,\%server_form);
-    print submit(-name=>'srv_submit',-value=>'Make changes'),end_form;
-    
+    $res=edit_magic('srv','Server','servers',\%server_form,
+		    \&get_server,\&update_server,$serverid);
+    goto select_zone if ($res == -1);
+    return;
   }
   else {
     $server=param('server_list');
@@ -436,40 +412,11 @@ sub zones_menu() {
   elsif ($sub eq 'del') {
     print p,"del...";
   }
-  elsif ($sub eq 'edit') {
-    if ($zoneid eq '') {
-      print p,"Zone not selected";
-      goto select_zone;
-    }
-
-    if (param('zn_submit') ne '') {
-      get_zone($zoneid,\%zone);
-      unless (form_check_form('zn',\%zone,\%zone_form)) {
-	$res=update_zone(\%zone);
-	if ($res < 0) {
-	  print "<FONT color=\"red\">",h1("Zone record update failed!"),
-	        "</FONT>";
-	} else {
-	  print h2("Zone record succefully updated:");
-	  get_zone($zoneid,\%zone);
-	  display_form(\%zone,\%zone_form);
-	  return;
-	}
-
-      }
-      print "<FONT color=\"red\">",h2("Invalid data in form!"),"</FONT>";
-    }
-
-    unless (param('zn_re_edit') eq '1') {
-      get_zone($zoneid,\%zone);
-    }
-
-    print h2("Edit zone:"),p,
-          startform(-method=>'POST',-action=>$selfurl),
-          hidden('menu','zones'),hidden('sub','edit');
-    form_magic('zn',\%zone,\%zone_form);
-    print submit(-name=>'zn_submit',-value=>'Make changes'),end_form;
-
+  elsif (($sub eq 'edit') || ($sub eq 'Edit')) {
+    $res=edit_magic('zn','Zone','zones',\%zone_form,\&get_zone,\&update_zone,
+		    $zoneid);
+    goto select_zone if ($res == -1);
+    return;
   }
   else {
     $zone=param('selected_zone');
@@ -534,49 +481,10 @@ sub hosts_menu() {
   $sub=param('sub');
   
   if ($sub eq 'Edit') {
-    $id=param('h_id');
-    if ($id eq '') {
-      print h2("Host id not speciefied!");
-      goto browse_hosts;
-    }
-
-    if (param('h_submit') ne '') {
-      if (get_host($id,\%host) < 0) {
-	print h2("Cannot find host record anymore! ($id)");
-	return;
-      }
-      unless (form_check_form('h',\%host,\%host_form)) {
-	$res=update_host(\%host);
-	# $res=-1;
-	if ($res < 0) {
-	  print "<FONT color=\"red\">",h1("Zone record update failed!"),
-	        p,"result code=$res",
-	        "</FONT>";
-	} else {
-	  print h2("Zone record succefully updated:");
-	  get_host($id,\%host);
-	  display_form(\%host,\%host_form);
-	  return;
-	}
-
-      }
-      print "<FONT color=\"red\">",h2("Invalid data in form!"),"</FONT>";
-    }
-
-    unless (param('h_re_edit') eq '1') {
-      if (get_host($id,\%host)) {
-	print h2("Cannot get host record (id=$id)!");
-	return;
-      }
-      #print p,"host data fetched...";
-    }
-
-    print h2("Edit host:"),p,
-          startform(-method=>'POST',-action=>$selfurl),
-          hidden('menu','hosts'),hidden('sub','Edit');
-    form_magic('h',\%host,\%host_form);
-    print submit(-name=>'h_submit',-value=>'Make changes'),end_form;
-
+    $res=edit_magic('h','Host','hosts',\%host_form,\&get_host,\&update_host,
+		   param('h_id'));
+    goto browse_hosts if ($res == -1);
+    return;
   }
   elsif ($sub eq 'viewhost') {
     $id=param('id');
@@ -741,36 +649,47 @@ sub login_menu() {
           "Click <a href=\"$s_url/logout\">here</a> ",
           "if you want to logout.";
   }
+  elsif ($sub eq 'save') {
+    $uid=$state{'uid'};
+    return if ($uid < 1);
+    $sqlstr="UPDATE users SET server=$serverid,zone=$zoneid " .
+            "WHERE id=$uid;";
+    $res=db_exec($sqlstr);
+    if ($res < 0) {
+      print h3('Saving defaults failed!');
+    } else {
+      print h3('Defaults saved succesfully!');
+    }
+  }
   else {
-    print p,"Unknown menu selection!";
+    #print p,"Unknown menu selection!";
   }
 }
 
 #####################################################################
 
-sub edit_magic($$$$$$) {
-  my($prefix,$name,$menu,$form,$get_func,$update_func) = @_;
+sub edit_magic($$$$$$$) {
+  my($prefix,$name,$menu,$form,$get_func,$update_func,$id) = @_;
   my(%h);
 
-  $id=param($prefix . '_id');
   if (($id eq '') || ($id < 1)) {
     print h2("$name id not specified!");
     return -1;
   }
   
   if (param($prefix . '_submit') ne '') {
-    if(get_func($id,\%h) < 0) {
+    if(&$get_func($id,\%h) < 0) {
       print h2("Cannot find $name record anymore! ($id)");
       return -2;
     }
-    unless (form_check_form($prefix,\%h,$form)) {
-      $res=update_func(\%h);
+    unless (($res=form_check_form($prefix,\%h,$form))) {
+      $res=&$update_func(\%h);
       if ($res < 0) {
 	print "<FONT color=\"red\">",h1("$name record update failed!"),
 	      "<br>result code=$res</FONT>";
       } else {
-	print h2("Zone record succefully updated:");
-	get_func($id,\%h);
+	print h2("$name record succefully updated:");
+	&$get_func($id,\%h);
 	display_form(\%h,$form);
 	return 0;
       }
@@ -780,7 +699,7 @@ sub edit_magic($$$$$$) {
   }
 
   unless (param($prefix . '_re_edit') eq '1') {
-    if (get_func($id,\%h)) {
+    if (&$get_func($id,\%h)) {
       print h2("Cannot get $name record (id=$id)!");
       return;
     }
@@ -789,7 +708,7 @@ sub edit_magic($$$$$$) {
   print h2("Edit $name:"),p,
           startform(-method=>'POST',-action=>$selfurl),
           hidden('menu',$menu),hidden('sub','Edit');
-  form_magic('h',\%h,$form);
+  form_magic($prefix,\%h,$form);
   print submit(-name=>$prefix . '_submit',-value=>'Make changes'),end_form;
 
   return 0;
@@ -834,7 +753,7 @@ sub login_form($$) {
 
 sub login_auth() {
   my($u,$p);  
-  my(%user,$ctx,$salt,$pass,$digest);
+  my(%user,$ctx,$salt,$pass,$digest,%h);
   
   $state{'auth'}='no';
   $state{'mode'}='0';
@@ -858,9 +777,19 @@ sub login_auth() {
 	  $state{'user'}=$u;
 	  $state{'uid'}=$user{'id'};
 	  $state{'login'}=time();
+	  $state{'serverid'}=$user{'server'};
+	  $state{'zoneid'}=$user{'zone'};
+	  if ($state{'serverid'} > 0) {
+	    $state{'server'}=$h{'name'} 
+	      unless(get_server($state{'serverid'},\%h));
+	  }
+	  if ($state{'zoneid'} > 0) {
+	    $state{'zone'}=$h{'name'} 
+	      unless(get_zone($state{'zoneid'},\%h));
+	  }
 	  print p,h1("Login ok!"),p,
-	        "Come in... <a href=\"$s_url/frames\">frames version</a> ",
-	        "or <a href=\"$s_url\">table version</a>";
+	      "Come in... <a href=\"$s_url/frames\">frames version</a> ",
+              "or <a href=\"$s_url\">table version (recommended for now)</a>";
 	  logmsg("notice","user ($u) logged in from " . $ENV{'REMOTE_ADDR'});
 	}
       }
@@ -892,9 +821,9 @@ sub top_menu($) {
         '<TD width="17%" height="24">',
         '<FONT color="white">&nbsp;GNU/Sauron</FONT></TD>',
         '<TD><FONT color="#ffffff">',
-        "<A HREF=\"$s_url?menu=servers\"><FONT color=\"#ffffff\">Servers</FONT></A> | ",
-        "<A HREF=\"$s_url?menu=zones\"><FONT color=\"#ffffff\">Zones</FONT></A> | ",
         "<A HREF=\"$s_url?menu=hosts\"><FONT color=\"#ffffff\">Hosts</FONT></A> | " ,
+        "<A HREF=\"$s_url?menu=zones\"><FONT color=\"#ffffff\">Zones</FONT></A> | ",
+        "<A HREF=\"$s_url?menu=servers\"><FONT color=\"#ffffff\">Servers</FONT></A> | ",
 	"<A HREF=\"$s_url?menu=login\"><FONT color=\"#ffffff\">login</FONT></A> | ";
   print "</FONT></TABLE>";
 }
@@ -934,9 +863,10 @@ sub left_menu($) {
           "<a href=\"$url&sub=edit\">Edit hosts</a><br>";
   } elsif ($menu eq 'login') {
     $url.='?menu=login';
-    print p,"<a href=\"$url&sub=login\">Login</a><br>",
-          p,"<a href=\"$url&sub=logout\">Logout</a><br>",
-          p,"<a href=\"$url&sub=passwd\">Change password</a><br>";
+    print "<a href=\"$url&sub=login\">Login</a>",
+          "<br><a href=\"$url&sub=logout\">Logout</a>",
+          "<br><a href=\"$url&sub=passwd\">Change password</a>",
+          "<br><a href=\"$url&sub=save\">Save defaults</a>";
   } else {
     print "<p><p>empty menu\n";
   }
@@ -946,7 +876,7 @@ sub left_menu($) {
         "cellpadding=\"0\">", #<TR><TD><H4>Current selections</H4></TD></TR>",
         "<TR><TD><TABLE width=\"100%\" cellspacing=\"2\" cellpadding=\"1\" " .
 	"border=\"0\">",
-	"<TR><TH><FONT size=-1>Current selections</FONT></TH></TR>",
+	"<TR><TH><FONT color=white size=-1>Current selections</FONT></TH></TR>",
 	"<TR><TD BGCOLOR=\"white\">";
 
   print "<FONT size=-1>",
@@ -1019,11 +949,13 @@ sub make_cookie() {
   my($val);
   my($ctx);
 
-  $val=rand 1000;
+  $val=rand 100000;
 
   $ctx=new Digest::MD5;
   $ctx->add($val);
+  $ctx->add($$);
   $ctx->add(time);
+  $ctx->add(rand 1000000);
   $val=$ctx->hexdigest;
   
   undef %state;
@@ -1098,7 +1030,7 @@ sub load_state($) {
     }
     $state{'user'}=$q[0][8] if ($q[0][8] ne '');
     $state{'last'}=$q[0][9];
-
+    
     db_exec("UPDATE utmp SET last=" . time() . " WHERE cookie='$id';");
     return 1;
   }
@@ -1196,8 +1128,9 @@ sub form_check_form($$$) {
     $p=$prefix."_".$tag;
 
     if ($type == 1) {
+      #print "<br>check $p ",param($p);
       return 1 if (form_check_field($rec,param($p),0) ne '');
-      print p,"$p changed! '",$data->{$tag},"' '",param($p),"'\n" if ($data->{$tag} ne param($p));
+      #print p,"$p changed! '",$data->{$tag},"' '",param($p),"'\n" if ($data->{$tag} ne param($p));
       $data->{$tag}=param($p);
     } 
     elsif  ($type == 2) {
@@ -1207,7 +1140,7 @@ sub form_check_form($$$) {
       for $j (1..$a) {
 	next if (param($p."_".$j."_del") eq 'on'); # skip if 'delete' checked
 	for $k (1..$f) {
-	  return 1 
+	  return 2 
 	    if (form_check_field($rec,param($p."_".$j."_".$k),$k) ne '');
 	}
       }
@@ -1251,7 +1184,7 @@ sub form_check_form($$$) {
     }
     elsif ($type == 3) {
       next if ($rec->{type} eq 'list');
-      return 1 unless (${$rec->{enum}}{param($p)});
+      return 3 unless (${$rec->{enum}}{param($p)});
       $data->{$tag}=param($p);
     }
   }

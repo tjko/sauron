@@ -504,7 +504,7 @@ sub get_user($$) {
   my ($uname,$rec) = @_;
   
   return get_record("users",
-	       "username,password,name,comment,id",
+	       "username,password,name,superuser,server,zone,comment,id",
 	       $uname,$rec,"username");
 }
 
