@@ -6,7 +6,7 @@
 
 /* database version (do not change unless you know what you're doing!) */
 
-INSERT INTO settings (key,value) VALUES('dbversion','1.0');
+INSERT INTO settings (key,value) VALUES('dbversion','1.1');
 
 
 
