@@ -86,7 +86,8 @@ SQL_MISC =      sql/DEFAULTS.sql sql/misc.sql sql/copy_tables.sql \
 PROGS = sauron addgroup adduser deluser modhosts \
 	import import-ethers import-jyu import-roots \
 	last moduser runsql status update-dhcp-info \
-	export-networks generatehosts addhosts check-pending
+	export-networks generatehosts addhosts check-pending \
+	expire-hosts
 
 MODULES = Sauron/Util.pm Sauron/DB.pm Sauron/BackEnd.pm Sauron/CGIutil.pm \
 	  Sauron/UtilZone.pm

@@ -93,6 +93,10 @@ COMMANDS
    Removes users accounts from the system. (accounts can also be locked
    with moduser command).
 
+ expire-hosts
+   Utility for expiring unused (no DHCP activity within given timeframe)
+   host entries.
+
  export-networks
    Generates Unix /etc/networks format file of networks defined for
    given server.
