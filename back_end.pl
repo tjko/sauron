@@ -922,7 +922,7 @@ sub get_host($$) {
 	       "zone,type,domain,ttl,class,grp,alias,cname_txt," .
 	       "hinfo_hw,hinfo_sw,wks,mx,rp_mbox,rp_txt,router," .
 	       "prn,ether,ether_alias,info,location,dept,huser,model," .
-	       "serial,misc,cdate,cuser,muser,mdate,comment",
+	       "serial,misc,cdate,cuser,muser,mdate,comment,dhcp_date",
 	       $id,$rec,"id");
 
   return -1 if ($res < 0);
@@ -1005,11 +1005,13 @@ sub get_host($$) {
 		    $rec,'alias_a');
   }
 
-
   $rec->{cdate_str}=($rec->{cdate} > 0 ?
 		     localtime($rec->{cdate}).' by '.$rec->{cuser} : 'UNKOWN');
   $rec->{mdate_str}=($rec->{mdate} > 0 ?
 		     localtime($rec->{mdate}).' by '.$rec->{muser} : '');
+
+  $rec->{dhcp_date_str}=($rec->{dhcp_date} > 0 ?
+			 localtime($rec->{dhcp_date}) : '');
 
   return 0;
 }
@@ -1030,6 +1032,8 @@ sub update_host($) {
   delete $rec->{cdate_str};
   delete $rec->{cdate};
   delete $rec->{cuser};
+  delete $rec->{dhcp_date};
+  delete $rec->{dhcp_date_str};
   $rec->{mdate}=time;
   $rec->{muser}=$muser;
 

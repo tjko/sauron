@@ -271,7 +271,9 @@ do "$PROG_DIR/back_end.pl";
 
   {ftype=>0, name=>'Record info', no_edit=>0},
   {ftype=>4, name=>'Record created', tag=>'cdate_str', no_edit=>1},
-  {ftype=>4, name=>'Last modified', tag=>'mdate_str', no_edit=>1}
+  {ftype=>4, name=>'Last modified', tag=>'mdate_str', no_edit=>1},
+  {ftype=>4, name=>'Last seen by DHCP server', tag=>'dhcp_date_str', 
+   no_edit=>1}
  ]
 );
 
