@@ -273,7 +273,10 @@ sub add_origin($$) {
   $domain="\L$domain";
   $origin="\L$origin";
   if ($domain eq '@') {  $domain=$origin; }
-  elsif (! ($domain =~ /\.$/)) { $domain.=".$origin"; }
+  elsif (! ($domain =~ /\.$/)) {
+    $origin='' if ($origin eq '.');
+    $domain.=".$origin";
+  }
   return $domain;
 }
 
