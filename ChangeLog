@@ -1,6 +1,10 @@
 $Id$
 
 0.7.1beta
+	- new configuration valiablre SAURON_CHR that allows
+          limiting what can be used in some host record
+	  fields (dept,location,asset_id) by server and by
+	  user group
 	- VLAN names now can be in mixed-case (before only 
 	  lower-case was allowed)
 	- support for "DHCP only" entries without IP

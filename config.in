@@ -136,7 +136,9 @@ $SERVER_ID = "fooserver";
 #
 # $SAURON_CHR = {
 #     'servername' => {
-#          'location' => [ ['.*','^(SiteA|SiteB)\d+$'] ],
+#          'location' => [ ['.*','^(SiteA|SiteB)\d+$',
+#                           'Official Site code + room number required'] 
+#                        ],
 #	   'dept' => [ 
 #         	       ['^groupa','^(Sales|Development|Research)$'],
 #		       ['^groubb','^(Manufacturing|Shipping)$' ]
