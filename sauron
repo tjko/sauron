@@ -12,7 +12,7 @@ use Sauron::Util;
 use Sauron::DB;
 use Sauron::BackEnd;
 
-($PG_DIR,$PG_NAME) = ($0 =~ /^(.*\/)(.*)$/);
+my ($PG_DIR,$PG_NAME) = ($0 =~ /^(.*\/)(.*)$/);
 $0 = $PG_NAME;
 
 if (-r "/etc/sauron/config") {
