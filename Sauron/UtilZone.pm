@@ -222,6 +222,8 @@ sub process_zonefile($$$$) {
       push @{$rec->{NS}}, add_origin($line[0],$origin);
     }
     elsif ($type eq 'HINFO') {
+      $line[0] =~ s/(\s+|^\"|\"$)//g;
+      $line[1] =~ s/(\s+|^\"|\"$)//g;
       $rec->{HINFO}[0]=$line[0];
       $rec->{HINFO}[1]=$line[1];
     }
