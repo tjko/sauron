@@ -93,16 +93,17 @@ $SERVER_ID = "fooserver";
 # $SAURON_RHF{serial}   = 1; # Serial
 # $SAURON_RHF{misc}     = 1; # Misc.
 
-# $SAURON_DTDHACK = 1;
-
-# $SAURON_BGCOLOR="white";
-# $SAURON_FGCOLOR="black";
+# set 1 to use hardcoded DTD instead the one genereated by CGI module
+# $SAURON_DTD_HACK = 0;
 
 #########################################################################
 # misc
 
 # uncomment to enable compatibilty with DHCP v2.0 ...
 # $SAURON_DCHP2_MODE = 1;
+
+# $SAURON_BGCOLOR="white";
+# $SAURON_FGCOLOR="black";
 
 # $LOOPBACK_NET = "127.0.0.0/24";
 # $LOOPBACK_ZONE = "loopback.";
