@@ -2,7 +2,7 @@
 #
 # import-zone - imports DNS zone from file or directly from DNS
 #
-# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2002,2003.
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2003.
 # $Id$
 #
 require 5;
@@ -282,7 +282,7 @@ if (@gluelist > 0) {
   }
 }
 
-#exit;
+
 unless ($opt_notransaction) {
   db_ignore_begin_and_commit(0);
   fatal("Cannot commit import to database!") if (db_commit() < 0);
