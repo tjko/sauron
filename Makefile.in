@@ -80,7 +80,7 @@ PROGS = sauron addgroup adduser deluser modhosts \
 	last moduser parse-hosts-rows runsql status update-dhcp-info \
 	export-networks generatehosts addhosts check-pending
 
-PLFILES = back_end.pl db.pl parseconf.pl util.pl util_zone.pl cgi_util.pl
+# PLFILES = back_end.pl db.pl parseconf.pl util.pl util_zone.pl cgi_util.pl
 MODULES = Sauron/Util.pm Sauron/DB.pm Sauron/BackEnd.pm Sauron/CGIutil.pm \
 	  Sauron/UtilZone.pm
 
@@ -92,7 +92,7 @@ DIRNAME = $(shell basename `pwd`)
 DISTNAME  = $(PKGNAME)-$(Version)
 BACKUPNAME = $(PKGNAME)-`date +%b%d`
 
-BINARIES = parse-hosts-rows
+BINARIES = 
 OBJS = 
 
 .c.o:	
@@ -104,8 +104,8 @@ all:	$(PKGNAME)
 $(PKGNAME):  $(BINARIES)
 	@echo "All done"
 
-parse-hosts-rows:  parse-hosts-rows.c
-	$(CC) $(CFLAGS) -o parse-hosts-rows parse-hosts-rows.c $(LDFLAGS) $(LIBS) 
+#parse-hosts-rows:  parse-hosts-rows.c
+#	$(CC) $(CFLAGS) -o parse-hosts-rows parse-hosts-rows.c $(LDFLAGS) $(LIBS) 
 
 
 #strip:

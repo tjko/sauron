@@ -1,0 +1,89 @@
+#!/usr/bin/perl
+# -I/usr/local/sauron
+#
+# import-dhcp - imports ISC DHCPD configuration
+#
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000,2001.
+# $Id$
+#
+require 5;
+use Net::Netmask;
+use Getopt::Long;
+use Sauron::DB;
+use Sauron::Util;
+use Sauron::UtilDhcp;
+use Sauron::BackEnd;
+
+($PG_DIR,$PG_NAME) = ($0 =~ /^(.*\/)(.*)$/);
+$0 = $PG_NAME;
+
+if (-r "/etc/sauron/config") {
+  $config_file="/etc/sauron/config";
+} elsif (-r "/usr/local/etc/sauron/config") {
+  $config_file="/usr/local/etc/sauron/config";
+} else {
+  die("cannot find config file in /etc/sauron or /usr/local/etc/sauron");
+}
+
+do "$config_file" || die("cannot load config: $config_file");
+
+
+##############################
+
+$result = GetOptions("help|h","verbose|v","dir=s","notransaction");
+
+if ($opt_help || @ARGV < 2) {
+    print "syntax: $0 [options] <servername> <dhcpd.conf file>\n";
+    print "options:\n",
+          "\t--dir=<directory>\tdirectory where included files are located\n",
+	  "\t\t\t\t(if not in directory specified in dhcpd.conf)\n",
+	  "\t--verbose\t\tdisplay more detailed progress reports\n",
+	  "\t--help\t\t\tdisplay this help\n\n";
+    exit(1);
+}
+
+$verbose = ($opt_verbose ? 1 : 0);
+$servername = $ARGV[0];
+$dhcpdf = $ARGV[1];
+$user = (getpwuid($<))[0];
+$cdate = time;
+
+set_muser($user);
+db_connect($DB_CONNECT);
+
+fatal("cannot read dhcpd.conf ($dhcpdf)") unless (-r $dhcpdf);
+
+if ($namedf =~ /(^.*\/)/) { 
+    $dir=$1;
+} else {
+    $dir="./";
+}
+
+# parse named.conf
+undef %data;
+process_dhcpdconf($dhcpdf,\%data);
+
+
+exit;
+
+
+unless ($opt_notransaction) {
+  db_ignore_begin_and_commit(1);
+  db_begin();
+}
+
+
+unless ($opt_notransaction) {
+  db_ignore_begin_and_commit(0);
+  fatal("Cannot commit import to database!") if (db_commit() < 0);
+}
+
+
+#print STDERR "Vacuuming...";
+#db_vacuum();
+print STDERR "\n";
+
+
+exit(0);
+
+# eof
