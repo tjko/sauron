@@ -1,10 +1,29 @@
-
-
+Sauron - DNS/DHCP Management System
+======
 
 
 REQUIREMENTS
-
+	- BIND v8 (or newer)
+	- DHCP, dhcp v2.0 or newer from ISC  (optional)
 	- Perl 5 or better
 		- Net::Netmask module
+		- Digest::MD5 module
 	- PostgresSQL (or add support to your favorite db yourself :)
 		- Pg perl module
+
+
+TESTED PLATFORMS
+	Linux
+	Solaris
+
+
+
+INSTALLATION
+	.... (instructions to be added someday :)
+
+
+
+
+--
+Timo <tjko@iki.fi>
+
