@@ -30,11 +30,12 @@ $mdate = db_timestamp_str();
 ##############################################
 
 $result = GetOptions("help|h","list","add:s","delall","del=s","passwd:s",
-		     "name=s","superuser=s","lock","unlock","edit");
+		     "name=s","superuser=s","lock","unlock","edit",
+		     "listusers");
 
 $opt_user=$ARGV[0];
 
-if ($opt_help || $opt_user eq '') {
+if ($opt_help || ($opt_user eq '' &&  $opt_listusers eq '')) {
   print "syntax: $0 <username> [--list|add|del|delall|edit]\n" ,
         "\t\t[--name=\"<user's full name>\"] [--superuser=<yes|no>]\n",
         "\t\t[--passwd] [--passwd=<password>] [--lock|unlock] [--help]\n\n";
@@ -48,12 +49,25 @@ if ($opt_help || $opt_user eq '') {
         "                                         (type=server|zone|net|host)\n",
         "   --delall                              delete all rights\n",
         "   --list                                list all rights\n",
+        "   --listusers                          list all users\n",
         "\n";
   exit(0);
 }
 
 db_connect();
 db_debug(1);
+
+if ($opt_listusers) {
+  print "Login      Name                                     Superuser\n";
+  print "---------- ---------------------------------------- ---------\n";
+  undef @q;
+  db_query("SELECT id,username,name,superuser,comment FROM users;",\@q);
+  for $i (0..$#q) {
+    printf "%-10s %-40s %-5s\n", $q[$i][1],$q[$i][2],$q[$i][3];
+  }
+
+  exit 0;
+}
 
 fatal("Invalid username '$opt_user'!") unless ($opt_user =~ /^\S+$/);
 

@@ -69,6 +69,16 @@ sub get_array_field($$$$$$$) {
   $$rec{$keyname}=$l;
 }
 
+sub get_field($$$$$) {
+  my($table,$field,$rule,$tag,$rec)=@_;
+  my(@list);
+  
+  db_query("SELECT $field FROM $table WHERE $rule;",\@list);
+  if ($#list >= 0) {
+    $rec->{$tag}=$list[0][0];
+  }
+}
+
 sub update_array_field($$$$$$) {
   my($table,$count,$fields,$keyname,$rec,$vals) = @_;
   my($list,$i,$j,$m,$str,$id,$flag,@f);
@@ -330,7 +340,7 @@ sub update_zone($) {
 
 sub get_host($$) {
   my ($id,$rec) = @_;
-  my ($res);
+  my ($res,$t);
  
   $res = get_record("hosts",
 	       "zone,type,domain,ttl,class,grp,alias,cname,cname_txt," .
@@ -338,6 +348,10 @@ sub get_host($$) {
 	       "prn,ether,info,comment",$id,$rec,"id");
 
   return -1 if ($res < 0);
+
+  get_array_field("rr_a",5,"id,ip,reverse,forward,comment",
+		  "IP,reverse,forward,Comments","host=$id ORDER BY ip",
+		  $rec,'ip');
 
   get_array_field("ns_entries",3,"id,ns,comment","NS,Comments",
 		  "type=2 AND ref=$id ORDER BY ns",$rec,'ns_l');
@@ -352,6 +366,12 @@ sub get_host($$) {
 		  "type=3 AND ref=$id ORDER BY dhcp",$rec,'dhcp_l');
   get_array_field("printer_entries",3,"id,printer,comment","PRINTER,Comments",
 		  "type=2 AND ref=$id ORDER BY printer",$rec,'printer_l');
+
+  if ($rec->{ether}) {
+    $t=substr($rec->{ether},0,6);
+    get_field("ether_info","info","ea='$t'","card_info",$rec);
+  }
+
   return 0;
 }
 

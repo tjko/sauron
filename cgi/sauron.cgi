@@ -138,6 +138,13 @@ error("invalid directory configuration")
   {ftype=>4, tag=>'type', name=>'Type', type=>'enum', enum=>\%host_types},
   {ftype=>4, tag=>'class', name=>'Class'},
   {ftype=>1, tag=>'ttl', name=>'TTL', type=>'int', len=>10},
+  {ftype=>5, tag=>'ip', name=>'IP address', iff=>['type','1']},
+  {ftype=>1, tag=>'ether', name=>'Ethernet address', type=>'mac', len=>12,
+   iff=>['type','1']},
+  {ftype=>4, tag=>'card_info', name=>'Card manufacturer', iff=>['type','1']},
+  {ftype=>1, tag=>'info', name=>'Info', type=>'text', len=>50, empty=>1},
+  {ftype=>0, name=>'Group selections'},
+  {ftype=>0, name=>'Host specific'},
   {ftype=>2, tag=>'ns_l', name=>'Name servers (NS)', type=>['text','text'], 
    fields=>2,
    len=>[30,20], empty=>[0,1], elabels=>['NS','comment'], iff=>['type','2']},
@@ -145,9 +152,9 @@ error("invalid directory configuration")
    type=>['text','text','text'], fields=>3, len=>[10,30,10], empty=>[0,0,1], 
    elabels=>['Protocol','Services','comment'], iff=>['type','1']},
   {ftype=>2, tag=>'mx_l', name=>'Mail exchanges (MX)', 
-   type=>['int','text','text'], fields=>3, len=>[5,30,20], empty=>[0,0,1], 
+   type=>['priority','domain','text'], fields=>3, len=>[5,30,20], 
+   empty=>[0,0,1], 
    elabels=>['Priority','MX','comment'], iff=>['type','[13]']},
-  {ftype=>1, tag=>'info', name=>'Info', type=>'text', len=>50, empty=>1},
   {ftype=>2, tag=>'txt_l', name=>'TXT', type=>['text','text'], 
    fields=>2,
    len=>[40,15], empty=>[0,1], elabels=>['TXT','comment'], iff=>['type','1']}
@@ -498,8 +505,45 @@ sub hosts_menu() {
   
   $sub=param('sub');
   
-  if ($sub eq 'edit') {
-    print p,'edit...';
+  if ($sub eq 'Edit') {
+    $id=param('h_id');
+    if ($id eq '') {
+      print h2("Host id not speciefied!");
+      goto browse_hosts;
+    }
+
+    if (param('h_submit') ne '') {
+      get_zone($id,\%host);
+      unless (form_check_form('h',\%host,\%host_form)) {
+#	$res=update_zone(\%zone);
+	$res=-1;
+	if ($res < 0) {
+	  print "<FONT color=\"red\">",h1("Zone record update failed!"),
+	        "</FONT>";
+	} else {
+	  print h2("Zone record succefully updated:");
+	}
+#	get_zone($zoneid,\%zone);
+#	display_form(\%zone,\%zone_form);
+	return;
+      }
+      print "<FONT color=\"red\">",h2("Invalid data in form!"),"</FONT>";
+    }
+
+    unless (param('h_re_edit') eq '1') {
+      if (get_host($id,\%host)) {
+	print h2("Cannot get host record (id=$id)!");
+	return;
+      }
+      print p,"host data fetched...";
+    }
+
+    print h2("Edit host:"),p,
+          startform(-method=>'POST',-action=>$selfurl),
+          hidden('menu','hosts'),hidden('sub','Edit');
+    form_magic('h',\%host,\%host_form);
+    print submit(-name=>'h_submit',-value=>'Make changes'),end_form;
+
   }
   elsif ($sub eq 'viewhost') {
     $id=param('id');
@@ -509,7 +553,10 @@ sub hosts_menu() {
     }
 
     display_form(\%host,\%host_form);
-
+    print p,startform(-method=>'GET',-action=>$selfurl),
+          hidden('menu','hosts'),hidden('h_id',$id),
+          submit(-name=>'sub',-value=>'Edit')," ",
+          submit(-name=>'sub',-value=>'Delete'),end_form;
   }
   elsif ($sub eq 'browse') {
     %bdata=(domain=>'',net=>'ANY',nets=>\%nethash,nets_k=>\@netkeys,
@@ -619,6 +666,7 @@ sub hosts_menu() {
   }
   else {
   browse_hosts:
+    param('sub','browse');
     #$nethash=get_nets($serverid);
     $nets=get_net_list($serverid,1);
     undef %nethash; undef @netkeys;
@@ -631,7 +679,7 @@ sub hosts_menu() {
     }
     %bdata=(domain=>'',net=>'ANY',nets=>\%nethash,nets_k=>\@netkeys,
 	    type=>1,order=>2);
-    print startform(-method=>'POST',-action=>$selfurl),
+    print start_form(-method=>'POST',-action=>$selfurl),
           hidden('menu','hosts'),hidden('sub','browse'),
           hidden('bh_page','0'),hidden('bh_psize','50');
     form_magic('bh',\%bdata,\%browse_hosts_form);
@@ -941,7 +989,7 @@ sub remove_state($) {
 #
 sub form_check_field($$$) {
   my($field,$value,$n) = @_;
-  my($type,$empty);
+  my($type,$empty,$t);
   
   if ($n > 0) { 
     $empty=${$field->{empty}}[$n-1]; 
@@ -969,14 +1017,26 @@ sub form_check_field($$$) {
   } elsif ($type eq 'path') {
     return 'valid pathname required!'
       unless ($value =~ /^(|\S+\/)$/);
+  } elsif ($type eq 'ip') {
+    return 'valid IP number required!' unless 
+      ($value =~ /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/);
   } elsif ($type eq 'cidr') {
     return 'valid CIDR (IP) required!' unless (is_cidr($value));
   } elsif ($type eq 'text') {
     return '';
   } elsif ($type eq 'enum') {
     return '';
-  } elsif ($type eq 'int') {
-    return 'integer required!' unless ($value =~ /^-?\d+$/);
+  } elsif ($type eq 'int' || $type eq 'priority') {
+    return 'integer required!' unless ($value =~ /^(-?\d+)$/);
+    $t=$1;
+    if ($type eq 'priority') {
+      return 'priority (0..n) required!' unless ($t >= 0);
+    }
+  } elsif ($type eq 'bool') {
+    return 'boolean value required!' unless ($value =~ /^(t|f)$/);
+  } elsif ($type eq 'mac') {
+    return 'Ethernet address required!' 
+      unless ($value =~ /^([0-9A-Z]{12})$/);
   } else {
     return "unknown typecheck for form_check_field: $type !";
   }
@@ -1074,11 +1134,12 @@ sub form_check_form($$$) {
 sub form_magic($$$) {
   my($prefix,$data,$form) = @_;
   my($i,$j,$k,$n,$key,$rec,$a,$formdata,$h_bg,$e_str,$p1,$p2,$val,$e,$enum,
-     $values);
+     $values,$ip,$t);
 
   $formdata=$form->{data};
   if ($form->{heading_bg}) { $h_bg=$form->{heading_bg}; }
   else { $h_bg=$SAURON_BGCOLOR; }
+
 
   # initialize fields
   unless (param($prefix . "_re_edit") eq '1' || ! $data) {
@@ -1111,6 +1172,22 @@ sub form_magic($$$) {
       elsif ($rec->{ftype} == 4) {
 	#$val=${$rec->{enum}}{$val}  if ($rec->{type} eq 'enum');
 	param($p1,$val);
+      }
+      elsif ($rec->{ftype} == 2 || $rec->{ftype} == 5) {
+	$rec->{fields}=5;
+	$a=$data->{$rec->{tag}};
+	for $j (1..$#{$a}) {
+	  param($p1."_".$j."_id",$$a[$j][0]);
+	  $ip=$$a[$j][1];
+	  $ip =~ s/\/\d{1,2}$//g;
+	  param($p1."_".$j."_1",$ip);
+	  $t=''; $t='on' if ($$a[$j][2] eq 't');
+	  param($p1."_".$j."_2",$t);
+	  $t=''; $t='on' if ($$a[$j][3] eq 't');
+	  param($p1."_".$j."_3",$t);
+	  param($p1."_".$j."_4",$$a[$j][4]);
+	}
+	param($p1."_count",$#{$a});
       }
       else { 
 	error("internal error (form_magic)");  
@@ -1203,9 +1280,45 @@ sub form_magic($$$) {
       $val=param($p1);
       $val=${$rec->{enum}}{$val}  if ($rec->{type} eq 'enum');
       print Tr,td($rec->{name}),td($val),hidden($p1,param($p1));
+    } elsif ($rec->{ftype} == 5) {
+      $rec->{fields}=5;
+      $rec->{type}=['ip','text','text','text'];
+      print Tr,td($rec->{name}),"<TD><TABLE>",Tr;
+      $a=param($p1."_count");
+      if (param($p1."_add") ne '') {
+	$a=$a+1;
+	param($p1."_count",$a);
+      }
+      $a=0 if (!$a || $a < 0);
+      #if ($a > 50) { $a = 50; }
+      print hidden(-name=>$p1."_count",-value=>$a);
+      print td('IP'),td('Reverse'),td('Forward'),td('Comments');
+
+      for $j (1..$a) {
+	$p2=$p1."_".$j;
+	print Tr,hidden(-name=>$p2."_id",param($p2."_id"));
+
+	$n=$p2."_1";
+	print "<TD>",textfield(-name=>$n,-size=>15,-value=>param($n));
+        print "<FONT size=-1 color=\"red\"><BR>",
+              form_check_field($rec,param($n),1),"</FONT></TD>";
+	$n=$p2."_2";
+	print td(checkbox(-label=>'Reverse',-name=>$n,-checked=>param($n)));
+	$n=$p2."_3";
+	print td(checkbox(-label=>'Forward',-name=>$n,-checked=>param($n)));
+
+        print td(checkbox(-label=>' Delete',
+	             -name=>$p2."_del",-checked=>param($p2."_del") ));
+      }
+      print Tr,Tr,Tr,Tr;
+      $j=$a+1;
+      $n=$prefix."_".$rec->{tag}."_".$j."_1";
+      print td(textfield(-name=>$n,-size=>15,-value=>param($n)));
+      
+      print td(submit(-name=>$prefix."_".$rec->{tag}."_add",-value=>'Add'));
+      print "</TABLE></TD>\n";
     }
   }
-
   print "</TABLE>";
 }
 
@@ -1218,6 +1331,7 @@ sub form_magic($$$) {
 sub display_form($$) {
   my($data,$form) = @_;
   my($i,$j,$k,$a,$rec,$formdata,$h_bg,$val,$e);
+  my($ip,$ipinfo,$com);
 
   $formdata=$form->{data};
 
@@ -1266,6 +1380,19 @@ sub display_form($$) {
     } elsif ($rec->{ftype} == 4 || $rec->{ftype} == 3) {
       print Tr,"<TD WIDTH=\"",$form->{nwidth},"\">",$rec->{name},"</TD><TD>",
             "$val</TD>\n";
+    } elsif ($rec->{ftype} == 5) {
+      print Tr,td($rec->{name}),"<TD><TABLE>",Tr;
+      $a=$data->{$rec->{tag}};
+      for $j (1..$#{$a}) {
+	$com=$$a[$j][4];
+	$ip=$$a[$j][1];
+	$ip=~ s/\/\d{1,2}$//g;
+	$ipinfo='';
+	$ipinfo.=' (no reverse)' if ($$a[$j][2] ne 't');
+	$ipinfo.=' (no A record)' if ($$a[$j][3] ne 't');
+	print Tr,td($ip),td($ipinfo),td($com);
+      }
+      print "</TABLE></TD>\n";
     } else {
       error("internal error (display_form)");
     }
