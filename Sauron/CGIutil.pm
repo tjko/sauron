@@ -170,11 +170,12 @@ sub form_get_defaults($) {
   my($form) = @_;
 
   return unless ($form);
+  $form->{tbl_bgcolor}='#ccccff' unless ($form->{tbl_bgcolor});
   $form->{bgcolor}="#eeeebf" unless ($form->{bgcolor});
   $form->{heading_bg}="#aaaaff" unless ($form->{heading_bg});
   $form->{ro_color}="#646464" unless ($form->{ro_color});
   $form->{border}=0 unless ($form->{border});
-  $form->{width}="100%" unless ($form->{width});
+  $form->{width}="99%" unless ($form->{width});
   $form->{nwidth}="30%" unless ($form->{nwidth});
 }
 
@@ -726,7 +727,7 @@ sub display_form($$) {
   form_get_defaults($form);
   $formdata=$form->{data};
 
-  print "\n<TABLE border=\"0\" cellspacing=\"0\" cellpadding=\"5\" ";
+  print "\n<TABLE border=\"0\" cellspacing=\"0\" cellpadding=\"1\" ";
   print "WIDTH=\"" . $form->{width} . "\" " if ($form->{width});
   print "><TR><TD>\n";
   print "<TABLE ";

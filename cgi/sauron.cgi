@@ -2698,9 +2698,10 @@ sub nets_menu() {
     $novlans=0;
   }
 
-  print "<TABLE width=\"99%\" cellspacing=1 cellpadding=1 border=0>",
+  print "<TABLE bgcolor=\"#ccccff\" width=\"99%\" cellspacing=1 " .
+        " cellpadding=1 border=0>",
         "<TR bgcolor=\"#aaaaff\">",
-        "<TH>Net</TH>",th("NetName"),th("Description"),th("Type"),
+        th("Net"),th("NetName"),th("Description"),th("Type"),
         th("DHCP"),($novlans?'':th("VLAN")),th("Lvl"),"</TR>";
 
   for $i (0..$#q) {
@@ -2754,6 +2755,7 @@ sub templates_menu() {
   $hinfo_id=param('hinfo_id');
 
   if ($sub eq 'mx') {
+  show_mx_template_list:
     db_query("SELECT name,comment,alevel,id FROM mx_templates " .
 	     "WHERE zone=$zoneid ORDER BY name;",\@q);
     print h3("MX templates for zone: $zone");
@@ -3045,6 +3047,8 @@ sub templates_menu() {
     return;
   }
 
+  # display MX template list by default
+  goto show_mx_template_list;
 }
 
 
@@ -3193,18 +3197,19 @@ sub login_menu() {
   elsif ($sub eq 'motd') {
     print h2("News & motd (message of day) messages:");
     get_news_list($serverid,10,\@list);
-    print "<TABLE width=\"99%\" cellspacing=1 cellpadding=4  bgcolor=\"#ccccff\">";
+    print "<TABLE width=\"99%\" cellspacing=1 cellpadding=4 " .
+          " bgcolor=\"#ccccff\">";
     print "<TR bgcolor=\"#aaaaff\"><TH width=\"70%\">Message</TH>",
           th("Date"),th("Type"),th("By"),"</TR>";
     for $i (0..$#list) {
       $date=localtime($list[$i][0]);
       $type=($list[$i][2] < 0 ? 'Global' : 'Local');
       $msg=$list[$i][3];
-      $msg =~ s/\n/<BR>/g;
+      #$msg =~ s/\n/<BR>/g;
       print "<TR bgcolor=\"#ddeeff\"><TD>$msg</TD>",
 		   td($date),td($type),td($list[$i][1]),"</TR>";
     }
-    print "</TABLE>";
+    print "</TABLE><br>";
   }
   elsif ($sub eq 'addmotd') {
     return if (check_perms('superuser',''));
@@ -3656,7 +3661,7 @@ sub top_menu($) {
       "Zones</FONT></A> | ",
     "<A HREF=\"$s_url?menu=nets\"><FONT color=\"#ffffff\">",
       "Nets</FONT></A> | ",
-    "<A HREF=\"$s_url?menu=templates&sub=mx\"><FONT color=\"#ffffff\">",
+    "<A HREF=\"$s_url?menu=templates\"><FONT color=\"#ffffff\">",
       "Templates</FONT></A> | ",
     "<A HREF=\"$s_url?menu=groups\"><FONT color=\"#ffffff\">",
       "Groups</FONT></A> | ",
