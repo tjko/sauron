@@ -18,6 +18,8 @@ $VERSION = '$Id$ ';
 	     valid_domainname
 	     valid_texthandle
 	     is_cidr
+	     decode_cidr
+	     is_cidr_within_cidr
 	     arpa2cidr
 	     cidr2arpa
 	     ip2int
@@ -119,12 +121,56 @@ sub valid_texthandle($) {
 
 # check if parameter contains a valid CIDR...returns 0 if not.
 sub is_cidr($) {
-  my($s) = @_;
-  if ( $s =~ /^\s*((\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})|(\d{1,3}(\.\d{1,3}(\.\d{1,3}(\.\d{1,3})?)?)?\/\d{1,3}))\s*$/ ) {
-    return $1;
-  }
-  return 0;
+  my($cidr) = @_;
+
+  my @base;
+
+  return 0 unless ( ( @base = ($cidr =~ /^(\d{1,3})(\.(\d{1,3}))?(\.(\d{1,3}))?(\.(\d{1,3}))?(\/(\d{1,2}))?$/)[0,2,4,6,8] ) );
+
+  return 0 if ($base[3] eq '' && $base[4] eq '');
+  return 0 unless ( ( $base[0] >= 0 && $base[0] <= 255) &&
+		    ( $base[1] >= 0 && $base[1] <= 255) &&
+		    ( $base[2] >= 0 && $base[2] <= 255) &&
+		    ( $base[3] >= 0 && $base[3] <= 255) &&
+		    ( $base[4] >= 0 && $base[4] <= 32) );
+
+  return 1;
 }
+
+
+# decode CIDR into base/mask...
+sub decode_cidr($$$) {
+    my($cidr,$baseref,$maskref) = @_;
+
+    my @base;
+
+    return -1 unless (is_cidr($cidr));
+    return -2 unless ( ( @base = ($cidr =~ /^\s*(\d{1,3})(\.(\d{1,3}))?(\.(\d{1,3}))?(\.(\d{1,3}))?(\/(\d{1,2}))?\s*$/)[0,2,4,6,8] ) );
+
+    $$baseref = (($base[0] & 0xff) << 24) + (($base[1] & 0xff) << 16) +
+ 	        (($base[2] & 0xff) << 8) + ($base[3] & 0xff);
+    $$maskref = unpack("N",
+		       pack("B32", substr("1" x ($base[4]) . "0" x 32, 0,32))
+		       );
+
+    return 0;
+}
+
+
+# test whether a CIDR block falls within another CIDR block...
+sub is_cidr_within_cidr($$) {
+    my($a,$b) = @_;
+
+    my($basea,$baseb,$maska,$maskb);
+
+    return -1 if (decode_cidr($a,\$basea,\$maska) < 0);
+    return -2 if (decode_cidr($b,\$baseb,\$maskb) < 0);
+
+    # let's test if CIDR a is within CIDR b...
+    return 0 unless ($maska > $maskb);
+    return ( ($basea & $maskb) == ($baseb & $maskb) ? 1 : 0);
+}
+
 
 # convert in-addr.arpa format address into CIDR format address
 sub arpa2cidr($) {
