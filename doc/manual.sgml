@@ -7,6 +7,7 @@
 <!ENTITY form-new-server SYSTEM "form-new-server.sgml">
 <!ENTITY form-new-zone SYSTEM "form-new-zone.sgml">
 <!ENTITY form-edit-zone SYSTEM "form-edit-zone.sgml">
+<!ENTITY form-new-host SYSTEM "form-new-host.sgml">
 ]>
 
 
@@ -755,6 +756,22 @@ User admin added succesfully.
       </para>
 
       <para>
+        After creating a server, it's time to add networks into 
+        <guimenuitem>Networks</> table in <guimenu>Nets</> menu.
+        Generate net for each network that have been delegated for
+        your use (and you're generating <quote>reverse</> zones for).
+        You should also generate subnets within these networks that
+        describe your network topology. If your network is split
+        up into <acronym>VLANs</>  / Layer-2 Networks (or 
+        <quote>Shared Networks</> as DHCP calls them), add you necessary
+        VLANs using <guimenuitem>Add vlan</> before, and assign each subnet
+        into appropriate VLAN. It is also possible to create
+        <quote>virtual subnets</> that are used only for access control
+        purposes by setting <quote>DHCP</> setting for these subnets to
+        false.
+      </para>
+
+      <para>
         Next step is to add the deault zones (localhost and reverse
         zones for 0.0.0.0/8, 127.0.0.0/8, and 255.0.0.0/8) into the server.
         This can be done from <guimenu>Zones</> menu using
@@ -781,6 +798,29 @@ Adding zone: 255.in-addr.arpa...OK (id=4)
         &form-edit-zone;
       </para>
 
+      <para>
+        Finally after creating the zone(s) you want. You may start adding
+        hosts into your zones. Before adding hosts make sure you've
+        selected correct server and zone (Note, you can save your current
+        zone and server selection as defaults from <guimenu>Login</> menu
+        using the <guimenuitem>Save Settings</> command). To add
+        a new host simply select <guimenuitem>Add host</> from 
+        <guimenu>Hosts</> menu. If you want to make a <quote>copy</> of
+        existing host, first select the host and press <guibutton>Copy</>
+        button. This will fill out the new host dialog with information
+        from the current host.
+
+        &form-new-host;
+      </para>
+
+      <para>
+        There are also templates and groups that you may define and use
+        when adding/modifying hosts. To makes it easier to define or
+        change  certain settings for large groups of hosts, by just modifying
+        the related template or group. More information about these
+        can be found in <xref linkend="reference">.
+      </para>
+ 
       </section>
 
       <section>
