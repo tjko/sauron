@@ -1,0 +1,75 @@
+#!/usr/bin/perl
+#
+# import-ethers  imports Ethernet card manufacturer codes&descriptions
+#                from text file (Ethernet.txt)
+#
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000.
+# $Id$
+#
+require 5;
+use Getopt::Long;
+
+
+($PG_DIR,$PG_NAME) = ($0 =~ /^(.*\/)(.*)$/);
+$0 = $PG_NAME;
+
+do "$PG_DIR/config" || die("cannot load config");
+do "$PG_DIR/util.pl";
+do "$PG_DIR/db.pl";
+
+
+###################################################################
+
+
+$result = GetOptions("help|h","force|f");
+
+if ($opt_help || @ARGV < 1) {
+  print "syntax: $0 [--help] [--force] <Ethernet.txt>\n";
+  exit(0);
+}
+
+$file=$ARGV[0];
+
+fatal("cannot read input file '$file'") unless (-r $file);
+
+db_connect();
+
+
+open(FILE,"$file") || fatal("cannot open input file '$file'");
+while (<FILE>) {
+  next unless /^\s*([0-9A-F]{6})\s+(\S.*)$/;
+  $code=$1; 
+  $info=$2;
+  $info =~ s/(\s+|\t+)/ /g;
+  $info =~ s/\'/\\\'/g;
+  $ethers{$code}=$info;
+}
+close(FILE);
+
+$c= keys %ethers;
+print "Found descriptions for $c adapter manufacturers.\n";
+
+fatal("Nothing to do.") if ($c < 1);
+
+
+# insert codes to ether_info table
+$icount=0;
+
+foreach $ea (keys %ethers) {
+  $info=$ethers{$ea};
+  $res=db_exec("INSERT INTO ether_info (ea,info) " .
+	       "VALUES('$ea','$info');");
+  $icount++ unless ($res < 0);
+  if ($res < 0 && $opt_force) {
+    $res=db_exec("UPDATE ether_info SET info='$info' WHERE ea='$ea';");
+    $ucount++ unless ($res < 0);
+  }
+}
+
+print "$icount entries inserted in adapter info table\n";
+print "$ucount entries updated in adapter infor table\n" if ($ucount>0);
+
+exit 0;
+
+# eof
+

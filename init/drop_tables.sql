@@ -22,6 +22,7 @@ DROP TABLE wks_entries;
 DROP TABLE host_info;
 DROP TABLE users;
 DROP TABLE user_rights;
+DROP TABLE ether_info;
 
 DROP TABLE pokemon;
 

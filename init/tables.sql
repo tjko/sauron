@@ -310,4 +310,9 @@ CREATE TABLE user_rights (
 );
 
 
+CREATE TABLE ether_info (
+       	ea		CHAR(6) PRIMARY KEY,
+       	info		TEXT
+);
+
 /* eof */

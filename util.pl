@@ -141,4 +141,12 @@ sub pwd_crypt($$) {
 }
 
 
+# print error message and exit program
+sub fatal($) {
+  my ($msg) = @_;
+  print STDERR "$0: $msg\n";
+  exit(1);
+}
+
+
 # eof
