@@ -45,6 +45,7 @@ $VERSION = '$Id$ ';
 
 	     get_zone_id
 	     get_zone_list
+	     get_zone_list2
 	     get_zone
 	     update_zone
 	     add_zone
@@ -1023,6 +1024,25 @@ sub get_zone_list($$$) {
 	   "WHERE server=$serverid $type $reverse " .
 	   "ORDER BY type,reverse,reversenet,name;",$list);
   return $list;
+}
+
+sub get_zone_list2($$$) {
+  my($serverid,$rec,$lst) = @_;
+  my(@q,$i);
+
+  undef @{$lst};
+  #push @{$lst},  -1;
+  undef %{$rec};
+  #$$rec{-1}='--None--';
+  return if ($serverid < 1);
+
+  db_query("SELECT id,name FROM zones " .
+	   "WHERE server=$serverid AND type='M' AND reverse=false " .
+	   "ORDER BY name;",\@q);
+  for $i (0..$#q) {
+    push @{$lst}, $q[$i][0];
+    $$rec{$q[$i][0]}=$q[$i][1];
+  }
 }
 
 sub get_zone($$) {
