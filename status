@@ -114,7 +114,7 @@ if (defined $opt_pending) {
   print "Pending host modifications for server: $opt_pending (id=$serverid)\n"
     unless ($opt_quiet);
 
-  $zones=get_zone_list($serverid,'M','f');
+  $zones=get_zone_list($serverid,'M','');
   for $i (0..$#{$zones}) {
     $zoneid=$$zones[$i][1];
     undef @q;
