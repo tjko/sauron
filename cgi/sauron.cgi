@@ -16,7 +16,7 @@ $CGI::DISABLE_UPLOADS = 1; # no uploads
 $CGI::POST_MAX = 100000; # max 100k posts
 
 #$|=1;
-$debug_mode = 0;
+$debug_mode = 1;
 
 if (-f "/etc/sauron/config") {
   $conf_dir='/etc/sauron';
@@ -486,6 +486,7 @@ do "$PROG_DIR/back_end.pl";
   {ftype=>4, tag=>'user', name=>'User name'},
   {ftype=>4, tag=>'login', name=>'Last login', type=>'localtime'},
   {ftype=>4, tag=>'addr', name=>'Host'},
+  {ftype=>4, tag=>'superuser', name=>'Superuser', iff=>['superuser','yes']},
   {ftype=>0, name=>'Current selections'},
   {ftype=>4, tag=>'server', name=>'Server'},
   {ftype=>4, tag=>'zone', name=>'Zone'},
@@ -2487,6 +2488,46 @@ sub login_menu() {
   else {
     print h2("User info:");
     display_form(\%state,\%user_info_form);
+
+    # server permissions
+    print h3("Permissions:"),"<TABLE border=0 cellspacing=1>",
+	  "<TR bgcolor=\"#aaaaff\"><TD>Type</TD><TD>Ref.</TD>",
+	  "<TD>Permissions</TD></TR>";
+    foreach $s (keys %{$perms{server}}) {
+      undef @q; 
+      db_query("SELECT name FROM servers WHERE id=$s;",\@q);
+      $s_name=$q[0][0];
+      print "<TR bgcolor=\"#dddddd\">",td("Server"),td("$s_name"),
+            td($perms{server}->{$s}." &nbsp;"),"</TR>";
+    }
+
+    # zone permissions
+    foreach $s (keys %{$perms{zone}}) {
+      undef @q; 
+      db_query("SELECT s.name,z.name FROM zones z, servers s " .
+	       "WHERE z.server=s.id AND z.id=$s;",\@q);
+      $z_name="$q[0][0]:$q[0][1]";
+      print "<TR bgcolor=\"#dddddd\">",td("Zone"),td("$z_name"),
+	     td($perms{zone}->{$s}." &nbsp;"),"</TR>";
+    }
+
+    # net permissions
+    foreach $s (keys %{$perms{net}}) {
+      undef @q; 
+      db_query("SELECT s.name,n.net,n.range_start,n.range_end " .
+	       "FROM servers s, nets n WHERE n.server=s.id AND n.id=$s;",\@q);
+      $z_name="$q[0][0]:$q[0][1]" . db_lasterrormsg();
+      print "<TR bgcolor=\"#dddddd\">",td("Net"),td("$z_name"),
+	     td($perms{net}->{$s}[0]." - ".$perms{net}->{$s}[1]),"</TR>";
+    }
+
+    # host permissions
+    foreach $s (@{$perms{hostname}}) {
+      print "<TR bgcolor=\"#dddddd\">",td("Hostname"),td("$s"),
+	     td("(hostname constraint)"),"</TR>";
+    }
+
+    print "</TABLE>";
   }
 }
 
@@ -2809,13 +2850,13 @@ sub top_menu($) {
     "<A HREF=\"$s_url?menu=about\"><FONT color=\"#ffffff\">About</FONT></A> ",
     '</FONT></TD>';
 
-  print  "<TD align=\"right\">";
-  if ($frame_mode) { print "&nbsp;"; } 
+  print  "<TD align=\"right\"><FONT color=\"#ffffff\">";
+  if ($frame_mode) { print "$SERVER_ID &nbsp;"; } 
   else {
-    printf "<FONT color=\"#ffffff\">%d.%d.%d %02d:%02d </FONT></TD>",
-           $mday,$mon,$year+1900,$hour,$min;
+    printf "%s &nbsp; &nbsp; %d.%d.%d %02d:%02d ",
+           $SERVER_ID,$mday,$mon,$year+1900,$hour,$min;
   }
-  print "</TR></TABLE>";
+  print "</FONT></TD></TR></TABLE>";
 }
 
 sub left_menu($) {
