@@ -1755,5 +1755,45 @@ sub fix_utmp($) {
   }
 }
 
+
+sub get_lastlog($$$) {
+  my($n,$user,$list) = @_;
+  my(@q,$count_rule,$user_rule,$count,$i,$t,$j,$l,$state,$host,$info,$hr,$mn,
+     $sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst);
+
+  $count_rule = ($n>0 ? " LIMIT $n " : "");
+  $user_rule=($user ? " AND u.username='$user' " : "");
+
+  db_query("SELECT l.sid,l.uid,l.date,l.state,l.ldate,l.ip,l.host,u.username ".
+           "FROM lastlog l, users u " .
+           "WHERE u.id=l.uid " .$user_rule .
+           "ORDER BY -l.sid " . $count_rule . ";",\@q);
+  $count=@q;
+
+  for $i (0..($count-1)) {
+     $j=$count-$i-1;
+     ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst)
+       = localtime($q[$j][2]);
+     $t=sprintf("%02d/%02d/%02d %02d:%02d",$mday,$mon,$year%100,$hour,$min);
+     $host=substr($q[$j][6],0,15);
+     $state=$q[$j][3];
+     if ($state < 2) {
+       $info="still logged in";
+     } else {
+       ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) =
+	 localtime($q[$j][4]);
+       $l=($q[$j][4] - $q[$j][2]) / 60;
+       $hr=$l / 60;
+       $mn=$l % 60;
+       $info=sprintf("%02d:%02d (%d:%02d)",$hour,$min,$hr,$mn);
+       $info.=" (reconnect) " if ($state == 4);
+       $info.=" (autologout)" if ($state == 3);
+     }
+     push @{$list}, [$q[$j][7],$q[$j][0],$host,$t,$info];
+  }
+
+  return $count;
+}
+
 # eof
 

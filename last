@@ -34,46 +34,24 @@ if (($ARGV[0] =~ /^--?h/)) {
 }
 
 if ($ARGV[0] =~ /^-(\d+)/) {
-  $count_rule="LIMIT $1";
+  $count_rule="$1";
   shift;
 }
 
-$user_rule="AND u.username='$ARGV[0]' " if ($ARGV[0]);
+$user_rule="$ARGV[0]" if ($ARGV[0]);
 
 db_connect();
 
+$count=get_lastlog($count_rule,$user_rule,\@q);
 
-db_query("SELECT l.sid,l.uid,l.date,l.state,l.ldate,l.ip,l.host,u.username ".
-	 "FROM lastlog l, users u " .
-	 "WHERE u.id=l.uid " . $user_rule .
-	 "ORDER BY -l.sid " . $count_rule . ";",\@q);
-
-$count=@q;
 
 printf "%-9s %5s %-15s %14s - %s\n",
         'User','SID','Host','Login','Logout';
 print "-" x 78 . "\n";
 
-for $i (0..$#q) {
-  $j=$count-$i-1;
-  ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst)=localtime($q[$j][2]);
-  $t=sprintf("%02d/%02d/%02d %02d:%02d",$mday,$mon,$year%100,$hour,$min);
-  $host=substr($q[$j][6],0,15);
-  $state=$q[$j][3];
-  if ($state < 2) {
-    $info="still logged in";
-  } else {
-    ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) =
-      localtime($q[$j][4]);
-    $l=($q[$j][4] - $q[$j][2]) / 60;
-    $hr=$l / 60;
-    $mn=$l % 60;
-    $info=sprintf("%02d:%02d (%d:%02d)",$hour,$min,$hr,$mn);
-    $info.=" (reconnect) " if ($state == 4);
-    $info.=" (autologout)" if ($state == 3);
-  }
-  printf "%-9s %5d %-15s %14s - %s\n",
-        $q[$j][7],$q[$j][0],$host,$t,$info;
+for $j (0..($count-1)) {
+  printf "$j %-9s %5d %-15s %14s - %s\n",
+        $q[$j][0],$q[$j][1],$q[$j][2],$q[$j][3],$q[$j][4];
 }
 
 

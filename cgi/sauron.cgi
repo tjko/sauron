@@ -206,6 +206,7 @@ do "$PROG_DIR/back_end.pl";
   {ftype=>8, tag=>'alias_a', name=>'Alias for host(s)', fields=>3,
    arec=>1, iff=>['type','7']},
   {ftype=>4, tag=>'id', name=>'Host ID'},
+  {ftype=>4, tag=>'alias', name=>'Alias ID', iff=>['type','4']},
   {ftype=>4, tag=>'type', name=>'Type', type=>'enum', enum=>\%host_types},
   {ftype=>4, tag=>'class', name=>'Class'},
   {ftype=>1, tag=>'ttl', name=>'TTL', type=>'int', len=>10, empty=>1,
@@ -656,6 +657,12 @@ do "$PROG_DIR/back_end.pl";
  ]
 );
 
+%session_id_form=(
+ data=>[
+  {ftype=>0, name=>'Session browser'},
+  {ftype=>1, tag=>'sid', name=>'SID', type=>'int', len=>8, empty=>1 }
+ ]
+);
 
 sub logmsg($$) {
   my($type,$msg)=@_;
@@ -899,6 +906,7 @@ sub servers_menu() {
       print h3("Cannot select server!"),p;
       goto select_server;
     }
+    goto select_server if(check_perms('server','R'));
     print h2("Selected server: $server"),p;
     get_server($serverid,\%serv);
     if ($state{'serverid'} ne $serverid) {
@@ -2315,7 +2323,11 @@ sub login_menu() {
           "if you want to logout.";
   }
   elsif ($sub eq 'passwd') {
-    if (param('passwd_submit') ne '') {
+    if (param('passwd_cancel')) {
+      print h2("Password not changed.");
+      return;
+    }
+    elsif (param('passwd_submit') ne '') {
       unless (($res=form_check_form('passwd',\%h,\%change_passwd_form))) {
 	if (param('passwd_new1') ne param('passwd_new2')) {
 	  print "<FONT color=\"red\">",h2("New passwords dont match!"),
@@ -2344,8 +2356,8 @@ sub login_menu() {
           startform(-method=>'POST',-action=>$selfurl),
           hidden('menu','login'),hidden('sub','passwd');
     form_magic('passwd',\%h,\%change_passwd_form);
-    print submit(-name=>'passwd_submit',-value=>'Change password'),
-          end_form;
+    print submit(-name=>'passwd_submit',-value=>'Change password')," ",
+          submit(-name=>'passwd_cancel',-value=>'Cancel'), end_form;
     return;
   }
   elsif ($sub eq 'save') {
@@ -2377,6 +2389,60 @@ sub login_menu() {
 	  td($wholist[$i][3]),td($wholist[$i][4]),"</TR>";
     }
     print "</TABLE>";
+  }
+  elsif ($sub eq 'lastlog') {
+    return if (check_perms('superuser',''));
+    $count=get_lastlog(20,'',\@lastlog);
+    print h2("Lastlog:");
+    print "<TABLE bgcolor=\"#eeeebf\" width=\"100%\">",
+          "<TR bgcolor=\"aaaaff\">",th("User"),th("SID"),th("Host"),
+	    th("Login"),th("Logout (session length)"),"</TR>";
+    for $i (0..($count-1)) {
+      print Tr(td($lastlog[$i][0]),td($lastlog[$i][1]),td($lastlog[$i][2]),
+	       td($lastlog[$i][3]),td($lastlog[$i][4]));
+    }
+    print "</TABLE>\n";
+  }
+  elsif ($sub eq 'session') {
+    return if (check_perms('superuser',''));
+    print startform(-method=>'POST',-action=>$selfurl),
+          hidden('menu','login'),hidden('sub','session');
+    form_magic('session',\%h,\%session_id_form);
+    print submit(-name=>'session_submit',-value=>'Select'), end_form, "<HR>";
+
+    if (param('session_sid') > 0) {
+      $session_id=param('session_sid');
+      undef @q;
+      db_query("SELECT l.uid,l.date,l.ldate,l.host,u.username " .
+	       "FROM lastlog l, users u " .
+	       "WHERE l.uid=u.id AND l.sid=$session_id;",\@q);
+      if (@q > 0) {
+	print "<TABLE bgcolor=\"#eeeebf\" width=\"100%\">",
+              "<TR bgcolor=\"aaaaff\">",th("SID"),th("User"),th("Login"),
+	      th("Logout"),th("From"),"</TR>";
+	$date1=localtime($q[0][1]);
+	$date2=($q[0][2] > 0 ? localtime($q[0][2]) : '&nbsp;');
+	print Tr(td($session_id),td($q[0][4]),td($date1),td($date2),
+		 td($q[0][3])),"</TABLE>";
+      }
+
+      undef @q;
+      db_query("SELECT date,type,ref,action,info " .
+	       "FROM history WHERE sid=$session_id;",\@q);
+      if (@q > 0) {
+	print h3("Session history:");
+	print "<TABLE bgcolor=\"#eeeebf\" width=\"100%\">",
+              "<TR bgcolor=\"aaaaff\">",th("Date"),th("Type"),th("Ref"),
+	      th("Action"),th("Info"),"</TR>";
+	for $i (0..$#q) {
+	  $date1=localtime($q[$i][0]);
+	  $type=$q[$i][1];
+	  print Tr(td($date1),td($type),
+		   td($q[$i][2]),td($q[$i][3]),td($q[$i][4]));
+	}
+	print "</TABLE>";
+      }
+    }
   }
   else {
     print h2("User info:");
@@ -2774,16 +2840,21 @@ sub left_menu($) {
           Tr(td("<a href=\"$url&sub=add&type=5\">Add printer</a>"));
   } elsif ($menu eq 'login') {
     $url.='?menu=login';
-    print Tr(td("<a href=\"$url&sub=login\">Login</a>")),
+    print Tr(td("<a href=\"$url\">User info</a>")),
+          Tr(td("<a href=\"$url&sub=who\">Who</a>")),
+          Tr(),Tr(),Tr(td("<a href=\"$url&sub=login\">Login</a>")),
           Tr(td("<a href=\"$url&sub=logout\">Logout</a>")),
-          Tr(),Tr(),Tr(td("<a href=\"$url&sub=who\">Who</a>")),
-          Tr(td("<a href=\"$url\">User info</a>")),
           Tr(),Tr(),Tr(td("<a href=\"$url&sub=passwd\">Change password</a>")),
           Tr(td("<a href=\"$url&sub=save\">Save defaults</a>"));
     if ($frame_mode) {
       print Tr(td("<a href=\"$script_name\" target=\"_top\">Frames OFF</a>"));
     } else {
       print Tr(td("<a href=\"$s_url/frames\" target=\"_top\">Frames ON</a>"));
+    }
+    if ($state{superuser} eq 'yes') {
+      print Tr(),Tr(),
+	    Tr(td("<a href=\"$url&sub=lastlog\">Lastlog</a>")),
+	    Tr(td("<a href=\"$url&sub=session\">Session info</a>"));
     }
   } elsif ($menu eq 'about') {
     $url.='?menu=about';
