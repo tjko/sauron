@@ -1094,7 +1094,8 @@ if (param('csv')) {
 );
 
 
-%group_type_hash = (1=>'Normal',2=>'Dynamic Address Pool',3=>'DHCP class');
+%group_type_hash = (1=>'Normal', 2=>'Dynamic Address Pool',
+		    3=>'DHCP class', 103=>'Custom DHCP class');
 
 %group_form=(
  data=>[

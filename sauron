@@ -1163,7 +1163,7 @@ sub make_dhcp() {
     $etherhash{$q[$i][0]}=[] unless ($etherhash{$q[$i][0]});
     push @{$etherhash{$q[$i][0]}}, $q[$i][1];
   }
-  # add ehter_aliases to ether hash too
+  # add ether_aliases to ether hash too
   undef @q;
   db_query("SELECT b.ether,c.ip FROM hosts a, hosts b, zones z, a_entries c ".
 	   "WHERE z.server=$serverid AND a.zone=z.id AND a.ether_alias=b.id ".
@@ -1207,39 +1207,44 @@ sub make_dhcp() {
   unless ($dhcp2_mode) {
   print_dhcp_classes:
     undef @dclasses;
-    db_query("SELECT id,name FROM groups WHERE server=$serverid AND type=3 " .
+    db_query("SELECT id,name,type FROM groups " .
+	     "WHERE server=$serverid AND (type=3 OR type=103) " .
 	     ($opt_dhcpclass ?
 	      " AND name=".db_encode_str($opt_dhcpclass)." " : "") .
 	     "ORDER BY name",\@dclasses);
     if (@dclasses > 0) {
-      print DHCPFILE "\n# dynamic classes\n\n";
+      print DHCPFILE "\n# (dynamic) classes\n\n";
       for $i (0..$#dclasses) {
-	print DHCPFILE "class \"$dclasses[$i][1]\" {\n";
+	print DHCPFILE "\nclass \"$dclasses[$i][1]\" {\n";
 	print DHCPFILE "\tmatch pick-first-value " .
-	               "(option dhcp-client-identifier, hardware);\n";
+	               "(option dhcp-client-identifier, hardware);\n"
+			 if ($dclasses[$i][2] == 3);
 	undef @q;
 	db_query("SELECT dhcp FROM dhcp_entries " .
 		 "WHERE type=5 and ref=$dclasses[$i][0] ORDER BY id",\@q);
 	for $j (0..$#q) {
 	    $q[$j][0].=';' unless ($q[$j][0] =~ /[;\{\}]\s*$/);
-	    print DHCPFILE "\t$q[$j][0]\n"; 
+	    print DHCPFILE "\t$q[$j][0]\n";
 	}
 	print DHCPFILE "}\n";
 
 	# subclasses
-	undef @q;
-	db_query("SELECT h.ether,h.domain FROM hosts h, zones z " .
-	         "WHERE z.server=$serverid AND h.zone=z.id " .
-	         " AND h.grp=$dclasses[$i][0] AND h.ether NOTNULL " .
-	         "ORDER BY h.ether",\@q);
-	for $j (0..$#q) {
-	  unless ($q[$j][0] =~ /^[0-9A-F]{12}$/) {
-	    #error("invalid ether for subclass: $q[$j][0]");
-	    next;
+	if ($dclasses[$i][2]== 3) {
+	  undef @q;
+	  db_query("SELECT h.ether,h.domain FROM hosts h, zones z " .
+		   "WHERE z.server=$serverid AND h.zone=z.id " .
+		   " AND h.grp=$dclasses[$i][0] AND h.ether NOTNULL " .
+		   "ORDER BY h.ether",\@q);
+	  for $j (0..$#q) {
+	    unless ($q[$j][0] =~ /^[0-9A-F]{12}$/) {
+	      #error("invalid ether for subclass: $q[$j][0]");
+	      next;
+	    }
+	    print DHCPFILE "subclass \"$dclasses[$i][1]\" 1:" .
+	                   dhcpether($q[$j][0]) . ";  # $q[$j][1]\n";
 	  }
-	  print DHCPFILE "subclass \"$dclasses[$i][1]\" 1:" .
-	                 dhcpether($q[$j][0]) . ";  # $q[$j][1]\n";
 	}
+
       }
       print DHCPFILE "\n";
     }

@@ -2305,7 +2305,8 @@ sub get_group_list($$$$) {
   $alevel=0 unless ($alevel > 0);
 
   db_query("SELECT id,name FROM groups " .
-	   "WHERE server=$serverid AND alevel <= $alevel  ORDER BY name;",\@q);
+	   "WHERE server=$serverid AND alevel <= $alevel AND type < 100 " .
+	   "ORDER BY name;",\@q);
   for $i (0..$#q) {
     push @{$lst}, $q[$i][0];
     $$rec{$q[$i][0]}=$q[$i][1];

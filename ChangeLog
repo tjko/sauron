@@ -1,6 +1,9 @@
 $Id$
 
 0.7.0beta
+	- added support for custom DHCP classes
+	- removed hosts	show up as "pending" changes to zone
+	  (before only new hosts or modified hosts showed up)
 	- added new user/group privileges that can be used to 
 	  control what type records user can add
 	- improved code for detecting wheter zone serial should

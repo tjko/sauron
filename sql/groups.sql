@@ -16,7 +16,8 @@ CREATE TABLE groups (
        type	    INT NOT NULL, /* group type:
 				     1 = normal group,
 				     2 = dynamic address pool,
-				     3 = DHCP client class  */
+				     3 = DHCP class (subclassed by MAC),
+	                             103 = Custom DHCP class */
        alevel       INT4 DEFAULT 0,   /* required authorization level */
        vmps         INT4 DEFAULT -1,  /* VMPS domain reference
                                           -->vmps.id */ 
