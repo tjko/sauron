@@ -1,6 +1,12 @@
 $Id$
 
 0.7.2beta
+	- import: fixed IP number parsing (named.conf)
+	- CGI interface: fixed "-> This Subnet" button in host display
+	- CGI interface: fixed "Show Hosts" button in network/subnet display
+	- moduser/modgroup: now lists also IDs for group memberships,
+	  making it easier to remove group membership from a user
+	- fixed server selection bug in web interface	
 	- cleaned up import-ethers (also added --verbose option)
 	
 0.7.1
