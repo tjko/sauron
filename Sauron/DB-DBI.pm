@@ -92,7 +92,7 @@ sub db_exec($) {
   }
 
   $rows = $sth->rows;
-#  $db_last_oid=$sth->pg_oid_status;
+  $db_last_oid=$sth->{pg_oid_status};
 
   return ($rows > 0 ? $rows : 0);
 }
