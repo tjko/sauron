@@ -117,6 +117,11 @@ $SERVER_ID = "fooserver";
 # $SAURON_RHF{serial}   = 1; # Serial
 # $SAURON_RHF{misc}     = 1; # Misc.
 
+# Set this to enable more restrictive user privilege intepretation.
+#  1 = zone read (write) access is not inherited from server privileges
+#      (user sees only zones she has explicitly given read (write) access)
+# $SAURON_PRIVILEGE_MODE = 1
+
 # set 1 to use hardcoded DTD instead the one genereated by CGI module
 # $SAURON_DTD_HACK = 0;
 

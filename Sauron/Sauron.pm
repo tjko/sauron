@@ -29,6 +29,7 @@ sub sauron_version() {
 
 
 sub set_defaults() {
+  $main::SAURON_PRIVILEGE_MODE = 0;
   $main::SAURON_CHARSET='iso-8859-1';
   $main::SAURON_PWD_MODE = 1;
   $main::SAURON_DHCP2_MODE = 0;

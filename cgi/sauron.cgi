@@ -1457,6 +1457,7 @@ sub zones_menu() {
     return;
   }
   elsif ($sub eq 'pending') {
+    return if (check_perms('zone','R'));
     print h2("Pending changes to host records:");
 
     undef @q;
@@ -1478,6 +1479,7 @@ sub zones_menu() {
     return;
   }
   elsif ($sub eq 'AddDefaults') {
+    return if (check_perms('superuser',''));
     print h2("Adding default zones...");
     print "<br><pre>";
     add_default_zones($serverid,1);
@@ -1495,6 +1497,7 @@ sub zones_menu() {
       print h3("Cannot select zone '$zone'!"),p;
       goto select_zone;
     }
+    goto select_zone if (check_perms('zone','R'));
     print h2("Selected zone: $zone"),p;
     get_zone($zoneid,\%zn);
     $state{'zone'}=$zone;
@@ -1521,6 +1524,11 @@ sub zones_menu() {
     $id=$$list[$i][1];
     $name=$$list[$i][0];
     $comment=$$list[$i][4].'&nbsp;';
+
+    if ($SAURON_PRIVILEGE_MODE==1) {
+      next unless ($perms{zone}->{$id} =~ /R/);
+    }
+
     print "<TR bgcolor=\"$color\">",td([
 	"<a href=\"$selfurl?menu=zones&selected_zone=$name\">$name</a>",
 				    $type,$rev,$comment]);
@@ -1561,15 +1569,15 @@ sub zones_menu() {
 # HOSTS menu
 #
 sub hosts_menu() {
-  unless ($serverid) {
+  unless ($serverid > 0) {
     alert1("Server not selected!");
     return;
   }
-  unless ($zoneid) {
+  unless ($zoneid > 0) {
     alert1("Zone not selected!");
     return;
   }
-  return if (check_perms('server','R'));
+  return if (check_perms('zone','R'));
 
   $id=param('h_id');
   if ($id > 0) {
@@ -4096,7 +4104,8 @@ sub check_perms($$$) {
     return 0 if ($perms{server}->{$serverid} =~ /$rule/);
   }
   elsif ($type eq 'zone') {
-    return 0 if ($perms{server}->{$serverid} =~ /$rule/);
+    return 0 if ($SAURON_PRIVILEGE_MODE==0 &&
+		 $perms{server}->{$serverid} =~ /$rule/);
     return 0 if ($perms{zone}->{$zoneid} =~ /$rule/);
   }
   elsif ($type eq 'host') {
