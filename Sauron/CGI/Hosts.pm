@@ -511,20 +511,6 @@ sub menu_handler {
     }
     goto show_host_record;
   }
-#  elsif ($sub eq 'Enable') {
-#    return unless ($id > 0);
-#    goto show_host_record if (check_perms('host',$host{domain}));
-#    if (update_host({id=>$id,type=>1}) < 0) {
-#      alert2("Failed to update host record (id=$id)");
-#    } else {
-#      update_history($state->{uid},$state->{sid},1,
-#		    "ENABLE: $host_types{$host{type}} ",
-#		    "domain: $host{domain}, ip:$host{ip}[1][1], " .
-#		    "ether: $host{ether}",$host{id});
-#      print h3("Host enabled (converted from a host reservation)");
-#    }
-#    goto show_host_record;
-#  }
   elsif ($sub eq 'Alias') { # add static alias
     if ($id > 0) {
       $data{alias}=$id;
