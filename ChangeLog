@@ -1,6 +1,11 @@
 $Id$
 
 0.6.0
+	- fixed problem with newer Pg.pm modules that caused
+	  "Error: cannot save state..." messages when trying to use web
+	  interface
+	- new configuration option: SAURON_NO_REMOTE_ADDR_AUTH
+	- generic man page for sauron added
 	- added import-zone utility; imports zones into existing server from
 	  a zone file or directly from DNS (using zone transfer)
 	- sauron: now uses temp files when creating new configuration files
