@@ -25,6 +25,10 @@ $VERSION = '$Id$ ';
 	     ip2int
 	     int2ip
 	     adjust_ip
+	     is_ip6_prefix
+	     is_ip6
+	     normalize_ip6
+	     ip6_to_ip6int
 	     net_ip_list
 	     remove_origin
 	     add_origin
@@ -281,6 +285,101 @@ sub adjust_ip($$) {
   return '' if ($i < 0);
   $i += $step;
   return int2ip($i);
+}
+
+sub normalize_ip6($) {
+  my($ip6) = @_;
+  my($a,$b,$i,$j,@tmp);
+
+  $ip6 = lc($ip6);
+  return '' unless (($a,$b) = ($ip6 =~ /^([a-f0-9:\.]+)(\/(\d{1,3}))?$/)[0,2]);
+
+  # check prefix length
+  return '' if ($b && not ($b >= 0 && $b <= 128));
+  # check for unspecified address
+  return '0000:0000:0000:0000:0000:0000:0000:0000' if ($a eq '::');
+
+  my @list;
+  my @l = split(/:/,$a,-1);
+  my $l1 = 'x';
+  my $l2 = 'x';
+  my $count = 0;
+
+  for $i (0..$#l) {
+    if ($l[$i] eq '') {
+      return '' if ($l1 eq '' && $l2 eq ''); # more than two ":"'s in a row...
+      if ($l1 ne '') {
+	$count++;
+	push @list, '';
+      }
+    }
+    elsif ($l[$i] =~ /^[0-9a-f]{1,4}$/) {
+      push @list, substr("0000".$l[$i],-4);
+    }
+    elsif (@tmp = ($l[$i] =~ /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/)) {
+      for $j (0..3) { return '' unless ($tmp[$j] >= 0 && $tmp[$j] <= 255); }
+      push @list, sprintf("%02x%02x",$tmp[0],$tmp[1]),
+	          sprintf("%02x%02x",$tmp[2],$tmp[3]);
+    } else {
+      return '';
+    }
+
+    $l2 = $l1;
+    $l1 = $l[$i];
+  }
+
+  return '' if ($count > 1); # more than one occurence of "::" ...
+  return '' if (@list > 8);
+
+  # expand "::" if necessary...
+  for $i (0..$#list) {
+    if ($list[$i] eq '') {
+      $list[$i]='0000';
+      if (@list < 8) {
+	for $j (1..(8 - @list)) { splice(@list,$i,0,'0000'); }
+      }
+      last;
+    }
+  }
+
+  return join(":",@list)."".($b ? "/$b":"");
+}
+
+sub is_ip6_prefix($) {
+  my($ip6) = @_;
+
+  return 0 unless ($ip6 =~ /\/\d+$/);
+  return 0 unless (normalize_ip6($ip6));
+  return 1;
+}
+
+sub is_ip6($) {
+  my($ip6) = @_;
+
+  return 0 if ($ip6 =~ /\/\d+$/);
+  return 0 unless (normalize_ip6($ip6));
+  return 1;
+}
+
+# converts IPv6 with prefix into IP6.INT domain name
+sub ip6_to_ip6int($) {
+  my($ip6) = @_;
+  my($a,$b,$i,$prefix,$len);
+
+  return '' unless ($ip6 = normalize_ip6($ip6));
+  ($a,$prefix) = $ip6 =~ /^(.*?)(\/\d+)?$/;
+  $a =~ s/://g;
+  $prefix =~ s/\///;
+  $prefix = 128 unless ($prefix > 0);
+  return '' if ($prefix % 4);
+  $len = $prefix/4;
+
+  for $i (1..$len) {
+    $b .= "." if (defined($b));
+    $b .= substr($a,$len-$i,1);
+  }
+
+  return $b.".ip6.int.";
 }
 
 sub net_ip_list($) {
