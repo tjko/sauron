@@ -703,7 +703,7 @@ load_config();
    enum=>{t=>'Subnet',f=>'Net'}},
   {ftype=>1, tag=>'net', name=>'Net (CIDR)', type=>'cidr'},
   {ftype=>3, tag=>'vlan', name=>'VLAN', type=>'enum', conv=>'L',
-   enum=>\%vlan_list_hash, restricted=>1},
+   enum=>\%vlan_list_hash, elist=>\@vlan_list_lst, restricted=>1},
   {ftype=>1, tag=>'alevel', name=>'Authorization level', type=>'priority', 
    len=>3, empty=>0},
   {ftype=>3, tag=>'private_flag', name=>'Private (hide from browser)',
@@ -2572,7 +2572,7 @@ sub nets_menu() {
   }
   elsif ($sub eq 'Edit') {
     return if (check_perms('superuser',''));
-    get_vlan_list($serverid,\%vlan_list_hash,\@vlan_list);
+    get_vlan_list($serverid,\%vlan_list_hash,\@vlan_list_lst);
     $res=edit_magic('net','Net','nets',\%net_form,\&get_net,\&update_net,$id);
     goto browse_nets if ($res == -1);
     goto show_net_record if ($res > 0);
