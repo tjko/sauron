@@ -59,7 +59,31 @@ if ($opt_versions) {
   print "Sauron::UtilDhcp: ",($Sauron::UtilDhcp::VERSION =~ /,v\s+(\S+)\s/),
         "\n";
   print "Sauron::UtilZone: ",($Sauron::UtilZone::VERSION =~ /,v\s+(\S+)\s/),
-        "\n";
+        "\n\n";
+
+
+  my @modules = ( 'Sauron::CGI::Utils',
+		  'Sauron::CGI::Servers',
+		  'Sauron::CGI::Zones',
+		  'Sauron::CGI::Hosts',
+		  'Sauron::CGI::Nets',
+		  'Sauron::CGI::Groups',
+		  'Sauron::CGI::Templates',
+		  'Sauron::CGI::Login' );
+  my $i;
+  for $i (0..$#modules) {
+    print "$modules[$i]: ";
+    eval "require $modules[$i];";
+    if ($@) {
+      print "failed to load this module!\n";
+    } else {
+      my $ver;
+      eval '$ver = $'.$modules[$i].'::VERSION;';
+      print "",($ver =~ /,v\s+(\S+)\s/) , "\n";
+    }
+  }
+
+
   print "\n";
 }
 
