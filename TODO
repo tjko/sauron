@@ -1,5 +1,7 @@
 
 general:
+	- add new "info" fields to hosts table
+	- change info field types to VARCHAR(n)
 	- test whether changing TEXT fiels in hosts table to appropriate
 	  CHAR(n) fields would improve speed...
 	- add 'install' to Makefile.in; directory generation, symlink
@@ -20,5 +22,8 @@ sauron:
 
 sauron.cgi:
 	- fix timeout problem with huge zone/server deletes...(faster server :)
+	- add search by dhcp_date field...
 
+browser.cgi:
+	- add sort by column links
 
