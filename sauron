@@ -2,12 +2,14 @@
 #
 # sauron - generates BIND/DHCP/printer configuration files from database
 #
-# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000-2003.
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000-2005.
 # $Id$
 #
 require 5;
 use Net::Netmask;
 use Getopt::Long;
+use MIME::Base64;
+use Crypt::RC5;
 use Sauron::Util;
 use Sauron::DB;
 use Sauron::BackEnd;
@@ -25,6 +27,7 @@ $dhcp2_mode = ($SAURON_DHCP2_MODE ? 1 : 0);
 %check_names_enum = (D=>'',W=>'warn',F=>'fail',I=>'ignore');
 %zone_type_enum = (M=>'master',S=>'slave',H=>'hint',F=>'forward');
 %forward_enum = (D=>'', O=>'only', F=>'first');
+%algorithm_enum = (157=>'hmac-md5');
 
 $ZFORMAT = "%-22s %6s %2s  %-6s %s\n";
 
@@ -52,7 +55,7 @@ sub expand_zonefile_path($$) {
     $tmp = substr($val,0,length($tag)-1);
     $path =~ s/$tag/$tmp/g;
   }
-
+  
   return $path;
 }
 
@@ -159,8 +162,11 @@ sub make_bind() {
     "// created by $user\@$host at $time_now\n//\n",
     "// server: $server{name} -- $server{comment}\n//\n\n";
 
-  #options section
   unless ($zones_only) {
+    # keys section
+    print_keys($server{id});
+
+    # options section
     print BINDFILE "options {\n";
     print BINDFILE "\tdirectory \"$server{'directory'}\";\n"
       if ($server{'directory'} ne '');
@@ -1676,6 +1682,69 @@ sub print_subnets() {
       }
       print DHCPFILE "\t}\n\n";
     }
+  }
+
+}
+
+
+sub print_keys($) {
+  my($serverid) = @_;
+  my(@keys,@reflist,%refs,$i);
+
+  return unless ($serverid > 0);
+
+  # get keys
+  db_query("SELECT id,name,algorithm,mode,keysize,secretkey,comment " .
+	   "FROM keys WHERE type=1 AND ref=$serverid " .
+	   "ORDER BY name",\@keys);
+  return unless (@keys > 0);
+
+  # count references to keys
+  db_query("SELECT tkey FROM cidr_entries WHERE tkey > 0",\@reflist);
+  for $i (0..$#reflist) { $refs{$reflist[$i][0]}++; }
+  
+  # mark keys that are not referenced
+  my $keycount=0;
+  for $i (0..$#keys) { 
+    unless ($refs{$keys[$i][0]}) { $keys[$i][0]=0; }
+    else { $keycount++; }
+  }
+
+  return unless ($keycount > 0);
+  fatal("Encrypted keys used, but SAURON_KEY not defined!")
+    unless ($SAURON_KEY);
+
+  # print referenced keys
+  print BINDFILE "// Keys\n\n";
+  for $i (0..$#keys) { 
+    my $id = $keys[$i][0];
+    next unless ($id > 0);
+
+    my $name = $keys[$i][1];
+    my $algorithm = $algorithm_enum{$keys[$i][2]};
+    my $key = $keys[$i][5];
+
+    unless ($name) {
+      error("Skipping key with empty name (id=$id)");
+      next;
+    }
+    unless ($algorithm) {
+      error("Skipping key with unsupported algorithm ($keys[$i][2]): $name");
+      next;
+    }
+    unless ($key) {
+      error("Skipping key with empty secret key: $name");
+      next;
+    }
+    my $h = Crypt::RC5->new($SAURON_KEY,16);
+    my $dkey = encode_base64($h->decrypt(decode_base64($key)));
+    chomp($dkey);
+
+    print BINDFILE "key \"$name\" {\n",
+                   "\talgorithm $algorithm;\n",
+		   "\tsecret \"$dkey\";\n",
+		   "};\n\n";
+    $dkey=$key;
   }
 
 }
