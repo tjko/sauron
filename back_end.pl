@@ -91,6 +91,15 @@ sub domain_in_use($$) {
   return 0;
 }
 
+sub new_sid() {
+  my($sid);
+
+  return -1 if (db_exec("SELECT NEXTVAL('sid_seq');") < 0);
+  $sid=db_getvalue(0,0);
+  $sid=-1 unless ($sid > 0);
+  return $sid;
+}
+
 #####################################################################
 
 sub get_record($$$$$) {
@@ -1675,3 +1684,62 @@ sub get_permissions($$$) {
   }
   return 0;
 }
+
+
+sub update_lastlog($$$$$) {
+  my($uid,$sid,$type,$ip,$host) = @_;
+  my($date,$i,$h,$ldate);
+
+  return -1 unless ($uid > 0);
+  return -2 unless ($sid > 0);
+  return -3 unless ($type > 0);
+
+  if ($type == 1) {
+    $date=time;
+    $i=db_encode_str($ip);
+    $h=db_encode_str($host);
+    return -10 if (db_exec("INSERT INTO lastlog " .
+			   "(sid,uid,date,state,ip,host) " .
+			   " VALUES($sid,$uid,$date,1,$i,$h);") < 0);
+  } else {
+    $ldate=time;
+    return -10 if (db_exec("UPDATE lastlog SET ldate=$ldate,state=$type " .
+			   "WHERE sid=$sid;") < 0);
+  }
+  return 0;
+}
+
+sub update_history($$$$$) {
+  my($uid,$sid,$type,$action,$info) = @_;
+  my($date,$a,$i);
+
+  return -1 unless ($uid > 0);
+  return -2 unless ($sid > 0);
+  return -3 unless ($type > 0);
+  $date=time;
+  $a=db_encode_str($action);
+  $i=db_encode_str($i);
+
+  return -10 
+    if (db_exec("INSERT INTO history (sid,uid,date,type,action,info) " .
+		" VALUES($sid,$uid,$date,$a,$i);") < 0);
+  return 0;
+}
+
+
+sub fix_utmp($) {
+  my($timeout) = @_;
+  my($i,$t,@q);
+
+  $t=time - $timeout;
+  db_query("SELECT cookie,uid,sid FROM utmp WHERE last < $t;",\@q);
+  if (@q > 0) {
+    for $i (0..$#q) {
+      update_lastlog($q[$i][1],$q[$i][2],3,'','');
+      db_exec("DELETE FROM utmp WHERE cookie='$q[$i][0]';");
+    }
+  }
+}
+
+# eof
+

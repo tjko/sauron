@@ -62,4 +62,6 @@ DROP SEQUENCE root_servers_id_seq;
 DROP SEQUENCE history_id_seq;
 DROP SEQUENCE lastlog_id_seq;
 
+DROP SEQUENCE sid_seq;
+
 /* eof */

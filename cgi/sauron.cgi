@@ -16,7 +16,7 @@ $CGI::DISABLE_UPLOADS = 1; # no uploads
 $CGI::POST_MAX = 100000; # max 100k posts
 
 #$|=1;
-$debug_mode = 0;
+$debug_mode = 1;
 
 if (-f "/etc/sauron/config") {
   $conf_dir='/etc/sauron';
@@ -676,6 +676,7 @@ $selfurl = $s_url . $pathinfo;
 $menu=param('menu');
 #$menu='login' unless ($menu);
 $remote_addr = $ENV{'REMOTE_ADDR'};
+$remote_host = remote_host();
 
 $scookie = cookie(-name=>'sauron');
 if ($scookie) {
@@ -702,6 +703,7 @@ if ($state{'mode'} eq '1' && param('login') eq 'yes') {
 
 if ($state{'auth'} ne 'yes' || $pathinfo eq '/login') {
   logmsg("notice","reconnect from: $remote_addr");
+  update_lastlog($state{uid},$state{sid},4,$remote_addr,$remote_host);
   print header(-target=>'_top'),
         start_html(-title=>"Sauron Login",-BGCOLOR=>'white');
   login_form("Welcome (again)",$scookie);
@@ -710,13 +712,18 @@ if ($state{'auth'} ne 'yes' || $pathinfo eq '/login') {
 if ((time() - $state{'last'}) > $USER_TIMEOUT) {
   logmsg("notice","connection timed out for $remote_addr " .
 	 $state{'user'});
+  update_lastlog($state{uid},$state{sid},3,$remote_addr,$remote_host);
   print header(-target=>'_top'),
         start_html(-title=>"Sauron Login",-BGCOLOR=>'white');
   login_form("Your session timed out. Login again",$scookie);
 }
 
-error("Unauthorized Access denied!")
-  if ($remote_addr ne $state{'addr'}) ;
+if ($remote_addr ne $state{'addr'}) {
+  logmsg("notice",
+	 "cookie reseived from wrong host: " . $remote_addr .
+	 " ($state{user})");
+  error("Unauthorized Access denied!");
+}
 
 
 $server=$state{'server'};
@@ -772,7 +779,6 @@ unless ($state{superuser} eq 'yes') {
 }
 
 print "<br>" unless ($frame_mode);
-
 
 if ($menu eq 'servers') { servers_menu(); }
 elsif ($menu eq 'zones') { zones_menu(); }
@@ -2486,6 +2492,7 @@ sub delete_magic($$$$$$$) {
 sub logout() {
   my($c,$u);
   $u=$state{'user'};
+  update_lastlog($state{uid},$state{sid},2,$remote_addr,$remote_host);
   logmsg("notice","user ($u) logged off from $remote_addr");
   $c=cookie(-name=>'sauron',-value=>'logged off',-expires=>'+1s',
 	    -path=>$s_url);
@@ -2548,6 +2555,7 @@ sub login_auth() {
 	$state{'user'}=$u;
 	$state{'uid'}=$user{'id'};
 	$state{'gid'}=$user{'gid'};
+	$state{'sid'}=new_sid();
 	$state{'login'}=$ticks;
 	$state{'serverid'}=$user{'server'};
 	$state{'zoneid'}=$user{'zone'};
@@ -2569,6 +2577,8 @@ sub login_auth() {
 	    "</TD></TR></TABLE>";
 	logmsg("notice","user ($u) logged in from " . $ENV{'REMOTE_ADDR'});
 	db_exec("UPDATE users SET last=$ticks WHERE id=$user{'id'};");
+	update_lastlog($state{uid},$state{sid},1,
+		       $remote_addr,$remote_host);
       }
     }
   }
@@ -2581,6 +2591,7 @@ sub login_auth() {
   print "</TABLE>\n" unless ($frame_mode);
   print end_html();
   save_state($scookie);
+  fix_utmp($USER_TIMEOUT*2);
   exit;
 }
 
@@ -2728,9 +2739,7 @@ sub left_menu($) {
 	"<TR><TD BGCOLOR=\"#eeeeee\">";
 
   print "<FONT size=-1>",
-        "Server: $server",br,
-        "Zone: $zone",br,
-        "</FONT>";
+        "Server: $server<br>Zone: $zone<br>SID: $state{sid}<br></FONT>";
 
   print "</FONT></TABLE></TD></TR></TABLE><BR>";
 
@@ -2813,7 +2822,7 @@ sub make_cookie() {
   return cookie(-name=>'sauron',-expires=>'+7d',-value=>$val,-path=>$s_url);
 }
 
-sub save_state($id) {
+sub save_state($) {
   my($id)=@_;
   my(@q,$res,$s_auth,$s_addr,$other,$s_mode);
 
@@ -2831,6 +2840,7 @@ sub save_state($id) {
   $other='';
   if ($state{'uid'}) { $other.=", uid=".$state{'uid'}." ";  }
   if ($state{'gid'}) { $other.=", gid=".$state{'gid'}." ";  }
+  if ($state{'sid'}) { $other.=", sid=".$state{'sid'}." ";  }
   if ($state{'serverid'}) {
     $other.=", serverid=".$state{'serverid'}." ";
     $other.=", server='".$state{'server'}."' ";
@@ -2863,7 +2873,8 @@ sub load_state($) {
 
   undef @q;
   db_query("SELECT uid,addr,auth,mode,serverid,server,zoneid,zone," .
-      "uname,last,login,searchopts,searchdomain,searchpattern,superuser,gid " .
+      "uname,last,login,searchopts,searchdomain,searchpattern,superuser, " .
+      "gid,sid " .
        "FROM utmp WHERE cookie='$id';",\@q);
   if (@q > 0) {
     $state{'uid'}=$q[0][0];
@@ -2887,6 +2898,7 @@ sub load_state($) {
     $state{'searchpattern'}=$q[0][13];
     $state{'superuser'}='yes' if ($q[0][14] eq 't');
     $state{'gid'}=$q[0][15];
+    $state{'sid'}=$q[0][16];
 
     db_exec("UPDATE utmp SET last=" . time() . " WHERE cookie='$id';");
     return 1;

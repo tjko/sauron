@@ -1,0 +1,77 @@
+#!/usr/bin/perl
+#
+# last -- utlity to display lastlog info
+#
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2001.
+# $Id$
+#
+require 5;
+use Getopt::Long;
+use Term::ReadKey;
+
+
+my ($PG_DIR,$PG_NAME) = ($0 =~ /^(.*\/)(.*)$/);
+$0 = $PG_NAME;
+
+do "$PG_DIR/config" || die("cannot load config");
+do "$PG_DIR/util.pl";
+do "$PG_DIR/db.pl";
+do "$PG_DIR/back_end.pl";
+
+sub fatal($) {
+  my ($msg) = @_;
+  print STDERR "$0: $msg\n";
+  exit(1);
+}
+
+##############################################
+
+$argcount=@ARGV;
+
+if (($ARGV[0] =~ /^--?h/)) {
+  print "syntax: $0 [-h] [-num] [name]\n\n";
+  exit(0);
+}
+
+if ($ARGV[0] =~ /^-(\d+)/) {
+  $count_rule="LIMIT $1";
+  shift;
+}
+
+$user_rule="AND u.username='$ARGV[0]' " if ($ARGV[0]);
+
+db_connect();
+
+
+db_query("SELECT l.sid,l.uid,l.date,l.state,l.ldate,l.ip,l.host,u.username ".
+	 "FROM lastlog l, users u " .
+	 "WHERE u.id=l.uid " . $user_rule .
+	 "ORDER BY -l.sid " . $count_rule . ";",\@q);
+
+$count=@q;
+
+for $i (0..$#q) {
+  $j=$count-$i-1;
+  $t=localtime($q[$j][2]);
+  $host=substr($q[$j][6],0,15);
+  $state=$q[$j][3];
+  if ($state < 2) {
+    $info="still logged in";
+  } else {
+    ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) =
+      localtime($q[$j][4]);
+    $l=($q[$j][4] - $q[$j][2]) / 60;
+    $hr=$l / 60;
+    $mn=$l % 60;
+    $info=sprintf("%02d:%02d (%d:%02d)",$hour,$min,$hr,$mn);
+    $info.=" (reconnect) " if ($state == 4);
+    $info.=" (autologout)" if ($state == 3);
+  }
+  printf "%-9s %-15s %20s - %s\n",
+        $q[$j][7],$host,$t,$info;
+}
+
+
+
+exit;
+
