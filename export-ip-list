@@ -25,12 +25,13 @@ $time_now = localtime;
 $tnow = time();
 $tmp_extension = ".tmp.$<.$$"; # generate extension for temp files
 
-GetOptions("help|h","verbose|v","inverse|i","optimize|o");
+GetOptions("help|h","verbose|v","inverse|i","optimize|o","netsonly|n");
 
 if ($opt_help || @ARGV < 1) {
   print "syntax: $0 [--help] [OPTIONS] <servername> [[networknamemask] ...]\n",
         "\noptions:\n",
 #	"\t--inverse\t\tlist IPs not in use\n",
+	"\t--netsonly\tlist only matching (sub)nets\n",
 	"\t--optimize\tcombine continuous IP blocks into CIDRs\n",
 	"\t--verbose\tmore verbose output\n";
   print "\n" if ($opt_help);
@@ -40,6 +41,7 @@ if ($opt_help || @ARGV < 1) {
 $opt_optimize = ($opt_optimize ? 1 : 0);
 $opt_verbose = ($opt_verbose ? 1 : 0);
 $opt_inverse = ($opt_inverse ? 1 : 0);
+$opt_netsonly = ($opt_netsonly ? 1 : 0);
 $servername=shift;
 while (($mask=shift)) {  push @masks, $mask; }
 
@@ -80,6 +82,18 @@ for $i (0..$#allnets) {
 }
 
 
+my $counter=0;
+
+# print out matching nets if --netsonly used
+if ($opt_netsonly) {
+  for $i (0..$#nets) {
+    print "$nets[$i]\n";
+    $counter++;
+  }
+  print "#\n# $counter CIDRs\n" if ($opt_verbose);
+  exit;
+}
+
 
 # select IPs (A records) for this server
 
@@ -112,7 +126,6 @@ $ipcount=@iplist;
 
 # print IPs/CIDRs...
 
-my $counter=0;
 for $i (0..$#iplist) {
   print "$iplist[$i]\n";
   $counter++;
