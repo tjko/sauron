@@ -133,8 +133,17 @@ $user{comment}=$opt_comment;
 $user{gid}=$gid;
 $user{expiration}=$opt_expiration;
 
+my $newid;
 fatal("Cannot add user to users table: " . db_errormsg())
-  if (add_user(\%user) < 0);
+  if (($newid=add_user(\%user)) < 0);
+
+if ($gid > 0) {
+    # add group membership
+    fatal("Cannot set group membership for user: $opt_user ".db_errormsg())
+	if (db_exec("INSERT INTO user_rights (type,ref,rtype,rref,rule) " .
+		    " VALUES(2,$newid,0,$gid,'')") < 0);
+}
+    
 
 print "User $opt_user added successfully.\n";
 print "Remember to give user some rights with moduser command.\n"
