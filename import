@@ -403,10 +403,10 @@ for ($i=0; $i <= $#zones; $i+=1) {
 	$rec=$zonedata{$rip};
 	if ($rec) {
 	  print "$ip:$rip --> $rec->{PTR}\n";
-	  $sqlstr = "SELECT rr_a.id, hosts.domain, zones.name " .
+	  $sqlstr = "SELECT a_entries.id, hosts.domain, zones.name " .
 #	          "hosts.domain || '.' || zones.name || '.' AS dname " .
-		  "FROM rr_a,hosts,zones,servers " .
-	          "WHERE rr_a.host=hosts.id AND hosts.zone=zones.id " .
+		  "FROM a_entries,hosts,zones,servers " .
+	          "WHERE a_entries.host=hosts.id AND hosts.zone=zones.id " .
 		  "AND zones.server=servers.id AND servers.id=$serverid AND " .
 #		  "AND zones.server=servers.id AND " .
 		   "ip='$ip';";  
@@ -432,12 +432,12 @@ for ($i=0; $i <= $#zones; $i+=1) {
 	    $rflag = 'false';
 	    $rflag = 'true' if ($rec->{PTR} eq $rhost);
 	    #print "$rid : $rhost : $rflag\n";
-	    $sqlstr = "UPDATE rr_a SET reverse=$rflag WHERE id=$rid;";
+	    $sqlstr = "UPDATE a_entries SET reverse=$rflag WHERE id=$rid;";
 	    $res=db_exec($sqlstr);
-	    die("cannot update rr_a record id=$rid host=$rhost") if ($res < 0);
+	    die("cannot update a_entries record id=$rid host=$rhost") if ($res < 0);
 	    warn("fail: $sqlstr") if (db_status() ne 'UPDATE 1');
 	  }
-	  #die("cannot commit rr_a record updates!") if (db_commit() < 0);
+	  #die("cannot commit a_entries record updates!") if (db_commit() < 0);
 	}
 	else {
 	  warn("cannot find $rip in zone $zone!");
@@ -681,7 +681,7 @@ for ($i=0; $i <= $#zones; $i+=1) {
   #die("Cannot commit alias record inserts!") if (db_commit() < 0);
 
     
-  # add A records in rr_a
+  # add A records in a_entries
   $j=0; $str='';
   #db_begin();
 
@@ -702,7 +702,7 @@ for ($i=0; $i <= $#zones; $i+=1) {
     
     for($k=0; $k < $c; $k+=1) {
       $ip=$rec->{A}[$k];
-      $sqlstr = "INSERT INTO rr_a (host,ip,reverse) " .
+      $sqlstr = "INSERT INTO a_entries (host,ip,reverse) " .
 	"VALUES($hostid,'$ip',$reverse);";
       
       $j++;
@@ -853,10 +853,10 @@ sub find_multi_ips($) {
 
   undef %mips;
 
-  $sqlstr = "SELECT rr_a.ip,COUNT(*) FROM rr_a,hosts,zones " .
-	    "WHERE rr_a.host=hosts.id AND hosts.zone=zones.id " .
+  $sqlstr = "SELECT a_entries.ip,COUNT(*) FROM a_entries,hosts,zones " .
+	    "WHERE a_entries.host=hosts.id AND hosts.zone=zones.id " .
 	    "  AND zones.server=$serverid " .
-	    "GROUP BY rr_a.ip " .
+	    "GROUP BY a_entries.ip " .
 	    "HAVING COUNT(*) >1;";
   $res = db_exec($sqlstr);
 

@@ -1140,7 +1140,7 @@ sub hosts_menu() {
 
     undef @q;
     $fields="a.id,a.type,a.domain,a.ether,a.info";
-    $sql1="SELECT b.ip,'',$fields FROM hosts a,rr_a b " .
+    $sql1="SELECT b.ip,'',$fields FROM hosts a,a_entries b " .
 	  "WHERE a.zone=$zoneid AND b.host=a.id $typerule $typerule2 " .
 	  " $netrule $domainrule $extrarule ";
     $sql2="SELECT '0.0.0.0'::cidr,'',$fields FROM hosts a " .
@@ -1537,7 +1537,7 @@ sub nets_menu() {
       return;
     }
 
-    db_query("SELECT a.ip FROM rr_a a, hosts h, zones z " .
+    db_query("SELECT a.ip FROM a_entries a, hosts h, zones z " .
 	     "WHERE z.server=$serverid AND h.zone=z.id AND a.host=h.id " .
 	     " AND a.ip << '$net{net}' ORDER BY a.ip;",\@q);
     $net{inuse}=@q;

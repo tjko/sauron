@@ -3,7 +3,7 @@
  * $Id$
  */
 
-DROP TABLE rr_a;
+DROP TABLE a_entries;
 DROP TABLE mx_templates;
 DROP TABLE wks_templates;
 DROP TABLE hosts;
@@ -31,7 +31,7 @@ DROP TABLE root_servers;
 DROP TABLE pokemon;
 
 
-DROP SEQUENCE rr_a_id_seq;
+DROP SEQUENCE a_entries_id_seq;
 DROP SEQUENCE mx_templates_id_seq;
 DROP SEQUENCE wks_templates_id_seq;
 DROP SEQUENCE hosts_id_seq;

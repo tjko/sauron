@@ -343,8 +343,8 @@ sub make_bind() {
 
       # zone A records
       undef @q;
-      db_query("SELECT ip,ttl FROM hosts,rr_a,zones " .
-	       "WHERE hosts.zone=zones.id AND rr_a.host=hosts.id AND " .
+      db_query("SELECT ip,ttl FROM hosts,a_entries,zones " .
+	       "WHERE hosts.zone=zones.id AND a_entries.host=hosts.id AND " .
 	       "zones.id=$zoneid AND domain='\@';",\@q);
       if (@q > 0) {
 	print ZONEFILE ";\n; zone A record(s)\n;\n";
@@ -393,7 +393,7 @@ sub make_bind() {
 
       undef @q;
       db_query("SELECT a.ip,h.domain,h.ttl,z.name " .
-	       "FROM hosts h,zones z,rr_a a " .
+	       "FROM hosts h,zones z,a_entries a " .
 	       "WHERE z.server=$serverid AND h.zone=z.id AND a.host=h.id " .
 	       " AND a.reverse=true AND a.ip << '$zone{reversenet}' " .
 	       "ORDER BY ip;",\@q);
@@ -419,8 +419,8 @@ sub make_bind() {
 
       # glue records needed for delgated zones
       undef @q;
-      db_query("SELECT hosts.domain,rr_a.ip,hosts.ttl FROM hosts,zones,rr_a " .
-	       "WHERE hosts.zone=zones.id AND hosts.id=rr_a.host " .
+      db_query("SELECT hosts.domain,a_entries.ip,hosts.ttl FROM hosts,zones,a_entries " .
+	       "WHERE hosts.zone=zones.id AND hosts.id=a_entries.host " .
 	       "AND zones.id=$zoneid AND hosts.type=6 " .
 	       "ORDER BY hosts.domain;",\@q);
       if (@q > 0) {
@@ -591,11 +591,11 @@ sub make_bind() {
       undef %dnames;
       db_query("SELECT hosts.domain,ip,hinfo_hw,hinfo_sw,ttl,huser,dept, " .
 	       "location,info " .
-	       "FROM hosts,rr_a " .
-	       "WHERE hosts.zone=zones.id AND rr_a.host=hosts.id " .
+	       "FROM hosts,a_entries " .
+	       "WHERE hosts.zone=zones.id AND a_entries.host=hosts.id " .
 	       "AND zones.id=$zoneid AND hosts.type=1 " .
-	       "AND rr_a.forward=true AND hosts.domain <> '\@' " .
-	       "ORDER BY rr_a.ip,hosts.domain;",\@q);
+	       "AND a_entries.forward=true AND hosts.domain <> '\@' " .
+	       "ORDER BY a_entries.ip,hosts.domain;",\@q);
       if (@q > 0) {
 	print ZONEFILE ";\n;\n; A records\n;\n";
 	for $i (0 .. $#q) {
@@ -654,11 +654,11 @@ sub make_bind() {
 
       # aliases (A records)
       undef @q;
-      db_query("SELECT a.domain,b.domain,rr_a.ip,a.ttl " .
-	       "FROM hosts a, hosts b,zones z, arec_entries r,rr_a " .
+      db_query("SELECT a.domain,b.domain,a_entries.ip,a.ttl " .
+	       "FROM hosts a, hosts b,zones z, arec_entries r,a_entries " .
 	       "WHERE z.id=$zoneid AND a.type=7 AND a.zone=z.id " .
-	       " AND r.host=a.id AND b.id=r.arec AND rr_a.host=b.id " .
-	       " AND rr_a.forward=true " .
+	       " AND r.host=a.id AND b.id=r.arec AND a_entries.host=b.id " .
+	       " AND a_entries.forward=true " .
 	       "ORDER BY a.domain;",\@q);
       if (@q > 0) {
 	print ZONEFILE ";\n;\n; In-zone aliases (A records)\n;\n";
@@ -736,7 +736,7 @@ sub make_dhcp() {
 
   # ether hash
   undef @q;
-  db_query("SELECT h.ether,a.ip FROM hosts h,zones z,rr_a a " .
+  db_query("SELECT h.ether,a.ip FROM hosts h,zones z,a_entries a " .
 	   "WHERE z.server=$serverid AND h.zone=z.id AND a.host=h.id " .
 	   " AND h.ether NOTNULL;",\@q);
   for $i (0..$#q) {
@@ -795,8 +795,8 @@ sub make_dhcp() {
       push @q, [$net,'',''];
     } else {
       undef @qq;
-      db_query("SELECT ip,router FROM hosts,zones,rr_a " .
-	       "WHERE hosts.zone=zones.id AND rr_a.host=hosts.id " .
+      db_query("SELECT ip,router FROM hosts,zones,a_entries " .
+	       "WHERE hosts.zone=zones.id AND a_entries.host=hosts.id " .
 	       "AND zones.server=$serverid AND router>0 " .
 	       "AND ip << '$net' " .
 	       "ORDER BY ip,router;",\@qq);
@@ -850,7 +850,7 @@ sub make_dhcp() {
   else {
     undef @ghosts;
     db_query("SELECT h.grp,h.ether,a.ip,h.domain,z.name,h.id " .
-	     "FROM hosts h, zones z, rr_a a " .
+	     "FROM hosts h, zones z, a_entries a " .
 	     "WHERE h.zone=z.id AND a.host=h.id AND h.type=1 " .
 	     "AND h.ether NOTNULL AND z.server=$serverid AND a.forward=true " .
 	     "AND h.grp>-1 " .
@@ -917,7 +917,7 @@ sub make_dhcp() {
   print DHCPFILE "\n# hosts not in any group\n\n";
   undef @ghosts;
   db_query("SELECT h.grp,h.ether,a.ip,h.domain,z.name,h.id " .
-	   "FROM hosts h, zones z, rr_a a " .
+	   "FROM hosts h, zones z, a_entries a " .
 	   "WHERE h.zone=z.id AND a.host=h.id AND h.type=1 " .
 	   "AND h.ether NOTNULL AND z.server=$serverid AND a.forward=true " .
 	   "AND h.grp<0 " .

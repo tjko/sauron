@@ -43,7 +43,7 @@ sub auto_address($$) {
   return 'Invalid auto address range' if ($s >= $e);
 
   undef @q;
-  db_query("SELECT a.ip FROM hosts h, rr_a a, zones z " .
+  db_query("SELECT a.ip FROM hosts h, a_entries a, zones z " .
 	   "WHERE z.server=$serverid AND h.zone=z.id AND a.host=h.id " .
 	   " AND '$net' >> a.ip ORDER BY a.ip;",\@q);
   for $i (0..$#q) {
@@ -66,7 +66,7 @@ sub ip_in_use($$) {
 
   return -1 unless ($serverid > 0);
   return -2 unless (is_cidr($ip));
-  db_query("SELECT a.id FROM hosts h, rr_a a, zones z " .
+  db_query("SELECT a.id FROM hosts h, a_entries a, zones z " .
 	   "WHERE z.server=$serverid AND h.zone=z.id AND a.host=h.id " .
 	   " AND a.ip = '$ip';",\@q);
   return 1 if ($q[0][0] > 0);
@@ -464,9 +464,9 @@ sub delete_server($) {
   if ($res < 0) { db_rollback(); return -18; }
 
 
-  # rr_a
-  $res=db_exec("DELETE FROM rr_a WHERE id IN ( " .
-	       "SELECT a.id FROM rr_a a, zones z, hosts h " .
+  # a_entries
+  $res=db_exec("DELETE FROM a_entries WHERE id IN ( " .
+	       "SELECT a.id FROM a_entries a, zones z, hosts h " .
 	       "WHERE z.server=$id AND h.zone=z.id AND a.host=h.id);");
   if ($res < 0) { db_rollback(); return -18; }
 
@@ -699,10 +699,10 @@ sub delete_zone($) {
 	       "WHERE h.zone=$id AND a.type=2 AND a.ref=h.id);");
   if ($res < 0) { db_rollback(); return -12; }
 
-  # rr_a
+  # a_entries
   print "<BR>Deleting A entries...\n";
-  $res=db_exec("DELETE FROM rr_a WHERE id IN ( " .
-	       "SELECT a.id FROM rr_a a, hosts h " .
+  $res=db_exec("DELETE FROM a_entries WHERE id IN ( " .
+	       "SELECT a.id FROM a_entries a, hosts h " .
 	       "WHERE h.zone=$id AND a.host=h.id);");
   if ($res < 0) { db_rollback(); return -13; }
 
@@ -815,11 +815,11 @@ sub copy_zone($$$$) {
 	   "WHERE a.zone=$id AND b.zone=$newid AND a.domain=b.domain;",\@hids);
   print "<br>hids = " . $#hids;
 
-  # rr_a
+  # a_entries
   print "<BR>Copying A records...";
-  $res=copy_records('rr_a','rr_a','id','host',\@hids,
+  $res=copy_records('a_entries','a_entries','id','host',\@hids,
      'ip,reverse,forward,comment',
-     "SELECT a.id FROM rr_a a,hosts h WHERE a.host=h.id AND h.zone=$id");
+     "SELECT a.id FROM a_entries a,hosts h WHERE a.host=h.id AND h.zone=$id");
   if ($res < 0) { db_rollback(); return -12; }
 
   # dhcp_entries
@@ -910,7 +910,7 @@ sub get_host($$) {
 
   return -1 if ($res < 0);
 
-  get_array_field("rr_a",4,"id,ip,reverse,forward",
+  get_array_field("a_entries",4,"id,ip,reverse,forward",
 		  "IP,reverse,forward,Comments","host=$id ORDER BY ip",
 		  $rec,'ip');
 
@@ -1018,7 +1018,7 @@ sub update_host($) {
 			'printer_l',$rec,"2,$id");
   if ($r < 0) { db_rollback(); return -17; }
 
-  $r=update_array_field("rr_a",4,"ip,reverse,forward,host",
+  $r=update_array_field("a_entries",4,"ip,reverse,forward,host",
 			'ip',$rec,"$id");
   if ($r < 0) { db_rollback(); return -20; }
 
@@ -1063,8 +1063,8 @@ sub delete_host($) {
   $res=db_exec("DELETE FROM txt_entries WHERE type=2 AND ref=$id;");
   if ($res < 0) { db_rollback(); return -6; }
 
-  # rr_a
-  $res=db_exec("DELETE FROM rr_a WHERE host=$id;");
+  # a_entries
+  $res=db_exec("DELETE FROM a_entries WHERE host=$id;");
   if ($res < 0) { db_rollback(); return -7; }
 
   # arec_entries
@@ -1099,7 +1099,7 @@ sub add_host($) {
   # IPs
   for $i (0..$#{$rec->{ip}}) {
     #print "<br>",$rec->{ip}[$i][0];
-    $res=db_exec("INSERT INTO rr_a (host,ip,reverse,forward) " .
+    $res=db_exec("INSERT INTO a_entries (host,ip,reverse,forward) " .
        "VALUES($id,'$rec->{ip}[$i][0]','$rec->{ip}[$i][1]'," .
        " '$rec->{ip}[$i][2]');");
     if ($res < 0) { db_rollback(); return -2; }
