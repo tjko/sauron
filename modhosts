@@ -40,7 +40,8 @@ sub fatal($) {
 
 $result = GetOptions("help|h","cidr=s","name=s","move=s","delete",
 		     "info=s","rename=s","commit","excludeip=s",
-		     "excludename=s","type=s");
+		     "excludename=s","type=s","ether=s","etherempty",
+		     "setedate=s","verbose");
 
 if ($opt_help || @ARGV < 2) {
   print "syntax: $0 <server> <zone> [options]\n\n",
@@ -49,9 +50,12 @@ if ($opt_help || @ARGV < 2) {
 	"\t--name=<regexp>\t\tselect hostnames matching the regexp\n",
 	"\t--info=<regexp>\t\tselect host with matching info\n\n",
 	"\t--type=<type>\t\tselect only hosts of this type\n",
+	"\t--ether=<regexp>\t\tselect hosts with matching MAC\n",
+	"\t--etherempty\t\tselect hosts without a MAC\n",
 	"\t--delete\t\tdelete matching hosts\n",
 	"\t--move=<CIDR>,<IP>\tmove hosts to given net starting from IP\n",
 	"\t--rename=<regexp>\trename hosts with given substitution 'regexp'\n",
+	"\t--setedate=<days>\tset host expiration date to today+days\n",
 	"\n",
 	"\t--commit\t\tcommit changes (w/o this NO changes are made)\n",
 	"\n";
@@ -65,6 +69,7 @@ set_muser($user);
 
 $server=$ARGV[0];
 $zone=$ARGV[1];
+$verbose=($opt_verbose?1:0);
 
 $serverid=get_server_id($server);
 fatal("cannot find server '$server'") unless ($serverid > 0);
@@ -92,6 +97,20 @@ if ($opt_cidr) {
   print "CIDR criteria: $opt_cidr\n";
 }
 
+if ($opt_ether) {
+    print "ETHER: criteria: $opt_ether\n";
+    $ether= " AND h.ether ~ '$opt_ether' ";
+}
+if ($opt_etherempty) {
+    $ether= " AND (h.ether = '' OR h.ether = NULL) ";
+}
+
+if ($opt_setedate) {
+    fatal("invalid arguments for setedate option: $opt_setedate")
+	unless ($opt_setedate =~ /^\d+$/);
+    $new_edate = time() + int($opt_setedate * 86400);
+    print "SET expiration date to: ".localtime($new_edate)." ($new_edate)\n";
+}
 
 if ($opt_type) {
   $opt_type=lc($opt_type);
@@ -147,8 +166,8 @@ if ($opt_excludeip) {
 }
 
 
-$sql="SELECT h.id,h.domain,h.type $cidr_f FROM hosts h $cidr_t " .
-     "WHERE h.zone=$zoneid $cidr_r $cidr $name $info $type " .
+$sql="SELECT h.id,h.domain,h.type,h.ether $cidr_f FROM hosts h $cidr_t " .
+     "WHERE h.zone=$zoneid $cidr_r $cidr $name $ether $info $type " .
      "ORDER BY h.domain;";
 
 print "$sql\n" if ($opt_verbose);
@@ -173,12 +192,12 @@ db_begin();
 db_ignore_begin_and_commit(1);
 
 for $i (0..$#q) {
-  printf "%-6d %-40s %2d %s %d\n", $q[$i][0],$q[$i][1],$q[$i][2],
+  printf "%-6d %-30s %2d %12s %s\n", $q[$i][0],$q[$i][1],$q[$i][2],
                                 $q[$i][3],$q[$i][4];
   if ($opt_excludeip) {
     $ip_skip=0;
     for $tmpip (@exclude_ips) {
-      if ($tmpip eq $q[$i][3]) {
+      if ($tmpip eq $q[$i][4]) {
 	print "Skipping excluded IP: $tmpip\n";
 	$ip_skip=1;
       }
@@ -209,12 +228,12 @@ for $i (0..$#q) {
     print "\tDelete: $q[$i][1]\n";
     fatal("cannot delete host: $q[$i][1]") if (delete_host($id));
   }
-  elsif ($opt_rename || $opt_move) {
+  elsif ($opt_rename || $opt_move || $opt_setedate) {
     $host{domain}=$domain;
     if ($opt_move) {
       for $j (1..$#{$host{ip}}) {
 	#print "IP: $host{ip}[$j][0] $host{ip}[$j][1]\n";
-	if ($host{ip}[$j][0] eq $q[$i][4]) {
+	if ($host{ip}[$j][0] eq $q[$i][5]) {
 	  print "\tIP MATCH: $host{ip}[$j][0] $host{ip}[$j][1]\n";
 	  $host{ip}[$j][1]=$new_ip;
 	  $host{ip}[$j][4]=1;
@@ -222,7 +241,10 @@ for $i (0..$#q) {
       }
     }
 
-    fatal("cannot update host: $q[$i][1]") if (update_host(\%host));
+    $host{expiration}=$new_edate if ($opt_setedate);
+
+    fatal("cannot update host: $q[$i][1]\n".db_errormsg()."\n") 
+	if (update_host(\%host));
   }
 
 }
