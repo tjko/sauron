@@ -1628,7 +1628,8 @@ sub print_subnets() {
 	    #print "foo: $snet $dips[$l][1]\n";
 	    if ($s==0) { $s=1; $b=$dips[$l][1]; }
 	    elsif ($s==1 && (ip2int($dips[$l][1]) > ip2int($last_ip)+1) ) {
-		$e=$last_ip; push @{$lst}, "range $b $e;";
+		$e=$last_ip; 
+		push @{$lst}, "range " . ($b eq $e ? "$b" : "$b $e") .";";
 		print STDERR "dynamic range $b - $e ($dpools[$k][1])\n"
 		    if ($opt_verbose);
 		$b=$dips[$l][1];
@@ -1636,7 +1637,8 @@ sub print_subnets() {
 	    $last_ip=$dips[$l][1];
 	  } else {
 	    if ($s==1) { 
-	      $e=$last_ip; push @{$lst}, "range $b $e;";
+	      $e=$last_ip; 
+	      push @{$lst}, "range " . ($b eq $e ? "$b" : "$b $e") .";";
 	      print STDERR "dynamic range $b - $e ($dpools[$k][1])\n"
 		if ($opt_verbose);
 	    }
@@ -1644,7 +1646,8 @@ sub print_subnets() {
 	  }
 	}
 	if ($s==1) { 
-	  $e=$last_ip; push @{$lst}, "range $b $e;"; 
+	  $e=$last_ip; 
+	  push @{$lst}, "range " . ($b eq $e ? "$b" : "$b $e") .";";
 	  print STDERR "dynamic range $b - $e ($dpools[$k][1])\n" 
 	    if ($opt_verbose);
 	}
