@@ -87,7 +87,7 @@ PROGS = sauron addgroup adduser deluser modhosts \
 	import import-ethers import-jyu import-roots \
 	last moduser runsql status update-dhcp-info \
 	export-networks generatehosts addhosts check-pending \
-	expire-hosts
+	expire-hosts createtables
 
 MODULES = Sauron/Util.pm Sauron/DB.pm Sauron/BackEnd.pm Sauron/CGIutil.pm \
 	  Sauron/UtilZone.pm
@@ -137,8 +137,7 @@ drop_tables:
 
 make_tables: 
 	@echo "Creating tables..."
-	$(RUNSQL) $(SQL_TABLES) sql/copy_tables.sql \
-				sql/misc.sql sql/DEFAULTS.sql
+	./createtables
 
 init_tables:
 	@echo "Inserting ether infos..."
