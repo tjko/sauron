@@ -13,6 +13,10 @@ CREATE TABLE groups (
 					-->servers.id */
 
        name	    TEXT NOT NULL CHECK(name <> ''), /* group name */
+       type	    INT NOT NULL, /* group type:
+				     1 = normal group,
+				     2 = dynamic address pool,
+				     3 = DHCP client class  */
        comment	    TEXT,
 
        CONSTRAINT   groups_key UNIQUE(name,server)

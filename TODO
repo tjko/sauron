@@ -1,8 +1,5 @@
 
 general:
-	- add new "info" fields to hosts table (asset ID)
-	- implement/add expiration_date field to hosts table records
-	- change info field types to VARCHAR(n) 
 	- test whether changing TEXT fiels in hosts table to appropriate
 	  CHAR(n) fields would improve speed...
 	- add 'install' to Makefile.in; directory generation, symlink
@@ -11,7 +8,7 @@ general:
 	  number of host entries, and to import interactively hosts
 	  from text files in standard zonefile format...
 	- add real VLAN support (vlan table)
-	- clear ether_alias ptrs from other hosts when deleting a host !!!
+	- IPv6 support
 
 import:
 	- remove unneccessary (?) quoting (\"...) from dhcp (and other) records

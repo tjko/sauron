@@ -12,10 +12,12 @@ CREATE TABLE nets (
        server	   INT4 NOT NULL, /* ptr to a servers table record
 					-->servers.id */
 
-       name	   TEXT, /* name of net/subnet */
+       netname     TEXT, /* (sub)net name */				
+       name	   TEXT, /* descriptive name of the (sub)net */
        net	   CIDR NOT NULL, /* net CIDR */
        subnet      BOOL DEFAULT true, /* subnet flag */
-       vlan	   CHAR(15), /* VLAN */
+       vlan	   INT4 DEFAULT -1, /* ptr to vlans table record
+                                  -->vlans.id */
 
        rp_mbox	   TEXT DEFAULT '.', /* RP mbox */
        rp_txt	   TEXT DEFAULT '.', /* RP txt */

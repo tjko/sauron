@@ -1111,6 +1111,7 @@ sub update_host($) {
   delete $rec->{dhcp_date_str};
   $rec->{mdate}=time;
   $rec->{muser}=$muser;
+  $rec->{domain}=lc($rec->{domain});
 
   db_begin();
   $r=update_record('hosts',$rec);
@@ -1220,6 +1221,7 @@ sub add_host($) {
   }
   $rec->{cuser}=$muser;
   $rec->{cdate}=time;
+  $rec->{domain}=lc($rec->{domain});
   $res=add_record('hosts',$rec);
   if ($res < 0) { db_rollback(); return -1; }
   $id=$res;
@@ -1581,7 +1583,7 @@ sub get_group($$) {
   my ($id,$rec) = @_;
 
   return -100 if (get_record("groups",
-			     "name,comment,cdate,cuser,mdate,muser",
+			     "name,comment,cdate,cuser,mdate,muser,type",
 			     $id,$rec,"id"));
 
   get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comments",
@@ -1724,8 +1726,8 @@ sub get_net($$) {
 
   return -100 if (get_record("nets",
                       "server,name,net,subnet,rp_mbox,rp_txt,no_dhcp,comment,".
-		      "range_start,range_end,vlan,cdate,cuser,mdate,muser",
-		      $id,$rec,"id"));
+		      "range_start,range_end,vlan,cdate,cuser,mdate,muser,".
+                      "netname", $id,$rec,"id"));
 
   get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comment",
 		  "type=4 AND ref=$id ORDER BY dhcp",$rec,'dhcp_l');
@@ -1787,6 +1789,83 @@ sub delete_net($) {
   if ($res < 0) { db_rollback(); return -2; }
 
   return db_commit();
+}
+
+############################################################################
+# vlan functions
+
+sub get_vlan($$) {
+  my ($id,$rec) = @_;
+
+  return -100 if (get_record("vlans",
+                      "server,name,description,comment,".
+		      "cdate,cuser,mdate,muser", $id,$rec,"id"));
+
+  $rec->{cdate_str}=($rec->{cdate} > 0 ?
+		     localtime($rec->{cdate}).' by '.$rec->{cuser} : 'UNKOWN');
+  $rec->{mdate_str}=($rec->{mdate} > 0 ?
+		     localtime($rec->{mdate}).' by '.$rec->{muser} : '');
+  return 0;
+}
+
+
+sub update_vlan($) {
+  my($rec) = @_;
+  my($r,$id);
+
+  delete $rec->{mdate_str};
+  delete $rec->{cdate_str};
+  delete $rec->{cdate};
+  delete $rec->{cuser};
+  $rec->{mdate}=time;
+  $rec->{muser}=$muser;
+
+  db_begin();
+  $r=update_record('vlans',$rec);
+  if ($r < 0) { db_rollback(); return $r; }
+  $id=$rec->{id};
+
+  return db_commit();
+}
+
+sub add_vlan($) {
+  my($rec) = @_;
+
+  $rec->{cdate}=time;
+  $rec->{cuser}=$muser;
+  return add_record('vlans',$rec);
+}
+
+sub delete_vlan($) {
+  my($id) = @_;
+  my($res);
+
+  return -100 unless ($id > 0);
+
+  db_begin();
+
+  $res=db_exec("DELETE FROM vlans WHERE id=$id;");
+  if ($res < 0) { db_rollback(); return -2; }
+
+  return db_commit();
+}
+
+sub get_vlan_list($$$) {
+  my($serverid,$rec,$lst) = @_;
+  my(@q,$i);
+
+  undef @{$lst};
+  push @{$lst},  -1;
+  undef %{$rec};
+  $$rec{-1}='None';
+  return if ($serverid < 1);
+
+  db_query("SELECT id,name FROM vlans " .
+	   "WHERE server=$serverid ORDER BY name;",\@q);
+  for $i (0..$#q) {
+    push @{$lst}, $q[$i][0];
+    $$rec{$q[$i][0]}=$q[$i][1];
+  }
 }
 
 

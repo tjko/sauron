@@ -1015,10 +1015,11 @@ sub make_dhcp() {
     for $i (0..$#subnets) {
       $vlanhash{$subnets[$i][3]}++;
     }
+    get_vlan_list($serverid,\%vlan_list_hash,\@vlan_list_lst);
     foreach $vlan (sort keys %vlanhash) {
-      $netname=$vlan;
+      $netname=$vlan_list_hash{$vlan};
       $netname =~ s/\s//g;
-      $netname = 'CHAOS' unless ($netname);
+      $netname = 'CHAOS' if ($vlan < 1 || $netname eq '');
       print DHCPFILE "shared-network \"$netname\" {\n";
       undef @q;
       for $i (0..$#subnets) {

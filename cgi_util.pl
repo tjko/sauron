@@ -87,6 +87,10 @@ sub form_check_field($$$) {
       unless ($value =~ /^([A-Z0-9-\+\/]+)$/);
   } elsif ($type eq 'textarea') {
     return '';
+  } elsif ($type eq 'texthandle') {
+    return 'Valid handle string required!'
+      unless ($value =~ /^[a-zA-Z0-9_\-]+$/);
+    return '';
   } elsif ($type eq 'expiration') {
     return 'Invalid expiration date specification'
       unless ($value =~ /^(\d{1,2}[\-\.\/]\d{1,2}[\-\.\/]\d{4}|\+\d+[dmy])$/);
@@ -145,10 +149,13 @@ sub form_check_form($$$) {
       next unless ($val =~ /^($e)$/);
     }
 
+    $val=param($p);
+    $val="\L$val" if ($rec->{conv} eq 'L');
+    $val="\U$val" if ($rec->{conv} eq 'U');
+
     #print "<br>check $p,$type";
 
     if ($type == 1) {
-      $val=param($p);
       if ($rec->{type} eq 'mac') {
 	$val="\U$val";
 	$val =~ s/[\s:-]//g;
