@@ -201,7 +201,7 @@ for($i=0; $i <= $#allow_transfer; $i+=1) {
   }
 }
 
-$res = db_exec(
+$res = db_exec(        # VOI POISTAA!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 	    "UPDATE servers SET allow_transfer='{$arr}' WHERE id=$serverid;");
 
 die ("cannot update allow_transfer column for record id=$serverid") 
@@ -292,7 +292,7 @@ for ($i=0; $i <= $#zones; $i+=1) {
       die("cannot insert master IPs id=$zoneid!") if (db_exec($sqlstr)<0);
     }
 
-    $masters_list=db_encode_list_str($masters{$zones[$i]});
+    $masters_list=db_encode_list_str($masters{$zones[$i]}); # voi POISTAA!!!!
     $sqlstr="UPDATE zones SET masters=$masters_list WHERE id=$zoneid;";
     die("cannot update zone record id=$zoneid!") if (db_exec($sqlstr)<0);
     next;
@@ -320,7 +320,7 @@ for ($i=0; $i <= $#zones; $i+=1) {
   $mailbox = $soa[1];
   $hostmaster = $mailbox if (! $hostmaster );
   $primaryservername = $soa[0] if ( ! $primaryservername );
-  $nslist = db_build_list_str($rec->{NS});
+  $nslist = db_build_list_str($rec->{NS}); # voi POISTA!!!!!!!
   foreach $rtmp (@{$rec->{NS}}) {
     $sqlstr="INSERT INTO ns_entries (type,ref,ns) ".
       "VALUES(1,$zoneid,'$rtmp');";
@@ -330,14 +330,14 @@ for ($i=0; $i <= $#zones; $i+=1) {
     $mxlist='';
     $txtlist='';
   } else {
-    $mxlist = db_build_list_str($rec->{MX});
+    $mxlist = db_build_list_str($rec->{MX}); # voi POISTAA!!!!!!
     foreach $rtmp (@{$rec->{MX}}) {
       next unless $rtmp =~ /^\s*(\d+)\s+(\S+)\s*$/;
       $sqlstr="INSERT INTO mx_entries (type,ref,pri,mx) ".
 	"VALUES(1,$zoneid,$1,'$2');";
       die("cannot insert MX entries id=$zoneid!") if (db_exec($sqlstr)<0);
     }
-    $txtlist = db_build_list_str($rec->{TXT});
+    $txtlist = db_build_list_str($rec->{TXT}); # voi POISTA!!!!!!!
     foreach $rtmp (@{$rec->{TXT}}) {
       $sqlstr="INSERT INTO txt_entries (type,ref,txt) ".
 	"VALUES(1,$zoneid,'$rtmp');";
@@ -615,7 +615,8 @@ for ($i=0; $i <= $#zones; $i+=1) {
     
     if ($hosttype == 2) { 
       if ($host =~ /in-addr\.arpa/) {
-	print STDERR "\nIGNORING reverse delegation $host in zone $zone\n";
+	print STDERR "\nIGNORING reverse delegation $host in zone $zone \n",
+                     " (reverse mapping stuff should be in in-arpa zone)\n";
 	next;
       }
 
@@ -670,7 +671,7 @@ for ($i=0; $i <= $#zones; $i+=1) {
       $rec=$zonedata{$dom};
       $rec->{ID}=$id;
     } else {
-      die("cannot find host '$dom' from hash!");
+      die("cannot find host '$dom' from hash! (unexpected error)");
     }
   }
   
@@ -759,7 +760,75 @@ for ($i=0; $i <= $#zones; $i+=1) {
     print STDERR "|";
   }
   die("Cannot commit A record inserts!") if (db_commit() < 0);
-  
+
+
+  # add MX & WKS template pointers to host entries
+  db_begin();
+  $j=0;
+  foreach $host (keys %zonedata) {
+    $rec = $zonedata{$host};
+
+    $mx=$mxhash{db_build_list_str($rec->{MX})};
+    $wks=$wkshash{db_build_list_str($rec->{WKS})};
+    $mx=-1 if (! $mx);
+    $wks=-1 if (! $wks);
+    $tmpid=$rec->{ID};
+
+    if ($mx > 0  || $wks > 1) {
+      if ($j>100) {
+	print STDERR "ö";
+	$j=0;
+      }
+      die("invalid id for record '$host'!") if ($tmpid < 1);
+      $res=db_exec("UPDATE hosts SET mx=$mx,wks=$wks WHERE id=$tmpid;");
+      $j++;
+    }
+  }  
+  die("Cannot commit MX & WKS tempate pointer updates!") if (db_commit() < 0);
+
+
+  # add NS & TXT entries to ns_entries & txt_entries tables accordingly
+  db_begin();
+  $j=0;
+  foreach $host (keys %zonedata) {
+    $rec = $zonedata{$host};
+
+    $mx=$mxhash{db_build_list_str($rec->{MX})};
+    $wks=$wkshash{db_build_list_str($rec->{WKS})};
+    $mx=-1 if (! $mx);
+    $wks=-1 if (! $wks);
+    $tmpid=$rec->{ID};
+
+    if (@{$rec->{NS}} > 0) {
+      $sqlstr='';
+      foreach $rtmp (@{$rec->{NS}}) {
+	$sqlstr .= "INSERT INTO ns_entries (type,ref,ns) " . 
+                   " VALUES(2,$tmpid,'$rtmp');\n";
+      }
+      $res=db_exec($sqlstr);
+      die("cannot insert entries for host in ns_entries!") 
+	if (db_exec($sqlstr)<0);
+      $j++;
+    }
+
+    if (@{$rec->{TXT}} > 0) {
+      $sqlstr='';
+      foreach $rtmp (@{$rec->{TXT}}) {
+	$sqlstr .= "INSERT INTO txt_entries (type,ref,txt) " . 
+                   " VALUES(2,$tmpid,'$rtmp');\n";
+      }
+      $res=db_exec($sqlstr);
+      die("cannot insert entries for host in txt_entries!") 
+	if (db_exec($sqlstr)<0);
+      $j++;
+    }
+
+    if ($j>100) {
+      print STDERR "å";
+      $j=0;
+    }
+  }  
+  die("Cannot commit MX & WKS tempate pointer updates!") if (db_commit() < 0);
   print "\n";
 
 
@@ -792,7 +861,9 @@ $res = db_exec("UPDATE servers SET hostmaster='$hostmaster'," .
 	       "hostname='$primaryservername' WHERE id=$serverid;");
 die("Cannot update server record!") if ($res < 0);
 
+print STDERR "Vacuuming..."
 db_vacuum();
+print STDERR "\n";
 exit;
 
 

@@ -33,6 +33,8 @@ CREATE TABLE servers (
 
        dhcp 	      TEXT[],
        comment	      TEXT
+	
+       // allow_transfer (cird_entries)
 ) INHERITS(pokemon);
 
 
@@ -68,6 +70,12 @@ CREATE TABLE zones ( // zone table; contains zones
        reversenet  CIDR,
        masters	   CIDR[], // used on slave zones
        parent	   INT4 DEFAULT -1,
+
+       // allow_update (cidr_entries)
+       // masters (cidr_entries)
+       // ns (ns_entries)
+       // mx (mx_entries)
+       // txt (txt_entries)
 
        CONSTRAINT  zones_key PRIMARY KEY (name,server)
 ) INHERITS(pokemon);
