@@ -36,8 +36,8 @@ do "$PROG_DIR/util.pl";
 do "$PROG_DIR/db.pl";
 do "$PROG_DIR/back_end.pl";
 
-error("invalid directory configuration") 
-  unless (-d $CGI_STATE_PATH && -w $CGI_STATE_PATH);
+#error("invalid directory configuration") 
+#  unless (-d $CGI_STATE_PATH && -w $CGI_STATE_PATH);
 
 
 %server_form = ( 
@@ -145,6 +145,8 @@ error("invalid directory configuration")
   {ftype=>4, tag=>'card_info', name=>'Card manufacturer', iff=>['type','1']},
   {ftype=>1, tag=>'info', name=>'Info', type=>'text', len=>50, empty=>1},
   {ftype=>0, name=>'Group selections'},
+  {ftype=>6, tag=>'mx', name=>'MX template', iff=>['type','1']},
+  {ftype=>7, tag=>'wks', name=>'WKS template', iff=>['type','1']},
   {ftype=>0, name=>'Host specific'},
   {ftype=>2, tag=>'ns_l', name=>'Name servers (NS)', type=>['text','text'], 
    fields=>2,
@@ -161,7 +163,7 @@ error("invalid directory configuration")
    len=>[40,15], empty=>[0,1], elabels=>['TXT','comment'], iff=>['type','1']}
 
  ],
- bgcolor=>'#bfee00',
+ bgcolor=>'#eeeebf',
  border=>'0',		
  width=>'100%',
  nwidth=>'30%',
@@ -1269,8 +1271,11 @@ sub form_magic($$$) {
 	}
 	param($p1."_count",$#{$a});
       }
+      elsif ($rec->{ftype} == 6 || $rec->{ftype} == 7) {
+	
+      }
       else { 
-	error("internal error (form_magic)");  
+	error("internal error (form_magic):". $rec->{ftype});  
       }
     }
   }   
@@ -1444,6 +1449,7 @@ sub display_form($$) {
             $rec->{name},"</TH>\n";
     } elsif ($rec->{ftype} == 1) {
       #print Tr,td([$rec->{name},$data->{$rec->{tag}}]);
+      $val='&nbsp;' if ($val eq '');
       print Tr,"<TD WIDTH=\"",$form->{nwidth},"\">",$rec->{name},"</TD><TD>",
             "$val</TD>\n";
     } elsif ($rec->{ftype} == 2) {
@@ -1473,11 +1479,48 @@ sub display_form($$) {
 	print Tr,td($ip),td($ipinfo),td($com);
       }
       print "</TABLE></TD>\n";
+    } elsif (($rec->{ftype} == 6) || ($rec->{ftype} ==7)) {
+      print "<TR>",td($rec->{name});
+      if ($val > 0) { 
+	print "<TD>";
+	print_mx_template($data->{mx_rec}) if ($rec->{ftype}==6);
+	print_wks_template($data->{wks_rec}) if ($rec->{ftype}==7);
+	print "</TD>";
+      } else { print td("Not selected"); }
+      print "</TR>";
     } else {
       error("internal error (display_form)");
     }
   }
 
+  print "</TABLE>";
+}
+
+sub print_mx_template($) {
+  my($rec)=@_;
+  my($i,$l);
+
+  return unless ($rec);
+  print "<TABLE WIDTH=\"95%\" BGCOLOR=\"#aaff00\"><TR><TD colspan=\"2\">",
+        $rec->{comment},"</TH></TR>";
+  $l=$rec->{mx_l};
+  for $i (1..$#{$l}) {
+    print "<TR>",td($$l[$i][1]),td($$l[$i][2]),"</TR>";
+  }
+  print "</TABLE>";
+}
+
+sub print_wks_template($) {
+  my($rec)=@_;
+  my($i,$l);
+
+  return unless ($rec);
+  print "<TABLE WIDTH=\"95%\" BGCOLOR=\"#aaff00\"><TR><TD colspan=\"2\">",
+        $rec->{comment},"</TH></TR>";
+  $l=$rec->{wks_l};
+  for $i (1..$#{$l}) {
+    print "<TR>",td($$l[$i][1]),td($$l[$i][2]),"</TR>";
+  }
   print "</TABLE>";
 }
 

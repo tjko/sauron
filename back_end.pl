@@ -341,7 +341,7 @@ sub update_zone($) {
 
 sub get_host($$) {
   my ($id,$rec) = @_;
-  my ($res,$t);
+  my ($res,$t,$wrec,$mrec);
  
   $res = get_record("hosts",
 	       "zone,type,domain,ttl,class,grp,alias,cname,cname_txt," .
@@ -373,6 +373,51 @@ sub get_host($$) {
     get_field("ether_info","info","ea='$t'","card_info",$rec);
   }
 
+  if ($rec->{wks} > 0) {
+    $wrec={};
+    print "<p>Error getting WKS template!\n" 
+      if (get_wks_template($rec->{wks},$wrec));
+    $rec->{wks_rec}=$wrec;
+  }
+
+  if ($rec->{mx} > 0) {
+    $mrec={};
+    print "<p>Error getting MX template!\n"
+      if (get_mx_template($rec->{mx},$mrec));
+    $rec->{mx_rec}=$mrec;
+    #print p,$rec->{mx}," rec=",$mrec->{comment};
+  }
+
+  return 0;
+}
+
+
+############################################################################
+# MX template functions
+
+sub get_mx_template($$) {
+  my ($id,$rec) = @_;
+
+  return -100 if (get_record("mx_templates","comment",$id,$rec,"id"));
+
+  get_array_field("mx_entries",4,"id,pri,mx,comment","Priority,MX,Comment",
+		  "type=3 AND ref=$id ORDER BY pri,mx",$rec,'mx_l');
+  
+  return 0;
+}
+
+
+############################################################################
+# WKS template functions
+
+sub get_wks_template($$) {
+  my ($id,$rec) = @_;
+
+  return -100 if (get_record("wks_templates","comment",$id,$rec,"id"));
+  
+  get_array_field("wks_entries",4,"id,proto,services,comment",
+		  "Proto,Services,Comment",
+		  "type=2 AND ref=$id ORDER BY proto,services",$rec,'wks_l');
   return 0;
 }
 
