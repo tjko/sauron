@@ -202,7 +202,11 @@ if ($modgroup) {
   fatal("Cannot find user '$opt_user' from users table!") if (@q < 1);
 
   $status=($pwd=~/^LOCKED/?"LOCKED!":"valid");
-  $status="Invalid password" unless $pwd =~ /^(LOCKED|MD5)/;
+    if ($pwd =~ /^(LOCKED|MD5|CRYPT|UNIX-MD5)/) {
+      $status="valid ($1)";
+    } else {
+      $status="Invalid password" ;
+    }
 
   $cdate_str=localtime($q[0][6]);
   $cuser_str=$q[0][7];
@@ -221,7 +225,7 @@ if ($modgroup) {
         "        longname: $longname\n",
         "       superuser: " ,($q[0][2] eq 't' ? 'Yes':'No'), "\n",
         "           group: $gidname (gid=$gid)\n",
-	"          status: $status\n",
+	"   passwd status: $status\n",
 	" account created: $cdate_str by $cuser_str\n",
 	"   last modified: $mdate_str by $muser_str\n\n";
 }
