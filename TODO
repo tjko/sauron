@@ -3,18 +3,20 @@
 
 import:
 
-	- fix transaction stuff
 	- add SRV stuff
 	- remove unneccessary (?) quoting (\"...) from dhcp (and other) records
 
+import-jyu:
+	- add AREC support
 
 sauron:
 
 	- better support for small reverse subnet delegations
 	- check MX generation for "MX only" records not using MX templates
-	- add support for WKS records belonging to host directly
-	- add support for MX records belonging to host directly
 	
 
 sauron.cgi:
+	- access control support
+	- fix timeout problem with hug zone/server deletes...
+
 

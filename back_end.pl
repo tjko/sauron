@@ -17,7 +17,7 @@ sub new_serial($) {
   }
 
   ($sec,$min,$hour,$day,$mon,$year) = localtime(time);
-  
+
   $s=sprintf("%04d%02d%02d%02d",1900+$year,1+$mon,$day,$hour);
   $s=$serial + 1 if ($s <= $serial);
 
@@ -36,7 +36,7 @@ sub auto_address($$) {
 
   db_query("SELECT net,range_start,range_end FROM nets " .
 	   "WHERE server=$serverid AND net = '$net';",\@q);
-  return 'No auto address range defined for this new ' 
+  return 'No auto address range defined for this new '
     unless (is_cidr($q[0][1]) && is_cidr($q[0][2]));
   $s=ip2int($q[0][1]);
   $e=ip2int($q[0][2]);
@@ -117,7 +117,7 @@ sub get_array_field($$$$$$$) {
 sub get_field($$$$$) {
   my($table,$field,$rule,$tag,$rec)=@_;
   my(@list);
-  
+
   db_query("SELECT $field FROM $table WHERE $rule;",\@list);
   if ($#list >= 0) {
     $rec->{$tag}=$list[0][0];
@@ -127,7 +127,7 @@ sub get_field($$$$$) {
 sub update_array_field($$$$$$) {
   my($table,$count,$fields,$keyname,$rec,$vals) = @_;
   my($list,$i,$j,$m,$str,$id,$flag,@f);
-  
+
   return -128 unless ($table);
   return -1 unless (ref($rec) eq 'HASH');
   return -2 unless ($$rec{'id'} > 0);
@@ -142,7 +142,7 @@ sub update_array_field($$$$$$) {
       $str="DELETE FROM $table WHERE id=$id;";
       print "<BR>DEBUG: delete record $id $str";
       return -5 if (db_exec($str) < 0);
-    } 
+    }
     elsif ($m == 1) { # update record
       $flag=0;
       $str="UPDATE $table SET ";
@@ -171,12 +171,12 @@ sub update_array_field($$$$$$) {
 
   return 0;
 }
-		       
+
 
 sub update_record($$) {
   my ($table,$rec) = @_;
   my ($key,$sqlstr,$id,$flag,$r);
-  
+
   return -128 unless ($table);
   return -129 unless (ref($rec) eq 'HASH');
   return -130 unless ($$rec{'id'} > 0);
@@ -190,7 +190,7 @@ sub update_record($$) {
 
     $sqlstr.="," if ($flag);
     $sqlstr.="$key=" . db_encode_str($$rec{$key});
-   
+
     $flag=1 if (! $flag);
   }
 
@@ -263,7 +263,7 @@ sub copy_records($$$$$$$) {
     return -1 unless ($newref);
     $data[$i][0]=$newref;
   }
-  
+
   return db_insert($ttable,"$reffield,$fields",\@data);
 }
 
@@ -1083,7 +1083,7 @@ sub get_wks_template($$) {
   my ($id,$rec) = @_;
 
   return -100 if (get_record("wks_templates","name,comment",$id,$rec,"id"));
-  
+
   get_array_field("wks_entries",4,"id,proto,services,comment",
 		  "Proto,Services,Comment",
 		  "type=2 AND ref=$id ORDER BY proto,services",$rec,'wks_l');
@@ -1147,6 +1147,61 @@ sub get_wks_template_list($$$) {
     push @{$lst}, $q[$i][0];
     $$rec{$q[$i][0]}=$q[$i][1];
   }
+}
+
+############################################################################
+# PRINTER class functions
+
+sub get_printer_class($$) {
+  my ($id,$rec) = @_;
+
+  return -100 if (get_record("printer_classes","name,comment",$id,$rec,"id"));
+
+  get_array_field("printer_entries",3,"id,printer,comment",
+		  "Printer,Comment",
+		  "type=3 AND ref=$id ORDER BY printer",$rec,'printer_l');
+  return 0;
+}
+
+sub update_printer_class($) {
+  my($rec) = @_;
+  my($r,$id);
+
+  db_begin();
+  $r=update_record('printer_classes',$rec);
+  if ($r < 0) { db_rollback(); return $r; }
+  $id=$rec->{id};
+
+  $r=update_array_field("printer_entries",3,"printer,comment,type,ref",
+			'printer_l',$rec,"3,$id");
+  if ($r < 0) { db_rollback(); return -10; }
+
+  return db_commit();
+}
+
+sub add_printer_class($) {
+  my($rec) = @_;
+
+  return add_record('printer_classes',$rec);
+}
+
+
+sub delete_printer_class($) {
+  my($id) = @_;
+  my($res);
+
+  return -100 unless ($id > 0);
+
+  db_begin();
+
+  # printer_entries
+  $res=db_exec("DELETE FROM printer_entries WHERE type=3 AND ref=$id;");
+  if ($res < 0) { db_rollback(); return -1; }
+
+  $res=db_exec("DELETE FROM printer_classes WHERE id=$id;");
+  if ($res < 0) { db_rollback(); return -2; }
+
+  return db_commit();
 }
 
 ############################################################################
@@ -1333,4 +1388,46 @@ sub delete_net($) {
   if ($res < 0) { db_rollback(); return -2; }
 
   return db_commit();
+}
+
+
+#######################################################
+
+
+sub get_who_list($$) {
+  my($lst,$timeout) = @_;
+  my(@q,$i,$login,$last,$idle,$t,$s,$m,$h,$midle,$ip,$login_s);
+
+  $t=time;
+
+  undef @q;
+  db_query("SELECT u.username,u.name,a.addr,a.login,a.last " .
+	   "FROM users u, utmp a " .
+	   "WHERE a.uid=u.id;",\@q);
+
+  for $i (0..$#q) {
+    $login=$q[$i][3];
+    $last=$q[$i][4];
+    $idle=$t-$last;
+    $s=$idle % 60;
+    $midle=($idle-$s) / 60;
+    $m=$midle % 60;
+    $h=($midle-$m) / 60;
+    $i= sprintf("%02d:%02d",$h,$m);
+    $i= sprintf(" %02ds ",$s) if ($m <= 0 && $h <= 0);
+    $ip = $q[$i][2];
+    $ip =~ s/\/32$//;
+    $login_s=localtime($login);
+    next unless ($idle < $timeout);
+    push @{$lst},[$q[$i][0],$q[$i][1],$ip,$i,$login_s];
+  }
+
+}
+
+
+sub cgi_disabled() {
+  my(@q);
+  db_query("SELECT value FROM settings WHERE key='cgi_disable';",\@q);
+  return ''if ($q[0][0] =~ /^\s*$/);
+  return $q[0][0];
 }

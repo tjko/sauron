@@ -2,7 +2,7 @@
 #
 # sauron.cgi
 # $Id$
-# дце
+# едц
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>, 2000,2001.
 # All Rights Reserved.
 #
@@ -15,7 +15,7 @@ $CGI::DISABLE_UPLOADS =1; # no uploads
 $CGI::POST_MAX = 100000; # max 100k posts
 
 #$|=1;
-$debug_mode = 1;
+$debug_mode = 0;
 
 if (-f "/etc/sauron/config") { 
   $conf_dir='/etc/sauron'; 
@@ -66,7 +66,7 @@ do "$PROG_DIR/back_end.pl";
  border=>'0',		
  width=>'100%',
  nwidth=>'30%',
- heading_bg=>'#ca4444'
+ heading_bg=>'#aaaaff'
 );
 
 %new_zone_form=(
@@ -135,7 +135,7 @@ do "$PROG_DIR/back_end.pl";
  border=>'0',		
  width=>'100%',
  nwidth=>'30%',
- heading_bg=>'#bfee00'
+ heading_bg=>'#aaaaff'
 );
 
 
@@ -145,7 +145,7 @@ do "$PROG_DIR/back_end.pl";
 
 
 %host_form = (
- data=>[	    
+ data=>[
   {ftype=>0, name=>'Host' },
   {ftype=>1, tag=>'domain', name=>'Hostname', type=>'domain', len=>30},
   {ftype=>5, tag=>'ip', name=>'IP address', iff=>['type','[16]']},
@@ -159,13 +159,17 @@ do "$PROG_DIR/back_end.pl";
   {ftype=>1, tag=>'ttl', name=>'TTL', type=>'int', len=>10},
   {ftype=>1, tag=>'info', name=>'Info', type=>'text', len=>50, empty=>1,
    iff=>['type','1']},
-  {ftype=>1, tag=>'location', name=>'Location', type=>'text', len=>25, 
+  {ftype=>1, tag=>'location', name=>'Location', type=>'text', len=>25,
    empty=>1, iff=>['type','1']},
-  {ftype=>1, tag=>'dept', name=>'Dept.', type=>'text', len=>25, empty=>1, 
+  {ftype=>1, tag=>'dept', name=>'Dept.', type=>'text', len=>25, empty=>1,
    iff=>['type','1']},
-  {ftype=>1, tag=>'huser', name=>'User', type=>'text', len=>25, empty=>1, 
+  {ftype=>1, tag=>'huser', name=>'User', type=>'text', len=>25, empty=>1,
    iff=>['type','1']},
   {ftype=>0, name=>'Equipment info', iff=>['type','1']},
+  {ftype=>1, tag=>'hinfo_hw', name=>'HINFO hardware', type=>'hinfo', len=>20,
+   iff=>['type','1']},
+  {ftype=>1, tag=>'hinfo_sw', name=>'HINFO sowftware', type=>'hinfo', len=>20,
+   iff=>['type','1']},
   {ftype=>1, tag=>'ether', name=>'Ethernet address', type=>'mac', len=>12,
    iff=>['type','1']},
   {ftype=>4, tag=>'card_info', name=>'Card manufacturer', iff=>['type','1']},
@@ -195,9 +199,50 @@ do "$PROG_DIR/back_end.pl";
   {ftype=>2, tag=>'printer_l', name=>'PRINTER entries', 
    type=>['text','text'], fields=>2,len=>[40,20], empty=>[0,1], 
    elabels=>['PRINTER','comment'], iff=>['type','[15]']},
-  {ftype=>0, name=>'Aliases', iff=>['type','1']},
+  {ftype=>0, name=>'Aliases', no_edit=>1, iff=>['type','1']},
   {ftype=>8, tag=>'alias_l', name=>'Aliases', fields=>2, 
    elabels=>['Alias','Info'], iff=>['type','1']}
+ ],
+ bgcolor=>'#eeeebf',
+ border=>'0',		
+ width=>'100%',
+ nwidth=>'30%',
+ heading_bg=>'#aaaaff'
+);
+
+%new_host_nets = (dummy=>'dummy');
+@new_host_netsl = ('dummy');
+
+%new_host_form = (
+ data=>[
+  {ftype=>0, name=>'New record' },
+  {ftype=>4, tag=>'type', name=>'Type', type=>'enum', enum=>\%host_types},
+  {ftype=>1, tag=>'domain', name=>'Hostname', type=>'domain', len=>40},
+  {ftype=>3, tag=>'net', name=>'Subnet', type=>'enum',
+   enum=>\%new_host_nets,elist=>\@new_host_netsl,iff=>['type','1']},
+  {ftype=>0, name=>'Host info',iff=>['type','1']},
+  {ftype=>1, tag=>'huser', name=>'User', type=>'text', len=>25, empty=>0,
+   iff=>['type','1']},
+  {ftype=>1, tag=>'location', name=>'Location', type=>'text', len=>25,
+   empty=>0, iff=>['type','1']},
+  {ftype=>1, tag=>'dept', name=>'Dept.', type=>'text', len=>25, empty=>0,
+   iff=>['type','1']},
+  {ftype=>1, tag=>'info', name=>'Info', type=>'text', len=>50, empty=>1 },
+  {ftype=>0, name=>'Equipment info',iff=>['type','1']},
+  {ftype=>101, tag=>'hinfo_hw', name=>'HINFO hardware', type=>'hinfo', len=>20,
+   sql=>"SELECT hinfo FROM hinfo_templates WHERE type=0 ORDER BY pri,hinfo;",
+   iff=>['type','1']},
+  {ftype=>101, tag=>'hinfo_sw', name=>'HINFO sowftware', type=>'hinfo',len=>20,
+   sql=>"SELECT hinfo FROM hinfo_templates WHERE type=1 ORDER BY pri,hinfo;",
+   iff=>['type','1']},
+  {ftype=>1, tag=>'ether', name=>'Ethernet address', type=>'mac', len=>12,
+   iff=>['type','1']},
+  {ftype=>1, tag=>'model', name=>'Model', type=>'text', len=>30, empty=>1, 
+   iff=>['type','1']},
+  {ftype=>1, tag=>'serial', name=>'Serial no.', type=>'text', len=>20,
+   empty=>1, iff=>['type','1']},
+  {ftype=>1, tag=>'misc', name=>'Misc.', type=>'text', len=>40, empty=>1, 
+   iff=>['type','1']}
  ],
  bgcolor=>'#eeeebf',
  border=>'0',		
@@ -407,6 +452,39 @@ do "$PROG_DIR/back_end.pl";
  heading_bg=>'#aaaaff'
 );
 
+%printer_class_form=(
+ data=>[
+  {ftype=>0, name=>'PRINTER class'},
+  {ftype=>1, tag=>'name', name=>'Name', type=>'printer_class',len=>20,
+   empty=>0},
+  {ftype=>4, tag=>'id', name=>'ID'},
+  {ftype=>1, tag=>'comment', name=>'Comment', type=>'text',len=>60, empty=>1},
+  {ftype=>2, tag=>'printer_l', name=>'PRINTER', 
+   type=>['text','text'], fields=>2, len=>[60,10], empty=>[0,1],
+   elabels=>['Printer','comment']}
+ ],
+ bgcolor=>'#eeeebf',
+ border=>'0',		
+ width=>'100%',
+ nwidth=>'30%',
+ heading_bg=>'#aaaaff'
+);
+
+%new_printer_class_form=(
+ data=>[
+  {ftype=>0, name=>'New PRINTER class'},
+  {ftype=>1, tag=>'name', name=>'Name', type=>'printer_class',len=>20,
+   empty=>0},
+  {ftype=>1, tag=>'comment', name=>'Comment', type=>'text',len=>60, empty=>1}
+ ],
+ bgcolor=>'#eeeebf',
+ border=>'0',		
+ width=>'100%',
+ nwidth=>'30%',
+ heading_bg=>'#aaaaff'
+);
+
+
 
 
 %change_passwd_form=(
@@ -430,7 +508,7 @@ sub logmsg($$) {
   open(LOGFILE,">>/tmp/sauron.log");
   print LOGFILE localtime(time) . " sauron: $msg\n";
   close(LOGFILE);
-  
+
   #openlog("sauron","cons,pid","user");
   #syslog($type,"foo: %s\n",$msg);
   #closelog();
@@ -440,6 +518,7 @@ sub logmsg($$) {
 #####################################################################
 
 db_connect2() || error("Cannot estabilish connection with database");
+if (($res=cgi_disabled())) { error("CGI interface disabled: $res"); }
 
 $frame_mode=0;
 $pathinfo = path_info();
@@ -788,18 +867,18 @@ sub zones_menu() {
     $state{'zone'}=$zone;
     $state{'zoneid'}=$zoneid;
     save_state($scookie);
-    
+
     display_form(\%zn,\%zone_form);
     return;
   }
 
-  
+
  select_zone:
   #display zone selection list
   print h2("Select zone:"),
             p,"<TABLE width=98% bgcolor=white border=0>",
-            "<TR bgcolor=\"#bfee00\">",th(['Zone','Type','Reverse']);
-            
+            "<TR bgcolor=\"#aaaaff\">",th(['Zone','Type','Reverse']);
+
   $list=get_zone_list($serverid);
   for $i (0 .. $#{$list}) {
     $type=$$list[$i][2];
@@ -814,7 +893,7 @@ sub zones_menu() {
 	"<a href=\"$selfurl?menu=zones&selected_zone=$name\">$name</a>",
 					$type,$rev]);
   }
-      
+
   print "</TABLE><BR>";
 
 }
@@ -831,11 +910,11 @@ sub hosts_menu() {
     print h2("Zone not selected!");
     return;
   }
-  
+
   $sub=param('sub');
   $host_form{alias_l_url}="$selfurl?menu=hosts&h_id=";
   $host_form{alias_d_url}="$selfurl?menu=hosts&h_id=";
-  
+
   if ($sub eq 'Delete') {
     $res=delete_magic('h','Host','hosts',\%host_form,\&get_host,\&delete_host,
 		      param('h_id'));
@@ -982,7 +1061,7 @@ sub hosts_menu() {
       if ($tmp) {
 	$extrarule=" AND a.$tmp LIKE " .
 	           db_encode_str('%' . param('bh_pattern') . '%') . " ";
-	print p,$extrarule;
+	#print p,$extrarule;
       }
     }
 
@@ -1010,7 +1089,7 @@ sub hosts_menu() {
     } 
     else { $sql="$sql2 ORDER BY $sorder"; }
     $sql.=" LIMIT $limit OFFSET $offset;";
-    print p,$sql;
+    #print p,$sql;
     db_query($sql,\@q);
     $count=scalar @q;
     print "<TABLE width=\"99%\" cellspacing=0 cellpadding=1 border=0 " .
@@ -1056,8 +1135,35 @@ sub hosts_menu() {
       print "<A HREF=\"$selfurl?menu=hosts&sub=browse&bh_page=$npage&".
 	      "$params\">next</A>";
     } else { print "next"; }
-    
+
     print "]</CENTER><BR>";
+    return;
+  }
+  elsif ($sub eq 'add') {
+    $type=param('type');
+    unless ($host_types{$type}) {
+      print h2('Invalid add type!');
+      return;
+    }
+    if (param('addhost_cancel')) {
+      print h2("$host_types{$type} record creation canceled.");
+      return;
+    }
+    print h2("Add $host_types{$type} record");
+
+    if ($type == 1) {
+      make_net_list($serverid,0,\%new_host_nets,\@new_host_netsl);
+      $new_host_nets{MANUAL}='<Manual IP>';
+      push @new_host_netsl, 'MANUAL';
+    }
+
+    $data{net}='MANUAL';
+    $data{type}=$type;
+    print startform(-method=>'POST',-action=>$selfurl),
+          hidden('menu','hosts'),hidden('sub','add'),hidden('type',$type);
+    form_magic('addhost',\%data,\%new_host_form);
+    print submit(-name=>'addhost_submit',-value=>'Create'), " ",
+          submit(-name=>'addhost_cancel',-value=>'Cancel'),end_form;
     return;
   }
 
@@ -1204,7 +1310,7 @@ sub groups_menu() {
     display_form(\%group,\%group_form);
     return;
   }
-  
+
  show_group_record:
   if ($id > 0) {
     if (get_group($id,\%group)) {
@@ -1228,12 +1334,12 @@ sub groups_menu() {
     return;
   }
 
-  print "<TABLE width=\"90%\"><TR bgcolor=\"#ffee55\">",
+  print "<TABLE width=\"90%\"><TR bgcolor=\"#aaaaff\">",
         th("Name"),th("Comment"),"</TR>";
-  
+
   for $i (0..$#q) {
-    print "<TR bgcolor=\"#dddddd\">";
-				   
+    print "<TR bgcolor=\"#eeeebf\">";
+
     $name=$q[$i][1];
     $name='&nbsp;' if ($name eq '');
     $comment=$q[$i][2];
@@ -1241,7 +1347,7 @@ sub groups_menu() {
     print "<td><a href=\"$selfurl?menu=groups&grp_id=$q[$i][0]\">$name</a></td>",
           td($comment),"</TR>";
   }
- 
+
   print "</TABLE>";
 }
 
@@ -1321,12 +1427,12 @@ sub nets_menu() {
     return;
   }
 
-  print "<TABLE><TR bgcolor=\"#ffee55\">",
+  print "<TABLE><TR bgcolor=\"#aaaaff\">",
         "<TH>Net</TH>",th("Name"),th("Type"),th("Comment"),"</TR>";
   
   for $i (0..$#q) {
       if ($q[$i][3] eq 't') {  
-	print "<TR bgcolor=\"#eeeeee\">";
+	print "<TR bgcolor=\"#eeeebf\">";
 	$type='Subnet';
       } else { 
 	print "<TR bgcolor=\"#ddffdd\">";
@@ -1362,6 +1468,7 @@ sub templates_menu() {
   $sub=param('sub');
   $mx_id=param('mx_id');
   $wks_id=param('wks_id');
+  $pc_id=param('pc_id');
 
   if ($sub eq 'mx') {
     db_query("SELECT id,name,comment FROM mx_templates " .
@@ -1372,15 +1479,15 @@ sub templates_menu() {
     }
 
     print h3("MX templates for zone: $zone"),
-          "<TABLE width=\"100%\"><TR bgcolor=\"#ffee55\">",
+          "<TABLE width=\"100%\"><TR bgcolor=\"#aaaaff\">",
           th("Name"),th("Comment"),"</TR>";
-  
+
     for $i (0..$#q) {
       $name=$q[$i][1];
       $name='&nbsp;' if ($name eq '');
       $comment=$q[$i][2];
       $comment='&nbsp;' if ($comment eq '');
-      print "<TR bgcolor=\"#dddddd\">",
+      print "<TR bgcolor=\"#eeeebf\">",
 	td("<a href=\"$selfurl?menu=templates&mx_id=$q[$i][0]\">$name</a>"),
 	td($comment),"</TR>";
     }
@@ -1391,21 +1498,45 @@ sub templates_menu() {
     db_query("SELECT id,name,comment FROM wks_templates " .
 	     "WHERE server=$serverid ORDER BY name;",\@q);
     if (@q < 1) {
-      print h2("No WKS templates found for this server!"); 
+      print h2("No WKS templates found for this server!");
       return;
     }
 
     print h3("WKS templates for server: $server"),
-          "<TABLE width=\"100%\"><TR bgcolor=\"#ffee55\">",
+          "<TABLE width=\"100%\"><TR bgcolor=\"#aaaaff\">",
           th("Name"),th("Comment"),"</TR>";
-  
+
     for $i (0..$#q) {
       $name=$q[$i][1];
       $name='&nbsp;' if ($name eq '');
       $comment=$q[$i][2];
       $comment='&nbsp;' if ($comment eq '');
-      print "<TR bgcolor=\"#dddddd\">",
+      print "<TR bgcolor=\"#eeeebf\">",
 	td("<a href=\"$selfurl?menu=templates&wks_id=$q[$i][0]\">$name</a>"),
+	td($comment),"</TR>";
+    }
+    print "</TABLE>";
+    return;
+  }
+  elsif ($sub eq 'pc') {
+    db_query("SELECT id,name,comment FROM printer_classes " .
+	     "ORDER BY name;",\@q);
+    if (@q < 1) {
+      print h2("No PRINTER classes found!");
+      return;
+    }
+
+    print h3("PRINTER Classes (global)"),
+          "<TABLE width=\"100%\"><TR bgcolor=\"#aaaaff\">",
+          th("Name"),th("Comment"),"</TR>";
+
+    for $i (0..$#q) {
+      $name=$q[$i][1];
+      $name='&nbsp;' if ($name eq '');
+      $comment=$q[$i][2];
+      $comment='&nbsp;' if ($comment eq '');
+      print "<TR bgcolor=\"#eeeebf\">",
+	td("<a href=\"$selfurl?menu=templates&pc_id=$q[$i][0]\">$name</a>"),
 	td($comment),"</TR>";
     }
     print "</TABLE>";
@@ -1420,6 +1551,10 @@ sub templates_menu() {
       $res=edit_magic('wks','WKS template','templates',\%wks_template_form,
 		      \&get_wks_template,\&update_wks_template,$wks_id);
       goto show_wkst_record if ($res > 0);
+    } elsif ($pc_id > 0) {
+      $res=edit_magic('pc','PRINTER class','templates',\%printer_class_form,
+		      \&get_printer_class,\&update_printer_class,$pc_id);
+      goto show_pc_record if ($res > 0);
     } else { print p,"Unknown template type!"; }
     return;
   }
@@ -1516,7 +1651,14 @@ sub templates_menu() {
 	      submit(-name=>'wks_cancel',-value=>'Cancel'),end_form;
       display_form(\%h,\%wks_template_form);
 
-    } else { print p,"Unknown template type!"; }
+    }
+    elsif ($pc_id > 0) {
+      $res=delete_magic('pc','PRINTER class','templates',\%printer_class_form,
+			\&get_printer_class,\&delete_printer_class,$pc_id);
+
+      goto show_pc_record if ($res==2);
+    }
+    else { print p,"Unknown template type!"; }
     return;
   }
   elsif ($sub eq 'addmx') {
@@ -1527,6 +1669,7 @@ sub templates_menu() {
       $mx_id=$res;
       goto show_mxt_record;
     }
+    return;
   }
   elsif ($sub eq 'addwks') {
     $data{server}=$serverid;
@@ -1536,6 +1679,17 @@ sub templates_menu() {
       $wks_id=$res;
       goto show_wkst_record;
     }
+    return;
+  }
+  elsif ($sub eq 'addpc') {
+    #$data{server}=$serverid;
+    $res=add_magic('addwpc','PRINTER class','templates',
+		   \%new_printer_class_form,\&add_printer_class,\%data);
+    if ($res > 0) {
+      $pc_id=$res;
+      goto show_pc_record;
+    }
+    return;
   }
   elsif ($mx_id > 0) {
   show_mxt_record:
@@ -1565,9 +1719,30 @@ sub templates_menu() {
           hidden('wks_id',$wks_id),end_form;
     return;
   }
+  elsif ($pc_id > 0) {
+  show_pc_record:
+    if (get_printer_class($pc_id,\%pchash)) {
+      print h2("Cannot get PRINTER class (id=$pc_id)!");
+      return;
+    }
+    display_form(\%pchash,\%printer_class_form);
+    print p,startform(-method=>'GET',-action=>$selfurl),
+          hidden('menu','templates'),
+          submit(-name=>'sub',-value=>'Edit'), "  ",
+          submit(-name=>'sub',-value=>'Delete'),
+          hidden('pc_id',$pc_id),end_form;
+    return;
+  }
 
-  print "&nbsp;";  # end of templates_menu()
-} 
+  print "<p><br><ul>",
+    "<li><a href=\"$selfurl?menu=templates&sub=mx\">" .
+      "Show MX templates</a></li>",
+    "<li><a href=\"$selfurl?menu=templates&sub=wks\">" .
+      "Show WKS templates</a></li>",
+    "<li><a href=\"$selfurl?menu=templates&sub=pc\">" .
+      "Show PRINTER classes</a></li>",
+    "</ul>";
+}
 
 
 # LOGIN menu
@@ -1631,8 +1806,25 @@ sub login_menu() {
       print h3('Defaults saved succesfully!');
     }
   }
+  elsif ($sub eq 'who') {
+    $timeout=$USER_TIMEOUT;
+    unless ($timeout > 0) {
+      print h2("error: $USER_TIMEOUT not defined in configuration!");
+      return;
+    }
+    get_who_list(\@wholist,$timeout);
+    print h2("Current users:");
+    print "<TABLE width=\"100%\"><TR bgcolor=\"#aaaaff\">",
+          th('User'),th('Name'),th('From'),th('Idle'),th('Login'),"</TR>";
+    for $i (0..$#wholist) {
+      print "<TR bgcolor=\"#eeeebf\">",	
+	td($wholist[$i][0]),td($wholist[$i][1]),td($wholist[$i][2]),
+	  td($wholist[$i][3]),td($wholist[$i][4]),"</TR>";
+    }
+    print "</TABLE>";
+  }
   else {
-    print p;
+    print h2("User info:");
     display_form(\%state,\%user_info_form);
   }
 }
@@ -1641,7 +1833,7 @@ sub login_menu() {
 #
 sub about_menu() {
   $sub=param('sub');
-  
+
   if ($sub eq 'copyright') {
     open(FILE,"$PROG_DIR/COPYRIGHT") || return;
     print "<PRE>\n\n";
@@ -1679,7 +1871,7 @@ sub edit_magic($$$$$$$) {
     print h2("$name id not specified!");
     return -1;
   }
-  
+
   if (param($prefix . '_cancel') ne '') {
     print h2("No changes made to $name record.");
     return 2;
@@ -1728,7 +1920,6 @@ sub add_magic($$$$$$) {
   my($prefix,$name,$menu,$form,$add_func,$data) = @_;
   my(%h);
 
-  
   if (param($prefix . '_submit') ne '') {
     unless (($res=form_check_form($prefix,$data,$form))) {
       $res=&$add_func($data);
@@ -1760,7 +1951,7 @@ sub delete_magic($$$$$$$) {
     print h2("$name id not specified!");
     return -1;
   }
-  
+
   if (param($prefix . '_cancel') ne '') {
     print h2("$name record not deleted.");
     return 2;
@@ -1835,13 +2026,13 @@ sub login_form($$) {
   $state{'mode'}='1';
   $state{'auth'}='no';
   save_state($c);
-  exit;      
+  exit;
 }
 
 sub login_auth() {
-  my($u,$p);  
+  my($u,$p);
   my(%user,%h,$ticks);
-  
+
   $ticks=time();
   $state{'auth'}='no';
   $state{'mode'}='0';
@@ -1897,38 +2088,45 @@ sub top_menu($) {
   my($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst);
 
   ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime(time);
-  
+
   print	'<a href="http://sauron.jyu.fi/" target="sauron">',
         '<IMG src="' .$ICON_PATH . '/logo.png" border="0" alt=""></a>';
 
   print '<TABLE border="0" cellspacing="0" width="100%">';
 
   print '<TR bgcolor="#002d5f" align="left" valign="center">',
-        '<TD width="15%" height="24">',
-        '<FONT color="white">&nbsp;GNU/Sauron</FONT></TD><TD>',
-        '<FONT color="white">',
-        "<A HREF=\"$s_url?menu=hosts\"><FONT color=\"#ffffff\">Hosts</FONT></A> | " ,
-        "<A HREF=\"$s_url?menu=zones\"><FONT color=\"#ffffff\">Zones</FONT></A> | ",
-        "<A HREF=\"$s_url?menu=nets\"><FONT color=\"#ffffff\">Nets</FONT></A> | ",
-        "<A HREF=\"$s_url?menu=templates\"><FONT color=\"#ffffff\">Templates</FONT></A> | ",
-        "<A HREF=\"$s_url?menu=groups\"><FONT color=\"#ffffff\">Groups</FONT></A> | ",
-        "<A HREF=\"$s_url?menu=servers\"><FONT color=\"#ffffff\">Servers</FONT></A> | ",
-	"<A HREF=\"$s_url?menu=login\"><FONT color=\"#ffffff\">Login</FONT></A> | ",
-	"<A HREF=\"$s_url?menu=about\"><FONT color=\"#ffffff\">About</FONT></A> ",
-        '</FONT></TD>';
+    '<TD width="15%" height="24">',
+    '<FONT color="white">&nbsp;Sauron </FONT></TD><TD>',
+    '<FONT color="white">',
+    "<A HREF=\"$s_url?menu=hosts\"><FONT color=\"#ffffff\">",
+      "Hosts</FONT></A> | ",
+    "<A HREF=\"$s_url?menu=zones\"><FONT color=\"#ffffff\">",
+      "Zones</FONT></A> | ",
+    "<A HREF=\"$s_url?menu=nets\"><FONT color=\"#ffffff\">",
+      "Nets</FONT></A> | ",
+    "<A HREF=\"$s_url?menu=templates\"><FONT color=\"#ffffff\">",
+      "Templates</FONT></A> | ",
+    "<A HREF=\"$s_url?menu=groups\"><FONT color=\"#ffffff\">",
+      "Groups</FONT></A> | ",
+    "<A HREF=\"$s_url?menu=servers\"><FONT color=\"#ffffff\">",
+      "Servers</FONT></A> | ",
+    "<A HREF=\"$s_url?menu=login\"><FONT color=\"#ffffff\">",
+      "Login</FONT></A> | ",
+    "<A HREF=\"$s_url?menu=about\"><FONT color=\"#ffffff\">About</FONT></A> ",
+    '</FONT></TD>';
 
   print  "<TD align=\"right\">";
-  printf "<FONT color=\"#ffffff\">%d.%d.%d %02d:%02d </FONT></TD>", 
-         $mday,$mon,$year+1900,$hour,$min;     
+  printf "<FONT color=\"#ffffff\">%d.%d.%d %02d:%02d </FONT></TD>",
+         $mday,$mon,$year+1900,$hour,$min;
   print "</TR></TABLE>";
 }
 
 sub left_menu($) {
   my($mode)=@_;
   my($url,$w);
-  
+
   $w="\"100\"";
-  
+
   $url=$s_url;
   print "<BR><TABLE width=$w bgcolor=\"#002d5f\" border=\"0\" " .
         "cellspacing=\"3\" cellpadding=\"0\">", # Tr,th(h4("$menu")),
@@ -1962,8 +2160,10 @@ sub left_menu($) {
     $url.='?menu=templates';
     print p,li("<a href=\"$url&sub=mx\">Show MX</a>"),
           li("<a href=\"$url&sub=wks\">Show WKS</a><br>"),
+          li("<a href=\"$url&sub=pc\">Show Prn Class</a><br>"),
           p,li("<a href=\"$url&sub=addmx\">Add MX</a>"),
-          li("<a href=\"$url&sub=addwks\">Add WKS</a>");
+          li("<a href=\"$url&sub=addwks\">Add WKS</a>"),
+          li("<a href=\"$url&sub=addpc\">Add Prn Class</a>");
   } elsif ($menu eq 'groups') {
     $url.='?menu=groups';
     print p,li("<a href=\"$url\">Groups</a>"),
@@ -1972,15 +2172,17 @@ sub left_menu($) {
     $url.='?menu=hosts';
     print p,li("<a href=\"$url\">Search</a>"),
           li("<a href=\"$url&sub=browse&lastsearch=1\">Last Search</a>"),
-          p,li("<a href=\"$url&sub=addhost\">Add host</a>"),
-          li("<a href=\"$url&sub=addmx\">Add MX entry</a>"),
-          li("<a href=\"$url&sub=adddelegation\">Add delegation</a>"),
-          li("<a href=\"$url&sub=addprinter\">Add glue rec.</a>"),
-          li("<a href=\"$url&sub=addprinter\">Add printer</a>");
+          p,li("<a href=\"$url&sub=add&type=1\">Add host</a>"),
+          li("<a href=\"$url&sub=add&type=3\">Add MX entry</a>"),
+          li("<a href=\"$url&sub=add&type=2\">Add delegation</a>"),
+          li("<a href=\"$url&sub=add&type=6\">Add glue rec.</a>"),
+          li("<a href=\"$url&sub=add&type=5\">Add printer</a>");
   } elsif ($menu eq 'login') {
     $url.='?menu=login';
     print p,li("<a href=\"$url&sub=login\">Login</a>"),
           li("<a href=\"$url&sub=logout\">Logout</a>"),
+          p,li("<a href=\"$url&sub=who\">Who</a>"),
+          li("<a href=\"$url\">User info</a>"),
           p,li("<a href=\"$url&sub=passwd\">Change password</a>"),
           li("<a href=\"$url&sub=save\">Save defaults</a>");
     if ($frame_mode) {
@@ -2012,12 +2214,11 @@ sub left_menu($) {
 
   print "</FONT></TABLE></TD></TR></TABLE><BR>";
 
-  
 }
 
 sub frame_set() {
   print header;
-  
+
   print "<HTML><FRAMESET border=\"0\" rows=\"110,*\">\n" .
         "  <FRAME src=\"$script_name/frame1\" noresize>\n" .
         "  <FRAME src=\"$script_name/frames2\" name=\"bottom\">\n" .
@@ -2032,7 +2233,7 @@ sub frame_set() {
 sub frame_set2() {
   print header;
   $menu="?menu=" . param('menu') if ($menu);
-  
+
   print "<HTML>" .
         "<FRAMESET border=\"0\" cols=\"17%,*\">\n" .
 	"  <FRAME src=\"$script_name/frame2$menu\" name=\"menu\" noresize>\n" .
@@ -2189,13 +2390,13 @@ sub remove_state($) {
 sub form_check_field($$$) {
   my($field,$value,$n) = @_;
   my($type,$empty,$t);
-  
-  if ($n > 0) { 
-    $empty=${$field->{empty}}[$n-1]; 
+
+  if ($n > 0) {
+    $empty=${$field->{empty}}[$n-1];
     $type=${$field->{type}}[$n-1];
   }
-  else { 
-    $empty=$field->{empty}; 
+  else {
+    $empty=$field->{empty};
     $type=$field->{type};
   }
 
@@ -2210,7 +2411,7 @@ sub form_check_field($$$) {
     if ($type eq 'domain') {
       return 'valid domain name required!' unless (valid_domainname($value));
     } else {
-      return 'FQDN required!' 
+      return 'FQDN required!'
 	unless (valid_domainname($value) && $value=~/\.$/);
     }
   } elsif ($type eq 'path') {
@@ -2239,8 +2440,14 @@ sub form_check_field($$$) {
   } elsif ($type eq 'bool') {
     return 'boolean value required!' unless ($value =~ /^(t|f)$/);
   } elsif ($type eq 'mac') {
-    return 'Ethernet address required!' 
+    return 'Ethernet address required!'
       unless ($value =~ /^([0-9A-Z]{12})$/);
+  } elsif ($type eq 'printer_class') {
+    return 'Valid printer class name required!'
+      unless ($value =~ /^\@[a-zA-Z]+$/);
+  } elsif ($type eq 'hinfo') {
+    return 'Valid HINFO required!'
+      unless ($value =~ /^[A-Z]+([A-Z-]+[A-Z])?$/);
   } else {
     return "unknown typecheck for form_check_field: $type !";
   }
@@ -2251,12 +2458,12 @@ sub form_check_field($$$) {
 
 #####################################################################
 # form_check_form($prefix,$data,$form)
-# 
+#
 # checks if form contains valid data and updates 'data' hash 
 #
 sub form_check_form($$$) {
   my($prefix,$data,$form) = @_;
-  my($formdata,$i,$j,$k,$type,$p,$p2,$tag,$list,$id,$ind,$f,$new);
+  my($formdata,$i,$j,$k,$type,$p,$p2,$tag,$list,$id,$ind,$f,$new,$tmp);
 
   $formdata=$form->{data};
   for $i (0..$#{$formdata}) {
@@ -2270,7 +2477,13 @@ sub form_check_form($$$) {
       return 1 if (form_check_field($rec,param($p),0) ne '');
       #print p,"$p changed! '",$data->{$tag},"' '",param($p),"'\n" if ($data->{$tag} ne param($p));
       $data->{$tag}=param($p);
-    } 
+    }
+    elsif ($type == 101) {
+      $tmp=param($p);
+      $tmp=param($p."_l") if ($tmp eq '');
+      return 1 if (form_check_field($rec,$tmp,0) ne '');
+      $data->{$tag}=$tmp;
+    }
     elsif  ($type == 2) {
       $f=$rec->{fields};
       $a=param($p."_count");
@@ -2337,13 +2550,13 @@ sub form_check_form($$$) {
 
 #####################################################################
 # form_magic($prefix,$data,$form)
-# 
+#
 # generates HTML form
 #
 sub form_magic($$$) {
   my($prefix,$data,$form) = @_;
   my($i,$j,$k,$n,$key,$rec,$a,$formdata,$h_bg,$e_str,$p1,$p2,$val,$e,$enum,
-     $values,$ip,$t,@lst,%lsth,%tmpl_rec,$maxlen,$len);
+     $values,$ip,$t,@lst,%lsth,%tmpl_rec,$maxlen,$len,@q,$tmp);
 
   $formdata=$form->{data};
   if ($form->{heading_bg}) { $h_bg=$form->{heading_bg}; }
@@ -2359,7 +2572,7 @@ sub form_magic($$$) {
       $val="\U$val" if ($rec->{conv} eq 'U');
       $p1=$prefix."_".$rec->{tag};
 
-      if ($rec->{ftype} == 1) { 
+      if ($rec->{ftype} == 1 || $rec->{ftype} == 101) {
 	$val =~ s/\/32$// if ($rec->{type} eq 'ip');
 	param($p1,$val);
       }
@@ -2402,11 +2615,11 @@ sub form_magic($$$) {
       elsif ($rec->{ftype} == 6 || $rec->{ftype} == 7) {
 	param($p1,$val);
       }
-      else { 
-	error("internal error (form_magic):". $rec->{ftype});  
+      else {
+	error("internal error (form_magic):". $rec->{ftype});
       }
     }
-  }   
+  }
 
   #generate form fields
   print hidden($prefix."_re_edit",1),"\n<TABLE ";
@@ -2430,7 +2643,7 @@ sub form_magic($$$) {
 
     if ($rec->{ftype} == 0) {
       print "<TR><TH COLSPAN=2 ALIGN=\"left\" BGCOLOR=\"$h_bg\">",
-             $rec->{name},"</TH></TR>\n";
+             $rec->{name},"</TH></TR>\n" unless ($rec->{no_edit});
     } elsif ($rec->{ftype} == 1) {
       $maxlen=$rec->{len};
       $maxlen=$rec->{maxlen} if ($rec->{maxlen} > 0);
@@ -2488,7 +2701,8 @@ sub form_magic($$$) {
     } elsif ($rec->{ftype} == 3) {
       if ($rec->{type} eq 'enum') {
 	$enum=$rec->{enum};
-	$values=[sort keys %{$enum}];
+	if ($rec->{elist}) { $values=$rec->{elist}; }
+	else { $values=[sort keys %{$enum}]; }
       } elsif ($rec->{type} eq 'list') {
 	$enum=$data->{$rec->{list}};
 	if ($rec->{listkeys}) {
@@ -2539,7 +2753,7 @@ sub form_magic($$$) {
       $j=$a+1;
       $n=$prefix."_".$rec->{tag}."_".$j."_1";
       print "<TR>",td(textfield(-name=>$n,-size=>15,-value=>param($n)));
-      
+
       print td(submit(-name=>$prefix."_".$rec->{tag}."_add",-value=>'Add'));
       print "</TR></TABLE></TD></TR>\n";
     } elsif ($rec->{ftype} == 6) {
@@ -2565,28 +2779,38 @@ sub form_magic($$$) {
       print_wks_template(\%tmpl_rec);
       print "</TD></TR></TABLE></TD></TR>";
     } elsif ($rec->{ftype} == 8) {
-      print "<TR>",td($rec->{name}),"<TD><TABLE><TR>";
-      $a=param($p1."_count");
-      $a=0 unless ($a > 0);
-      print hidden(-name=>$p1."_count",-value=>$a);
-      for $k (1..$rec->{fields}) { 
-	print "<TD>",${$rec->{elabels}}[$k-1],"</TD>"; 
-      }
-      print "</TR>";
-      for $j (1..$a) {
-	$p2=$p1."_".$j;
-	print "<TR>",hidden(-name=>$p2."_id",param($p2."_id"));
-	for $k (1..$rec->{fields}) {
-	  $n=$p2."_".$k;
-	  print td(param($n)),hidden($n,param($n));
-        }
-	print "</TR>";
-      }
-      print "</TABLE></TD></TR>\n";
-      
+      # do nothing...
     }
     elsif ($rec->{ftype} == 9) {
       # do nothing...
+    }
+    elsif ($rec->{ftype} == 101) {
+      undef @q; undef @lst; undef %lsth;
+      $maxlen=$rec->{len};
+      $maxlen=$rec->{maxlen} if ($rec->{maxlen} > 0);
+      db_query($rec->{sql},\@q);
+      for $i (0..$#q) {
+	push @lst,$q[$i][0];
+	$lsth{$q[$i][0]}=$q[$i][0];
+      }
+      param($p1."_l",$lst[0]) if (($lst[0] ne '') && (not param($p1."_l")));
+
+      if ($lsth{param($p1)}) {
+	param($p1."_l",param($p1));
+	param($p1,'');
+      }
+
+      print "<TR>",td($rec->{name}),"<TD>",
+	    popup_menu(-name=>$p1."_l",-values=>\@lst,-default=>param($p1),
+		       -labels=>\%lsth),
+	    " ",textfield(-name=>$p1,-size=>$rec->{len},-maxlength=>$maxlen,
+			  -value=>param($p1));
+
+      $tmp=param($p1);
+      $tmp=param($p1."_l") if ($tmp eq '');
+      print "<FONT size=-1 color=\"red\"><BR> ",
+	    form_check_field($rec,$tmp,0),
+	    "</FONT></TD></TR>";
     }
     print "\n";
   }
@@ -2596,8 +2820,8 @@ sub form_magic($$$) {
 
 #####################################################################
 # display_form($data,$form)
-# 
-# generates HTML code that displays the form 
+#
+# generates HTML code that displays the form
 #
 sub display_form($$) {
   my($data,$form) = @_;
@@ -2635,7 +2859,7 @@ sub display_form($$) {
       print "<TR><TH COLSPAN=2 ALIGN=\"left\" ",
             "BGCOLOR=\"$h_bg\">",
             $rec->{name},"</TH>\n";
-    } elsif ($rec->{ftype} == 1) {
+    } elsif ($rec->{ftype} == 1 || $rec->{ftype} == 101) {
       $val =~ s/\/32$// if ($rec->{type} eq 'ip');
       #print Tr,td([$rec->{name},$data->{$rec->{tag}}]);
       $val='&nbsp;' if ($val eq '');
@@ -2645,7 +2869,7 @@ sub display_form($$) {
       print Tr,td($rec->{name}),"<TD><TABLE>",Tr;
       $a=$data->{$rec->{tag}};
       for $k (1..$rec->{fields}) { 
-	#print "<TH>",$$a[0][$k-1],"</TH>"; 
+	#print "<TH>",$$a[0][$k-1],"</TH>";
       }
       for $j (1..$#{$a}) {
 	print Tr;
@@ -2731,19 +2955,15 @@ sub print_wks_template($) {
 #####################################################################
 sub error($) {
   my($msg)=@_;
-  
-  print header,
-        start_html("sauron: error"),
-        h1("Error: $msg"),
-        end_html();
+
+  print header,start_html("sauron: error"),h1("Error: $msg"),end_html();
   exit;
 }
 
 
 sub error2($) {
   my($msg)=@_;
-  
-  print h1("Error: $msg"),
-        end_html();
+
+  print h1("Error: $msg"),end_html();
   exit;
 }

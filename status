@@ -1,0 +1,113 @@
+#!/usr/bin/perl
+#
+# status -- utlity to query/modify system status
+#
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2001.
+# $Id$
+#
+require 5;
+use Getopt::Long;
+use Term::ReadKey;
+
+
+my ($PG_DIR,$PG_NAME) = ($0 =~ /^(.*\/)(.*)$/);
+$0 = $PG_NAME;
+
+do "$PG_DIR/config" || die("cannot load config");
+do "$PG_DIR/util.pl";
+do "$PG_DIR/db.pl";
+do "$PG_DIR/back_end.pl";
+
+sub fatal($) {
+  my ($msg) = @_;
+  print STDERR "$0: $msg\n";
+  exit(1);
+}
+
+##############################################
+
+$argcount=@ARGV;
+
+
+
+$result = GetOptions("cgi-enable","cgi-disable=s","help|h");
+
+if ($opt_help || not $result) {
+  print "syntax: $0 [options]\n\n",
+    "options:\n",
+    " --help                       display this help\n",
+    " --cgi-disable='message'      disable CGI interface\n",
+    " --cgi-enable                 enable CGI interface\n";
+  exit(0);
+}
+
+$db_ok = db_connect2();
+
+
+if ($argcount < 1) {
+  print "Sauron v$VER status\n\n";
+  printf "Database connection:   %s\n", ($db_ok?"OK":"ERROR");
+}
+
+exit unless ($db_ok);
+
+
+
+
+if (defined $opt_cgi_enable) {
+  db_exec("DELETE FROM settings WHERE key='cgi_disable';");
+  undef @q;
+  db_query("SELECT value FROM settings WHERE key='cgi_disable';",\@q);
+  if (@q > 0) {
+    print STDERR "Cannot enable CGI interface!\n";
+    exit(1);
+  }
+  print "CGI interface successfully enabled\n";
+  exit;
+}
+
+if ($opt_cgi_disable) {
+  $msg=$opt_cgi_disable;
+  if ($msg =~ /^\s*$/) {
+    print "CGI disable requires message\n";
+    exit;
+  }
+  $msg=db_encode_str($msg);
+  undef @q;
+  db_query("SELECT value FROM settings WHERE key='cgi_disable';",\@q);
+  if (@q > 0) {
+    $res=db_exec("UPDATE settings SET value='$msg' WHERE key='cgi_disable';");
+  } else {
+    $res=db_exec("INSERT INTO settings (key,value) " .
+		 "VALUES('cgi_disable',$msg);");
+  }
+  print "CGI interface succesfully disabled.\n";
+  exit;
+}
+
+
+undef @q;
+db_query("SELECT value FROM settings WHERE key='cgi_disable';",\@q);
+
+printf "CGI interface:         %s\n",
+	  ($q[0][0] ne '' ? "Disabled ($q[0][0])":"Enabled");
+
+
+$timeout=$USER_TIMEOUT;
+$timeout=3600 unless ($timeout > 0);
+$t=time;
+
+
+print "\n";
+printf("%-8s %-22s %-15s %-6s %s\n",'USER','NAME','FROM','IDLE','LOGIN');
+
+get_who_list(\@who,$timeout);
+for $i(0..$#who) {
+  printf("%-8s %-22s %-15s %-6s %s\n",
+	 $who[$i][0],$who[$i][1],$who[$i][2],$who[$i][3],$who[$i][4]);
+}
+
+
+
+exit;
+

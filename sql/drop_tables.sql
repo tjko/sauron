@@ -24,7 +24,8 @@ DROP TABLE utmp;
 DROP TABLE users;
 DROP TABLE user_rights;
 DROP TABLE ether_info;
-
+DROP TABLE settings;
+DROP TABLE hinfo_templates;
 DROP TABLE pokemon;
 
 

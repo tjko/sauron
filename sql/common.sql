@@ -13,3 +13,12 @@ CREATE TABLE pokemon (
        expiration  TIMESTAMP
 );
 
+
+/* global settings table */
+CREATE TABLE settings (
+	key	TEXT NOT NULL CHECK(key <> ''),
+	value	TEXT,
+	ivalue  INT4,
+	
+	CONSTRAINT global_key PRIMARY KEY (key)
+);
