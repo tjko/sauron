@@ -1574,7 +1574,7 @@ sub make_dhcp() {
 
 sub print_subnets() {
   my(@qq,@qqq,$j,$k,$l,$router,$ssnet,$snet,$nmask,$dhcpid,$pri);
-  my(@ranges,$lst,$s,$b,$e,$last,$first_pool);
+  my(@ranges,$lst,$s,$b,$e,$last_ip,$first_pool);
 
   for $k (0..$#dpools) { $ranges[$k]=[]; }
 
@@ -1627,10 +1627,16 @@ sub print_subnets() {
 	  if (($dips[$l][0]==$dpools[$k][0]) && $ssnet->match($dips[$l][1])) {
 	    #print "foo: $snet $dips[$l][1]\n";
 	    if ($s==0) { $s=1; $b=$dips[$l][1]; }
-	    $last=$l;
+	    elsif ($s==1 && (ip2int($dips[$l][1]) > ip2int($last_ip)+1) ) {
+		$e=$last_ip; push @{$lst}, "range $b $e;";
+		print STDERR "dynamic range $b - $e ($dpools[$k][1])\n"
+		    if ($opt_verbose);
+		$b=$dips[$l][1];
+	    }
+	    $last_ip=$dips[$l][1];
 	  } else {
 	    if ($s==1) { 
-	      $e=$dips[$last][1]; push @{$lst}, "range $b $e;";
+	      $e=$last_ip; push @{$lst}, "range $b $e;";
 	      print STDERR "dynamic range $b - $e ($dpools[$k][1])\n"
 		if ($opt_verbose);
 	    }
@@ -1638,7 +1644,7 @@ sub print_subnets() {
 	  }
 	}
 	if ($s==1) { 
-	  $e=$dips[$last][1]; push @{$lst}, "range $b $e;"; 
+	  $e=$last_ip; push @{$lst}, "range $b $e;"; 
 	  print STDERR "dynamic range $b - $e ($dpools[$k][1])\n" 
 	    if ($opt_verbose);
 	}
