@@ -27,9 +27,13 @@ $ALEVEL_VLANS = 5;  # authorization level needed to see vlan info
 $REMOVE_EXPIRED_DELAY = 30;  # sauron --clean will remove all hosts that
 		             # have been expired longer than days defined here
 
+# mailer configuration
 # $SAURON_MAILER = '/usr/sbin/sendmail';
 # $SAURON_MAILER_ARGS = '-t'; 
 # $SAURON_MAIL_FROM = 'postmaster@somedomain'; 
+
+# set to enable ping command in web interface
+# $SAURON_PING_PROG = '/bin/ping';
 
 # specify charset for CGI interface (default is iso-8859-1)
 # $SAURON_CHARSET = 'iso-8859-15';
