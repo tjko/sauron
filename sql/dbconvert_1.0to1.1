@@ -3,11 +3,11 @@
 
 /* hosts */
 
-ALTER TABLE hosts ADD COLUMN vmps INT;
+ALTER TABLE hosts ADD COLUMN vmps INT4;
 ALTER TABLE hosts ALTER COLUMN vmps SET DEFAULT -1;
 UPDATE hosts SET vmps=-1;
 
-ALTER TABLE hosts ADD COLUMN dhcp_last INT;
+ALTER TABLE hosts ADD COLUMN dhcp_last INT4;
 ALTER TABLE hosts ALTER COLUMN dhcp_last SET DEFAULT -1;
 UPDATE hosts SET dhcp_last=-1;
 
@@ -26,6 +26,12 @@ ALTER TABLE utmp DROP COLUMN gid;
 
 /* vlan */
 ALTER TABLE vlans ADD COLUMN vlanno INT;
+
+/* groups */
+ALTER TABLE groups ADD COLUMN vmps INT4;
+ALTER TABLE groups ALTER COLUMN vmps SET DEFAULT -1;
+UPDATE groups SET vmps=-1;
+
 
 \i vmps.sql
 

@@ -1102,14 +1102,16 @@ if (param('csv')) {
   {ftype=>1, tag=>'name', name=>'Name', type=>'text', len=>40, empty=>0},
   {ftype=>4, tag=>'id', name=>'ID'},
   {ftype=>3, tag=>'type', name=>'Type', type=>'enum', enum=>\%group_type_hash},
-  {ftype=>1, tag=>'alevel', name=>'Authorization level', type=>'priority', 
+  {ftype=>3, tag=>'vmps', name=>'VMPS Domain', type=>'enum', conv=>'L',
+   enum=>\%vmps_list_hash, elist=>\@vmps_list_lst, restricted=>0},
+  {ftype=>1, tag=>'alevel', name=>'Authorization level', type=>'priority',
    len=>3, empty=>0},
   {ftype=>1, tag=>'comment', name=>'Comment', type=>'text', len=>60, empty=>1},
   {ftype=>2, tag=>'dhcp', name=>'DHCP entries', 
    type=>['text','text'], fields=>2, maxlen=>[200,20],
    len=>[50,20], empty=>[0,1], elabels=>['DHCP','comment']},
-  {ftype=>2, tag=>'printer', name=>'PRINTER entries', 
-   type=>['text','text'], fields=>2, len=>[40,20], empty=>[0,1], 
+  {ftype=>2, tag=>'printer', name=>'PRINTER entries',
+   type=>['text','text'], fields=>2, len=>[40,20], empty=>[0,1],
    elabels=>['PRINTER','comment'], iff=>['type','[1]']},
   {ftype=>0, name=>'Record info', no_edit=>1},
   {ftype=>4, name=>'Record created', tag=>'cdate_str', no_edit=>1},
@@ -2479,6 +2481,8 @@ sub groups_menu() {
     return;
   }
   return if (check_perms('server','R'));
+
+  get_vmps_list($serverid,\%vmps_list_hash,\@vmps_list_lst);
 
   if ($sub eq 'add') {
     $data{type}=1; $data{alevel}=0; $data{dhcp}=[]; $data{printer}=[];

@@ -18,6 +18,8 @@ CREATE TABLE groups (
 				     2 = dynamic address pool,
 				     3 = DHCP client class  */
        alevel       INT4 DEFAULT 0,   /* required authorization level */
+       vmps         INT4 DEFAULT -1,  /* VMPS domain reference
+                                          -->vmps.id */ 
        comment	    TEXT,
 
        CONSTRAINT   groups_key UNIQUE(name,server)

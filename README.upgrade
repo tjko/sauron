@@ -1,0 +1,27 @@
+
+When upgrading Sauron you may also need to update your database (format)
+to same level (version) as the new version of Sauron requires.
+Here is the current version history for database format:
+
+Sauron version		database version
+--------------		----------------
+0.5.x			1.0
+0.6.x			1.0
+0.7.0			1.1
+
+
+GENERAL UPGRADE PROCEDURE
+
+ 1) Make backup of your database!
+ 
+ 2) Identify which conversion script or scripts (if you're
+    not upgrading from the previous version) you need to use.
+    Conversion scripts are located in the sql/ directory.
+    For example script for converting from 1.0 to 1.1
+    would be named as: dbconvert_1.0to1.1.sql
+
+ 3) run upgrade scripts: psql sauron -f <filename>
+   
+ 4) vacuum database: psql sauron -c 'VACUUM ANALYZE;'
+
+

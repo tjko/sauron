@@ -67,8 +67,7 @@ CREATE TABLE hosts (
        misc	   TEXT,       /* misc info */
        asset_id	   TEXT,       /* asset ID */
 
-       vmps        INT DEFAULT -1, /* ptr to vmps table 
-	 				-->vmps.id */
+       vmps        INT4 DEFAULT -1, /* reserved */
 			       
        comment	   TEXT,       /* comment */
 

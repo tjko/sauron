@@ -1,6 +1,10 @@
 $Id$
 
 0.7.0beta
+	- added initial (Cisco) VMPS support
+	   - export-vmps utility for generating VMPS configuration files
+	   - VMPS domains can now be managed via Web interface
+	   - groups may now be associated with a VMPS domain
 	- changed DBI (DBD::Pg) as default database access method
 	  (use --with-Pg option when running configure to use Pg)
 	- user can now be member of more than one user group

@@ -106,6 +106,7 @@ $VERSION = '$Id$ ';
 	     delete_vlan
 	     get_vlan_list
 
+	     get_vmps_by_name
 	     get_vmps
 	     update_vmps
 	     add_vmps
@@ -2198,7 +2199,8 @@ sub get_group($$) {
   my ($id,$rec) = @_;
 
   return -100 if (get_record("groups",
-		      "name,comment,cdate,cuser,mdate,muser,type,alevel",
+			     "name,comment,cdate,cuser,mdate,muser," .
+			     "type,alevel,vmps",
 			     $id,$rec,"id"));
 
   get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comments",
@@ -2643,6 +2645,15 @@ sub get_vlan_list($$$) {
 
 ############################################################################
 # VMPS functions
+
+sub get_vmps_by_name($$) {
+  my($serverid,$name)=@_;
+  my(@q);
+  return -1 unless ($serverid > 0);
+  db_query("SELECT id FROM vmps WHERE server=$serverid AND name='$name'",\@q);
+  return -2 unless (@q > 0);
+  return ($q[0][0]);
+}
 
 sub get_vmps($$) {
   my ($id,$rec) = @_;
