@@ -869,6 +869,9 @@
   <row><entry><option>--quiet</></>
        <entry>Display less verbose output.</>
   </row>
+  <row><entry><option>--versions</></>
+       <entry>Display module version numbers.</>
+  </row>
   </tbody>
   </tgroup>
 </informaltable>

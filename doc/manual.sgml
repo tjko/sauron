@@ -31,7 +31,7 @@
         </affiliation>
       </author>
     </authorgroup>
-    <pubdate>2003-02-21</>
+    <pubdate>2003-03-05</>
 
     <copyright>
       <year>2003</>
@@ -39,6 +39,12 @@
     </copyright>
 
     <revhistory>
+      <revision>
+        <revnumber>0.6</>
+        <date>2003-03-05</>
+        <authorinitials>tjko</>
+        <revremark>Updated to cover new features in Sauron 0.6.x</>
+      </revision>
       <revision>
         <revnumber>0.5</>
         <date>2003-02-21</>
@@ -607,7 +613,7 @@
       <title>Initializing Database</>
       <para>
         Before using Sauron, you need to initialized the database. For this
-        there is <application>createtables</> utility that is included
+        there is <command>createtables</> utility that is included
         with Sauron. To initialize the database, simply run following command
         in Sauron program directory:
         <screen>
@@ -629,6 +635,15 @@ CGI interface:         Enabled
 
 No servers found in database!
         </screen>
+      </para>
+      <para>
+        It is also recommended to check that the Perl modules in use
+        meet the requirements (see <xref linkend="system-requirements">).
+        This can be done by running <command>status</> command with 
+        <option>--versions</> option:
+        <screen>
+        ./status --versions
+        </screen> 
       </para>
       </section>
 
