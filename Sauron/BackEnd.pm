@@ -2582,7 +2582,7 @@ sub get_who_list($$) {
   $t=time;
   db_query("SELECT u.username,u.name,a.addr,a.login,a.last " .
 	   "FROM users u, utmp a " .
-	   "WHERE a.uid=u.id;",\@q);
+	   "WHERE a.uid=u.id ORDER BY u.username",\@q);
 
   for $i (0..$#q) {
     $login=$q[$i][3];
