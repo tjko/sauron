@@ -707,7 +707,7 @@ $menu=param('menu');
 $remote_addr = $ENV{'REMOTE_ADDR'};
 $remote_host = remote_host();
 
-$scookie = cookie(-name=>'sauron');
+$scookie = cookie(-name=>"sauron-$SERVER_ID");
 if ($scookie) {
   unless (load_state($scookie)) { 
     logmsg("notice","invalid cookie ($scookie) supplied by $remote_addr"); 
@@ -2647,7 +2647,7 @@ sub logout() {
   $u=$state{'user'};
   update_lastlog($state{uid},$state{sid},2,$remote_addr,$remote_host);
   logmsg("notice","user ($u) logged off from $remote_addr");
-  $c=cookie(-name=>'sauron',-value=>'logged off',-expires=>'+1s',
+  $c=cookie(-name=>"sauron-$SERVER_ID",-value=>'logged off',-expires=>'+1s',
 	    -path=>$s_url);
   remove_state($scookie);
   print header(-target=>'_top',-cookie=>$c),
@@ -2977,7 +2977,8 @@ sub make_cookie() {
   $state{'addr'}=$ENV{'REMOTE_ADDR'};
   save_state($val);
   $ncookie=$val;
-  return cookie(-name=>'sauron',-expires=>'+7d',-value=>$val,-path=>$s_url);
+  return cookie(-name=>"sauron-$SERVER_ID",-expires=>'+7d',
+		-value=>$val,-path=>$s_url);
 }
 
 sub save_state($) {

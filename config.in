@@ -7,7 +7,7 @@ $VER = "0.42";
 $LOG_DIR = "/tmp/";
 $PROG_DIR = "/home/tjko/work/sauron/";
 $ICON_PATH = "/sauron/icons";
-
+$SERVER_ID = "foo";   # unique server ID (if using multiple www-server)
 
 $DB_CONNECT = "host=ns1.jyu.fi port=5432 dbname=sauron user=tjko password=farside";
 
