@@ -10,7 +10,7 @@ use CGI::Carp 'fatalsToBrowser'; # debug stuff
 use Digest::MD5;
 
 $CGI::DISABLE_UPLOADS =1; # no uploads
-$CGI::POST_MAX = 100000; # max 100k posts
+$CGI::POST_MAX = 10000; # max 100k posts
 
 $debug_mode = 1;
 
@@ -36,6 +36,40 @@ do "$PROG_DIR/back_end.pl";
 
 error("invalid directory configuration") 
   unless (-d $CGI_STATE_PATH && -w $CGI_STATE_PATH);
+
+
+%server_form = ( 
+ data=>[
+  {ftype=>0, name=>'Server' },  
+  {ftype=>1, tag=>'name', name=>'Server name', type=>'text', len=>20},
+  {ftype=>1, tag=>'comment', name=>'Comments',  type=>'text', len=>60,
+   empty=>1},
+  {ftype=>0, name=>'DNS'},
+  {ftype=>1, tag=>'hostmaster', name=>'Hostmaster', type=>'fqdn', len=>30,
+   default=>'hostmaster.my.domain.'},
+  {ftype=>1, tag=>'hostname', name=>'Hostname',type=>'fqdn', len=>30,
+   default=>'ns.my.domain.'},
+  {ftype=>1, tag=>'pzone_path', name=>'Primary zone-file path', type=>'path',
+   len=>30, empty=>1},
+  {ftype=>1, tag=>'szone_path', name=>'Slave zone-file path', type=>'path',
+   len=>30, empty=>1, default=>'NS2/'},
+  {ftype=>1, tag=>'named_ca', name=> 'Root-server file', type=>'text', len=>30,
+   default=>'named.ca'},
+  {ftype=>2, tag=>'allow_transfer', name=>'Allow-transfer', fields=>2,
+   type=>['cidr','text'], len=>[20,30], empty=>[0,1], 
+   elabels=>['IP','comment']},
+  {ftype=>0, name=>'DHCP'},
+  {ftype=>2, tag=>'dhcp', name=>'Global DHCP', type=>'text', fields=>2,
+   len=>[35,20], empty=>[0,1],elabels=>['dhcptab line','comment']} 
+ ],
+ bgcolor=>'#00ffff',
+ border=>'0',		
+ width=>'100%',
+ nwidth=>'30%',
+ heading_bg=>'#aaaaff'
+);
+
+
 
 #####################################################################
 
@@ -120,7 +154,7 @@ if ($debug_mode) {
          "<br>cookie='$scookie'\n",
         "<br>s_url='$s_url' '$selfurl'\n",
         "<br>url()=" . url(),
-        "<p>self_url()=" . self_url(),
+ #       "<p>self_url()=" . self_url(),
         "<p>";
   @names = param();
   foreach $var (@names) {
@@ -132,6 +166,9 @@ if ($debug_mode) {
     print " $key=" . $state{$key} . "<br>";
   }
   print "<hr><p>\n";
+  foreach $key (keys %server_form) {
+    print "$key,";
+  }
 }
  
 print "</TABLE> <!-- end of page -->\n" unless ($frame_mode);
@@ -159,51 +196,15 @@ sub servers() {
       goto select_server;
     }
 
-    unless (param('server_re_edit') eq '1') {
+    unless (param('srv_re_edit') eq '1') {
       get_server($serverid,\%serv);
-      param('srv_name',$serv{'name'});
-      param('srv_comment',$serv{'comment'});
-      param('srv_hostmaster',$serv{'hostmaster'});
-      param('srv_hostname',$serv{'hostname'});
-      param('srv_pzone',$serv{'pzone_path'});
-      param('srv_szone',$serv{'szone_path'});
-      param('srv_namedca',$serv{'named_ca'});
-      param_array('srv_dhcp',$serv{'dhcp'});
-      param_array('srv_allow_transfer',$serv{'allow_transfer'});
     }
     
     print h2("Edit server: $server"),p,
             startform(-method=>'POST',-action=>$selfurl),
-            hidden('menu','servers'),hidden('sub','edit'),
-            hidden('server_re_edit',1),
-            "\n<TABLE border=1>",
-            Tr,td(["Server name",
-                  textfield(-name=>'srv_name',-value=>param('srv_name'))]),
-            Tr,td(["Comments",
-		   textfield(-name=>'srv_comment',-size=>'60',
-			    -value=>param('srv_comment'))]),
-            Tr,
-            Tr,td(["Hostmaster",
-		textfield(-name=>'srv_hostmaster',-size=>'30',
-			  -value=>param('srv_hostmaster'))]),
-            Tr,td(["Hostname",
-		textfield(-name=>'srv_hostname',-size=>'30',
-			  -value=>param('srv_hostname'))]),
-            Tr,td(["Primary zone-file path",
-		textfield(-name=>'srv_pzone',-size=>'30',
-			  -value=>param('srv_pzone'))]),
-            Tr,td(["Slave zone-file path",
-		textfield(-name=>'srv_szone',-size=>'30',
-			  -value=>param('srv_szone'))]),
-            Tr,td(["Root-server file",
-		textfield(-name=>'srv_namedca',-size=>'30',
-			  -value=>param('srv_namedca'))]),
-            Tr,"<TD>Allow transfer</TD><TD>";
-    form_array('srv_allow_transfer',20);
-    print   "</TD>",Tr,"<TD>Global DHCP</TD><TD>";
-    form_array('srv_dhcp',60);
-    print "</TD></TABLE>",
-          submit,end_form;
+            hidden('menu','servers'),hidden('sub','edit');
+    form_magic('srv',\%serv,\%server_form);
+    print submit(-name=>'srv_submit',-value=>'Make changes'),end_form;
     
   }
   else {
@@ -225,30 +226,9 @@ sub servers() {
 	$state{'serverid'}=$serverid;
 	save_state($scookie);
       }
-      print "<TABLE BGCOLOR=#f0f000 WIDTH=\"100%\">",
-         Tr,"<TH align=left width=30% bgcolor=white>Server<TH>",
-         Tr,td(['Server name',$serv{'name'}]),
-         Tr,td(['Server ID',$serv{'id'}]),
-         Tr,td(['Comments',$serv{'comment'}]),
-         Tr,Tr,"<TH align=left width=30% bgcolor=white>BIND",
-         Tr,td(['Hostmaster',$serv{'hostmaster'}]),
-         Tr,td(['Hostname',$serv{'hostname'}]),
-         Tr,td(['Directory',$serv{'directory'}]),
-         Tr,td(['Primary zone-file path',$serv{'pzone_path'}]),
-         Tr,td(['Slave zone-file path',$serv{'szone_path'}]),
-         Tr,td(['Root-server file',$serv{'named_ca'}]),
-         Tr,td('Allow transfer'),td;
-      $at=$serv{'allow_transfer'};
-      for $i (0 .. $#{$at}) {
-	print $$at[$i] . "<br>";
-      }
-      print Tr,Tr,"<TH align=left width=30% bgcolor=white>DHCP",
-            Tr,td('Global settings'),td;
-      $dh=$serv{'dhcp'};
-      for $i (0 .. $#{$dh}) {
-	print $$dh[$i] . "<br>";
-      }
-      print "</TABLE>";
+      
+      display_form(\%serv,\%server_form);
+
     }
     else {
      select_server:
@@ -705,6 +685,141 @@ sub form_array($$) {
   param("$pref",$j);
   print hidden(-name=>$pref,-value=>$j);
   
+}
+
+sub form_magic($$$) {
+  my($prefix,$data,$form) = @_;
+  my($i,$j,$k,$n,$key,$rec,$a,$formdata,$h_bg);
+
+  $formdata=$form->{data};
+  if ($form->{heading_bg}) { $h_bg=$form->{heading_bg}; }
+  else { $h_bg=$SAURON_BGCOLOR; }
+
+  # initialize fields
+  unless (param($prefix . "_re_edit") eq '1' || ! $data) {
+    for $i (0..$#{$formdata}) {
+      $rec=$$formdata[$i];
+      if ($rec->{ftype} == 1) { 
+	param($prefix."_".$rec->{tag},$data->{$rec->{tag}});
+      }
+      elsif ($rec->{ftype} == 2) {
+	$a=$data->{$rec->{tag}};
+	for $j (0..$#{$a}) {
+	  for $k (1..$rec->{fields}) {
+	    param($prefix."_".$rec->{tag}."_".$j."_".$k,$$a[$j][$k]);
+	  }
+	}
+	param($prefix."_".$rec->{tag}."_count",$#{$a});
+      }
+      elsif ($rec->{ftype} == 0) {
+      }
+      else { error("internal error (form_magic)");  }
+    }
+  }   
+
+  #generate form fields
+  print hidden($prefix."_re_edit",1),"\n<TABLE ";
+  print "BGCOLOR=\"" . $form->{bgcolor} . "\" " if ($form->{bgcolor});
+  print "FGCOLOR=\"" . $form->{fgcolor} . "\" " if ($form->{fgcolor});
+# netscape sekoilee muuten no-frame modessa...
+#  print "WIDTH=\"" . $form->{width} . "\" " if ($form->{width});
+  print "BORDER=\"" . $form->{border} . "\" " if ($form->{border});
+  print ">\n";
+
+
+  for $i (0..$#{$formdata}) {
+    $rec=$$formdata[$i];
+    if ($rec->{ftype} == 0) {
+      print "<TR><TH COLSPAN=2 ALIGN=\"left\" BGCOLOR=\"$h_bg\">",
+             $rec->{name},"</TH>\n";
+    } elsif ($rec->{ftype} == 1) {
+      print Tr,td($rec->{name}),
+            td(textfield(-name=>$prefix."_".$rec->{tag},-size=>$rec->{len},
+			 -value=>param($prefix."_".$rec->{tag}))),"\n";
+    } elsif ($rec->{ftype} == 2) {
+      print Tr,td($rec->{name}),"<TD><TABLE>",Tr;
+      $a=param($prefix."_".$rec->{tag}."_count");
+      if (param($prefix."_".$rec->{tag}."_add") ne '') {
+	$a=$a+1;
+	param($prefix."_".$rec->{tag}."_count",$a);
+      }
+      $a=0 if (!$a || $a < 0);
+      #if ($a > 50) { $a = 50; }
+      print hidden(-name=>$prefix."_".$rec->{tag}."_count",-value=>$a);
+      for $k (1..$rec->{fields}) { 
+	print "<TD>",${$rec->{elabels}}[$k-1],"</TD>"; 
+      }
+      for $j (1..$a) {
+	print Tr;
+	for $k (1..$rec->{fields}) {
+	  $n=$prefix."_".$rec->{tag}."_".$j."_".$k;
+	  print td(textfield(-name=>$n,-size=>${$rec->{len}}[$k-1],
+		   -value=>param($n)));
+
+        }
+        print td(checkbox(-label=>' Delete',
+	             -name=>$prefix."_".$rec->{tag}."_".$j."_del",
+		     -checked=>param($prefix." ".$rec->{tag}."_".$j."_del") ));
+      }
+      print Tr,Tr,Tr,Tr;
+      $j=$a+1;
+      for $k (1..$rec->{fields}) {
+	$n=$prefix."_".$rec->{tag}."_".$j."_".$k;
+	print td(textfield(-name=>$n,-size=>${$rec->{len}}[$k-1],
+		 -value=>param($n)));
+      }
+      print td(submit(-name=>$prefix."_".$rec->{tag}."_add",-value=>'Add'));
+      print "</TABLE></TD>\n";
+    }
+  }
+
+  print "</TABLE>";
+}
+
+sub display_form($$) {
+  my($data,$form) = @_;
+  my($i,$j,$k,$a,$rec,$formdata,$h_bg);
+
+  $formdata=$form->{data};
+
+  print "<TABLE ";
+  print "BGCOLOR=\"" . $form->{bgcolor} . "\" " if ($form->{bgcolor});
+  print "FGCOLOR=\"" . $form->{fgcolor} . "\" " if ($form->{fgcolor});
+  print "WIDTH=\"" . $form->{width} . "\" " if ($form->{width});
+  print "BORDER=\"" . $form->{border} . "\" " if ($form->{border});
+  print ">";
+
+  for $i (0..$#{$formdata}) {
+    $rec=$$formdata[$i];
+
+    if ($form->{heading_bg}) { $h_bg=$form->{heading_bg}; }
+    else { $h_bg=$SAURON_BGCOLOR; }
+
+    if ($rec->{ftype} == 0) {
+      print "<TR><TH COLSPAN=2 ALIGN=\"left\" ",
+            "BGCOLOR=\"$h_bg\">",
+            $rec->{name},"</TH>\n";
+    } elsif ($rec->{ftype} == 1) {
+      #print Tr,td([$rec->{name},$data->{$rec->{tag}}]);
+      print Tr,"<TD WIDTH=\"",$form->{nwidth},"\">",$rec->{name},"</TD><TD>",
+            $data->{$rec->{tag}},"</TD>\n";
+    } elsif ($rec->{ftype} == 2) {
+      print Tr,td($rec->{name}),"<TD><TABLE>",Tr;
+      $a=$data->{$rec->{tag}};
+      for $k (1..$rec->{fields}) { 
+	#print "<TH>",$$a[0][$k-1],"</TH>"; 
+      }
+      for $j (1..$#{$a}) {
+	print Tr;
+	for $k (1..$rec->{fields}) { print td($$a[$j][$k]); }
+      }
+      print "</TABLE></TD>\n";
+    } else {
+      error("internal error (display_form)");
+    }
+  }
+
+  print "</TABLE>";
 }
 
 #####################################################################

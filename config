@@ -13,3 +13,7 @@ $DB_CONNECT = "dbname=sauron user=tjko password=kala";
 
 $LOOPBACK_NET = "127.0.0.0/24";
 $LOOPBACK_ZONE = "loopback.";
+
+
+$SAURON_BGCOLOR="white";
+$SAURON_FGCOLOR="black";

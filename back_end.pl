@@ -115,14 +115,39 @@ sub get_server_list() {
   return $list;
 }
 
+
+sub get_array_field($$$$$$$) {
+  my($table,$count,$fields,$desc,$rule,$rec,$keyname) = @_;
+  my(@list,$l,$i);
+
+  db_query("SELECT $fields FROM $table WHERE $rule;",\@list);
+  $l=[];
+  push @{$l}, [split(",",$desc)];
+  for $i (0..$#list) {
+    push @{$l}, $list[$i];
+  }
+
+  $$rec{$keyname}=$l;
+}
 	       
 sub get_server($$) {
   my ($id,$rec) = @_;
-  return get_record("servers",
-		    "name,directory,named_ca,\@allow_transfer,\@dhcp," .
+  my ($res);
+
+  $res = get_record("servers",
+		    "name,directory,named_ca," .
 		    "pzone_path,szone_path,hostname,hostmaster,comment",
 		    $id,
 		    $rec,"id");
+
+  return -1 if ($res < 0);
+  
+  get_array_field("cidr_entries",3,"id,ip,comment","IP,Comments",
+		  "type=1 AND ref=$id ORDER BY ip",$rec,'allow_transfer');
+  get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comments",
+		  "type=1 AND ref=$id ORDER BY dhcp",$rec,'dhcp');
+
+  return 0;
 }
 
 
