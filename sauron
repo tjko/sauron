@@ -408,7 +408,7 @@ sub make_bind() {
     else { $zfile=''; }
     $zfile.=$zonename . ".zone";
 
-    print BINDFILE "zone \"$zonename\" $zone{'class'} {\n";
+    print BINDFILE "zone \"$zonename\" $zone{class} {\n";
     print BINDFILE "\ttype $type;\n";
     $val=$check_names_enum{$zone{chknames}};
     print BINDFILE "\tcheck-names $val;\n" if ($val ne '');
@@ -416,52 +416,20 @@ sub make_bind() {
     print BINDFILE "\tnotify $val;\n" if ($val ne '');
     print BINDFILE "\tfile \"$zfile\";\n"
       if ($type eq 'master' || $type eq 'slave');
+    print BINDFILE "\tforward $forward_enum{$zone{forward}};\n"
+      if ($forward_enum{$zone{forward}} && $type eq 'forward');
 
     # allow_update
-    undef @q;
-    db_query("SELECT ip FROM cidr_entries WHERE type=2 AND ref=$zoneid " .
-	     "ORDER BY ip;",\@q);
-    error(db_errormsg()) if (db_errormsg());
-    if (@q > 0) {
-      print BINDFILE "\tallow-update {\n";
-      for $j (0..(@q-1)) { print BINDFILE "\t\t$q[$j][0];\n"; }
-      print BINDFILE "\t};\n";
-    }
+    print_cidr_list('allow-update',2,$zoneid,"\t");
     # allow_query
-    undef @q;
-    db_query("SELECT ip FROM cidr_entries WHERE type=4 AND ref=$zoneid " .
-	     "ORDER BY ip;",\@q);
-    error(db_errormsg()) if (db_errormsg());
-    if (@q > 0) {
-      print BINDFILE "\tallow-query {\n";
-      for $j (0..(@q-1)) { print BINDFILE "\t\t$q[$j][0];\n"; }
-      print BINDFILE "\t};\n";
-    }
+    print_cidr_list('allow-query',4,$zoneid,"\t");
     # allow_transfer
-    undef @q;
-    db_query("SELECT ip FROM cidr_entries WHERE type=5 AND ref=$zoneid " .
-	     "ORDER BY ip;",\@q);
-    error(db_errormsg()) if (db_errormsg());
-    if (@q > 0) {
-      print BINDFILE "\tallow-transfer {\n";
-      for $j (0..(@q-1)) { print BINDFILE "\t\t$q[$j][0];\n"; }
-      print BINDFILE "\t};\n";
-    }
+    print_cidr_list('allow-transfer',5,$zoneid,"\t");
     # also_notify
-    undef @q;
-    db_query("SELECT ip FROM cidr_entries WHERE type=6 AND ref=$zoneid " .
-	     "ORDER BY ip;",
-	     \@q);
-    error(db_errormsg()) if (db_errormsg());
-    if (@q > 0) {
-      print BINDFILE "\talso-notify {\n";
-      for $j (0..(@q-1)) {
-	$ip=$q[$j][0];
-	$ip =~ s/\/32$//g;
-	print BINDFILE "\t\t$ip;\n";
-      }
-      print BINDFILE "\t};\n";
-    }
+    print_cidr_list('also-notify',6,$zoneid,"\t");
+    # forwarders
+    print_cidr_list('forwarders',12,$zoneid,"\t") if ($type eq 'forward');
+
     # masters (IPs)
     if ($type eq 'slave') {
       undef @q;
@@ -485,8 +453,8 @@ sub make_bind() {
 
     print BINDFILE "};\n\n\n";
 
-
     next unless ($type eq 'master');
+
     if ($zone{'dummy'} eq 't') {
       print "Skipping zone creation for dummy zone: $zonename\n";
       next;
