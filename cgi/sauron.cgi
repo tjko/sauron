@@ -127,7 +127,7 @@ do "$PROG_DIR/cgi_util.pl";
 %zone_form = (
  data=>[
   {ftype=>0, name=>'Zone' },
-  {ftype=>1, tag=>'name', name=>'Zone name', type=>'domain', len=>30},
+  {ftype=>1, tag=>'name', name=>'Zone name', type=>'domain', len=>50},
   {ftype=>4, tag=>'reversenet', name=>'Reverse net', iff=>['reverse','t']},
   {ftype=>4, tag=>'id', name=>'Zone ID'},
   {ftype=>1, tag=>'comment', name=>'Comments', type=>'text', len=>60,
