@@ -9,6 +9,7 @@ require Exporter;
 @ISA = qw(Exporter); # Inherit from Exporter
 @EXPORT = qw(
 	     load_config
+	     load_browser_config
 	    );
 
 use strict;
@@ -50,22 +51,23 @@ sub set_defaults() {
   $main::LOOPBACK_ZONE = 'loopback.';
 }
 
-sub load_config() {
+sub load_config_file($) {
+  my($cfile)=@_;
   my($file,$ret);
 
-  set_defaults();
+  fatal("internal error in load_config_file()") unless ($cfile);
 
-  if (-f "/etc/sauron/config") {
-    $file="/etc/sauron/config";
+  if (-f "/etc/sauron/$cfile") {
+    $file="/etc/sauron/$cfile";
   }
-  elsif (-f "/usr/local/etc/sauron/config") {
-    $file="/usr/local/etc/sauron/config";
+  elsif (-f "/usr/local/etc/sauron/$cfile") {
+    $file="/usr/local/etc/sauron/$cfile";
   }
-  elsif (-f "/opt/sauron/etc/config") {
-    $file="/opt/sauron/etc/config";
+  elsif (-f "/opt/sauron/etc/$cfile") {
+    $file="/opt/sauron/etc/$cfile";
   }
   else {
-    fatal("cannot find configuration file!");
+    fatal("cannot find configuration file: $cfile");
   }
 
   fatal("cannot read configuration file: $file") unless (-r $file);
@@ -76,10 +78,37 @@ sub load_config() {
     fatal("failed to run configuration file: $file") unless $ret;
   }
 
+}
+
+# load sauron config file
+sub load_config() {
+  my($file,$ret);
+
+  set_defaults();
+  load_config_file("config");
+
   fatal("DB_CONNECT not set in configuration file") unless ($main::DB_CONNECT);
   fatal("SERVER_ID not set in configuration file") unless ($main::SERVER_ID);
   fatal("PROG_DIR not set in configuration file") unless ($main::PROG_DIR);
   fatal("LOG_DIR not set in configuration file") unless ($main::LOG_DIR);
+
+  return 0;
+}
+
+# load (sauron) browser config file
+sub load_browser_config() {
+
+  # set defaults
+  $main::BROWSER_MAX = 100;
+  $main::BROWSER_CHARSET = 'iso-8859-1';
+  $main::BROWSER_SHOW_FIELDS = 'huser,location,info,dept';
+  $main::BROWSER_HIDE_PRIVATE = 1;
+  $main::BROWSER_HIDE_FIELDS = 'huser,location';
+
+  load_config_file("config-browser");
+
+  fatal("DB_CONNECT not set in configuration file") unless ($main::DB_CONNECT);
+  fatal("PROG_DIR not set in configuration file") unless ($main::PROG_DIR);
 
   return 0;
 }
