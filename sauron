@@ -524,7 +524,7 @@ sub make_bind() {
       db_query("SELECT a.ip,h.domain,h.ttl,z.name,h.expiration " .
 	       "FROM hosts h,zones z,a_entries a " .
 	       "WHERE z.server=$serverid AND h.zone=z.id " .
-	       " AND (h.type=1 OR h.type=10) " .
+	       " AND (h.type=1 OR h.type=6 OR h.type=10) " .
 	       " AND a.host=h.id " .
 	       " AND a.reverse=true AND a.ip << '$zone{reversenet}' " .
 	       "ORDER BY ip;",\@q);
