@@ -42,7 +42,8 @@ unless ($opt_user) {
   chomp ($opt_user = <STDIN>);
   $i=1;
 }
-fatal("Invalid username '$opt_user'!") unless ($opt_user =~ /^[a-z0-9]+$/);
+fatal("Invalid username '$opt_user'!")
+  unless ($opt_user =~ /^[a-z0-9]{1,8}$/);
 fatal("User allready exists!") unless (get_user($opt_user,\%user));
 undef %user;
 
