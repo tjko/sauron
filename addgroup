@@ -1,0 +1,86 @@
+#!/usr/bin/perl
+#
+# addgroup - utility to create users
+#
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000.
+# $Id$
+#
+require 5;
+use Getopt::Long;
+use Term::ReadKey;
+
+my ($PG_DIR,$PG_NAME) = ($0 =~ /^(.*\/)(.*)$/);
+$0 = $PG_NAME;
+
+do "$PG_DIR/config" || die("cannot load config");
+do "$PG_DIR/util.pl";
+do "$PG_DIR/db.pl";
+
+
+$cdate = time;
+$user = (getpwuid($<))[0];
+
+sub fatal($) {
+  my ($msg) = @_;
+  print STDERR "$0: $msg\n";
+  exit(1);
+}
+
+##############################################
+
+$result = GetOptions("help|h","name=s","group=s");
+
+if ($opt_help) {
+  print "syntax: $0 [--help] [--group=name] [--name=\"<groupname>\"]\n";
+  exit(0);
+}
+
+db_connect();
+
+
+unless ($opt_group) {
+  print "Enter group name: ";
+  $opt_group = ReadLine 0;
+  chomp $opt_group;
+  $i=1;
+}
+fatal("Invalid groupname '$opt_group'!") unless ($opt_group =~ /^\S+$/);
+
+
+unless ($opt_name) {
+  print "Enter group description: ";
+  $opt_name = ReadLine 0;
+  chomp $opt_name;
+  $i=1;
+}
+
+$user = (getpwuid($<))[0];
+
+if ($i) { # ask confirmation only in interactive session...
+  print "\t Groupname: $opt_group\n",
+  "\t Description: $opt_name\n",
+  "Add this group [y/n]?";
+
+  $t=ReadLine 0;
+  chomp $t;
+  unless ($t eq 'y' || $t eq 'Y') {
+    print "Group not added!\n";
+    exit(1);
+  }
+}
+
+
+$res=db_exec("INSERT INTO user_groups " .
+	     "(name,comment) VALUES('$opt_group','$opt_name');");
+
+fatal("Cannot add group! (group already exists?)\n" .  db_errormsg()) 
+	  if ($res < 0);
+
+print "Group $opt_group added succesfully.\n";
+
+
+exit;
+
+
+# eof :-)
+

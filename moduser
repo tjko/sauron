@@ -37,7 +37,7 @@ $mdate = time;
 ##############################################
 
 $result = GetOptions("help|h","list!","add:s","delall!","del=s","passwd:s",
-		     "name=s","superuser=s","lock!","unlock!","edit!");
+  	     "group=s","name=s","superuser=s","lock!","unlock!","edit!");
 
 $opt_user=$ARGV[0];
 
@@ -49,6 +49,7 @@ if ($opt_help || ($opt_user eq '' &&  $opt_list eq '')) {
   print "   --name=\"user name\"                    full user name\n",
         "   --superuser=<yes|no>                  toggle superuser flag\n",
         "   --passwd                              set password (interactive)\n",
+        "   --group=<groupname>                   set user group\n",
         "   --passwd=<password>                   set password\n",
         "   --list                                list all $fooname\n",
         "   --lock                                lock account\n",
@@ -127,6 +128,17 @@ if ($modgroup) {
     print "User description succesfully updated.\n";
   }
 
+  if ($opt_group) {
+    undef @q;
+    db_query("SELECT id FROM user_groups WHERE name='$opt_group';",\@q);
+    fatal("Cannot find group: $opt_group") unless ($q[0][0] > 0);
+    $group_id=$q[0][0];
+    $res=db_exec("UPDATE users SET gid=$group_id, " .
+		 " muser='$user',mdate='$mdate' WHERE id=$id;");
+    fatal("Cannot update user description!") if ($res < 0);
+    print "User description succesfully updated.\n";
+  }
+
   if ($opt_superuser) {
     if ($opt_superuser eq 'yes') { $superuser='true'; }
     elsif ($opt_superuser eq 'no') { $superuser='false'; }
@@ -190,6 +202,7 @@ if ($modgroup) {
   $muser_str=$q[0][9];
   $gid=$q[0][5];
   $gidname='<none>';
+  $longname=$q[0][1];
   if ($gid > 0) {
     undef @q;
     db_query("SELECT name FROM user_groups WHERE id=$gid;",\@q);
@@ -197,7 +210,7 @@ if ($modgroup) {
   }
 
   print "\n        Username: $opt_user (id=$id)\n",
-        "        longname: $q[0][1]\n",
+        "        longname: $longname\n",
         "       superuser: " ,($q[0][2] eq 't' ? 'Yes':'No'), "\n",
         "           group: $gidname (gid=$gid)\n",
 	"          status: $status\n",

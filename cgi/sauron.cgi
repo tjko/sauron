@@ -221,9 +221,9 @@ do "$PROG_DIR/back_end.pl";
    empty=>1, iff=>['type','1']},
   {ftype=>0, name=>'Equipment info', iff=>['type','1']},
   {ftype=>1, tag=>'hinfo_hw', name=>'HINFO hardware', type=>'hinfo', len=>20,
-   iff=>['type','1']},
+   empty=>1, iff=>['type','1']},
   {ftype=>1, tag=>'hinfo_sw', name=>'HINFO software', type=>'hinfo', len=>20,
-   iff=>['type','1']},
+   empty=>1, iff=>['type','1']},
   {ftype=>1, tag=>'ether', name=>'Ethernet address', type=>'mac', len=>12,
    iff=>['type','1'], empty=>1},
   {ftype=>4, tag=>'card_info', name=>'Card manufacturer', iff=>['type','1']},
@@ -296,11 +296,11 @@ do "$PROG_DIR/back_end.pl";
    empty=>0, iff=>['type','1']},
   {ftype=>0, name=>'Equipment info', iff=>['type','1']},
   {ftype=>1, tag=>'hinfo_hw', name=>'HINFO hardware', type=>'hinfo', len=>20,
-   iff=>['type','1']},
+   empty=>1, iff=>['type','1']},
   {ftype=>1, tag=>'hinfo_sw', name=>'HINFO software', type=>'hinfo', len=>20,
-   iff=>['type','1']},
+   empty=>1, iff=>['type','1']},
   {ftype=>1, tag=>'ether', name=>'Ethernet address', type=>'mac', len=>12,
-   iff=>['type','1'], iff2=>['ether_alias_info','-1'], empty=>0},
+   iff=>['type','1'], iff2=>['ether_alias_info',''], empty=>0},
   {ftype=>4, tag=>'ether_alias_info', name=>'Ethernet alias', 
    iff=>['type','1']}, 
 
@@ -1733,10 +1733,11 @@ sub groups_menu() {
     }
     display_form(\%group,\%group_form);
     print p,startform(-method=>'GET',-action=>$selfurl),
-          hidden('menu','groups'),
-          submit(-name=>'sub',-value=>'Edit'), "  ",
-          submit(-name=>'sub',-value=>'Delete'),
-          hidden('grp_id',$id),end_form;
+          hidden('menu','groups');
+    print submit(-name=>'sub',-value=>'Edit'), "  ",
+          submit(-name=>'sub',-value=>'Delete')
+	    unless (check_perms('superuser','',1));
+    print hidden('grp_id',$id),end_form;
     return;
   }
 
@@ -1903,10 +1904,11 @@ sub nets_menu() {
     }
     display_form(\%net,\%net_form);
     print p,startform(-method=>'GET',-action=>$selfurl),
-          hidden('menu','nets'),
-          submit(-name=>'sub',-value=>'Edit'), "  ",
-          submit(-name=>'sub',-value=>'Delete'), " &nbsp;&nbsp;&nbsp; ",
-          submit(-name=>'sub',-value=>'Net Info'),
+          hidden('menu','nets');
+    print submit(-name=>'sub',-value=>'Edit'), "  ",
+          submit(-name=>'sub',-value=>'Delete'), " &nbsp;&nbsp;&nbsp; "
+	    unless (check_perms('superuser','',1));
+    print submit(-name=>'sub',-value=>'Net Info'),
           hidden('net_id',$id),end_form;
     return;
   }
@@ -2247,10 +2249,11 @@ sub templates_menu() {
     }
     display_form(\%mxhash,\%mx_template_form);
     print p,startform(-method=>'GET',-action=>$selfurl),
-          hidden('menu','templates'),
-          submit(-name=>'sub',-value=>'Edit'), "  ",
-          submit(-name=>'sub',-value=>'Delete'),
-          hidden('mx_id',$mx_id),end_form;
+          hidden('menu','templates');
+    print submit(-name=>'sub',-value=>'Edit'), "  ",
+          submit(-name=>'sub',-value=>'Delete') 
+	    unless (check_perms('superuser','',1));
+    print hidden('mx_id',$mx_id),end_form;
     return;
   }
   elsif ($wks_id > 0) {
@@ -2261,10 +2264,11 @@ sub templates_menu() {
     }
     display_form(\%wkshash,\%wks_template_form);
     print p,startform(-method=>'GET',-action=>$selfurl),
-          hidden('menu','templates'),
-          submit(-name=>'sub',-value=>'Edit'), "  ",
-          submit(-name=>'sub',-value=>'Delete'),
-          hidden('wks_id',$wks_id),end_form;
+          hidden('menu','templates');
+    print submit(-name=>'sub',-value=>'Edit'), "  ",
+          submit(-name=>'sub',-value=>'Delete')
+	    unless (check_perms('superuser','',1));
+    print hidden('wks_id',$wks_id),end_form;
     return;
   }
   elsif ($pc_id > 0) {
@@ -2275,10 +2279,11 @@ sub templates_menu() {
     }
     display_form(\%pchash,\%printer_class_form);
     print p,startform(-method=>'GET',-action=>$selfurl),
-          hidden('menu','templates'),
-          submit(-name=>'sub',-value=>'Edit'), "  ",
-          submit(-name=>'sub',-value=>'Delete'),
-          hidden('pc_id',$pc_id),end_form;
+          hidden('menu','templates');
+    print submit(-name=>'sub',-value=>'Edit'), "  ",
+          submit(-name=>'sub',-value=>'Delete')
+	    unless (check_perms('superuser','',1));
+    print hidden('pc_id',$pc_id),end_form;
     return;
   }
   elsif ($hinfo_id > 0) {
@@ -2289,10 +2294,11 @@ sub templates_menu() {
     }
     display_form(\%hinfohash,\%hinfo_template_form);
     print p,startform(-method=>'GET',-action=>$selfurl),
-          hidden('menu','templates'),
-          submit(-name=>'sub',-value=>'Edit'), "  ",
-          submit(-name=>'sub',-value=>'Delete'),
-          hidden('hinfo_id',$hinfo_id),end_form;
+          hidden('menu','templates');
+    print submit(-name=>'sub',-value=>'Edit'), "  ",
+          submit(-name=>'sub',-value=>'Delete')
+	    unless (check_perms('superuser','',1));
+    print hidden('hinfo_id',$hinfo_id),end_form;
     return;
   }
 

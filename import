@@ -24,10 +24,14 @@ do "$PG_DIR/db.pl";
 
 ##############################
 
-$result = GetOptions("help|h","orphans=s");
+$result = GetOptions("help|h","orphans=s","notransaction");
 
 if ($opt_help || @ARGV < 2) {
-    print "syntax: $0 [--help] [--orphans=<zone>] <servername> <named.conf file>\n";
+    print "syntax: $0 [options] <servername> <named.conf file>\n";
+    print "options:\n",
+          "\t--orphans=<zonename>\tzone for 'orphan' PTR record hosts\n",
+	  "\t--notrasaction\t\tdo not use transactions (speeds up things)\n",
+	  "\t--help\t\t\tdisplay this help\n\n";
     exit(1);
 }
 
@@ -184,7 +188,7 @@ print "Found $c zones (rootserverfile=$named_ca)\n";
 die("no directory option in named.conf!") if ($directory eq '');
 chdir($directory) || die ("cannot chdir to: $directory");
 
-db_begin();
+db_begin() unless ($opt_notransaction);
 
 ##################################
 # create server record
@@ -949,7 +953,9 @@ $res = db_exec("UPDATE servers SET hostmaster='$hostmaster'," .
 	       "hostname='$primaryservername' WHERE id=$serverid;");
 die("Cannot update server record!") if ($res < 0);
 
-die("Cannot commit import to database!") if (db_commit() < 0);
+unless ($opt_notransaction) {
+  die("Cannot commit import to database!") if (db_commit() < 0);
+}
 
 print STDERR "Vacuuming...";
 db_vacuum();
