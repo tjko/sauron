@@ -26,7 +26,7 @@ $CONF_FILE_PATH = '__CONF_FILE_PATH__';
 
 
 sub sauron_version() {
-  return "0.7.0beta"; # current Sauron version
+  return "0.7.0"; # current Sauron version
 }
 
 

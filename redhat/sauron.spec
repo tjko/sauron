@@ -3,13 +3,12 @@ Name: sauron
 Version: 0.7.0
 Release: 1
 URL: http://sauron.jyu.fi/
-Packager: Timo Kokkonen <tjko@iki.fi>
 License: GPL
 Group: Applications/Internet
 Source0: %{name}-%{version}.tar.gz
 BuildRoot: %{_tmppath}/%{name}-%{version}-buildroot
 BuildRequires: perl >= 0:5.004
-Requires: perl >= 0:5.004, perl-CGI
+Requires: perl >= 0:5.004
 # Requires: postgresql-perl
 # Requires: perl-Net-Netmask
 BuildArch: noarch
