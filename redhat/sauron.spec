@@ -1,7 +1,7 @@
 Summary: Sauron - DNS/DHCP management system
 Name: sauron
-Version: 0.5.1
-Release: 2
+Version: 0.6.0
+Release: 1
 URL: http://sauron.jyu.fi/
 Packager: Timo Kokkonen <tjko@iki.fi>
 License: GPL
@@ -46,6 +46,8 @@ ln -s /opt/sauron/cgi/browser.cgi $RPM_BUILD_ROOT/var/www/cgi-bin/browser.cgi
 ln -s /opt/sauron/icons/logo_large.png $RPM_BUILD_ROOT/var/www/html/sauron/icons/logo_large.png
 ln -s /opt/sauron/icons/logo.png $RPM_BUILD_ROOT/var/www/html/sauron/icons/logo.png
 
+install -d -m 755 $RPM_BUILD_ROOT/usr/share/man/man1
+install -m 644 -c doc/sauron.1 $RPM_BUILD_ROOT/usr/share/man/man1
 %clean
 rm -rf $RPM_BUILD_ROOT
 
@@ -56,13 +58,20 @@ rm -rf $RPM_BUILD_ROOT
 /etc/sauron/config-browser.in
 /var/www/cgi-bin/*
 /var/www/html/sauron
+/usr/share/man/man1/*
 %config /etc/sauron/config
 %config /etc/sauron/config-browser
 %doc README COPYRIGHT ChangeLog
 %doc test
-%doc doc
+%doc doc/manual.pdf
+%doc doc/tables.html
+%doc doc/manual
+
 
 %changelog
+* Wed Mar  5 2003 Timo Kokkonen <tjko@iki.fi> 0.6.0-1
+- added manual page & manual
+
 * Tue Jan 21 2003 Timo Kokkonen <tjko@iki.fi> 0.5.1-2
 - relaxed perl requirements
 
