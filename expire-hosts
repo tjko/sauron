@@ -16,6 +16,15 @@ use Sauron::Sauron;
 
 load_config();
 
+
+sub local_date($) {
+  my($date)=@_;
+  my($y,$m,$d);
+
+  ($y,$m,$d) = (localtime($date))[5,4,3];
+  return sprintf("%02d-%02d-%04d",$d,$m+1,$y+1900);
+}
+
 $user = (getpwuid($<))[0];
 
 GetOptions("help|h","cidr=s","netname=s","name=s","norecord",
@@ -174,7 +183,10 @@ for $i (0..$#q) {
   next if ($expiration > 0 && $expiration <= $etime);
   next unless ($ddate <= $date);
 
-  print "$domain $ip $ether ".($ddate > 0 ? localtime($ddate) : 'N/A')."\n";
+  printf "%-25s %-15s %12s %10s %10s\n",
+         $domain,$ip,$ether,
+	($ddate > 0 ? local_date($ddate) : 'N/A'),
+        ($mdate > 0 ? local_date($mdate) : 'N/A');
   $ecount++;
 
   if ($opt_commit) {
