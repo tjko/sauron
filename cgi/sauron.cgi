@@ -1988,10 +1988,12 @@ sub nets_menu() {
 	  th("Comment"),"</TR>";
 
   for $i (0..$#q) {
-      if ($q[$i][3] eq 't') {  
-	print "<TR bgcolor=\"#eeeebf\">";
+      $dhcp=($q[$i][5] eq 't' ? 'No' : 'Yes' );
+      if ($q[$i][3] eq 't') {
+	print ($dhcp eq 'Yes' ? "<TR bgcolor=\"#eeeebf\">" :
+	       "<TR bgcolor=\"#eeeeee\">");
 	$type='Subnet';
-      } else { 
+      } else {
 	print "<TR bgcolor=\"#ddffdd\">";
 	$type='Network';
       }
@@ -2001,7 +2003,6 @@ sub nets_menu() {
       $name='&nbsp;' if ($name eq '');
       $comment=$q[$i][4];
       $comment='&nbsp;' if ($comment eq '');
-      $dhcp=($q[$i][5] eq 't' ? 'No' : 'Yes' );
       print "<td><a href=\"$selfurl?menu=nets&net_id=$q[$i][0]\">",
 	  "$q[$i][2]</a></td>",
           td("<FONT size=-1>$name</FONT>"),td($type),td($dhcp),td($vlan),

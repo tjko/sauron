@@ -40,7 +40,7 @@ sub fatal($) {
 
 set_muser($user);
 
-$result = GetOptions("help|h","name=s","commit",
+$result = GetOptions("help|h","name=s","commit","noreverse",
 		    "newonly","outofzone","verbose","force=s");
 
 if ($opt_help || @ARGV < 2) {
@@ -48,6 +48,7 @@ if ($opt_help || @ARGV < 2) {
         "options:\n",
 	"\t--name=<regexp>\t\thostname filter (regexp)\n",
 	"\t--newonly\t\tprocess only new records\n",
+	"\t--noreverse\t\do not add reverse records\n",
 	"\t--outofzone\t\tallow out of zone records\n",
 	"\t--verbose\t\tproduce more verbose output\n",
 	"\t--force=<type>\t\tforce record type:\n",
