@@ -2516,6 +2516,8 @@ sub get_permissions($$$) {
     elsif ($type == 4) { push @{$rec->{hostname}}, $mode; }
     elsif ($type == 5) { push @{$rec->{ipmask}}, $mode; }
     elsif ($type == 6) { $rec->{alevel}=$mode if ($rec->{alevel} < $mode); }
+    elsif ($type == 7) { $rec->{elimit}=$mode; }
+    elsif ($type == 8) { $rec->{defdept}=$mode; }
   }
 
   return 0;

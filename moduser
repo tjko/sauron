@@ -33,7 +33,8 @@ $fooname=($modgroup ? 'groupname' : 'username');
 $user = (getpwuid($<))[0];
 $mdate = time;
 
-%addmodes=('server'=>1,'zone'=>2,'net'=>3,'host'=>4,'ipmask'=>5,'level'=>6);
+%addmodes=('server'=>1,'zone'=>2,'net'=>3,'host'=>4,'ipmask'=>5,
+	   'level'=>6,'elimit'=>7,'defdept'=>8);
 
 ##############################################
 
@@ -71,7 +72,9 @@ if ($opt_help || ($opt_user eq '' &&  $opt_list eq '')) {
         "   --add=\"net,<net>,<mode>\"              add net (mode=RW|RWS)\n",
         "   --add=\"host,<reg exp>\"                add hostname mask\n",
         "   --add=\"ipmask,<ipmask>\"               add IP-mask\n",
-        "   --add=\"level,<level>\"                 add priv.level\n\n",
+        "   --add=\"level,<level>\"                 add priv.level\n",
+        "   --add=\"elimit,<days>\"                 add expiration limit\n",
+        "   --add=\"def_dept,<string>\"             add default dept for hosts\n\n",
         "   --del=<id>                            delete rule by id\n",
         "   --delall                              delete all rules\n",
         "\n";
@@ -308,9 +311,9 @@ unless (defined $opt_add || defined $opt_del || defined $opt_delall) {
 if (defined $opt_add) {
   unless ($opt_add) {
   add_i:
-    print "Record type [1=server,2=zone,3=net,4=hostmask,5=IP-mask,6=priv.level]: ";
+    print "Record type [1=server,2=zone,3=net,4=hostmask,5=IP-mask,6=priv.level,7=elimit,8=defdept]: ";
     $type = ReadLine 0; chomp $type;
-    unless ($type =~ /^([1-6])$/) { print "invalid type!\n"; goto add_i; }
+    unless ($type >= 1 && $type <=8) { print "invalid type!\n"; goto add_i; }
     if ($type==1 || $type==2 || $type==3) {
       print "Enter server name: ";
       $tmp = ReadLine 0; chomp $tmp;
@@ -352,44 +355,56 @@ if (defined $opt_add) {
     elsif ($type==4) {
       print "Enter hostname mask (regexp): ";
       $tmp = ReadLine 0; chomp $tmp;
-      $tmp =~ s/\\/\\\\/g;
-      undef @d;
       $mode=$tmp;
       $ref=-1;
     }
     elsif ($type==5) {
       print "Enter IP mask (eg 192.162.1-2.*, 192.162.1-2.10-254): ";
       $tmp = ReadLine 0; chomp $tmp;
-      print "$tmp\n";
-      unless (check_ipmask($tmp,'')==1) { 
-	  print "invalid IP-mask!\n"; goto add_i; 
+      unless (check_ipmask($tmp,'')==1) {
+	  print "invalid IP-mask!\n"; goto add_i;
       }
-      $tmp =~ s/\\/\\\\/g;
-      undef @d;
       $mode=$tmp;
       $ref=-1;
     }
     elsif ($type==6) {
       print "Enter privilege level (0-999): ";
       $tmp = ReadLine 0; chomp $tmp;
-      print "$tmp\n";
-      unless (($tmp =~ /^\d+$/) && ($tmp < 999)) { 
-	  print "invalid level\n"; goto add_i; 
+      unless (($tmp =~ /^\d+$/) && ($tmp < 999)) {
+	  print "invalid level\n"; goto add_i;
       }
-      $tmp =~ s/\\/\\\\/g;
-      undef @d;
+      $mode=$tmp;
+      $ref=-1;
+    }
+    elsif ($type==7) {
+      print "Enter host expiration limit (0-n days): ";
+      $tmp = ReadLine 0; chomp $tmp;
+      unless (($tmp =~ /^\d+$/) && ($tmp >= 0)) {
+	print "invalid expiration limit\n"; goto add_i;
+      }
+      $mode=$tmp;
+      $ref=-1;
+    }
+    elsif ($type==8) {
+      print "Enter default department (string): ";
+      $tmp = ReadLine 0; chomp $tmp;
+      $tmp =~ s/^\s+|\s+$//g;
+      unless (length($tmp) >= 1) {
+	print "invalid default department\n"; goto add_i;
+      }
       $mode=$tmp;
       $ref=-1;
     }
 
+    $mode=db_encode_str($mode);
     $res=db_exec("INSERT INTO user_rights (type,ref,rtype,rref,rule) " .
-		 "VALUES($utype,$id,$type,$ref,'$mode');");
+		 "VALUES($utype,$id,$type,$ref,$mode);");
     fatal("cannot insert record to user_rights table!") if ($res < 0);
     exit;
   }
 
   fatal("invalid parameter '$opt_add' for add option!")
-    unless ($opt_add =~ /^(server|zone|net|host|ipmask|level),([^,\s]+)(,(R|RW|RWS))?$/);
+    unless ($opt_add =~ /^(server|zone|net|host|ipmask|level|elimit|defdept),([^,\s]+)(,(R|RW|RWS))?$/);
   $type=$addmodes{$1};
   $tmp=$2;
   $mode=$4;
@@ -431,26 +446,34 @@ if (defined $opt_add) {
   }
   elsif ($type eq 4) {
     $mode=$tmp;
-    $mode=~s/\\/\\\\/g;
     $ref=-1;
   }
   elsif ($type eq 5) {
     fatal("invalid IP-mask '$tmp'!")  unless (check_ipmask($tmp,'')==1);
     $mode=$tmp;
-    $mode=~s/\\/\\\\/g;
     $ref=-1;
   }
   elsif ($type eq 6) {
-    fatal("invalid level '$tmp'!") 
+    fatal("invalid level '$tmp'!")
 	unless (($tmp =~ /^\d+$/) && ($tmp < 999));
     $mode=$tmp;
-    $mode=~s/\\/\\\\/g;
+    $ref=-1;
+  }
+  elsif ($type eq 7) {
+    fatal("invalid expiration limit '$tmp'") unless ($tmp >= 0);
+    $mode=$tmp;
+    $ref=-1;
+  }
+  elsif ($type eq 8) {
+    $tmp =~ s/^\s+|\s+$//g;
+    fatal("invalid default department '$tmp'") unless (length($tmp) > 0);
+    $mode=$tmp;
     $ref=-1;
   }
 
-  #print "$type,$ref,$mode\n";
+  $mode=db_encode_str($mode);
   $res=db_exec("INSERT INTO user_rights (type,ref,rtype,rref,rule) " .
-	       "VALUES($utype,$id,$type,$ref,'$mode');");
+	       "VALUES($utype,$id,$type,$ref,$mode);");
   fatal("cannot insert record to user_rights table!") if ($res < 0);
   print "Record successfully inserted.\n";
 }
@@ -480,7 +503,7 @@ elsif ($opt_edit) {
 exit;
 
 
-#####################3
+#####################
 
 sub ask_mode($n) {
   my($n) = @_;
@@ -493,7 +516,7 @@ sub ask_mode($n) {
   foreach $i (keys %modehash) { print "$i=$modehash{$i} "; }
   print "]: ";
 
-  $t = ReadLine 0; 
+  $t = ReadLine 0;
   chomp $t;
   $mode=$modehash{$t};
 
@@ -510,7 +533,7 @@ sub list_privs($$) {
 	   "WHERE a.rtype=1 AND a.rref=b.id AND a.ref=$id AND a.type=$utype;",
 	   \@d);
   #print "Server records:\n";
-  for $i (0..$#d) { 
+  for $i (0..$#d) {
     $d[$i][0] =~ s/\s+$//;
     printf "%-6s %-8s %-25s %s\n",$d[$i][2],"server",$d[$i][1],$d[$i][0];
   }
@@ -564,6 +587,24 @@ sub list_privs($$) {
     $d[$i][0] =~ s/\s+$//;
     printf "%-6s %-8s %-25s %s\n",$d[$i][1],"Level",$d[$i][0],
       "(privilege level)";
+  }
+
+  undef @d;
+  db_query("SELECT a.rule,a.id  FROM user_rights a " .
+	   "WHERE a.rtype=7 AND a.ref=$id AND a.type=$utype;",\@d);
+  for $i (0..$#d) {
+    $d[$i][0] =~ s/\s+$//;
+    printf "%-6s %-8s %-25s %s\n",$d[$i][1],"ELimit",$d[$i][0],
+      "(expiration limit)";
+  }
+
+  undef @d;
+  db_query("SELECT a.rule,a.id  FROM user_rights a " .
+	   "WHERE a.rtype=8 AND a.ref=$id AND a.type=$utype;",\@d);
+  for $i (0..$#d) {
+    $d[$i][0] =~ s/\s+$//;
+    printf "%-6s %-8s %-25s %s\n",$d[$i][1],"DefDept",$d[$i][0],
+      "(default department string)";
   }
 
 }

@@ -1734,7 +1734,7 @@ sub hosts_menu() {
 	      unless ($q[0][0] > 0) {
 		alert2("Cannot find host specified in 'Ethernet alias' field");
 		$update_ok=0;
-	      } else { 
+	      } else {
 		$host{ether_alias}=$q[0][0];
 	      }
 	    } else {
@@ -1744,6 +1744,11 @@ sub hosts_menu() {
 
 	  if ($update_ok) {
 	    $host{ether_alias}=-1 if ($host{ether});
+	    if ($perms{elimit} > 0) { # enforce expiration limit, if it exists
+	      $tmp=time()+$perms{elimit}*86400;
+	      $host{expiration}=$tmp
+		unless ($host{expiration} > 0 && $host{expiration} < $tmp)
+	      }
 	    $res=update_host(\%host);
 	    if ($res < 0) {
 	      alert1("Host record update failed! ($res)");
@@ -2028,7 +2033,8 @@ sub hosts_menu() {
     $data{zone}=$zoneid;
     $data{grp}=-1; $data{mx}=-1; $data{wks}=-1;
     $data{mx_l}=[]; $data{ns_l}=[]; $data{printer_l}=[]; $data{srv_l}=[];
-
+    $data{dept}=$perms{defdept} if ($perms{defdept});
+    $data{expiration}=time()+$perms{elimit}*86400 if ($perms{elimit} > 0);
 
     if (param('addhost_cancel')) {
       print h2("$host_types{$type} record creation canceled.");
@@ -2072,6 +2078,11 @@ sub hosts_menu() {
 	  }
 	  delete $data{net};
 	  #show_hash(\%data);
+	  if ($perms{elimit} > 0) { # enforce expiration limit, if it exists
+	    $tmp=time()+$perms{elimit}*86400;
+	    $data{expiration}=$tmp
+	      unless ($data{expiration} > 0 && $data{expiration} < $tmp)
+	  }
 	  $res=add_host(\%data);
 	  if ($res > 0) {
 	    update_history($state{uid},$state{sid},1,
