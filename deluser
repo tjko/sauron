@@ -81,10 +81,9 @@ if ($i) { # ask confirmation only in interactive session...
 
 
 db_begin();
-$res=db_exec("DELETE FROM user_rights WHERE uref=$id;");
-#print "$res\n";
+$res=db_exec("DELETE FROM user_rights WHERE ref=$id;");
+fatal("Cannot delete user rights from user_rights table!") if ($res < 0);
 $res=db_exec("DELETE FROM users WHERE id=$id;");
-#print "$res\n";
 fatal("Cannot delete user from users table!") if ($res < 0);
 fatal("commit failed!") if (db_commit() < 0);
 

@@ -122,7 +122,7 @@ sub get_host_network_settings($$$) {
   $rec->{ip}=$ip;
   
   db_query("SELECT id,name,net FROM nets " .
-	   "WHERE server=$serverid AND '$ip' << net " .
+	   "WHERE server=$serverid AND no_dhcp=false AND '$ip' << net " .
 	   "ORDER BY subnet,net",\@q);
   return -2 unless (@q > 0);
   return -3 unless ($q[$#q][0] > 0);
@@ -1277,7 +1277,7 @@ sub get_mx_template($$) {
   my ($id,$rec) = @_;
 
   return -100 if (get_record("mx_templates",
-			     "name,comment,cdate,cuser,mdate,muser",
+			     "name,comment,cdate,cuser,mdate,muser,plevel",
 			     $id,$rec,"id"));
 
   get_array_field("mx_entries",4,"id,pri,mx,comment","Priority,MX,Comment",
@@ -1366,7 +1366,7 @@ sub get_wks_template($$) {
   my ($id,$rec) = @_;
 
   return -100 if (get_record("wks_templates",
-			     "name,comment,cuser,cdate,muser,mdate",
+			     "name,comment,cuser,cdate,muser,mdate,plevel",
 			     $id,$rec,"id"));
 
   get_array_field("wks_entries",4,"id,proto,services,comment",
@@ -1583,7 +1583,7 @@ sub get_group($$) {
   my ($id,$rec) = @_;
 
   return -100 if (get_record("groups",
-			     "name,comment,cdate,cuser,mdate,muser,type",
+		      "name,comment,cdate,cuser,mdate,muser,type,plevel",
 			     $id,$rec,"id"));
 
   get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comments",
@@ -1680,7 +1680,8 @@ sub get_user($$) {
   my ($uname,$rec) = @_;
 
   return get_record("users",
-	       "username,password,name,superuser,server,zone,comment,gid,id",
+	       "username,password,name,superuser,server,zone,comment,gid,".
+	       "email,id",
 	       $uname,$rec,"username");
 }
 
@@ -1727,7 +1728,7 @@ sub get_net($$) {
   return -100 if (get_record("nets",
                       "server,name,net,subnet,rp_mbox,rp_txt,no_dhcp,comment,".
 		      "range_start,range_end,vlan,cdate,cuser,mdate,muser,".
-                      "netname", $id,$rec,"id"));
+                      "netname,plevel", $id,$rec,"id"));
 
   get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comment",
 		  "type=4 AND ref=$id ORDER BY dhcp",$rec,'dhcp_l');
@@ -1943,6 +1944,8 @@ sub get_permissions($$$) {
   $rec->{zone}={};
   $rec->{net}={};
   $rec->{hostname}=[];
+  $rec->{ipmask}=[];
+  $rec->{plevel}=0;
 
   undef @q;
   $sql = "SELECT a.rtype,a.rref,a.rule,n.range_start,n.range_end " .
@@ -1969,7 +1972,10 @@ sub get_permissions($$$) {
     elsif ($type == 2) { $rec->{zone}->{$ref}=$mode; }
     elsif ($type == 3) { $rec->{net}->{$ref}=[$s,$e]; }
     elsif ($type == 4) { push @{$rec->{hostname}}, $mode; }
+    elsif ($type == 5) { push @{$rec->{ipmask}}, $mode; }
+    elsif ($type == 6) { $rec->{plevel}=$mode if ($rec->{plevel} < $mode); }
   }
+
   return 0;
 }
 

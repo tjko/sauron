@@ -519,7 +519,10 @@ do "$PROG_DIR/cgi_util.pl";
 %user_info_form=(
  data=>[
   {ftype=>0, name=>'User info' },
-  {ftype=>4, tag=>'user', name=>'User name'},
+  {ftype=>4, tag=>'user', name=>'Login'},
+  {ftype=>4, tag=>'name', name=>'User Name'},
+  {ftype=>4, tag=>'email', name=>'Email'},
+  {ftype=>4, tag=>'groupname', name=>'Group'},
   {ftype=>4, tag=>'login', name=>'Last login', type=>'localtime'},
   {ftype=>4, tag=>'addr', name=>'Host'},
   {ftype=>4, tag=>'superuser', name=>'Superuser', iff=>['superuser','yes']},
@@ -564,6 +567,8 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>1, tag=>'name', name=>'Description', type=>'text',
    len=>60, empty=>0},
   {ftype=>4, tag=>'id', name=>'ID'},
+  {ftype=>1, tag=>'plevel', name=>'Privilege level', type=>'priority', 
+   len=>3, empty=>0},
   {ftype=>4, tag=>'subnet', name=>'Type', type=>'enum',
    enum=>{t=>'Subnet',f=>'Net'}},
   {ftype=>1, tag=>'net', name=>'Net (CIDR)', type=>'cidr'},
@@ -636,7 +641,9 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>1, tag=>'ssize', name=>'Usable addresses', type=>'int'},
   {ftype=>0, name=>'Address Usage'},
   {ftype=>1, tag=>'inuse', name=>'Addresses in use', type=>'int'},
-  {ftype=>1, tag=>'inusep', name=>'Usage', type=>'int'}
+  {ftype=>1, tag=>'inusep', name=>'Usage', type=>'int'},
+  {ftype=>0, name=>'Routers'},
+  {ftype=>1, tag=>'gateways', name=>'Gateway(s)', type=>'text'}
  ],
  nwidth=>'40%'
 );
@@ -664,6 +671,8 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>1, tag=>'name', name=>'Name', type=>'text', len=>40, empty=>0},
   {ftype=>4, tag=>'id', name=>'ID'},
   {ftype=>3, tag=>'type', name=>'Type', type=>'enum', enum=>\%group_type_hash},
+  {ftype=>1, tag=>'plevel', name=>'Privilege level', type=>'priority', 
+   len=>3, empty=>0},
   {ftype=>1, tag=>'comment', name=>'Comment', type=>'text', len=>60, empty=>1},
   {ftype=>2, tag=>'dhcp', name=>'DHCP entries', 
    type=>['text','text'], fields=>2,
@@ -715,6 +724,8 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>0, name=>'MX template'},
   {ftype=>1, tag=>'name', name=>'Name', type=>'text',len=>40, empty=>0},
   {ftype=>4, tag=>'id', name=>'ID'},
+  {ftype=>1, tag=>'plevel', name=>'Privilege level', type=>'priority', 
+   len=>3, empty=>0},
   {ftype=>1, tag=>'comment', name=>'Comment', type=>'text',len=>60, empty=>1},
   {ftype=>2, tag=>'mx_l', name=>'Mail exchanges (MX)', 
    type=>['priority','mx','text'], fields=>3, len=>[5,30,20], 
@@ -730,6 +741,8 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>0, name=>'WKS template'},
   {ftype=>1, tag=>'name', name=>'Name', type=>'text',len=>40, empty=>0},
   {ftype=>4, tag=>'id', name=>'ID'},
+  {ftype=>1, tag=>'plevel', name=>'Privilege level', type=>'priority', 
+   len=>3, empty=>0},
   {ftype=>1, tag=>'comment', name=>'Comment', type=>'text',len=>60, empty=>1},
   {ftype=>2, tag=>'wks_l', name=>'WKS', 
    type=>['text','text','text'], fields=>3, len=>[10,30,10], empty=>[0,1,1], 
@@ -1960,15 +1973,15 @@ sub groups_menu() {
   }
 
  browse_groups:
-  db_query("SELECT id,name,comment,type FROM groups " .
+  db_query("SELECT id,name,comment,type,plevel FROM groups " .
 	   "WHERE server=$serverid ORDER BY name;",\@q);
   if (@q < 1) {
     print h2("No groups found!");
     return;
   }
 
-  print "<TABLE width=\"90%\"><TR bgcolor=\"#aaaaff\">",
-        th("Name"),th("Type"),th("Comment"),"</TR>";
+  print "<TABLE width=\"100%\"><TR bgcolor=\"#aaaaff\">",
+        th("Name"),th("Type"),th("Comment"),th("Lvl"),"</TR>";
 
   for $i (0..$#q) {
     print "<TR bgcolor=\"#eeeebf\">";
@@ -1979,7 +1992,7 @@ sub groups_menu() {
     $comment='&nbsp;' if ($comment eq '');
     print "<td><a href=\"$selfurl?menu=groups&grp_id=$q[$i][0]\">$name</a>",
           "</td>",td($group_type_hash{$q[$i][3]}),
-          td($comment),"</TR>";
+          td($comment),td($q[$i][4].'&nbsp;'),"</TR>";
   }
 
   print "</TABLE>";
@@ -2121,13 +2134,16 @@ sub nets_menu() {
       return;
     }
 
-    db_query("SELECT a.ip FROM a_entries a, hosts h, zones z " .
+    db_query("SELECT a.ip,h.router,h.domain " .
+             "FROM a_entries a, hosts h, zones z " .
 	     "WHERE z.server=$serverid AND h.zone=z.id AND a.host=h.id " .
 	     " AND a.ip << '$net{net}' ORDER BY a.ip;",\@q);
     $net{inuse}=@q;
     for $i (0..$#q) {
       $ip=$q[$i][0]; $ip=~s/\/32$//;
       $netmap{$ip}=1;
+      $net{gateways}.="$q[$i][0] " . ($q[$i][2] ? "($q[$i][2])":'') .
+	              "<br>" if ($q[$i][1] > 0);
     }
 
     $net = new Net::Netmask($net{net});
@@ -2271,7 +2287,7 @@ sub templates_menu() {
   $hinfo_id=param('hinfo_id');
 
   if ($sub eq 'mx') {
-    db_query("SELECT id,name,comment FROM mx_templates " .
+    db_query("SELECT id,name,comment,plevel FROM mx_templates " .
 	     "WHERE zone=$zoneid ORDER BY name;",\@q);
     if (@q < 1) {
       print h2("No MX templates found for this zone!"); 
@@ -2280,7 +2296,7 @@ sub templates_menu() {
 
     print h3("MX templates for zone: $zone"),
           "<TABLE width=\"100%\"><TR bgcolor=\"#aaaaff\">",
-          th("Name"),th("Comment"),"</TR>";
+          th("Name"),th("Comment"),th("Lvl"),"</TR>";
 
     for $i (0..$#q) {
       $name=$q[$i][1];
@@ -2289,13 +2305,13 @@ sub templates_menu() {
       $comment='&nbsp;' if ($comment eq '');
       print "<TR bgcolor=\"#eeeebf\">",
 	td("<a href=\"$selfurl?menu=templates&mx_id=$q[$i][0]\">$name</a>"),
-	td($comment),"</TR>";
+	td($comment),td($q[$i][3].'&nbsp;'),"</TR>";
     }
     print "</TABLE>";
     return;
   }
   elsif ($sub eq 'wks') {
-    db_query("SELECT id,name,comment FROM wks_templates " .
+    db_query("SELECT id,name,comment,plevel FROM wks_templates " .
 	     "WHERE server=$serverid ORDER BY name;",\@q);
     if (@q < 1) {
       print h2("No WKS templates found for this server!");
@@ -2304,7 +2320,7 @@ sub templates_menu() {
 
     print h3("WKS templates for server: $server"),
           "<TABLE width=\"100%\"><TR bgcolor=\"#aaaaff\">",
-          th("Name"),th("Comment"),"</TR>";
+          th("Name"),th("Comment"),th("Lvl"),"</TR>";
 
     for $i (0..$#q) {
       $name=$q[$i][1];
@@ -2313,7 +2329,7 @@ sub templates_menu() {
       $comment='&nbsp;' if ($comment eq '');
       print "<TR bgcolor=\"#eeeebf\">",
 	td("<a href=\"$selfurl?menu=templates&wks_id=$q[$i][0]\">$name</a>"),
-	td($comment),"</TR>";
+	td($comment),td($q[$i][3].'&nbsp;'),"</TR>";
     }
     print "</TABLE>";
     return;
@@ -2621,6 +2637,10 @@ sub templates_menu() {
 #
 sub login_menu() {
   $sub=param('sub');
+  
+  if (get_user($state{user},\%user) < 0) {
+      fatal("Cannot get user record!");
+  };
 
   if ($sub eq 'login') {
     print h2("Login as another user?"),p,
@@ -2643,7 +2663,6 @@ sub login_menu() {
 	  print "<FONT color=\"red\">",h2("New passwords dont match!"),
 	        "</FONT>";
 	} else {
-	  get_user($state{user},\%user);
 	  unless (pwd_check(param('passwd_old'),$user{password})) {
 	    $password=pwd_make(param('passwd_new1'));
 	    $ticks=time();
@@ -2785,6 +2804,15 @@ sub login_menu() {
   }
   else {
     print h2("User info:");
+    $state{email}=$user{email};
+    $state{name}=$user{name};
+    if ($state{gid} > 0) {
+	undef @q;
+	db_query("SELECT name FROM user_groups WHERE id=$state{gid}",\@q);
+	$state{groupname}=$q[0][0];
+    } else {
+	$state{groupname}='&lt;None&gt;';
+    }
     display_form(\%state,\%user_info_form);
 
     # server permissions
@@ -2825,7 +2853,19 @@ sub login_menu() {
 	     td("(hostname constraint)"),"</TR>";
     }
 
-    print "</TABLE>";
+    # IP-mask permissions
+    foreach $s (@{$perms{ipmask}}) {
+      print "<TR bgcolor=\"#dddddd\">",td("IP-mask"),td("$s"),
+	     td("(IP address constraint)"),"</TR>";
+    }
+
+    # plevel permissions
+    $perms{plevel}=999 if ($state{superuser});
+    print "<TR bgcolor=\"#dddddd\">",td("Level"),td($perms{plevel}),
+	     td("(general privilege level)"),"</TR>";
+
+
+    print "</TABLE><P>&nbsp;";
   }
 }
 
@@ -3467,6 +3507,9 @@ sub check_perms($$$) {
     alert1("Access denied: administrator priviliges required.");
     return 1;
   }
+  elsif ($type eq 'level') {
+    return 0 if ($perms{plevel} >= $rule);
+  }
   elsif ($type eq 'server') {
     return 0 if ($perms{server}->{$serverid} =~ /$rule/);
   }
@@ -3491,7 +3534,7 @@ sub check_perms($$$) {
   }
   elsif ($type eq 'ip') {
     @n=keys %{$perms{net}};
-    return 0  if (@n < 1);
+    return 0  if (@n < 1 && @{$perms{ipmask}} < 1);
     $ip=ip2int($rule); #print "<br>ip=$rule ($ip)";
 
     for $i (0..$#n) {
@@ -3501,6 +3544,11 @@ sub check_perms($$$) {
 	#print "<br>$i $n[$i] $s,$e : $ip";
 	return 0 if (($s <= $ip) && ($ip <= $e));
       }
+    }
+    for $i (0..$#{$perms{ipmask}}) {
+	$re=$perms{ipmask}[$i];
+	#print p,"regexp='$re' '$rule'";
+	return 0 if (check_ipmask($re,$rule));
     }
 
     return 1 if ($quiet);
