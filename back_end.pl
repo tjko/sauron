@@ -592,6 +592,12 @@ sub delete_zone($) {
   #return db_rollback();
 }
 
+sub add_zone($) {
+  my($rec) = @_;
+
+  return add_record('zones',$rec);
+}
+
 
 ############################################################################
 # hosts table functions

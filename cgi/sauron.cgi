@@ -72,6 +72,22 @@ do "$PROG_DIR/back_end.pl";
  heading_bg=>'#ca4444'
 );
 
+%new_zone_form=(
+ data=>[
+  {ftype=>0, name=>'New zone'},
+  {ftype=>1, tag=>'name', name=>'Zone name', type=>'domain',len=>40, empty=>0},
+  {ftype=>3, tag=>'type', name=>'Type', type=>'enum', conv=>'U',
+   enum=>{M=>'Master', S=>'Slave', H=>'Hint', F=>'Forward'}},
+  {ftype=>3, tag=>'reverse', name=>'Reverse', type=>'enum',  conv=>'L',
+   enum=>{f=>'No',t=>'Yes'}}
+ ],
+ bgcolor=>'#eeeebf',
+ border=>'0',		
+ width=>'100%',
+ nwidth=>'30%',
+ heading_bg=>'#aaaaff'
+);
+
 %zone_form = (
  data=>[
   {ftype=>0, name=>'Zone' },
@@ -240,6 +256,8 @@ do "$PROG_DIR/back_end.pl";
  nwidth=>'30%',
  heading_bg=>'#aaaaff'
 );
+
+
 
 %net_form=(
  data=>[
@@ -613,7 +631,37 @@ sub zones_menu() {
   }
 
   if ($sub eq 'add') {
-    print p,"add...";
+    $data{server}=$serverid;
+    if (param('add_submit')) {
+      unless (($res=form_check_form('addzone',\%data,\%new_zone_form))) {
+	if ($data{reverse} eq 't') {
+	  $new_net=arpa2cidr($data{name});
+	  if ($new_net eq '0.0.0.0/0') {
+	    print h2('Invalid name for reverse zone!');
+	    goto new_zone_edit;
+	  }
+	  $data{reversenet}=$new_net;
+	}
+
+	$res=add_zone(\%data);
+	if ($res < 0) {
+	  print "<FONT color=\"red\">",h1("Adding Zone record failed!"),
+	      "result code=$res</FONT>";
+	} else {
+	  param('selected_zone',$data{name});
+	  goto display_zone;
+	}
+      } else {
+	print "<FONT color=\"red\">",h2("Invalid data in form!"),"</FONT>";
+      }
+    }
+  new_zone_edit:
+    unless (param('addzone_re_edit')) { $data{type}='M'; }
+    print h2("New Zone:"),p,
+          startform(-method=>'POST',-action=>$selfurl),
+          hidden('menu','zones'),hidden('sub','add');
+    form_magic('addzone',\%data,\%new_zone_form);
+    print submit(-name=>'add_submit',-value=>"Create Zone"),end_form;
     return;
   }
   elsif ($sub eq 'Delete') {
@@ -1481,7 +1529,7 @@ sub add_magic($$$$$$) {
 
   print h2("New $name:"),p,
           startform(-method=>'POST',-action=>$selfurl),
-          hidden('menu',$menu),hidden('sub','Edit');
+          hidden('menu',$menu),hidden('sub',$prefix);
   form_magic($prefix,\%data,$form);
   print submit(-name=>$prefix . '_submit',-value=>"Create $name"),end_form;
   return 0;
