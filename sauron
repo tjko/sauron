@@ -59,6 +59,22 @@ sub expand_zonefile_path($$) {
   return $path;
 }
 
+sub expand_dhcp_macro($%) {
+    my($str,%var) = (@_);
+    my($k);
+
+    if ($str =~ /\%\{\w+\}/) {
+	$str.= "\t# macro eval";
+	foreach $k (qw(domain ether fqdn host)) {
+	    if ($str =~ /\%\{($k)\}/) {
+		$str =~ s/\%\{$k\}/$dhcp_var{$k}/ge;
+	    }
+	}
+    }		 
+
+    return $str;
+}
+
 sub clean_up() {
   my(@q,$i,$count,$t);
 
@@ -1431,11 +1447,19 @@ sub make_dhcp() {
 	# $dhcp=db_decode_list_str($groups[$i][2]);
 	print DHCPFILE "group {  # $group\n";
 	undef @qqq;
+	undef @gperhost; # per host macro store
 	db_query("SELECT d.dhcp FROM dhcp_entries d " .
 		 "WHERE d.type=5 AND d.ref=$gid ORDER BY d.id",\@qqq);
 	for $k (0..$#qqq) {
 	  $qqq[$k][0] =~ s/\\"/"/g;
 	  $qqq[$k][0].=';' unless ($qqq[$k][0] =~ /[;\{\}]\s*$/);
+
+	  # if includes %{macro} store it for later use and skip to next 
+	  if ($qqq[$k][0] =~ /\%\{\w+\}/) { 
+	      push(@gperhost,$qqq[$k][0]);    
+	      next;
+	  }
+
 	  print DHCPFILE "\t$qqq[$k][0]\n";
 	}
 	print DHCPFILE "\t\n";
@@ -1473,16 +1497,31 @@ sub make_dhcp() {
 	      print DHCPFILE "\thost $host {\n";
 	      print DHCPFILE "\t\tfixed-address $ip;\n";
 	      print DHCPFILE "\t\thardware ethernet $ether;\n";
-	      if ($dhcp_auto_domainnames) {
-		($adomain=$host) =~ s/^[^\.]+\.//;
-		print DHCPFILE "\t\toption domain-name \"$adomain\";\n"
-		  if ($adomain);
-	      }
 
 	      $dhcplst=$dhcphosth{$dhcpid};
+	      ($adomain=$host) =~ s/^[^\.]+\.//;
+	      $fqdn = $host;
+	      $host =~ s/\..*//g;
+	      $lookup = '/(filename|option\s+root-path)\s+/';
+	      foreach $l (@gperhost) {
+		  push @{$dhcplst},$l unless (grep {eval $lookup} @{$dhcplst});
+	      }
+
+	      if ($dhcp_auto_domainnames) {
+		  push(@{$dhcplst},"option domain-name \"$adomain\"")
+		      unless (grep {/option\s+domain-name\s+/ } @{$dhcplst}
+			      and $adomain);
+	      }
+	      
+	      %dhcp_var = ();
+	      $dhcp_var{'domain'} = $adomain;
+	      $dhcp_var{'ether'}  = $ether;
+	      $dhcp_var{'fqdn'}   = $fqdn;
+	      $dhcp_var{'host'}   = $host;
+
 	      for $l (0..$#{$dhcplst}) {
 		  $$dhcplst[$l].=';' unless ($$dhcplst[$l] =~ /[;\{\}]\s*$/);
-		  print DHCPFILE "\t\t$$dhcplst[$l]\n";
+		  print DHCPFILE "\t\t" . expand_dhcp_macro($$dhcplst[$l],%dhcp_var)."\n";
 	      }
 	      print DHCPFILE "\t}\n";
 	    }
