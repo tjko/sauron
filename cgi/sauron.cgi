@@ -3,7 +3,7 @@
 # sauron.cgi
 # $Id$
 #
-# Copyright (c) Timo Kokkonen <tjko@iki.fi>, 2000.
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>, 2000,2001.
 # All Rights Reserved.
 #
 use Sys::Syslog;
@@ -14,7 +14,7 @@ use Digest::MD5;
 $CGI::DISABLE_UPLOADS =1; # no uploads
 $CGI::POST_MAX = 100000; # max 100k posts
 
-
+#$|=1;
 $debug_mode = 0;
 
 if (-f "/etc/sauron/config") { 
@@ -192,6 +192,20 @@ do "$PROG_DIR/back_end.pl";
  heading_bg=>'#aaaaff'
 );
 
+%new_server_form=(
+ data=>[
+  {ftype=>1, tag=>'name', name=>'Name', type=>'text',
+   len=>20, empty=>0},
+  {ftype=>1, tag=>'comment', name=>'Comment', type=>'text',
+   len=>60, empty=>1}
+ ],
+ bgcolor=>'#eeeebf',
+ border=>'0',		
+ width=>'100%',
+ nwidth=>'30%',
+ heading_bg=>'#aaaaff'
+);
+
 sub logmsg($$) {
   my($type,$msg)=@_;
 
@@ -338,61 +352,93 @@ print end_html();
 exit;
 #####################################################################
 
-
 # SERVERS menu
 #
 sub servers_menu() {
   $sub=param('sub');
 
   if ($sub eq 'add') {
-    print p,"add...";
+    $res=add_magic('srvadd','Server','servers',\%new_server_form,
+		   \&add_server,\%data);
+    if ($res > 0) {
+      print "<p>$res $data{name}";
+      #param('server_list',$data{'name'});
+      $server=$data{name};
+      goto display_new_server;
+    }
+
+    return;
   }
-  elsif ($sub eq 'del') {
-    print p,"del...";
+
+  if (($sub eq 'del') && ($serverid > 0)) {
+    if (param('srvdel_submit') ne '') {
+      if (delete_server($serverid) < 0) {
+	print h2("Cannot delete server!");
+      } else {
+	print h2('Server deleted succesfully!');
+	$state{'zone'}=''; $state{'zoneid'}=-1;
+	$state{'server'}=''; $state{'serverid'}=-1;
+	save_state($scookie);
+	goto select_server;
+      }
+      return;
+    }
+
+    get_server($serverid,\%serv);
+    print h2('Delete this server?');
+    display_form(\%serv,\%server_form);
+    print start_form(-method=>'POST',-action=>$selfurl),
+          hidden('menu','servers'),hidden('sub','del'),
+          submit(-name=>'srvdel_submit',-value=>'Delete Server'),end_form;
+    return;
   }
-  elsif ($sub eq 'edit') {
+
+  if ($sub eq 'edit') {
     $res=edit_magic('srv','Server','servers',\%server_form,
 		    \&get_server,\&update_server,$serverid);
     goto select_zone if ($res == -1);
     return;
   }
-  else {
-    $server=param('server_list');
-    $server=$state{'server'} unless ($server);
-    if ($server && $sub ne 'select') {
-      #display selected server info
-      $serverid=get_server_id($server);
-      if ($serverid < 1) {
-	print h3("Cannot select server!"),p;
-	goto select_server;
-      }
-      print h2("Selected server: $server"),p;
-      get_server($serverid,\%serv);
-      if ($state{'serverid'} ne $serverid) {
-	delete $state{'zone'};
-	delete $state{'zoneid'};
-	$state{'server'}=$server;
-	$state{'serverid'}=$serverid;
-	save_state($scookie);
-      }
-      display_form(\%serv,\%server_form); # display server record 
+
+
+  $server=param('server_list');
+  $server=$state{'server'} unless ($server);
+ display_new_server:
+  if ($server && $sub ne 'select') {
+    #display selected server info
+    $serverid=get_server_id($server);
+    if ($serverid < 1) {
+      print h3("Cannot select server!"),p;
+      goto select_server;
     }
-    else {
-     select_server:
-      #display server selection dialig
-      $list=get_server_list();
-      for $i (0 .. $#{$list}) {
-	push @l,$$list[$i][0];
-      }
-      print h2("Select server:"),p,
-            startform(-method=>'POST',-action=>$selfurl),
-            hidden('menu','servers'),p,
-            "Available servers:",p,
-            scrolling_list(-width=>'100%',-name=>'server_list',
-			   -size=>'10',-values=>\@l),
-            br,submit,end_form;
+    print h2("Selected server: $server"),p;
+    get_server($serverid,\%serv);
+    if ($state{'serverid'} ne $serverid) {
+      $state{'zone'}='';
+      $state{'zoneid'}=-1;
+      $state{'server'}=$server;
+      $state{'serverid'}=$serverid;
+      save_state($scookie);
     }
+    display_form(\%serv,\%server_form); # display server record 
+    return;
   }
+
+  select_server:
+  #display server selection dialig
+  $list=get_server_list();
+  for $i (0 .. $#{$list}) {
+    push @l,$$list[$i][0];
+  }
+  print h2("Select server:"),p,
+    startform(-method=>'POST',-action=>$selfurl),
+    hidden('menu','servers'),p,
+    "Available servers:",p,
+      scrolling_list(-width=>'100%',-name=>'server_list',
+		   -size=>'10',-values=>\@l),
+      br,submit(-name=>'server_select_submit',-value=>'Select server'),
+      end_form;
+
 }
 
 
@@ -711,6 +757,35 @@ sub edit_magic($$$$$$$) {
   form_magic($prefix,\%h,$form);
   print submit(-name=>$prefix . '_submit',-value=>'Make changes'),end_form;
 
+  return 0;
+}
+
+sub add_magic($$$$$$) {
+  my($prefix,$name,$menu,$form,$add_func,$data) = @_;
+  my(%h);
+
+  
+  if (param($prefix . '_submit') ne '') {
+    unless (($res=form_check_form($prefix,\%h,$form))) {
+      $res=&$add_func(\%h);
+      if ($res < 0) {
+	print "<FONT color=\"red\">",h1("Adding $name record failed!"),
+	      "<br>result code=$res</FONT>";
+      } else {
+	print h3("$name record succefully added");
+	%$data=%h;
+	return $res;
+      }
+    } else {
+      print "<FONT color=\"red\">",h2("Invalid data in form!"),"</FONT>";
+    }
+  }
+
+  print h2("New $name:"),p,
+          startform(-method=>'POST',-action=>$selfurl),
+          hidden('menu',$menu),hidden('sub','Edit');
+  form_magic($prefix,\%h,$form);
+  print submit(-name=>$prefix . '_submit',-value=>"Create $name"),end_form;
   return 0;
 }
 
@@ -1185,6 +1260,10 @@ sub form_check_form($$$) {
     elsif ($type == 3) {
       next if ($rec->{type} eq 'list');
       return 3 unless (${$rec->{enum}}{param($p)});
+      $data->{$tag}=param($p);
+    }
+    elsif ($type == 6 || $type == 7) {
+      return 6 unless (param($p) =~ /^-?\d+$/);
       $data->{$tag}=param($p);
     }
   }
