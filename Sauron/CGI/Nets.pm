@@ -607,7 +607,7 @@ sub menu_handler {
       $type='Net';
     }
 
-    my $spacer = "&nbsp;&nbsp;" x ($#path -1);
+    my $spacer = "&nbsp;&nbsp;&nbsp;" x ($#path -1);
     $vlan=($q[$i][6] > 0 ? $vlan_list_hash{$q[$i][6]} : '&nbsp;');
     $netname=($q[$i][7] eq '' ? '&nbsp;' : $q[$i][7]);
     $name=($q[$i][1] eq '' ? '&nbsp;' : $q[$i][1]);

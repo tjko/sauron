@@ -1308,7 +1308,7 @@ sub make_dhcp() {
   undef @nets;
   db_query("SELECT net,name,id,vlan " .
 	   "FROM nets WHERE server=$serverid AND no_dhcp=false " .
-	   "AND subnet=false ORDER BY net",\@nets);
+	   "AND subnet=false AND dummy=false ORDER BY net",\@nets);
   if (@nets < 1) {
     fatal("No nets, that use DHCP, defined for this server!");
   }
@@ -1332,7 +1332,7 @@ sub make_dhcp() {
     undef @q;
     db_query("SELECT net,id,name,vlan FROM nets " .
 	     "WHERE server=$serverid AND no_dhcp=false AND subnet=true " .
-	     "AND net << '$net' ORDER BY net;",\@q);
+	     "AND dummy=false AND net << '$net' ORDER BY net;",\@q);
     if (@q < 1 ) {
       error("No subnets that use DHCP found") if ($net_map_mode==1);
       push @q, [$net,$nets[$i][2],$nets[$i][1],$nets[$i][3]];

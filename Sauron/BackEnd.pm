@@ -276,7 +276,7 @@ sub get_host_network_settings($$$) {
   $rec->{ip}=$ip;
 
   db_query("SELECT id,name,net FROM nets " .
-	   "WHERE server=$serverid AND no_dhcp=false AND '$ip' << net " .
+	   "WHERE server=$serverid AND dummy=false AND '$ip' << net " .
 	   "ORDER BY subnet,net",\@q);
   return -2 unless (@q > 0);
   return -3 unless ($q[$#q][0] > 0);
