@@ -1,4 +1,5 @@
-# Sauron sampleconfiguration
+#
+# Sauron sample configuration
 #
 # $Id$
 #
@@ -7,8 +8,27 @@
 # general configuration options
 
 $PROG_DIR = "/usr/local/sauron/";
-
 $LOG_DIR = "$PROG_DIR/logs/";
+
+# database connection setup
+#$DB_CONNECT = "host=localhost port=5432 dbname=sauron user=foo password=bar";
+#$DB_CONNECT = "dbname=sauron user=foo password=bar";
+$DB_CONNECT = "dbname=sauron";
+
+$REMOVE_EXPIRED_DELAY = 30;  # sauron --clean will remove all hosts that
+		             # have been expired longer than days defined here
+
+# mailer configuration (set to enable email notifications)
+# $SAURON_MAILER = '/usr/sbin/sendmail';
+# $SAURON_MAILER_ARGS = '-t'; 
+# $SAURON_MAIL_FROM = 'postmaster@somedomain'; 
+
+# default method for encrypting passwords:
+#        0 = simple MD5 based hash with salt
+#        1 = standard Unix crypt
+#
+$SAURON_PWD_MODE = 1;
+
 
 #########################################################################
 # WWW interface (sauron.cgi) configuration options 
@@ -16,23 +36,11 @@ $LOG_DIR = "$PROG_DIR/logs/";
 $ICON_PATH = "/sauron/icons";
 $SERVER_ID = "fooserver";   # unique server ID (if using multiple www-server)
 
-#$DB_CONNECT = "host=localhost port=5432 dbname=sauron user=foo password=bar";
-#$DB_CONNECT = "dbname=sauron user=foo password=bar";
-$DB_CONNECT = "dbname=sauron";
-
-$USER_TIMEOUT = 3600;
+$USER_TIMEOUT = 3600; # idle timeout for user sessions
 
 $ALEVEL_VLANS = 5;  # authorization level needed to see vlan info 
                     # in web interface
 $ALEVEL_HISTORY = 1; # authorization level needed to see host history
-
-$REMOVE_EXPIRED_DELAY = 30;  # sauron --clean will remove all hosts that
-		             # have been expired longer than days defined here
-
-# mailer configuration
-# $SAURON_MAILER = '/usr/sbin/sendmail';
-# $SAURON_MAILER_ARGS = '-t'; 
-# $SAURON_MAIL_FROM = 'postmaster@somedomain'; 
 
 # set to enable ping command in web interface
 # $SAURON_PING_PROG = '/bin/ping';
@@ -52,17 +60,26 @@ $REMOVE_EXPIRED_DELAY = 30;  # sauron --clean will remove all hosts that
 # $SAURON_DTDHACK = 1;
 
 # Set this 1 to enable secure cookies. Note, this may cause problems
-# with some broken browsers so it's not enabled by default.
+# with some broken browsers, so it's not enabled by default.
 $SAURON_SECURE_COOKIES = 0;
+
+# restricted host form field defaults: 0=required, 1=optional
+$SAURON_RHF{huser}    = 0; # User
+$SAURON_RHF{dept}     = 0; # Dept.
+$SAURON_RHF{location} = 0; # Location
+$SAURON_RHF{info}     = 1; # [Extra] Info
+$SAURON_RHF{ether}    = 0; # Ether
+$SAURON_RHF{asset_id} = 1; # Asset ID
+$SAURON_RHF{model}    = 1; # Model
+$SAURON_RHF{serial}   = 1; # Serial
+$SAURON_RHF{misc}     = 1; # Misc.
+
+
+$SAURON_BGCOLOR="white";
+$SAURON_FGCOLOR="black";
 
 #########################################################################
 # misc
-
-# default method for encrypting passwords:
-#        0 = simple MD5 based hash with salt
-#        1 = standard Unix crypt
-#
-$SAURON_PWD_MODE = 1;
 
 # uncomment to enable compatibilty with DHCP v2.0 ...
 # $SAURON_DCHP2_MODE = 1;
@@ -70,9 +87,6 @@ $SAURON_PWD_MODE = 1;
 $LOOPBACK_NET = "127.0.0.0/24";
 $LOOPBACK_ZONE = "loopback.";
 
-
-$SAURON_BGCOLOR="white";
-$SAURON_FGCOLOR="black";
 
 1;
 # eof
