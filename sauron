@@ -1098,6 +1098,7 @@ sub make_dhcp() {
 	      next;
 	    }
 	    $iplst=$etherhash{$ghosts[$k][1]};
+	    @{$iplst} = sort(@{$iplst}) if (@{$iplst}>1);
 	    $ip='';
 	    for $l (0..$#{$iplst}) {
 	      if ($net->match($$iplst[$l])) {
@@ -1156,6 +1157,7 @@ sub make_dhcp() {
 	  next;
 	}
 	$iplst=$etherhash{$ghosts[$k][1]};
+	@{$iplst} = sort(@{$iplst}) if (@{$iplst}>1);
 	$ip='';
 	for $l (0..$#{$iplst}) {
 	  if ($net->match($$iplst[$l])) {
