@@ -541,7 +541,7 @@ sub menu_handler {
     print startform(-method=>'GET',-action=>$selfurl),
           hidden('menu','hosts'),hidden('sub','browse'),
 	  hidden('bh_type','1'),hidden('bh_sdtype','0'),hidden('bh_order','2'),
-	  hidden('bh_size','3'),hidden('bh_stype','0'),
+	  hidden('bh_size','3'),hidden('bh_stype','0'),hidden('bh_grp','-1'),
 	  hidden('bh_net',$net{net}),hidden('bh_submit','Search'),
           submit(-name=>'foobar',-value=>'Show Hosts'),end_form,
 	  "</TD></TR></TABLE>";

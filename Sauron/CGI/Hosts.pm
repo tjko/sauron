@@ -374,6 +374,7 @@ my %browse_hosts_form=(
   {ftype=>0, name=>'Search scope' },
   {ftype=>3, tag=>'type', name=>'Record type', type=>'enum',
    enum=>\%host_types},
+  {ftype=>10, tag=>'grp', name=>'Group' },
   {ftype=>3, tag=>'net', name=>'Subnet', type=>'list', listkeys=>'nets_k',
    list=>'nets'},
   {ftype=>1, tag=>'cidr', name=>'CIDR (block) or IP', type=>'cidr',
@@ -859,7 +860,7 @@ sub menu_handler {
 	       "ORDER BY subnet,net",\@q);
       if (@q > 0) {
 	param('bh_type','1'); param('bh_order','2');
-	param('bh_size','3'); param('bh_stype','0');
+	param('bh_size','3'); param('bh_stype','0'); param('bh_grp','-1');
 	param('bh_net',$q[$#q][0]); param('bh_sdtype','0');
 	param('bh_submit','Search');
 	goto browse_hosts_jump_point;
@@ -869,7 +870,7 @@ sub menu_handler {
   elsif ($sub eq 'browse') {
   browse_hosts_jump_point:
     %bdata=(domain=>'',net=>'ANY',nets=>\%nethash,nets_k=>\@netkeys,
-	    type=>1,order=>2,stype=>0,size=>3);
+	    type=>1,order=>2,stype=>0,size=>3,grp=>-1);
     if (param('bh_submit')) {
       if (param('bh_submit') eq 'Clear') {
 	param('bh_pattern','');
@@ -884,6 +885,7 @@ sub menu_handler {
 
 	param('bh_order','2');
 	param('bh_size','3');
+	param('bh_grp','-1');
 	goto browse_hosts;
       }
       if (form_check_form('bh',\%bdata,\%browse_hosts_form)) {
@@ -893,14 +895,15 @@ sub menu_handler {
       $state->{searchopts}=param('bh_type').",".param('bh_order').",".
                    param('bh_size').",".param('bh_stype').",".
 		   param('bh_sdtype').",".param('bh_net').",".
-                   param('bh_cidr').",".param('bh_dates');
+                   param('bh_cidr').",".param('bh_dates').",".
+		   param('bh_grp');
       $state->{searchdomain}=param('bh_domain');
       $state->{searchpattern}=param('bh_pattern');
       save_state($state->{cookie},$state);
     }
     elsif (param('lastsearch')) {
       if ($state->{searchopts} =~
-	  /^(\d+),(\d+),(\d+),(-?\d+),(\d+),(\S*),(\S*),(\S*)$/) {
+	  /^(\d+),(\d+),(\d+),(-?\d+),(\d+),(\S*),(\S*),(\S*),(\d+)$/) {
 	param('bh_type',$1);
 	param('bh_order',$2) unless (param('bh_order'));
 	param('bh_size',$3);
@@ -909,6 +912,7 @@ sub menu_handler {
 	param('bh_net',$6) if ($6);
 	param('bh_cidr',$7) if ($7);
 	param('bh_dates',$8) if ($8);
+	param('bh_grp',$9);
       } else {
 	print h2('No previous search found');
 	goto browse_hosts;
@@ -942,6 +946,10 @@ sub menu_handler {
     if (param('bh_domain') ne '') {
       $tmp=param('bh_domain');
       $domainrule=" AND a.domain ~* " . db_encode_str($tmp) . " ";
+    }
+    my $grouprule;
+    if (param('bh_grp') > 0) {
+	$grouprule=" AND a.grp = " . db_encode_str(param('bh_grp')) . "  ";
     }
 
     my $sorder;
@@ -1008,7 +1016,7 @@ sub menu_handler {
     my $sql1="SELECT b.ip,'',$fields " .
              "FROM hosts a LEFT JOIN a_entries b ON b.host=a.id " .
 	     "WHERE a.zone=$zoneid  $typerule $typerule2 " .
-	     " $netrule $domainrule $extrarule $extrarule2 ";
+	     " $netrule $domainrule $grouprule $extrarule $extrarule2 ";
     my $sql2="SELECT '0.0.0.0'::cidr,b.domain,$fields FROM hosts a,hosts b " .
              "WHERE a.zone=$zoneid AND a.alias=b.id AND a.type=4 " .
 	     " $domainrule  ";
@@ -1145,7 +1153,8 @@ sub menu_handler {
     my $params="bh_type=".param('bh_type')."&bh_order=".param('bh_order').
              "&bh_net=".param('bh_net')."&bh_cidr=".param('bh_cidr').
 	     "&bh_stype=".param('bh_stype')."&bh_pattern=".param('bh_pattern').
-	     "&bh_domain=".param('bh_domain')."&bh_size=".param('bh_size');
+	     "&bh_domain=".param('bh_domain')."&bh_size=".param('bh_size').
+	     "&bh_grp=".param('bh_grp');
 
     my $npage;
     if ($page > 0) {
@@ -1399,11 +1408,12 @@ sub menu_handler {
  browse_hosts:
   param('sub','browse');
   make_net_list($serverid,1,\%nethash,\@netkeys,0,$perms);
+  $browse_hosts_form{alevel}=$perms->{alevel};
 
   %bdata=(domain=>'',net=>'ANY',nets=>\%nethash,nets_k=>\@netkeys,
-	    type=>1,order=>2,stype=>0,size=>3,sdtype=>0);
+	    type=>1,order=>2,stype=>0,size=>3,sdtype=>0,grp=>-1);
   if ($state->{searchopts} =~
-      /^(\d+),(\d+),(\d+),(-?\d+),(\d+),(\S*),(\S*),(\S*)$/) {
+      /^(\d+),(\d+),(\d+),(-?\d+),(\d+),(\S*),(\S*),(\S*),(\d+)$/) {
     $bdata{type}=$1;
     $bdata{order}=$2;
     $bdata{size}=$3;
@@ -1412,6 +1422,7 @@ sub menu_handler {
     $bdata{net}=$6 if ($6);
     $bdata{cidr}=$7 if ($7);
     $bdata{dates}=$8 if ($8);
+    $bdata{grp}=$9;
   }
   $bdata{domain}=$state->{searchdomain} if ($state->{searchdomain});
   $bdata{pattern}=$state->{searchpattern} if ($state->{searchpattern});
