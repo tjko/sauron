@@ -148,19 +148,37 @@ do "$PROG_DIR/back_end.pl";
  data=>[	    
   {ftype=>0, name=>'Host' },
   {ftype=>1, tag=>'domain', name=>'Hostname', type=>'domain', len=>30},
-  {ftype=>5, tag=>'ip', name=>'IP address', iff=>['type','1']},
+  {ftype=>5, tag=>'ip', name=>'IP address', iff=>['type','[16]']},
+  {ftype=>9, tag=>'alias_d', name=>'Alias for', idtag=>'alias',
+   iff=>['type','4']},
   {ftype=>4, tag=>'id', name=>'Host ID'},
   {ftype=>4, tag=>'type', name=>'Type', type=>'enum', enum=>\%host_types},
+  {ftype=>4, tag=>'cname', name=>'Alias type', type=>'enum', conv=>'L',
+   enum=>{t=>'CNAME',f=>'AREC'}, iff=>['type','4']},
   {ftype=>4, tag=>'class', name=>'Class'},
   {ftype=>1, tag=>'ttl', name=>'TTL', type=>'int', len=>10},
+  {ftype=>1, tag=>'info', name=>'Info', type=>'text', len=>50, empty=>1,
+   iff=>['type','1']},
+  {ftype=>1, tag=>'location', name=>'Location', type=>'text', len=>25, 
+   empty=>1, iff=>['type','1']},
+  {ftype=>1, tag=>'dept', name=>'Dept.', type=>'text', len=>25, empty=>1, 
+   iff=>['type','1']},
+  {ftype=>1, tag=>'huser', name=>'User', type=>'text', len=>25, empty=>1, 
+   iff=>['type','1']},
+  {ftype=>0, name=>'Equipment info', iff=>['type','1']},
   {ftype=>1, tag=>'ether', name=>'Ethernet address', type=>'mac', len=>12,
    iff=>['type','1']},
   {ftype=>4, tag=>'card_info', name=>'Card manufacturer', iff=>['type','1']},
-  {ftype=>1, tag=>'info', name=>'Info', type=>'text', len=>50, empty=>1},
-  {ftype=>0, name=>'Group selections'},
+  {ftype=>1, tag=>'model', name=>'Model', type=>'text', len=>30, empty=>1, 
+   iff=>['type','1']},
+  {ftype=>1, tag=>'serial', name=>'Serial no.', type=>'text', len=>20,
+   empty=>1, iff=>['type','1']},
+  {ftype=>1, tag=>'misc', name=>'Misc.', type=>'text', len=>40, empty=>1, 
+   iff=>['type','1']},
+  {ftype=>0, name=>'Group selections', iff=>['type','1']},
   {ftype=>6, tag=>'mx', name=>'MX template', iff=>['type','1']},
   {ftype=>7, tag=>'wks', name=>'WKS template', iff=>['type','1']},
-  {ftype=>0, name=>'Host specific'},
+  {ftype=>0, name=>'Host specific',iff=>['type','[12]']},
   {ftype=>2, tag=>'ns_l', name=>'Name servers (NS)', type=>['text','text'], 
    fields=>2,
    len=>[30,20], empty=>[0,1], elabels=>['NS','comment'], iff=>['type','2']},
@@ -174,6 +192,9 @@ do "$PROG_DIR/back_end.pl";
   {ftype=>2, tag=>'txt_l', name=>'TXT', type=>['text','text'], 
    fields=>2,
    len=>[40,15], empty=>[0,1], elabels=>['TXT','comment'], iff=>['type','1']},
+  {ftype=>2, tag=>'printer_l', name=>'PRINTER entries', 
+   type=>['text','text'], fields=>2,len=>[40,20], empty=>[0,1], 
+   elabels=>['PRINTER','comment'], iff=>['type','[15]']},
   {ftype=>0, name=>'Aliases', iff=>['type','1']},
   {ftype=>8, tag=>'alias_l', name=>'Aliases', fields=>2, 
    elabels=>['Alias','Info'], iff=>['type','1']}
@@ -186,7 +207,11 @@ do "$PROG_DIR/back_end.pl";
 );
 
 
-%browse_page_size=(0=>'25',1=>'50',2=>'100',3=>'200',4=>'500');
+%browse_page_size=(0=>'25',1=>'50',2=>'100',3=>'256',4=>'512',5=>'1000');
+%browse_search_fields=(0=>'Ether',1=>'Info',2=>'User',3=>'Location',
+		       4=>'Department',5=>'Model',6=>'Serial',7=>'Misc');
+@browse_search_f=('ether','info','huser','location','dept','model',
+		  'serial','misc');
 
 %browse_hosts_form=(
  data=>[
@@ -205,7 +230,7 @@ do "$PROG_DIR/back_end.pl";
    len=>40, empty=>1},
   {ftype=>0, name=>'Search (optional)' },
   {ftype=>3, tag=>'stype', name=>'Search field', type=>'enum',
-   enum=>{1=>'Ether',2=>'Info',3=>'User',4=>'Dept.'}},
+   enum=>\%browse_search_fields},
   {ftype=>1, tag=>'pattern',name=>'Pattern',type=>'text',len=>40,empty=>1}
  ],
  bgcolor=>'#eeeebf',
@@ -804,6 +829,7 @@ sub hosts_menu() {
   
   $sub=param('sub');
   $host_form{alias_l_url}="$selfurl?menu=hosts&h_id=";
+  $host_form{alias_d_url}="$selfurl?menu=hosts&h_id=";
   
   if ($sub eq 'Delete') {
     $res=delete_magic('h','Host','hosts',\%host_form,\&get_host,\&delete_host,
@@ -820,14 +846,38 @@ sub hosts_menu() {
   }
   elsif ($sub eq 'browse') {
     %bdata=(domain=>'',net=>'ANY',nets=>\%nethash,nets_k=>\@netkeys,
-	    type=>1,order=>2,stype=>1,size=>1);
-    if (form_check_form('bh',\%bdata,\%browse_hosts_form)) {
-      print p,'<FONT color="red">Invalid parameters.</FONT>';
-      goto browse_hosts;
+	    type=>1,order=>2,stype=>1,size=>3);
+    if (param('bh_submit')) {
+      if (form_check_form('bh',\%bdata,\%browse_hosts_form)) {
+	print p,'<FONT color="red">Invalid parameters.</FONT>';
+	goto browse_hosts;
+      }
+      $state{searchopts}=param('bh_type').",".param('bh_order').",".
+                   param('bh_size').",".param('bh_stype').",".
+		   param('bh_net').",".param('bh_cidr');
+      $state{searchdomain}=param('bh_domain');
+      $state{searchpattern}=param('bh_pattern');
+      save_state($scookie);
+    }
+    elsif (param('lastsearch')) {
+      if ($state{searchopts} =~ /^(\d+),(\d+),(\d+),(\d+),(\S*),(\S*)$/) {
+	param('bh_type',$1);
+	param('bh_order',$2);
+	param('bh_size',$3);
+	param('bh_stype',$4);
+	param('bh_net',$5) if ($5);
+	param('bh_cidr',$6) if ($6);
+      } else {
+	print h2('No previous search found');
+	goto browse_hosts;
+      }
+      param('bh_domain',$state{searchdomain});
+      param('bh_pattern',$state{searchpattern});
     }
 
     undef $typerule;
-    $limit=param('bh_psize');
+    $limit=$browse_page_size{param('bh_size')};
+    $limit='100' unless ($limit > 0);
     $page=param('bh_page');
     $offset=$page*$limit;
 
@@ -857,17 +907,27 @@ sub hosts_menu() {
       $type=1;
     }
 
+    undef %extrarule;
+    if (param('bh_pattern')) {
+      $tmp=$browse_search_f[param('bh_stype')];
+      if ($tmp) {
+	$extrarule=" AND a.$tmp LIKE " .
+	           db_encode_str('%' . param('bh_pattern') . '%') . " ";
+	print p,$extrarule;
+      }
+    }
+
     undef @q;
     $fields="a.id,a.type,a.domain,a.ether,a.info";
     $sql1="SELECT b.ip,'',$fields FROM hosts a,rr_a b " .
 	  "WHERE a.zone=$zoneid AND b.host=a.id $typerule $typerule2 " .
-	  " $netrule $domainrule ";
+	  " $netrule $domainrule $extrarule ";
     $sql2="SELECT '0.0.0.0'::cidr,'',$fields FROM hosts a " .
           "WHERE a.zone=$zoneid AND (a.type!=1 AND a.type!=6 AND a.type!=4) " .
 	  " $typerule $domainrule ";
     $sql3="SELECT '0.0.0.0'::cidr,b.domain,$fields FROM hosts a,hosts b " .
           "WHERE a.zone=$zoneid AND a.alias=b.id AND a.type=4 " .
-	  " $domainrule ";
+	  " $domainrule  ";
     $sql4="SELECT '0.0.0.0'::cidr,a.cname_txt,$fields FROM hosts a  " .
           "WHERE a.zone=$zoneid AND a.alias=-1 AND a.type=4 " .
 	  " $domainrule ";
@@ -884,10 +944,13 @@ sub hosts_menu() {
     #print p,$sql;
     db_query($sql,\@q);
     $count=scalar @q;
-    print "<TABLE width=\"100%\" cellpadding=1 BGCOLOR=\"#eeeeff\">",
-          Tr,"<TD colspan=5 bgcolor=#aadaff><B>Zone:</B> $zone</TD>",
-          Tr,"<TD align=right colspan=5 bgcolor=#aadaff>Page: " .
-	      ($page+1)."</TD>",
+    print "<TABLE width=\"99%\" cellspacing=0 cellpadding=1 border=0 " .
+          "BGCOLOR=\"aaaaff\">",
+          "<TR><TD><B>Zone:</B> $zone</TD>",
+          "<TD align=right>Page: ".($page+1)."</TD></TR></TABLE>";
+	    
+
+    print "<TABLE width=\"99%\" cellspacing=0 cellpadding=1 BGCOLOR=\"#eeeeff\">",
           Tr,Tr,
           "<TR bgcolor=#aaaaff>",th(['Hostname','Type','IP','Ether','Info']);
     for $i (0..$#q) {
@@ -900,15 +963,18 @@ sub hosts_menu() {
       #$hostname=add_origin($q[$i][4],$zone);
       $hostname="<A HREF=\"$selfurl?menu=hosts&h_id=$q[$i][2]\">".
 	        "$q[$i][4]</A>";
-      print Tr,td([$hostname,$host_types{$q[$i][3]},$ip,
-		   "<PRE>$ether</PRE>",$q[$i][6]]);
-      last if ($i > 50);
+      $trcolor='#eeeeff';
+      $trcolor='#ffffcc' if ($i % 2 == 0);
+      print "<TR bgcolor=\"$trcolor\">",td([$hostname,$host_types{$q[$i][3]},$ip,
+		   "<PRE>$ether&nbsp;</PRE>",$q[$i][6]."&nbsp;"]),"</TR>";
+
     }
     print "</TABLE><BR><CENTER>[";
 
     $params="bh_type=".param('bh_type')."&bh_order=".param('bh_order').
             "&bh_net=".param('bh_net')."&bh_cidr=".param('bh_cidr').
-	    "&bh_domain=".param('bh_domain')."&bh_psize=".param('bh_psize');
+	    "&bh_stype=".param('bh_stype')."&bh_pattern=".param('bh_pattern').
+	    "&bh_domain=".param('bh_domain')."&bh_size=".param('bh_size');
     
     if ($page > 0) {
       $npage=$page-1;;
@@ -952,15 +1018,26 @@ sub hosts_menu() {
   $nethash{'ANY'}='Any net';
   $netkeys[0]='ANY';
   for $i (0..$#{$nets}) { 
-    #print p,$$nets[$i][0]; 
+    next unless ($$nets[$i][2]);
     $nethash{$$nets[$i][0]}="$$nets[$i][0] - " . substr($$nets[$i][2],0,25);
     push @netkeys, $$nets[$i][0];
   }
   %bdata=(domain=>'',net=>'ANY',nets=>\%nethash,nets_k=>\@netkeys,
-	    type=>1,order=>2,stype=>1,size=>1);
-  print start_form(-method=>'POST',-action=>$selfurl),
+	    type=>1,order=>2,stype=>1,size=>3);
+  if ($state{searchopts} =~ /^(\d+),(\d+),(\d+),(\d+),(\S*),(\S*)$/) {
+    $bdata{type}=$1;
+    $bdata{order}=$2;
+    $bdata{size}=$3;
+    $bdata{stype}=$4;
+    $bdata{net}=$5 if ($5);
+    $bdata{cidr}=$6 if ($6);
+  }
+  $bdata{domain}=$state{searchdomain} if ($state{searchdomain});
+  $bdata{pattern}=$state{searchpattern} if ($state{searchpattern});
+
+  print start_form(-method=>'GET',-action=>$selfurl),
           hidden('menu','hosts'),hidden('sub','browse'),
-          hidden('bh_page','0'),hidden('bh_psize','50');
+          hidden('bh_page','0');
   form_magic('bh',\%bdata,\%browse_hosts_form);
   print submit(-name=>'bh_submit',-value=>'Search'),end_form;
 
@@ -1498,12 +1575,13 @@ sub about_menu() {
   }
   else {
     print "<P><BR><CENTER>",
-          "<IMG src=\"$ICON_PATH/logo_large.png\" alt=\"Sauron\">",
-          "<BR>Version $VER<P>",
+        "<a href=\"http://sauron.jyu.fi/\" target=\"sauron\">",
+        "<IMG src=\"$ICON_PATH/logo_large.png\" border=\"0\" alt=\"Sauron\">",
+          "</a><BR>Version $VER<P>",
           "a free DNS & DHCP management system<p>",
           "<hr noshade width=\"40%\"><b>Author:</b>",
           "<br>Timo Kokkonen <i>&lt;tjko\@iki.fi&gt;</i>",
-          "<hr width=\"30%\"><b>Logo design:</b>",
+          "<hr width=\"30%\"><b>Logo Design:</b>",
           "<br>Teemu Lähteenmäki <i>&lt;tola\@iki.fi&gt;</i>",
           "<hr noshade width=\"40%\"><p>",
 	  "</CENTER><BR><BR>";
@@ -1739,7 +1817,8 @@ sub top_menu($) {
 
   ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime(time);
   
-  print	'<IMG src="' .$ICON_PATH . '/logo.png" alt="">';
+  print	'<a href="http://sauron.jyu.fi/" target="sauron">',
+        '<IMG src="' .$ICON_PATH . '/logo.png" border="0" alt=""></a>';
 
   print '<TABLE border="0" cellspacing="0" width="100%">';
 
@@ -1810,7 +1889,8 @@ sub left_menu($) {
           p,li("<a href=\"$url&sub=add\">Add</a>");
   } elsif ($menu eq 'hosts') {
     $url.='?menu=hosts';
-    print p,li("<a href=\"$url\">Browse</a>"),
+    print p,li("<a href=\"$url\">Search</a>"),
+          li("<a href=\"$url&sub=browse&lastsearch=1\">Last Search</a>"),
           p,li("<a href=\"$url&sub=addhost\">Add host</a>"),
           li("<a href=\"$url&sub=addmx\">Add MX entry</a>"),
           li("<a href=\"$url&sub=adddelegation\">Add delegation</a>"),
@@ -1959,6 +2039,10 @@ sub save_state($id) {
   if ($state{'user'}) { $other.=", uname='".$state{'user'}."' "; }
   if ($state{'login'}) { $other.=", login=".$state{'login'}." "; }
 
+  $other.=", searchopts=". db_encode_str($state{'searchopts'}) . " ";
+  $other.=", searchdomain=". db_encode_str($state{'searchdomain'}) . " ";
+  $other.=", searchpattern=". db_encode_str($state{'searchpattern'}) . " ";
+
   $res=db_exec("UPDATE utmp SET auth=$s_auth, addr='$s_addr', mode=$s_mode " .
 	       " $other " .
 	       "WHERE cookie='$id';");
@@ -1976,7 +2060,7 @@ sub load_state($) {
 
   undef @q;
   db_query("SELECT uid,addr,auth,mode,serverid,server,zoneid,zone," .
-	   "uname,last,login " .
+	   "uname,last,login,searchopts,searchdomain,searchpattern " .
 	   "FROM utmp WHERE cookie='$id';",\@q);
   if (@q > 0) {
     $state{'uid'}=$q[0][0];
@@ -1995,6 +2079,9 @@ sub load_state($) {
     $state{'user'}=$q[0][8] if ($q[0][8] ne '');
     $state{'last'}=$q[0][9];
     $state{'login'}=$q[0][10];
+    $state{'searchopts'}=$q[0][11];
+    $state{'searchdomain'}=$q[0][12];
+    $state{'searchpattern'}=$q[0][13];
     
     db_exec("UPDATE utmp SET last=" . time() . " WHERE cookie='$id';");
     return 1;
@@ -2175,7 +2262,7 @@ sub form_check_form($$$) {
 sub form_magic($$$) {
   my($prefix,$data,$form) = @_;
   my($i,$j,$k,$n,$key,$rec,$a,$formdata,$h_bg,$e_str,$p1,$p2,$val,$e,$enum,
-     $values,$ip,$t,@lst,%lsth,%tmpl_rec);
+     $values,$ip,$t,@lst,%lsth,%tmpl_rec,$maxlen,$len);
 
   $formdata=$form->{data};
   if ($form->{heading_bg}) { $h_bg=$form->{heading_bg}; }
@@ -2204,7 +2291,7 @@ sub form_magic($$$) {
 	}
 	param($p1."_count",$#{$a});
       }
-      elsif ($rec->{ftype} == 0) {
+      elsif ($rec->{ftype} == 0 || $rec->{ftype} == 9) {
 	# do nothing...
       }
       elsif ($rec->{ftype} == 3) {
@@ -2263,12 +2350,16 @@ sub form_magic($$$) {
       print "<TR><TH COLSPAN=2 ALIGN=\"left\" BGCOLOR=\"$h_bg\">",
              $rec->{name},"</TH></TR>\n";
     } elsif ($rec->{ftype} == 1) {
+      $maxlen=$rec->{len};
+      $maxlen=$rec->{maxlen} if ($rec->{maxlen} > 0);
       if ($rec->{type} eq 'passwd') {
 	print "<TR>",td($rec->{name}),"<TD>",
-	  password_field(-name=>$p1,-size=>$rec->{len},-value=>param($p1));
+	  password_field(-name=>$p1,-size=>$rec->{len},-maxlength=>$maxlen,
+			 -value=>param($p1));
       } else {
 	print "<TR>",td($rec->{name}),"<TD>",
-	  textfield(-name=>$p1,-size=>$rec->{len},-value=>param($p1));
+	  textfield(-name=>$p1,-size=>$rec->{len},-maxlength=>$maxlen,
+		    -value=>param($p1));
       }
 
       print "<FONT size=-1 color=\"red\"><BR> ",
@@ -2343,7 +2434,7 @@ sub form_magic($$$) {
       $a=0 if (!$a || $a < 0);
       #if ($a > 50) { $a = 50; }
       print hidden(-name=>$p1."_count",-value=>$a);
-      print td('IP'),td('Reverse'),td('Forward'),td('Comments'),"</TR>";
+      print td('IP'),td('Reverse'),td('Forward'),"</TR>";
 
       for $j (1..$a) {
 	$p2=$p1."_".$j;
@@ -2354,9 +2445,9 @@ sub form_magic($$$) {
         print "<FONT size=-1 color=\"red\"><BR>",
               form_check_field($rec,param($n),1),"</FONT></TD>";
 	$n=$p2."_2";
-	print td(checkbox(-label=>'Reverse',-name=>$n,-checked=>param($n)));
+	print td(checkbox(-label=>' A',-name=>$n,-checked=>param($n)));
 	$n=$p2."_3";
-	print td(checkbox(-label=>'Forward',-name=>$n,-checked=>param($n)));
+	print td(checkbox(-label=>' PTR',-name=>$n,-checked=>param($n)));
 
         print td(checkbox(-label=>' Delete',
 	             -name=>$p2."_del",-checked=>param($p2."_del") )),
@@ -2411,6 +2502,9 @@ sub form_magic($$$) {
       }
       print "</TABLE></TD></TR>\n";
       
+    }
+    elsif ($rec->{ftype} == 9) {
+      # do nothing...
     }
     print "\n";
   }
@@ -2512,6 +2606,9 @@ sub display_form($$) {
 	          td($k),"</TR>";
       }
       print "</TABLE></TD>\n";
+    } elsif ($rec->{ftype} == 9) {
+      $url=$form->{$rec->{tag}."_url"}.$data->{$rec->{idtag}};
+      print "<TR>",td($rec->{name}),td("<a href=\"$url\">$val</a>"),"</TR>";
     } else {
       error("internal error (display_form)");
     }

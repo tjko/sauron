@@ -17,6 +17,8 @@ CREATE TABLE utmp (
 	zone		TEXT,
 	login		INT4 DEFAULT 0,
 	last		INT4 DEFAULT 0,
-	searchopts	TEXT	
+	searchopts	TEXT,
+	searchdomain	TEXT,
+	searchpattern	TEXT
 );
 

@@ -123,6 +123,7 @@ sub db_encode_str($) {
   my($str) = @_;
 
   return "NULL" unless ($str);
+  $str =~ s/\\/\\\\/g;
   $str =~ s/\'/\\\'/g;
   return "'" . $str . "'";
 }

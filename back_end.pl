@@ -809,12 +809,13 @@ sub copy_zone($$$$) {
 
 sub get_host($$) {
   my ($id,$rec) = @_;
-  my ($res,$t,$wrec,$mrec);
+  my ($res,$t,$wrec,$mrec,%h);
  
   $res = get_record("hosts",
 	       "zone,type,domain,ttl,class,grp,alias,cname,cname_txt," .
 	       "hinfo_hw,hinfo_sw,wks,mx,rp_mbox,rp_txt,router," .
-	       "prn,ether,info,comment",$id,$rec,"id");
+	       "prn,ether,info,location,dept,huser,model,serial,misc,comment",
+		    $id,$rec,"id");
 
   return -1 if ($res < 0);
 
@@ -861,6 +862,12 @@ sub get_host($$) {
     #print p,$rec->{mx}," rec=",$mrec->{comment};
   }
 
+
+  if ($rec->{type} == 4) {
+    get_host($rec->{alias},\%h);
+    $rec->{alias_d}=$h{domain};
+  }
+
   return 0;
 }
 
@@ -872,6 +879,8 @@ sub update_host($) {
   delete $rec->{card_info};
   delete $rec->{wks_rec};
   delete $rec->{mx_rec};
+  delete $rec->{alias_l};
+  delete $rec->{alias_d};
 
   db_begin();
   $r=update_record('hosts',$rec);
