@@ -2,7 +2,7 @@
 #
 # makesvr4pkg.pl -- simple SVR4 packakge building tool
 #
-# Copyright (c) Timo Kokkonen <tjko@iki.fi> 2003.
+# Copyright (c) Timo Kokkonen <tjko@iki.fi> 2003,2004.
 # $Id$
 #
 use File::Path;
@@ -18,6 +18,7 @@ my @SYS_DIRS = qw#
     /usr
     /usr/(bin|sbin|lib|share|local)
     /usr/share/(man|man/man.)
+    /usr/local
     /usr/local/(etc|bin|doc|sbin|libexec|man|man/man.|share|lib|include)
     /var
     /var/(opt|run|tmp)
@@ -27,7 +28,8 @@ my @SYS_DIRS = qw#
 
 sub fatal($) {
     my($msg) = @_;
-    my($prg) = ($0 =~ /\/(.*)$/);
+    my($prg) = $0;
+    $prg =~ s/^.*\///;
     print STDERR "$prg: $msg\n";
     exit;
 }
@@ -39,7 +41,7 @@ chomp($ARCH = `uname -p`);
 $USER = (getpwuid($<))[0];
 
 GetOptions("base=s","email=s","name=s","vendor=s","arch=s","desc=s",
-	   "classes=s","category=s","help|h","pstamp=s",
+	   "classes=s","category=s","help|h","pstamp=s","basedir=s",
 	   "verbose","build","rename");
 
 $PKG=shift;
@@ -74,7 +76,13 @@ fatal("package directory does not exist: $dir") unless (-d $dir);
 chomp($targetdir=`pwd`) unless ($targetdir);
 chdir($targetdir) || fatal("cannot change to targetdir: $targetdir");
 
-fatal("basedir option not supported yet") if ($opt_basedir);
+if ($opt_basedir) {
+    fatal("invalid basedir: $opt_basedir")
+	unless ($opt_basedir =~ /^\/\S+$/);
+    $opt_basedir =~ s/\/$//;
+    fatal("basedir does not exist: $opt_basedir ($dir/$opt_basedir)")
+	unless (-d "$dir/$opt_basedir");
+}
 
 $opt_name = "$PKG for $UNAME_S" unless ($opt_name);
 $opt_desc = "Automatically generated package (by makeSVR4pkg)" 
@@ -89,6 +97,9 @@ $opt_pstamp = sprintf("%s\@%s%04d%02d%02d%02d%02d%02d",
 		      $USER,$HOST,$l[5]+1900,$l[4]+1,$l[3],$l[2],$l[1],$l[0])
     unless ($opt_pstamp);
 fatal("invalid basedir: $opt_basedir") unless ($opt_basedir =~ /^\/.*$/);
+
+$r_basedir = substr($opt_basedir,1);
+$r_basedir = '.' unless ($r_basedir);
 
 $pkginfo =  "PKG=$PKG\n" .
       "NAME=\"$opt_name\"\n" .
@@ -131,7 +142,7 @@ close(FILE);
 # check for filenames that would choke pkgmk
 print "Checking invalid filenames...\n";
 my $filenames_ok = 1;
-open(PIPE,"find . -type f -o -type l | sort |") || fatal("pipe failed");
+open(PIPE,"find $r_basedir -type f -o -type l | sort |") || fatal("pipe failed");
 while (<PIPE>) {
     chomp;
     my $old = $_;
@@ -158,7 +169,7 @@ $count=0;
 open(FILE,">prototype") || fatal("failed to create: prototype");
 print FILE "i pkginfo\n";
 
-open(PIPE,"find . | sort | pkgproto |") || fatal("pipe failed");
+open(PIPE,"find $r_basedir/* | sort | pkgproto |") || fatal("pipe failed");
 while(<PIPE>) {
     chomp;
     next if /^f\s+\S+\s+(prototype|pkginfo)\s/;
@@ -167,12 +178,18 @@ while(<PIPE>) {
 	$l[4]='root';
 	$l[5]='sys';
     }
-    my $tmp = $opt_basedir . $l[2];
+    my $tmp = '/' . $l[2];
     foreach $sysdir (@SYS_DIRS) {
 	if ($tmp =~ /^($sysdir)$/) { $l[3]='?'; $l[4]='?'; $l[5]='?'; }
     }
+    my $fn = $l[2];
+    if ($opt_basedir ne '/') {
+	($tmp=$fn) =~ s/^$r_basedir\///;
+	if  ($l[0] =~ /^[ls]$/) { $fn=$tmp; }
+	else { $fn="$tmp=$fn"; }
+    }
 
-    print FILE "$l[0] $l[1] $l[2] $l[3] $l[4] $l[5]\n";
+    print FILE "$l[0] $l[1] $fn $l[3] $l[4] $l[5]\n";
     $count++;
 }
 close(PIPE);
