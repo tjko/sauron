@@ -19,64 +19,87 @@
 <book id="sauron-manual">
 
   <bookinfo>
-    <title>Sauron: User's Guide</>
-    <subtitle>Version 0.5</>
+    <title>Sauron</>
+    <subtitle>User's Guide</>
     <date>$Date$</>
     <authorgroup>
       <author>
 	<firstname>Timo</>
 	<surname>Kokkonen</>
+        <affiliation>
+          <address><email>tjko@iki.fi</></>
+        </affiliation>
       </author>
     </authorgroup>
+    <pubdate>2003-02-20</>
+
     <copyright>
       <year>2003</>
       <holder>Timo Kokkonen</>
     </copyright>
-    <legalnotice>
+
+    <revhistory>
+      <revision>
+        <revnumber>0.5</>
+        <date>20 Feb 2003</>
+        <authorinitials>tjko</>
+        <revremark>First draft</>
+      </revision>
+    </revhistory>
+
+    <abstract>
       <para>
-	This software and manual are distributed under the 
-	GNU General Public License.
+        This manual describes Sauron, a free DNS &amp; DHCP management
+        system. 
       </para>
-    </legalnotice>
+    </abstract>
+
   </bookinfo>
 
   <preface>
     <title>Preface</>
     <para>
-      This manual describes the Sauron, a free DNS &amp; DHCP management
-      system. 
+      This manual is designed to address user's guestions about installing
+      and using <application>Sauron</>, a free DNS & DHCP management
+      software.
     </para>
+    <para>
+      Listed below are the topics covered in this User Guide.
+      <itemizedlist>
+        <listitem>
+          <para>
+            Chapter 1: introduction to Sauron, and pointers to additional 
+                       information about Sauron.
+          </para>
+        </listitem>
+      <listitem>
+          <para>
+            Chapter 2: explains how to install and configure Sauron.
+          </para>
+       </listitem>
+      <listitem>
+          <para>
+            Chapter 3: provides an overview of how to start using Sauron.
+          </para>
+       </listitem>
+      <listitem>
+          <para>
+            Chapter 4: explains how to manage user accounts.
+          </para>
+       </listitem>
+      <listitem>
+          <para>
+            Chapter 5: reference for Sauron web-based user interface.
+          </para>
+       </listitem>
+      <listitem>
+          <para>
+            Chapter 6: reference for Sauron command-line utilities.
+          </para>
+       </listitem>
 
-    <section id="copyright">
-      <title>Copyright Notice</>
-      <para>
-	Sauron is Copyright (C) 1999-2003 Timo Kokkonen.
-      </para>
-      <para>
-	Sauron is Copyright (C) 1999-2003 Computing Center, 
-                                          University of Jyvaskyla.
-      </para>
-      <para>
-	This  program  is  free  software; you can redistribute it
-	and/or modify it under the terms of the GNU General Public
-	License  as  published  by  the  Free Software Foundation;
-	either version 2 of the License, or (at your  option)  any
-	later version.
-      </para>
-      <para>
-	This  program  is distributed in the hope that it will be
-	useful, but WITHOUT ANY WARRANTY; without even the implied
-	warranty  of  MERCHANTABILITY  or FITNESS FOR A PARTICULAR
-	PURPOSE.  See the GNU  General  Public  License  for  more
-	details.
-      </para>
-      <para>
-	You should have received a copy of the GNU General Public
-	License along with this program; if not, write to the Free
-	Software  Foundation,  Inc.,  675  Mass Ave, Cambridge, MA
-	02139, USA.
-      </para>
-    </section>
+      </itemizedlist>
+    </para>
 
   </preface>
 
@@ -273,6 +296,37 @@
 	 <member>Riku Meskanen <email>mesrik@iki.fi</></>
 	 <member>Otto J. Mäkelä <email>om@iki.fi</></>
         </simplelist>
+      </para>
+    </section>
+
+    <section id="copyright">
+      <title>Copyright Notice</>
+      <para>
+	Sauron is Copyright (C) 1999-2003 Timo Kokkonen.
+      </para>
+      <para>
+	Sauron is Copyright (C) 1999-2003 Computing Center, 
+                                          University of Jyvaskyla.
+      </para>
+      <para>
+	This  program  is  free  software; you can redistribute it
+	and/or modify it under the terms of the GNU General Public
+	License  as  published  by  the  Free Software Foundation;
+	either version 2 of the License, or (at your  option)  any
+	later version.
+      </para>
+      <para>
+	This  program  is distributed in the hope that it will be
+	useful, but WITHOUT ANY WARRANTY; without even the implied
+	warranty  of  MERCHANTABILITY  or FITNESS FOR A PARTICULAR
+	PURPOSE.  See the GNU  General  Public  License  for  more
+	details.
+      </para>
+      <para>
+	You should have received a copy of the GNU General Public
+	License along with this program; if not, write to the Free
+	Software  Foundation,  Inc.,  675  Mass Ave, Cambridge, MA
+	02139, USA.
       </para>
     </section>
 
