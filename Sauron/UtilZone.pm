@@ -21,6 +21,7 @@ $VERSION = '$Id$ ';
 
 
 sub process_zonefile($$$$);
+sub process_zonefile_soa_time($);
 
 my $debug = 0;
 
@@ -96,7 +97,7 @@ sub process_zonefile($$$$) {
     }
     if (/^\$TTL\s+(\S+)(\s|$)/) {
       print "\$TTL: $1\n" if ($debug);
-      $tmp=$1;
+      $tmp=process_zonefile_soa_time($1);
       $zone_ttl = $tmp if ($tmp =~ /(\d+)/);
       next;
     }
@@ -191,8 +192,9 @@ sub process_zonefile($$$$) {
       fatal("$filename($.): invalid mailbox in SOA record: $fline")
 	unless ($line[1] =~ /^\S+\.$/);
       for($i=2;$i <= $#line; $i+=1) {
-	fatal("$filename($.): invalid values '$line[$i]' in SOA record: $fline")
-	  unless ($line[$i] =~ /^\d+$/);
+	$line[$i]=process_zonefile_soa_time($line[$i]);
+	fatal("$filename($.): invalid values '$line[$i]' in SOA record:" .
+	      " $fline") unless ($line[$i] =~ /^\d+$/);
       }
       fatal("$filename($.): invalid SOA record, too many fields: $fline")
 	if ($#line > 6);
@@ -413,6 +415,31 @@ sub process_zonedns($$$$) {
     print "Processed $c records (ignored $ucount records)\n"
 	if ($verbose);
 
+}
+
+# convert the shortform time found in the SOA record to seconds
+sub process_zonefile_soa_time($) {
+       my ($time) = @_;
+       my $returnTime = 0;
+
+       if ( $time =~ m/^\d+[mhdw]/ ) {
+               my ($value,$unit) = ( $time =~ m/^(\d+)([mhdw])/ );
+               if ( $unit eq "m" ) {
+                       $returnTime = $value * 60;
+               } elsif ( $unit eq "h" ) {
+                       $returnTime = $value * 60 * 60;
+               } elsif ( $unit eq "d" ) {
+                       $returnTime = $value * 60 * 60 * 24;
+               } elsif ( $unit eq "w" ) {
+                       $returnTime = $value * 60 * 60 * 24 * 7;
+               } else {
+                       $returnTime = $value;
+               }
+       } else {
+               $returnTime = $time;
+       }
+
+       return $returnTime;
 }
 
 
