@@ -27,7 +27,6 @@ sauron.cgi:
 	- display conflicting domainname/MAC when host update/insert fails
 	- option to "download" search results in CSV format
 	- remove confirm from logout
-	- display record type in "Show Pending"
 
 
 browser.cgi:

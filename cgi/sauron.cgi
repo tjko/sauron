@@ -1080,8 +1080,8 @@ $remote_host = remote_host();
 
 ($scookie = cookie(-name=>"sauron-$SERVER_ID")) =~ s/[^A-Fa-f0-9]//g;
 if ($scookie) {
-  unless (load_state($scookie)) { 
-    logmsg("notice","invalid cookie ($scookie) supplied by $remote_addr"); 
+  unless (load_state($scookie)) {
+    logmsg("notice","invalid cookie ($scookie) supplied by $remote_addr");
     undef $scookie;
   }
 }
@@ -1098,7 +1098,7 @@ if ($state{'mode'} eq '1' && param('login') eq 'yes') {
   logmsg("debug","login authentication: $remote_addr");
   print header(-target=>'_top'),
         start_html(-title=>"Sauron Login",-BGCOLOR=>'white');
-  login_auth(); 
+  login_auth();
 }
 
 if ($state{'auth'} ne 'yes' || $pathinfo eq '/login') {
@@ -1445,21 +1445,22 @@ sub zones_menu() {
     print h2("Pending changes to host records:");
 
     undef @q;
-    db_query("SELECT h.id,h.domain,h.cdate,h.mdate,h.cuser,h.muser " .
+    db_query("SELECT h.id,h.domain,h.cdate,h.mdate,h.cuser,h.muser,h.type " .
 	     "FROM hosts h, zones z " .
 	     "WHERE z.id=$zoneid AND h.zone=z.id " .
 	     " AND (h.mdate > z.serial_date OR h.cdate > z.serial_date) " .
 	     "ORDER BY h.domain LIMIT 100;",\@q);
     print "<TABLE width=\"98%\" bgcolor=\"#ccccff\" cellspacing=1 ".
           " cellpadding=1 border=0>",
-          "<TR bgcolor=\"#aaaaff\">",th("#"),th("Hostname"),
-	  "<TH>Action</TH><TH>Date</TH><TH>By</TH></TR>";
+          "<TR bgcolor=\"#aaaaff\">",th("#"),th("Hostname"),th("Type"),
+	  th("Action"),th("Date"),th("By"),"</TR>";
     for $i (0..$#q) {
       $action=($q[$i][2] > $q[$i][3] ? 'Create' : 'Modify');
       $date=localtime(($action eq 'Create' ? $q[$i][2] : $q[$i][3]));
       $user=($action eq 'Create' ? $q[$i][4] : $q[$i][5]);
       print "<TR bgcolor=\"#eeeebf\">",td($i."."),
 	    td("<a href=\"$selfurl?menu=hosts&h_id=$q[$i][0]\">$q[$i][1]</a>"),
+	    td($host_types{$q[$i][6]}),
 	    td($action),td($date),td($user),"</TR>";
     }
     print "</TABLE>";
@@ -3764,9 +3765,10 @@ sub make_cookie($) {
   $val=$ctx->hexdigest;
 
   undef %state;
-  $state{'auth'}='no';
+  $state{auth}='no';
   #$state{'host'}=remote_host();
-  $state{'addr'}=$ENV{'REMOTE_ADDR'};
+  $state{addr}=$ENV{'REMOTE_ADDR'};
+  $state{addr}='0.0.0.0' unless ($state{addr});
   save_state($val);
   $ncookie=$val;
   return cookie(-name=>"sauron-$SERVER_ID",-expires=>'+7d',
@@ -3812,7 +3814,7 @@ sub save_state($) {
 	       ", superuser=$s_superuser $other " .
 	       "WHERE cookie='$id';");
 
-  html_error("cannot save stat '$id'") if ($res < 0);
+  html_error("cannot save state '$id' ($state{uid},$state{user})") if ($res < 0);
 }
 
 
