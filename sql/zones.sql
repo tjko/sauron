@@ -25,6 +25,9 @@ CREATE TABLE zones (
        reverse	   BOOL DEFAULT false, /* true for reverse (arpa) zones */
        noreverse   BOOL DEFAULT false, /* if true, zone not used in reverse
 				          map generation */
+       flags	   INT DEFAULT 0, /* zone option flags: reserved */
+       forward	   CHAR(1) DEFAULT 'D', /* forward: D=default, 
+						    O=only, F=first */
        nnotify	   CHAR(1) DEFAULT 'D', /* notify: D=default, Y=yes, N=no */
        chknames    CHAR(1) DEFAULT 'D', /* check-names:
 					     	D=default,

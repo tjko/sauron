@@ -18,7 +18,8 @@ CREATE TABLE cidr_entries (
 				      8=server (allow-recursion) 
 				      9=server (blackhole) 
 				      10=server (listen-on) 
-				      11=zone (forwarders) */
+				      11=server (forwarders)
+				      12=zone (forwarders) */
         ref	    INT4 NOT NULL, /* ptr to table speciefied by type field
 					-->servers.id
 					-->zones.id  */

@@ -411,7 +411,10 @@ sub form_magic($$$) {
     if ($rec->{iff}) {
       $val=param($prefix."_".${$rec->{iff}}[0]);
       $e=${$rec->{iff}}[1];
-      next unless ($val =~ /^($e)$/);
+      unless ($val =~ /^($e)$/) {
+	print hidden($p1,param($p1)) if ($rec->{iff}[2]);
+	next;
+      }
     }
     if ($rec->{iff2}) {
       $val=param($prefix."_".${$rec->{iff2}}[0]);

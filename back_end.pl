@@ -700,7 +700,7 @@ sub get_zone($$) {
 	       "server,active,dummy,type,reverse,class,name,nnotify," .
 	       "hostmaster,serial,refresh,retry,expire,minimum,ttl," .
 	       "chknames,reversenet,comment,cdate,cuser,mdate,muser," .
-	       "serial_date",
+	       "forward,serial_date",
 	       $id,$rec,"id");
   return -1 if ($res < 0);
 
@@ -722,6 +722,8 @@ sub get_zone($$) {
 		  "type=5 AND ref=$id ORDER BY ip",$rec,'allow_transfer');
   get_array_field("cidr_entries",3,"id,ip,comment","IP,Comments",
 		  "type=6 AND ref=$id ORDER BY ip",$rec,'also_notify');
+  get_array_field("cidr_entries",3,"id,ip,comment","IP,Comments",
+		  "type=12 AND ref=$id ORDER BY ip",$rec,'forwarders');
 
   $rec->{cdate_str}=($rec->{cdate} > 0 ?
 		     localtime($rec->{cdate}).' by '.$rec->{cuser} : 'UNKOWN');
@@ -788,6 +790,9 @@ sub update_zone($) {
   if ($r < 0) { db_rollback(); return -19; }
   $r=update_array_field("cidr_entries",3,"ip,comment,type,ref",
 			'also_notify',$rec,"6,$id");
+  if ($r < 0) { db_rollback(); return -20; }
+  $r=update_array_field("cidr_entries",3,"ip,comment,type,ref",
+			'forwarders',$rec,"12,$id");
   if ($r < 0) { db_rollback(); return -20; }
 
   return db_commit();

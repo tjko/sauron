@@ -64,6 +64,17 @@ ALTER TABLE servers ALTER COLUMN df_loadbalmax SET DEFAULT 3;
 UPDATE servers SET df_loadbalmax=3;
 
 
+/* zones.sql */
+
+ALTER TABLE zones ADD COLUMN flags INT;
+ALTER TABLE zones ALTER COLUMN flags SET DEFAULT 0;
+UPDATE zones SET flags=0;
+
+ALTER TABLE zones ADD COLUMN forward CHAR(1);
+ALTER TABLE zones ALTER COLUMN forward SET DEFAULT 'D';
+UPDATE zones SET forward='D';
+
+
 UPDATE settings SET value='1.0' WHERE key='dbversion';
 
 /* eof */

@@ -111,7 +111,7 @@ do "$PROG_DIR/cgi_util.pl";
 
   {ftype=>0, name=>'Access control'},
   {ftype=>3, tag=>'named_flags_ac', name=>'Use access control from master',
-   type=>'enum', enum=>{0=>'No',1=>'Yes'}, iff=>['masterserver','\d+']},
+   type=>'enum', enum=>{0=>'No',1=>'Yes'}, iff=>['masterserver','\d+',1]},
   {ftype=>2, tag=>'allow_transfer', name=>'Allow-transfer', fields=>2,
    type=>['cidr','text'], len=>[20,30], empty=>[0,1],
    elabels=>['CIDR','comment'], iff=>['named_flags_ac','0']},
@@ -238,6 +238,8 @@ do "$PROG_DIR/cgi_util.pl";
    conv=>'U', enum=>\%check_names_enum},
   {ftype=>3, tag=>'nnotify', name=>'Notify', type=>'enum', conv=>'U',
    enum=>\%yes_no_enum, iff=>['type','M']},
+  {ftype=>3, tag=>'forward', name=>'Forward', type=>'enum', conv=>'U',
+   enum=>{D=>'Default',O=>'Only',F=>'First'}, iff=>['type','F'] },
   {ftype=>4, tag=>'serial', name=>'Serial', iff=>['type','M']},
   {ftype=>1, tag=>'refresh', name=>'Refresh', type=>'int', len=>10, 
    empty=>1, definfo=>['','Default (from server)'], iff=>['type','M']},
@@ -276,6 +278,10 @@ do "$PROG_DIR/cgi_util.pl";
    name=>'[Stealth] Servers to notify (also-notify)', type=>['ip','text'],
    fields=>2, len=>[40,15], empty=>[0,1], elabels=>['IP','comment'],
    iff=>['type','M']},
+  {ftype=>2, tag=>'forwarders', 
+   name=>'Forwarders', type=>['ip','text'],
+   fields=>2, len=>[40,15], empty=>[0,1], elabels=>['IP','comment'],
+   iff=>['type','F']},
 
   {ftype=>0, name=>'DHCP', iff=>['type','M']},
   {ftype=>2, tag=>'dhcp', name=>'Zone specific DHCP entries',
@@ -1490,19 +1496,20 @@ sub zones_menu() {
 
  select_zone:
   #display zone selection list
+  %ztypecolors=(M=>'#c0ffc0',S=>'#eeeeff',F=>'#eedfdf',H=>'#eeeebf');
+  %ztypenames=(M=>'Master',S=>'Slave',F=>'Forward',H=>'Hint');
 
   print h2("Select zone:"),p,"<TABLE width=98% bgcolor=white border=0>",
         "<TR bgcolor=\"#aaaaff\">",th(['Zone','Type','Reverse','Comments']);
   $list=get_zone_list($serverid);
   for $i (0 .. $#{$list}) {
-    $type=$$list[$i][2];
-    if ($type eq 'M') { $type='Master'; $color='#f0f000'; }
-    elsif ($type eq 'S') { $type='Slave'; $color='#eeeebf'; }
+    $type=$ztypenames{$$list[$i][2]};
+    $color=$ztypecolors{$$list[$i][2]};
     $rev=($$list[$i][3] eq 't' ? 'Yes' : 'No');
     $id=$$list[$i][1];
     $name=$$list[$i][0];
     $comment=$$list[$i][4].'&nbsp;';
-    print "<TR bgcolor=$color>",td([
+    print "<TR bgcolor=\"$color\">",td([
 	"<a href=\"$selfurl?menu=zones&selected_zone=$name\">$name</a>",
 				    $type,$rev,$comment]);
     $zonelist{$name}=$id;
@@ -1511,6 +1518,9 @@ sub zones_menu() {
 
   get_server($serverid,\%server);
   if ($server{masterserver} > 0) {
+    %ztypecolors=(M=>'#eedeff',S=>'#eeeeff',F=>'#eedfdf',H=>'#eeeebf');
+    %ztypenames=(M=>'Slave (Master)',S=>'Slave',F=>'Forward',H=>'Hint');
+
     print h4("Zones from master server:"),
           p,"<TABLE width=98% bgcolor=white border=0>",
         "<TR bgcolor=\"#aaaaff\">",th(['Zone','Type','Reverse','Comments']);
@@ -1519,8 +1529,8 @@ sub zones_menu() {
       $type=$$list[$i][2];
       next if ($server{named_flags_isz}!=1 && $type !~ /^M/);
       next unless ($type =~ /^[MS]$/);
-      if ($type eq 'M') { $type='Slave (Master)'; $color='#eeeedf'; }
-      elsif ($type eq 'S') { $type='Slave'; $color='#eeeebf'; }
+      $type=$ztypenames{$$list[$i][2]};
+      $color=$ztypecolors{$$list[$i][2]};
       $rev=($$list[$i][3] eq 't' ? 'Yes' : 'No');
       $id=$$list[$i][1];
       $name=$$list[$i][0];
