@@ -506,7 +506,7 @@ sub copy_records($$$$$$$) {
   $tmp="SELECT $reffield,$fields FROM $stable WHERE $key IN ($selectsql)";
   #print "$tmp\n";
   db_query($tmp,\@data);
-  print "<br>$stable records to copy: " . @data . "\n";
+  #print "<br>$stable records to copy: " . @data . "\n";
   return 0 if (@data < 1);
 
   for $i (0..$#data) {
@@ -1265,19 +1265,30 @@ sub add_zone($) {
 }
 
 sub copy_zone($$$$) {
-  my($id,$serverid,$newname,$trans)=@_;
-  my($newid,%z,$res,@q,@ids,@hids,$i,$j,%h,@t,$fields,%aids);
+  my($id,$serverid,$newname,$verbose)=@_;
+  my($newid,%z,$res,@q,@ids,@hids,$i,$j,%h,@t,$fields,$fields2,%aids);
+  my($timenow,%eaids,%hidh);
 
   return -1 if (get_zone($id,\%z) < 0);
-  db_begin() if ($trans);
+  del_std_fields(\%z);
+  delete $z{pending_info};
+  delete $z{zonehostid};
+  delete $z{txt_auto_generation};
 
-  print "<BR>Copying zone record...";
+  db_begin();
+
+  print "<BR>Copying zone record..." if ($verbose);
   delete $z{id};
   $z{server}=$serverid;
   $z{name}=$newname;
-  $newid=add_zone(\%z);
-  return -2 if ($newid < 1);
-  print "<BR>Copying records pointing to zone record...";
+  $z{cuser}=$muser;
+  $z{cdate}=time;
+  $newid=add_record('zones',\%z);
+  if ($newid < 1) { db_rollback(); return -2; }
+
+
+  # Records pointing to the zone record
+  print "<BR>Copying records pointing to zone record..." if ($verbose);
 
   # cidr_entries
   $res=db_exec("INSERT INTO cidr_entries (type,ref,ip,comment) " .
@@ -1292,35 +1303,19 @@ sub copy_zone($$$$) {
 	       "WHERE type=2 AND ref=$id;");
   if ($res < 0) { db_rollback(); return -4; }
 
-  # mx_entries
-  $res=db_exec("INSERT INTO mx_entries (type,ref,pri,mx,comment) " .
-	       "SELECT type,$newid,pri,mx,comment FROM mx_entries " .
-	       "WHERE type=1 AND ref=$id;");
-  if ($res < 0) { db_rollback(); return -5; }
-
-  # ns_entries
-  $res=db_exec("INSERT INTO ns_entries (type,ref,ns,comment) " .
-	       "SELECT type,$newid,ns,comment FROM ns_entries " .
-	       "WHERE type=1 AND ref=$id;");
-  if ($res < 0) { db_rollback(); return -6; }
-
-  # txt_entries
-  $res=db_exec("INSERT INTO txt_entries (type,ref,txt,comment) " .
-	       "SELECT type,$newid,txt,comment FROM txt_entries " .
-	       "WHERE type=1 AND ref=$id;");
-  if ($res < 0) { db_rollback(); return -7; }
-
-
   # mx_templates
-  print "<BR>Copying MX templates...";
+  print "<BR>Copying MX templates..." if ($verbose);
   undef @q;
   db_query("SELECT id FROM mx_templates WHERE zone=$id;",\@ids);
   for $i (0..$#ids) {
     undef %h;
     if (get_mx_template($ids[$i][0],\%h) < 0) { db_rollback(); return -8; }
+    del_std_fields(\%h);
     $h{zone}=$newid;
+    $h{cuser}=$muser;
+    $h{cdate}=time;
     $j=add_record('mx_templates',\%h);
-    if ($j < 0) { db_rollback(); return -9; }
+    if ($j < 0) { db_rollback(); print db_errormsg(); return -9; }
     $ids[$i][1]=$j;
     $res=db_exec("INSERT INTO mx_entries (type,ref,pri,mx,comment) " .
 		 "SELECT type,$j,pri,mx,comment FROM mx_entries " .
@@ -1329,28 +1324,33 @@ sub copy_zone($$$$) {
   }
 
   # hosts
-  print "<BR>Copying hosts...";
+  print "<BR>Copying hosts..." if ($verbose);
   $fields='type,domain,ttl,class,grp,alias,cname_txt,hinfo_hw,' .
-          'hinfo_sw,wks,mx,rp_mbox,rp_txt,router,prn,ether,info,comment';
+          'hinfo_sw,loc,wks,mx,rp_mbox,rp_txt,router,prn,flags,ether,' .
+	  'ether_alias,info,location,dept,huser,model,serial,misc,asset_id,' .
+	  'comment,expiration';
+  $fields2 = 'cdate,cuser,mdate,muser';
+  $timenow = time;
 
-  $res=db_exec("INSERT INTO hosts (zone,$fields) " .
-	       "SELECT $newid,$fields FROM hosts " .
+  $res=db_exec("INSERT INTO hosts (zone,$fields,$fields2) " .
+	  "SELECT $newid,$fields,$timenow,'$muser',NULL,'$muser' FROM hosts " .
 	       "WHERE zone=$id;");
   if ($res < 0) { db_rollback(); return -11; }
 
   db_query("SELECT a.id,b.id,a.domain FROM hosts a, hosts b " .
 	   "WHERE a.zone=$id AND b.zone=$newid AND a.domain=b.domain;",\@hids);
   print "<br>hids = " . $#hids;
+  for $i (0..$#hids) { $hidh{$hids[$i][0]}=$hids[$i][1]; }
 
   # a_entries
-  print "<BR>Copying A records...";
+  print "<BR>Copying A records..." if ($verbose);
   $res=copy_records('a_entries','a_entries','id','host',\@hids,
-     'ip,reverse,forward,comment',
+     'ip,ipv6,type,reverse,forward,comment',
      "SELECT a.id FROM a_entries a,hosts h WHERE a.host=h.id AND h.zone=$id");
   if ($res < 0) { db_rollback(); return -12; }
 
   # dhcp_entries
-  print "<BR>Copying DHCP records...";
+  print "<BR>Copying DHCP records..." if ($verbose);
   $res=copy_records('dhcp_entries','dhcp_entries','id','ref',\@hids,
      'type,dhcp,comment',
      "SELECT a.id FROM dhcp_entries a,hosts h " .
@@ -1358,7 +1358,7 @@ sub copy_zone($$$$) {
   if ($res < 0) { db_rollback(); return -13; }
 
   # mx_entires
-  print "<BR>Copying MX records...";
+  print "<BR>Copying MX records..." if ($verbose);
   $res=copy_records('mx_entries','mx_entries','id','ref',\@hids,
      'type,pri,mx,comment',
      "SELECT a.id FROM mx_entries a,hosts h " .
@@ -1366,7 +1366,7 @@ sub copy_zone($$$$) {
   if ($res < 0) { db_rollback(); return -14; }
 
   # wks_entries
-  print "<BR>Copying WKS records...";
+  print "<BR>Copying WKS records..." if ($verbose);
   $res=copy_records('wks_entries','wks_entries','id','ref',\@hids,
      'type,proto,services,comment',
      "SELECT a.id FROM wks_entries a,hosts h " .
@@ -1374,7 +1374,7 @@ sub copy_zone($$$$) {
   if ($res < 0) { db_rollback(); return -15; }
 
   # ns_entries
-  print "<BR>Copying NS records...";
+  print "<BR>Copying NS records..." if ($verbose);
   $res=copy_records('ns_entries','ns_entries','id','ref',\@hids,
      'type,ns,comment',
      "SELECT a.id FROM ns_entries a,hosts h " .
@@ -1382,7 +1382,7 @@ sub copy_zone($$$$) {
   if ($res < 0) { db_rollback(); return -16; }
 
   # printer_entries
-  print "<BR>Copying PRINTER records...";
+  print "<BR>Copying PRINTER records..." if ($verbose);
   $res=copy_records('printer_entries','printer_entries','id','ref',\@hids,
      'type,printer,comment',
      "SELECT a.id FROM printer_entries a,hosts h " .
@@ -1390,35 +1390,71 @@ sub copy_zone($$$$) {
   if ($res < 0) { db_rollback(); return -17; }
 
   # txt_entries
-  print "<BR>Copying TXT records...";
+  print "<BR>Copying TXT records..." if ($verbose);
   $res=copy_records('txt_entries','txt_entries','id','ref',\@hids,
      'type,txt,comment',
      "SELECT a.id FROM txt_entries a,hosts h " .
      "WHERE a.type=2 AND a.ref=h.id AND h.zone=$id");
   if ($res < 0) { db_rollback(); return -18; }
 
+  # srv_entries
+  print "<BR>Copying SRV records..." if ($verbose);
+  $res=copy_records('srv_entries','srv_entries','id','ref',\@hids,
+     'type,pri,weight,port,target,comment',
+     "SELECT a.id FROM srv_entries a,hosts h " .
+     "WHERE a.type=1 AND a.ref=h.id AND h.zone=$id");
+  if ($res < 0) { db_rollback(); return -19; }
+
   # update mx_template pointers
-  print "<BR>Updating MX template pointers...";
+  print "<BR>Updating MX template pointers..." if ($verbose);
   for $i (0..$#ids) {
     $res=db_exec("UPDATE hosts SET mx=$ids[$i][1] " .
 		 "WHERE zone=$newid AND mx=$ids[$i][0];");
-    if ($res < 0) { db_rollback(); return -19; }
+    if ($res < 0) { db_rollback(); return -20; }
   }
 
   # update alias pointers
-  print "<BR>Updating ALIAS pointers...";
+  print "<BR>Updating ALIAS pointers..." if ($verbose);
   undef @q;
   db_query("SELECT alias FROM hosts WHERE zone=$newid AND alias > 0;",\@q);
-  print " " .@q." alias records to update...";
+  print " " .@q." alias records to update..." if ($verbose);
   for $i (0..$#q) { $aids{$q[$i][0]}=1; }
   for $i (0..$#hids) {
     next unless ($aids{$hids[$i][0]});
     $res=db_exec("UPDATE hosts SET alias=$hids[$i][1] " .
 		 "WHERE zone=$newid AND alias=$hids[$i][0];");
-    if ($res < 0) { db_rollback(); return -20; }
+    if ($res < 0) { db_rollback(); return -21; }
   }
 
-  if ($trans) { return -100 if (db_commit() < 0);  }
+  # update ether_alias pointers
+  print "<BR>Updating ETHERALIAS pointers..." if ($verbose);
+  undef @q;
+  db_query("SELECT ether_alias FROM hosts " .
+	   "WHERE zone=$newid AND ether_alias > 0;",\@q);
+  print " " .@q." ether_alias records to update..." if ($verbose);
+  for $i (0..$#q) { $eaids{$q[$i][0]}=1; }
+  for $i (0..$#hids) {
+    next unless ($eaids{$hids[$i][0]});
+    $res=db_exec("UPDATE hosts SET ether_alias=$hids[$i][1] " .
+		 "WHERE zone=$newid AND ether_alias=$hids[$i][0];");
+    if ($res < 0) { db_rollback(); return -22; }
+  }
+
+  # copy AREC entries
+  print "<BR>Copying AREC entries..." if ($verbose);
+  undef @q;
+  db_query("SELECT a.host,a.arec FROM arec_entries a, hosts h " .
+	   "WHERE h.zone=$id AND h.id=a.host",\@q);
+  for $i (0..$#q) {
+    #print "$i: $q[$i][0] --> $hidh{$q[$i][0]}, $q[$i][1] --> $hidh{$q[$i][1]}<br>";
+    return -23 unless ($hidh{$q[$i][0]} && $hidh{$q[$i][1]});
+    $q[$i][0]=$hidh{$q[$i][0]};
+    $q[$i][1]=$hidh{$q[$i][1]};
+  }
+  $res = db_insert('arec_entries','host,arec',\@q);
+  if ($res < 0) { db_rollback(); return -24; }
+
+  return -100 if (db_commit() < 0);
   return $newid;
 }
 
@@ -1650,7 +1686,7 @@ sub delete_host($) {
   if ($res < 0) { db_rollback(); return -7; }
 
   # arec_entries
-  $res=db_exec("DELETE FROM arec_entries WHERE host=$id;");
+  $res=db_exec("DELETE FROM arec_entries WHERE host=$id OR arec=$id;");
   if ($res < 0) { db_rollback(); return -8; }
 
   # aliases
