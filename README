@@ -3,38 +3,144 @@ Sauron - DNS/DHCP Management System
 
 
 REQUIREMENTS
-	- BIND v8 (or newer)
-	- DHCP, dhcp v2.0 or newer from ISC  (optional)
-	- Perl 5 or better
+	- BIND v8 or later [9.2.x or newer recommended]
+	- ISC dhcpd v2 or later [3.x or newer recommended] (optional)
+	- Perl 5 or better [at least 5.6 recommended]
 		- Net::Netmask module
 		- Digest::MD5 module
-		- Term::ReadKey module
 	- PostgresSQL (or add support to your favorite db yourself :)
 		- Pg perl module
-	- Apache (or any other www-server with CGI support)
+	- www-server (Apache or any other www-server with CGI support)
 
 
 TESTED PLATFORMS
-	Linux
-	Solaris
+	Sauron is currently developed using Red Hat Linux and GNU/Debian Linux,
+	but it should work pretty much on any Unix variant (if required
+	programs are available).
 
 
 
-INSTALLATION
-	.... (complete instructions to be added someday :)
+INSTALLATION 
 
-
+  1) Build and install the program (SKIP this if you're installing the RPM):
 	./configure
-	make docs
-	<read docs... :)>
-	<create database (sauron) in postgres>
-	cp config.in config
-	<edit config>
-	make make_tables
-	make init_tables
-	<run import,import-jyu,contrib/netnames-jyu,... if necessary :)>
-	./adduser
-	<setup www interface...sauron.cgi>
+	make
+	make docs	(optional)
+	make install
+
+  2) Create database for sauron to user in PostgreSQL
+     	(use createdb command to create the database, see postgres
+	 documentation for more help)
+
+  3) Edit configuration files: config and config-browser
+	(these are usually in /usr/local/etc/sauron or /etc/sauron)
+	at minimum you need to check paths and setup database
+	connection string (DB_CONNECT)
+
+  4) Create tables in the newly created database:
+	<change to installation directory (/usr/local/sauron)>
+	./createtables
+	./status		(check that everything worked)
+
+  5) Populate OUI (ethernet card manufacturer) table (optional):
+	./import-ethers contrib/Ethernet.txt
+	./import-ethers --force contrib/additional-ether-codes.txt
+	   (NOTE! you may want to download IEEE's public list
+	    of OUIs from: http://standards.ieee.org/regauth/oui/index.shtml
+	    and import it as well)
+
+  6) Populate global root servers table:
+	./import-roots default contrib/named.root
+	  (NOTE! you should download latest version of this file
+	   from: ftp://ftp.rs.internic.net/domain/ and use it)
+
+  7) Create adminstrator account:
+	./adduser 		(remember to set superuser flag)
+
+  8) Setup www interface
+	You need to make sauron.cgi and browser.cgi available through
+	your www server. One way to do this is to make symbolic links
+	for sauron.cgi and browser.cgi in your cgi-bin directory.
+
+
+  9) now you can use the web interface to create a server and zones, or
+     you can import existing named/dhcpd configurations using
+     import/iport-dhcp utilities.
+
+
+
+
+COMMANDS
+
+ addgroup	
+   Creates user groups. It's recommended to assign
+   users to groups and assign privileges to groups and not
+   directly to users.
+   
+ addhosts
+   Utility for adding hosts to a existing zone from given
+   file. Input file format is same as in normal zone files.
+
+ adduser
+   Creates new user accounts. Use --help option for more help.
+
+ check-pending  
+   Program to be run from crontab that check for pending
+   changes in database and sends notification of pending changes
+   to address defined in configuration.
+
+ deluser
+   Removes users accounts from the system. (accounts can also be locked
+   with moduser command).
+
+ export-networks
+   Generates Unix /etc/networks format file of networks defined for
+   given server.
+
+ generatehosts
+   Utility for generating number of host entries into database.
+
+ import
+   Reads complete named (BIND) configuration file set and generates
+   new server and related zones into Sauron.
+
+ import-ethers
+   Utility for adding OUI (ethernet card manufacturer) information
+   into global table. This table enable sauron to recognize and display
+   NIC manufacturer information for hosts.
+
+ import-roots
+   Utility for importing root server hints into Sauron. Sauron has
+   global table and option for server specific root server lists.
+
+ last
+   Unix 'last' command style utility for listing lastlog information
+   about sauron www-interface users.
+
+ modgroup
+   Modifies privileges associated with groups.
+
+ modhosts
+   Simple utility for modifying several hosts at a time in the database.
+
+ moduser
+   Modifies user account privileges and attributes.
+
+ runsql
+   Utility for running SQL code from file into Sauron database.
+
+ sauron
+   Program to for generatin named/dhcpd configuration files from Sauron 
+   database for given server.
+
+ status
+   Utility for listing database connection and www-interface status.
+   Also displays currently logged in users.
+
+ update-dhcp-info
+   Program to be run from crontab that parses dhcpd logs and updates
+   'last seen by dhcp server' fields for hosts.
+
 
 
 
