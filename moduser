@@ -16,6 +16,7 @@ $0 = $PG_NAME;
 do "$PG_DIR/config" || die("cannot load config");
 do "$PG_DIR/util.pl";
 do "$PG_DIR/db.pl";
+do "$PG_DIR/back_end.pl";
 
 sub fatal($) {
   my ($msg) = @_;
@@ -233,21 +234,26 @@ if (defined $opt_add) {
     print "Record type [1=server,2=zone,3=net,4=hostnamemask]: ";
     $type = ReadLine 0; chomp $type;
     unless ($type =~ /^(1|2|3|4)$/) { print "invalid type!\n"; goto add_i; }
-    if ($type==1) {
+    if ($type==1 || $type==2 || $type==3) {
       print "Enter server name: ";
       $tmp = ReadLine 0; chomp $tmp;
       undef @d;
       db_query("SELECT id,name FROM servers WHERE name='$tmp';",\@d);
       if (@d < 1) { print "cannot find server!\n"; goto add_i; }
-      $mode=ask_mode();
-      unless ($mode) { print "invalid mode!\n"; goto add_i; }
-      $ref=$d[0][0];
+      if ($type==1) {
+	$mode=ask_mode();
+	unless ($mode) { print "invalid mode!\n"; goto add_i; }
+	$ref=$d[0][0];
+      } else {
+	$serverid=$d[0][0];
+      }
     }
-    elsif ($type==2) {
+    if ($type==2){
       print "Enter zone name: ";
       $tmp = ReadLine 0; chomp $tmp;
       undef @d;
-      db_query("SELECT id,name FROM zones WHERE name='$tmp';",\@d);
+      db_query("SELECT id,name FROM zones " .
+	       "WHERE server=$serverid AND name='$tmp';",\@d);
       if (@d < 1) { print "cannot find zone!\n"; goto add_i; }
       $mode=ask_mode();
       unless ($mode) { print "invalid mode!\n"; goto add_i; }
@@ -258,9 +264,11 @@ if (defined $opt_add) {
       $tmp = ReadLine 0; chomp $tmp;
       unless (is_cidr($tmp)) { print "Invalid CIDR!"; goto add_i; }
       undef @d;
-      db_query("SELECT id,name FROM nets WHERE net='$tmp';",\@d);
+      db_query("SELECT id,name FROM nets " .
+	       "WHERE server=$serverid AND net='$tmp';",\@d);
       if (@d < 1) { print "cannot find net!\n"; goto add_i; }
-      $mode=ask_mode(1);
+      #$mode=ask_mode(1);
+      $mode='unused';
       unless ($mode) { print "invalid mode!\n"; goto add_i; }
       $ref=$d[0][0];
     }
@@ -291,14 +299,32 @@ if (defined $opt_add) {
     $ref=$d[0][0];
   }
   elsif ($type eq 2) {
+    if ($tmp=~/^(\S+):(\S+)$/) {
+      $tmp1=$1;
+      $tmp2=$2;
+      $serverid=get_server_id($tmp1);
+      fatal("Cannot find server '$tmp1'") unless ($serverid > 0);
+    } else {
+      fatal("Server not specified.");
+    }
     undef @d;
-    db_query("SELECT id FROM zones WHERE name='$tmp';",\@d);
-    fatal("cannot find zone '$tmp'") if (@d < 1);
+    db_query("SELECT id FROM zones WHERE server=$serverid AND name='$tmp2';",
+	     \@d);
+    fatal("cannot find zone '$tmp2'") if (@d < 1);
     $ref=$d[0][0];
   }
   elsif ($type eq 3) {
+    if ($tmp=~/^(\S+):(\S+)$/) {
+      $tmp1=$1;
+      $tmp2=$2;
+      $serverid=get_server_id($tmp1);
+      fatal("Cannot find server '$tmp1'") unless ($serverid > 0);
+    } else {
+      fatal("Server not specified.");
+    }
     undef @d;
-    db_query("SELECT id FROM nets WHERE net='$tmp';",\@d);
+    db_query("SELECT id FROM nets WHERE server=$serverid AND net='$tmp2' ;",
+	     \@d);
     fatal("cannot find net '$tmp'") if (@d < 1);
     $ref=$d[0][0];
   }
@@ -312,7 +338,7 @@ if (defined $opt_add) {
   $res=db_exec("INSERT INTO user_rights (type,ref,rtype,rref,rule) " .
 	       "VALUES($utype,$id,$type,$ref,'$mode');");
   fatal("cannot insert record to user_rights table!") if ($res < 0);
-
+  print "Record succesfully inserted.\n";
 }
 elsif (defined $opt_del) {
   fatal("invalid parameter to del option!")
@@ -376,8 +402,8 @@ sub list_privs($$) {
   }
 
   undef @d;
-  db_query("SELECT a.rule,b.name,a.id FROM user_rights a, zones b " .
-	   "WHERE a.rtype=2 AND a.rref=b.id AND a.ref=$id AND a.type=$utype;",
+  db_query("SELECT a.rule,c.name||':'||b.name,a.id FROM user_rights a, zones b, servers c " .
+	   "WHERE a.rtype=2 AND a.rref=b.id AND b.server=c.id AND  a.ref=$id AND a.type=$utype;",
 	   \@d);
   #print "Zone   records:\n";
   for $i (0..$#d) { 
@@ -386,13 +412,14 @@ sub list_privs($$) {
   }
 
   undef @d;
-  db_query("SELECT a.rule,b.net,a.id FROM user_rights a, nets b " .
-	   "WHERE a.rtype=3 AND a.rref=b.id AND a.ref=$id AND a.type=$utype;",
+  db_query("SELECT a.rule,b.net,a.id,c.name FROM user_rights a, nets b, servers c " .
+	   "WHERE a.rtype=3 AND a.rref=b.id AND b.server=c.id AND a.ref=$id AND a.type=$utype;",
 	   \@d);
-  #print "Net    records:\n";
+  #print "Net    records:\n" . db_errormsg();
   for $i (0..$#d) { 
     $d[$i][0] =~ s/\s+$//;
-    printf "%-6s %-8s %-25s %s\n",$d[$i][2],"net",$d[$i][1],$d[$i][0];
+    printf "%-6s %-8s %-25s %s\n",$d[$i][2],"net",$d[$i][3].':'.$d[$i][1],
+      '(IP constraint)';
   }
 
   undef @d;

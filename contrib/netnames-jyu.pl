@@ -4,7 +4,7 @@
 # files given as parameters on command line.
 #
 # This script looks for lines containing following pattern:
-#  Net <CIRD> <subnet name>
+#  Net <CIDR> <subnet name>
 #
 # For example:
 #  Net 192.168  Testing network

@@ -220,7 +220,7 @@ foreach $host (keys %zonedata) {
       die("Cannot update host record for router interface $host") if ($res<0);
       print "FAILED: $sqlstr\n" if (db_status() ne 'UPDATE 1');
 
-      $rhash{$router[0]}={ MASK => $router[1], NAME => $host};
+      $rhash{$router[0]}={ MASK=>$router[1], NAME=>$host, VLAN=>$router[3]};
       $rcount++;
     } else {
       $rec2=$rhash{$router[0]};
@@ -243,14 +243,15 @@ foreach $net (keys %rhash) {
   $n = $nm->desc();
   $range1 = $nm->nth(1);
   $range2 = $nm->nth(-2);
+  $vlan=($rec->{VLAN} ? "'$rec->{VLAN}'" : 'NULL');
 
   #print "$n $rec->{NAME} $rec->{ETHER}\n" if ($rec->{ETHER} ne '');
   #print "$n $rec->{NAME} : $net : $rec->{MASK} : $rec2->{INFO}\n";
 
   $sqlstr = "INSERT INTO nets (cdate,cuser,server,net,comment," .
-            "subnet,no_dhcp,range_start,range_end) " .
+            "subnet,no_dhcp,range_start,range_end,vlan) " .
     "VALUES($cdate,'$user',$serverid,'$n','$rec2->{INFO}'," .
-    "true,false,'$range1','$range2');";
+    "true,false,'$range1','$range2',$vlan);";
 
   if (db_exec($sqlstr) < 0) {
     die("net record for '$n' already exists!") 
@@ -369,18 +370,25 @@ foreach $host (keys %zonedata) {
     $group=-1 if (! $group);
 
     if ($host =~ /^\@\S+$/) {
-      $ptype=3;
-      print "printer class: $host2\n";
-      $sqlstr="INSERT INTO printer_classes " .
-	"(cdate,cuser,name,comment) " .
-	  "VALUES($cdate,'$user','$host2','imported entry');";
-      if (db_exec($sqlstr) < 0) {
-	die("cannot insert printer_class '$host2'") ;
-	$lastid=-1;
-      } else {
-	$res=db_exec("SELECT id FROM printer_classes WHERE name='$host2';");
-	die("Cannot get printer_class record id!") if ($res < 0);
-	$lastid=db_getvalue(0,0);	
+      undef @q;
+      db_query("SELECT id FROM printer_classes WHERE name='$host2';",\@q);
+      if (@q > 0) {
+	print "skipping printer class: $host2\n";
+      }
+      else {
+	$ptype=3;
+	print "printer class: $host2\n";
+	$sqlstr="INSERT INTO printer_classes " .
+	  "(cdate,cuser,name,comment) " .
+	    "VALUES($cdate,'$user','$host2','imported entry');";
+	if (db_exec($sqlstr) < 0) {
+	  die("cannot insert printer_class '$host2'") ;
+	  $lastid=-1;
+	} else {
+	  $res=db_exec("SELECT id FROM printer_classes WHERE name='$host2';");
+	  die("Cannot get printer_class record id!") if ($res < 0);
+	  $lastid=db_getvalue(0,0);	
+	}
       }
     } else {
       $ptype=2;
