@@ -1,6 +1,9 @@
 $Id$
 
 0.6.0
+	- added import-zone utility; imports zones into existing server from
+	  a zone file or directly from DNS (using zone transfer)
+	- sauron: now uses temp files when creating new configuration files
 	- added delgroup utility
 	- status: now returns with exit code 2, when  run using 
 	  option --pending=server and there are pending host changes
