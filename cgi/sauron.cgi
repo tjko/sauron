@@ -451,10 +451,11 @@ sub zones_menu() {
 	        "</FONT>";
 	} else {
 	  print h2("Zone record succefully updated:");
+	  get_zone($zoneid,\%zone);
+	  display_form(\%zone,\%zone_form);
+	  return;
 	}
-	get_zone($zoneid,\%zone);
-	display_form(\%zone,\%zone_form);
-	return;
+
       }
       print "<FONT color=\"red\">",h2("Invalid data in form!"),"</FONT>";
     }
@@ -540,20 +541,24 @@ sub hosts_menu() {
     }
 
     if (param('h_submit') ne '') {
-      get_zone($id,\%host);
+      if (get_host($id,\%host) < 0) {
+	print h2("Cannot find host record anymore! ($id)");
+	return;
+      }
       unless (form_check_form('h',\%host,\%host_form)) {
-#	$res=update_zone(\%zone);
-	$res=-1;
+	$res=update_host(\%host);
+	# $res=-1;
 	if ($res < 0) {
 	  print "<FONT color=\"red\">",h1("Zone record update failed!"),
 	        p,"result code=$res",
 	        "</FONT>";
 	} else {
 	  print h2("Zone record succefully updated:");
+	  get_host($id,\%host);
+	  display_form(\%host,\%host_form);
+	  return;
 	}
-#	get_zone($zoneid,\%zone);
-#	display_form(\%zone,\%zone_form);
-	return;
+
       }
       print "<FONT color=\"red\">",h2("Invalid data in form!"),"</FONT>";
     }
@@ -563,7 +568,7 @@ sub hosts_menu() {
 	print h2("Cannot get host record (id=$id)!");
 	return;
       }
-      print p,"host data fetched...";
+      #print p,"host data fetched...";
     }
 
     print h2("Edit host:"),p,
@@ -742,6 +747,53 @@ sub login_menu() {
 }
 
 #####################################################################
+
+sub edit_magic($$$$$$) {
+  my($prefix,$name,$menu,$form,$get_func,$update_func) = @_;
+  my(%h);
+
+  $id=param($prefix . '_id');
+  if (($id eq '') || ($id < 1)) {
+    print h2("$name id not specified!");
+    return -1;
+  }
+  
+  if (param($prefix . '_submit') ne '') {
+    if(get_func($id,\%h) < 0) {
+      print h2("Cannot find $name record anymore! ($id)");
+      return -2;
+    }
+    unless (form_check_form($prefix,\%h,$form)) {
+      $res=update_func(\%h);
+      if ($res < 0) {
+	print "<FONT color=\"red\">",h1("$name record update failed!"),
+	      "<br>result code=$res</FONT>";
+      } else {
+	print h2("Zone record succefully updated:");
+	get_func($id,\%h);
+	display_form(\%h,$form);
+	return 0;
+      }
+    } else {
+      print "<FONT color=\"red\">",h2("Invalid data in form!"),"</FONT>";
+    }
+  }
+
+  unless (param($prefix . '_re_edit') eq '1') {
+    if (get_func($id,\%h)) {
+      print h2("Cannot get $name record (id=$id)!");
+      return;
+    }
+  }
+
+  print h2("Edit $name:"),p,
+          startform(-method=>'POST',-action=>$selfurl),
+          hidden('menu',$menu),hidden('sub','Edit');
+  form_magic('h',\%h,$form);
+  print submit(-name=>$prefix . '_submit',-value=>'Make changes'),end_form;
+
+  return 0;
+}
 
 sub logout() {
   my($c,$u);
@@ -1145,7 +1197,7 @@ sub form_check_form($$$) {
 
     if ($type == 1) {
       return 1 if (form_check_field($rec,param($p),0) ne '');
-      #print p,"$p changed!" if ($data->{$tag} ne param($p));
+      print p,"$p changed! '",$data->{$tag},"' '",param($p),"'\n" if ($data->{$tag} ne param($p));
       $data->{$tag}=param($p);
     } 
     elsif  ($type == 2) {

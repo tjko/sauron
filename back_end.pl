@@ -392,6 +392,46 @@ sub get_host($$) {
 }
 
 
+sub update_host($) {
+  my($rec) = @_;
+  my($r,$id);
+
+  delete $rec->{card_info};
+  delete $rec->{wks_rec};
+  delete $rec->{mx_rec};
+
+  db_begin();
+  $r=update_record('hosts',$rec);
+  if ($r < 0) { db_rollback(); return $r; }
+  $id=$rec->{id};
+
+  $r=update_array_field("ns_entries",3,"ns,comment,type,ref",
+			'ns_l',$rec,"2,$id");
+  if ($r < 0) { db_rollback(); return -12; }
+  $r=update_array_field("wks_entries",4,"proto,services,comment,type,ref",
+			'wks_l',$rec,"1,$id");
+  if ($r < 0) { db_rollback(); return -13; }
+  $r=update_array_field("mx_entries",4,"pri,mx,comment,type,ref",
+			'mx_l',$rec,"2,$id");
+  if ($r < 0) { db_rollback(); return -14; }
+  $r=update_array_field("txt_entries",3,"txt,comment,type,ref",
+			'txt_l',$rec,"2,$id");
+  if ($r < 0) { db_rollback(); return -15; }
+  $r=update_array_field("dhcp_entries",3,"dhcp,comment,type,ref",
+			'dhcp_l',$rec,"3,$id");
+  if ($r < 0) { db_rollback(); return -16; }
+  $r=update_array_field("printer_entries",3,"printer,comment,type,ref",
+			'printer_l',$rec,"2,$id");
+  if ($r < 0) { db_rollback(); return -17; }
+
+  $r=update_array_field("rr_a",4,"ip,reverse,forward,comment,host",
+			'ip',$rec,"$id");
+  if ($r < 0) { db_rollback(); return -20; }
+
+  return db_commit();
+}
+
+
 ############################################################################
 # MX template functions
 
