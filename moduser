@@ -6,6 +6,7 @@
 # $Id$
 #
 require 5;
+use Time::Local;
 use Getopt::Long;
 use Sauron::DB;
 use Sauron::Util;

@@ -3536,7 +3536,8 @@ sub login_auth() {
   }
   else {
     unless (get_user($u,\%user)) {
-      if (pwd_check($p,$user{'password'}) == 0) {
+      if ( (pwd_check($p,$user{'password'}) == 0) &&
+	   ($user{expiration} == 0 || $user{expiration} > time()) ) {
 	$state{'auth'}='yes';
 	$state{'user'}=$u;
 	$state{'uid'}=$user{'id'};
@@ -3561,6 +3562,15 @@ sub login_auth() {
 	    startform(-method=>'POST',-action=>"$s_url/frames"),
 	    submit(-name=>'submit',-value=>'Frames'),end_form,
 	    "</TD></TR></TABLE>";
+
+	# warn about expiring account
+	if ( ($user{expiration} > 0) &&
+	     ($user{expiration} < time() + 14*86400) ) {
+	  print "<FONT color=\"red\">",
+	        h2("NOTE! Your account will expire soon!"),
+	        "(account expiration date: " . localtime($user{expiration}) .
+		")</FONT><p><br>";
+	}
 
 	# print news/MOTD stuff
 	get_news_list($state{serverid},3,\@newslist);
