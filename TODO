@@ -1,7 +1,8 @@
 
 general:
-	- add new "info" fields to hosts table
-	- change info field types to VARCHAR(n)
+	- add new "info" fields to hosts table (asset ID)
+	- implement/add expiration_date field to hosts table records
+	- change info field types to VARCHAR(n) 
 	- test whether changing TEXT fiels in hosts table to appropriate
 	  CHAR(n) fields would improve speed...
 	- add 'install' to Makefile.in; directory generation, symlink
@@ -9,7 +10,6 @@ general:
         - write (command-line :) utility for easily generating large
 	  number of host entries, and to import interactively hosts
 	  from text files in standard zonefile format...
-	- hide "VLAN" info from normal users
 	- add real VLAN support (vlan table)
 
 import:
@@ -26,7 +26,12 @@ sauron.cgi:
 	- fix timeout problem with huge zone/server deletes...(faster server :)
 	- add search by dhcp_date field...
 	- add quick search like in browser.cgi
+	- add "network settings" button to host display
+	- hide "VLAN" info from normal users
+	
 
 browser.cgi:
+
+
 
 
