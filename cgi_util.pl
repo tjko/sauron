@@ -511,10 +511,10 @@ sub form_magic($$$) {
       $a=0 if (!$a || $a < 0);
       #if ($a > 50) { $a = 50; }
       print hidden(-name=>$p1."_count",-value=>$a);
-      print td('IP'),td('Reverse'),td('Forward');
+      print td('IP'),td('Forward'),td('Reverse');
       print td("(",
 	       checkbox(-label=>'allow duplicate IPs',name=>$p1."_allowdup",
-			-checked=>'0'),")")  unless ($rec->{restricted});
+			-checked=>'0'),")")  unless ($rec->{restricted_mode});
       print "</TR>";
 
       for $j (1..$a) {
@@ -526,11 +526,11 @@ sub form_magic($$$) {
         print "<FONT size=-1 color=\"red\"><BR>",
               form_check_field($rec,param($n),1),"</FONT></TD>";
 
-	if ($rec->{restricted}) {
-	  $n=$p2."_2";
+	if ($rec->{restricted_mode}) {
+	  $n=$p2."_3";
 	  print hidden(-name=>$n,-value=>param($n)),
 	        td((param($n) eq 'on' ? 'on':'off'));
-	  $n=$p2."_3";
+	  $n=$p2."_2";
 	  print hidden(-name=>$n,-value=>param($n)),
 	        td((param($n) eq 'on' ? 'on':'off'));
 	}
@@ -546,7 +546,7 @@ sub form_magic($$$) {
 	}
       }
 
-      unless ($rec->{restricted}) {
+      unless ($rec->{restricted_mode}) {
 	$j=$a+1;
 	$n=$prefix."_".$rec->{tag}."_".$j."_1";
 	print "<TR>",td(textfield(-name=>$n,-size=>15,-value=>param($n))),

@@ -313,7 +313,7 @@ do "$PROG_DIR/cgi_util.pl";
   {ftype=>0, name=>'Host (restricted edit)' },
   {ftype=>1, tag=>'domain', name=>'Hostname', type=>'domain', 
    conv=>'L', len=>40},
-  {ftype=>5, tag=>'ip', name=>'IP address', restricted=>1,
+  {ftype=>5, tag=>'ip', name=>'IP address', restricted_mode=>1,
    iff=>['type','[169]']},
   {ftype=>1, tag=>'cname_txt', name=>'Static alias for', type=>'domain',
    len=>60, iff=>['type','4'], iff2=>['alias','-1']},
