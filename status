@@ -57,7 +57,8 @@ if ($opt_versions) {
   print "Sauron::UtilDhcp: ",($Sauron::UtilDhcp::VERSION =~ /,v\s+(\S+)\s/),
         "\n";
   print "Sauron::UtilZone: ",($Sauron::UtilZone::VERSION =~ /,v\s+(\S+)\s/),
-        "\n\n";
+        "\n";
+  print "\n" if ($opt_versions);
   exit;
 }
 
