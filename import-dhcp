@@ -29,7 +29,8 @@ do "$config_file" || die("cannot load config: $config_file");
 
 ##############################
 
-GetOptions("help|h","verbose|v","dir=s","notransaction","chaosnet=s");
+GetOptions("help|h","verbose|v","dir=s","notransaction","chaosnet=s",
+	   "global");
 
 if ($opt_help || @ARGV < 2) {
     print "syntax: $0 [options] <servername> <dhcpd.conf file>\n";
@@ -38,6 +39,7 @@ if ($opt_help || @ARGV < 2) {
 	  "\t\t\t\t(if not in directory specified in dhcpd.conf)\n",
 	  "\t--chaosnet=<name>\ttreat this shared-network as default VLAN\n",
 	  "\t\t\t\t(default is \"CHAOS\")\n",
+	  "\t--global\t\timport 'global' entires into server settings\n",
 	  "\t--verbose\t\tdisplay more detailed progress reports\n",
 	  "\t--help\t\t\tdisplay this help\n\n";
     exit(1);
@@ -72,6 +74,19 @@ unless ($opt_notransaction) {
   db_ignore_begin_and_commit(1);
 }
 
+# global entries
+if ($opt_global) {
+  fatal("cannot get server record") if (get_server($serverid,\%server) < 0);
+
+  foreach $line (@{$data{GLOBAL}}) {
+    next unless $line =~ /;\s*$/;
+    $line =~ s/;\s*//;
+    print "GLOBAL: $line\n" if ($verbose);
+    push @{$server{dhcp}}, [0,$line,'',2];
+  }
+
+  fatal("cannot update server record") if (update_server(\%server) < 0);
+}
 
 # VLANs (shared-networks)
 
