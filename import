@@ -480,16 +480,16 @@ for ($i=0; $i <= $#zones; $i+=1) {
     $c=$wkshash{$wks};
     #print "wks: '$wks' $c\n";
     $wks_i_count++;
-    $sqlstr="INSERT INTO rr_wks (server,comment) " .
+    $sqlstr="INSERT INTO wks_templates (server,comment) " .
             "VALUES($serverid," .
             "'$servername:$wks_i_count');";
     $res=db_exec($sqlstr);
-    die("cannot insert record in rr_wks") if ($res < 0);
+    die("cannot insert record in wks_templates") if ($res < 0);
     $oid=db_lastoid();
-    $sqlstr="SELECT id FROM rr_wks WHERE OID=$oid";
+    $sqlstr="SELECT id FROM wks_templates WHERE OID=$oid";
         #"AND server=$serverid AND wks='{$wks}';";
     $res=db_exec($sqlstr);
-    die("cannot get record id from rr_wks!") if ($res < 0);
+    die("cannot get record id from wks_templates!") if ($res < 0);
     $c=db_getvalue(0,0);
     $wkshash{$wks}=$c;
     #print "id=$c\n";
@@ -502,22 +502,22 @@ for ($i=0; $i <= $#zones; $i+=1) {
       die("cannot insert WKS entries id=$c!") if (db_exec($sqlstr)<0);
     }
   }
-  #die("Cannot commit rr_wks inserts!") if (db_commit() < 0);
+  #die("Cannot commit wks_templates inserts!") if (db_commit() < 0);
 
   #db_begin();
   foreach $mx (keys %mxhash) {
     $c=$mxhash{$mx};
     #print "mx: '$mx' $c\n";
     $mx_i_count++;
-    $sqlstr="INSERT INTO rr_mx (zone,comment) VALUES($zoneid," .
+    $sqlstr="INSERT INTO mx_templates (zone,comment) VALUES($zoneid," .
             "'$zone:$mx_i_count');";
     $res=db_exec($sqlstr);
-    die("cannot insert record in rr_mx") if ($res < 0);
+    die("cannot insert record in mx_templates") if ($res < 0);
     $oid=db_lastoid();
-    $sqlstr="SELECT id FROM rr_mx WHERE OID=$oid;";
+    $sqlstr="SELECT id FROM mx_templates WHERE OID=$oid;";
         #"AND zone=$zoneid AND mx='{$mx}';";
     $res=db_exec($sqlstr);
-    die("cannot get record id from rr_mx!") if ($res < 0);
+    die("cannot get record id from mx_templates!") if ($res < 0);
     $c=db_getvalue(0,0);
     $mxhash{$mx}=$c;
     #print "id=$c\n";
@@ -531,7 +531,7 @@ for ($i=0; $i <= $#zones; $i+=1) {
       die("cannot insert MX entries id=$c!") if (db_exec($sqlstr)<0);
     }
   }
-  #die("Cannot commit rr_mx inserts!") if (db_commit() < 0);
+  #die("Cannot commit mx_templates inserts!") if (db_commit() < 0);
 
   
   # insert records in hosts table....

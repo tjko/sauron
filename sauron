@@ -367,7 +367,7 @@ sub make_bind() {
 
       undef @q; # entries with mx-templates
       db_query("SELECT h.domain,m.pri,m.mx " .
-	       "FROM hosts h,zones z,mx_entries m,rr_mx r " .
+	       "FROM hosts h,zones z,mx_entries m,mx_templates r " .
 	       "WHERE h.zone=z.id AND h.mx=r.id AND m.ref=r.id AND m.type=3 " .
 	       " AND h.type=3 AND h.mx > 0 AND z.id=$zoneid " .
 	       "ORDER BY h.domain,m.pri;",\@q);
@@ -407,7 +407,7 @@ sub make_bind() {
       undef %wkshash;
       undef @q;
       db_query("SELECT h.domain,w.proto,w.services FROM hosts h,zones z, " .
-	             "rr_wks r, wks_entries w " .
+	             "wks_templates r, wks_entries w " .
 	       "WHERE h.zone=z.id AND h.wks=r.id AND w.ref=r.id " .
 	       "AND w.type=2 AND z.id=$zoneid AND h.type=1 " .
 	       "ORDER BY h.domain, w.proto;",\@q);
@@ -433,7 +433,7 @@ sub make_bind() {
       ## mx hash
       undef %mxhash;
       undef @q;
-      db_query("SELECT h.domain,m.pri,m.mx FROM hosts h,zones z,rr_mx r, " .
+      db_query("SELECT h.domain,m.pri,m.mx FROM hosts h,zones z,mx_templates r, " .
 	         "mx_entries m " .
 	       "WHERE h.zone=z.id AND h.mx=r.id AND m.ref=r.id AND m.type=3 " .
 	       "AND z.id=$zoneid AND h.type=1 " .

@@ -7,7 +7,6 @@ Version = 0.1
 PKGNAME = sauron
 
 DBASE = sauron
-PSQL = psql
 
 SHELL = /bin/sh
 
@@ -32,6 +31,9 @@ infodir = $(prefix)/info
 mandir = $(prefix)/man
 
 
+RUNSQL = $(srcdir)/runsql
+
+
 
 CC        = @CC@ 
 XCPPFLAGS = @CPPFLAGS@
@@ -49,6 +51,18 @@ INSTALL_PROGRAM = @INSTALL_PROGRAM@
 
 # there should be no reason to modify lines below this
 #########################################################################
+
+SQL_TABLES = 	sql/common.sql \
+		sql/cidr_entries.sql sql/dhcp_entries.sql sql/ether_info.sql \
+		sql/groups.sql sql/host_info.sql sql/hosts.sql \
+		sql/mx_entries.sql sql/mx_templates.sql \
+		sql/nets.sql sql/ns_entries.sql \
+		sql/printer_classes.sql sql/printer_entries.sql \
+		sql/rr_a.sql sql/servers.sql sql/txt_entries.sql \
+	        sql/user_rights.sql sql/users.sql \
+		sql/wks_entries.sql sql/wks_templates.sql \
+		sql/zones.sql
+
 
 DIRNAME = $(shell basename `pwd`) 
 DISTNAME  = $(PKGNAME)-$(Version)
@@ -80,11 +94,11 @@ clean_all: clean
 	rm -f Makefile config.h config.log config.cache config.status
 
 clean_tables:
-	$(PSQL) -f init/drop_tables.sql $(DBASE)
+	$(RUNSQL) -v -n sql/drop_tables.sql
 	@echo "Database cleaned..."
 
-init_tables: clean_tables
-	$(PSQL) -f init/tables.sql $(DBASE)
+init_tables: 
+	$(RUNSQL) $(SQL_TABLES)
 	@echo "Database initialized..."
 
 grant_full:
