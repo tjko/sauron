@@ -77,10 +77,18 @@ while (<FILE>) {
   $m=$months{$1}; $d=$2; $hour=$3; $min=$4; $sec=$5; $host=$6; $rest=$7;
   $t=timelocal($sec,$min,$hour,$d,$m,$year);
   #print "$t:$m,$d,$hour,$min,$sec,$host,'$rest'\n";
+  $mac='';
 
   if ($rest =~ /^(DHCPDISCOVER|BOOTREQUEST)\s+from\s+(\S+)\s+via\s+(\S+)/) {
     #print "$1 $2 $3\n";
     $mac="\U$2";
+  }
+  elsif ($rest =~ /^(DHCPREQUEST)\s+for\s+(\S+)\s+from\s+(\S+)\s+via\s+/) {
+    $mac="\U$3";
+    #print "$1 $2 $3 : $mac\n";
+  }
+
+  if ($mac) {
     $mac =~ s/[^A-F0-9]//g;
     next unless (length($mac)==12);
     #print "$t : $mac\n";
