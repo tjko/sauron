@@ -62,7 +62,11 @@ if ($opt_versions) {
   print "\n";
 }
 
-print_config() if ($opt_config);
+if ($opt_config) {
+  print "{CONFIG_FILE=$CONFIG_FILE}\n";
+  print_config();
+}
+
 exit if ($opt_versions || $opt_config);
 
 fatal("DB_CONNECT not defined in configuration!") unless ($DB_CONNECT);
