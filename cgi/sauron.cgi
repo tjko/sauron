@@ -1761,9 +1761,13 @@ sub hosts_menu() {
     if ($type == 1) {
       make_net_list($serverid,0,\%new_host_nets,\@new_host_netsl,1);
       $new_host_nets{MANUAL}='<Manual IP>';
-      push @new_host_netsl, 'MANUAL';
       $data{net}='MANUAL';
-      $data{net}=$new_host_netsl[0] if ($new_host_netsl[0]);
+      if (check_perms('superuser','')) {
+	push @new_host_netsl, 'MANUAL';
+	$data{net}=$new_host_netsl[0] if ($new_host_netsl[0]);
+      } else {
+	unshift @new_host_netsl, 'MANUAL';
+      }
     }
     $data{type}=$type;
     $data{zone}=$zoneid;
@@ -2289,7 +2293,7 @@ sub nets_menu() {
 
   print "<TABLE cellspacing=2 border=0><TR bgcolor=\"#aaaaff\">",
         "<TH>Net</TH>",th("NetName"),th("Description"),th("Type"),
-        th("DHCP"),($novlans?'':th("VLAN")),th("Comments"),th("Lvl"),"</TR>";
+        th("DHCP"),($novlans?'':th("VLAN")),th("Lvl"),"</TR>";
 
   for $i (0..$#q) {
       $dhcp=($q[$i][5] eq 't' ? 'No' : 'Yes' );
@@ -2312,7 +2316,8 @@ sub nets_menu() {
           td("<FONT size=-1>$name</FONT>"), td("<FONT size=-1>$type</FONT>"),
           td("<FONT size=-1>$dhcp</FONT>"), 
 	  ($novlans?'':td("<FONT size=-1>$vlan</FONT>")),
-	  td("<FONT size=-1>$comment</FONT>"), td($q[$i][8].'&nbsp;'),"</TR>";
+	  # td("<FONT size=-1>$comment</FONT>"), 
+	  td($q[$i][8].'&nbsp;'),"</TR>";
   }
 
   print "</TABLE>&nbsp;";
