@@ -1,6 +1,12 @@
 $Id$
 
 0.7.2beta
+	- generatehosts: fix to :N: parameter handling by Ken McKinlay
+	- new utility: export-hosts to export host data in CSV format
+	- moduser: added ability to add group(s) to user from command line
+	- CGI interface: login debugging support by Riku Meskanen
+	- CGI browser: fix to "info" field searching and support for 
+	  "dhcp only" records by Erik Ruwalder
 	- dbformat changes: new fields: users.person
 	- new utility: export-ip-list for generating lists of active
 	  IPs in given (sub)nets (for automatically updating access/accounting
