@@ -97,7 +97,7 @@ sub db_exec($) {
     printf ("db_exec(%s) result:\n", $sqlstr) if ($db_debug_flag > 0);
     sql_print_result($db_last_result) if ($db_debug_flag > 0);
     $db_last_error_msg=$db_connection_handle->errorMessage;
-    return -1; 
+    return -1;
   }
 
   return $db_last_result->ntuples if $s == PGRES_TUPLES_OK;
@@ -107,7 +107,20 @@ sub db_exec($) {
 
 sub db_query($$) {
   my ($sqlstr,$aref) = @_;
-  Pg::doQuery($db_connection_handle,$sqlstr,$aref);
+  my ($result, $status, $i, $j);
+
+  undef @{$aref};
+
+  if ($result = $db_connection_handle->exec($sqlstr)) {
+    if (($status = $result->resultStatus) == 2) {
+      for $i (0..$result->ntuples - 1) {
+	for $j (0..$result->nfields - 1) {
+	  $$aref[$i][$j] = $result->getvalue($i,$j);
+	}
+      }
+    }
+  }
+
 }
 
 
