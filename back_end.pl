@@ -387,7 +387,7 @@ sub get_server($$) {
 		    "listen_on_port,checknames_m,checknames_s,checknames_r," .
 		    "nnotify,recursion,ttl,refresh,retry,expire,minimum," .
 		    "pzone_path,szone_path,hostname,hostmaster,comment," .
-		    "dhcp_flags,named_flags,domain,masterserver,version," .
+		    "dhcp_flags,named_flags,masterserver,version," .
 		    "memstats_file,transfer_source,forward,dialup," .
 		    "multiple_cnames,rfc2308_type1,authnxdomain," .
 		    "df_port,df_max_delay,df_max_uupdates,df_mclt,df_split,".

@@ -50,8 +50,10 @@ $failover_peer_name = 'foobar';
 
 ##############################
 
-$result=GetOptions("help|h","all|a","bind|b","dhcp|d","printer|p",
-		  "updateserial","noupdateserial","verbose","dhcp2","clean");
+$VER = sauron_version();
+
+$result=GetOptions("help|h","all|a","bind|b","dhcp|d","printer|p","nomail",
+		   "updateserial","noupdateserial","verbose","dhcp2","clean");
 
 if ($opt_help || @ARGV < 1 || $result < 1) {
     print "syntax: $0 [--help] [options] <servername> [<target directory>]\n";
@@ -62,7 +64,8 @@ if ($opt_help || @ARGV < 1 || $result < 1) {
       "\t--clean          cleanup expired records and vacuum database\n",
       "\t--printer        generate PRINTER (lpd) configuration files\n\n",
       "\t--updateserial   force serial update on master zones\n\n",
-      "\t--dhcp2          enable DHCPv2 compatibilty mode\n\n";
+      "\t--dhcp2          enable DHCPv2 compatibilty mode\n\n",
+      "\t--nomail         disable email notification sending\n\n";
     exit(1);
 }
 
@@ -98,7 +101,9 @@ chdir($targetdir) || fatal("Cannot change to directory '$targetdir'!");
 
 $mailnotify_mode = (($SAURON_MAILER && -x $SAURON_MAILER) ? 1 : 0);
 $mailnotify_mode = 0 unless ($SAURON_MAIL_FROM);
-
+$mailnotify_mode = 0 if ($opt_nomail);
+print "Email notification sending: " . 
+      ($mailnotify_mode ? 'enabled':'disabled') . "\n" if ($verbose);
 
 db_connect();
 
@@ -107,7 +112,8 @@ $time_now_ticks = time;
 
 $serverid = get_server_id($servername);
 fatal("Cannot find server '$servername' from database.") if ($serverid < 0);
-fatal("Cannot get server record!") if (get_server($serverid,\%server));
+fatal("Cannot get server record!".db_errormsg()) if (get_server($serverid,\%server));
+
 
 $dhcp_auto_domainnames = $server{dhcp_flags_ad};
 $failover_mode = ($server{dhcp_flags_fo} ? 1 : 0);
@@ -200,7 +206,8 @@ sub mail_notifications() {
     next if (get_user($user,\%user) < 0);
     next unless ($user{email_notify} && $user{email});
     $lst=$mailnotify{$u};
-    #print "user: $u $user{id} $user{email}\n";
+    print "Sending email notification to: $u ($user{email})...\n" 
+	if ($verbose);
     open(PIPE,"| $SAURON_MAILER $SAURON_MAILER_ARGS") || error("pipe failed");
     print PIPE "From: Sauron <$SAURON_MAIL_FROM>\n",
                "Subject: [sauron] update notification ($servername)\n",
