@@ -1,0 +1,13 @@
+#!/bin/sh
+DBNAME=sauron
+
+destroydb sauron
+createdb sauron
+
+psql -f init/tables.sql sauron > .initdb.log 2>&1
+if [ $? != 0 ]; then
+  echo "error creating tables!"
+fi
+
+
+

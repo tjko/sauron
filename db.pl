@@ -1,0 +1,140 @@
+# db.pl  -- database interface routines
+
+use Pg;
+
+
+sub sql_print_result($) {
+  my($res)=@_;
+  
+  %t = ( 0, 'PGRES_EMPTY_QUERY', 
+	 1, 'PGRES_COMMAND_OK',
+	 2, 'PGRES_TUPLES_OK',
+	 3, 'PGRES_COPY_OUT',
+	 4, 'PGRES_COPY_IN',
+	 5, 'PGRES_BAD_RESPONSE',
+	 6, 'PGRES_NONFATAL_ERROR',
+	 7, 'PGRES_FATAL_ERROR'
+       );
+
+  print "status= ".$res->resultStatus . " (" . $t{$res->resultStatus} . ")\n";
+  print "cmdstatus='" . $res->cmdStatus . "'  oid=". $res->oidStatus . "\n";
+  print "ntuples=" . $res->ntuples . "   nfields=" . $res->nfields . "\n";
+  #print $res->getvalue(0,0) . "\n";
+  #print $res->getvalue(0,1) . "\n";
+
+}
+
+$db_connection_handle = 0;
+$db_last_result = 0;
+$db_debug_flag = 0;
+
+sub db_connect {
+  $db_connection_handle = Pg::connectdb($DB_CONNECT);
+  die($0 . ": ". $db_connection_handle->errorMessage) 
+         if ($db_connection_handle->status != PGRES_CONNECTION_OK);
+}
+
+sub db_exec($) {
+  my($sqlstr) = @_;
+  my($s);
+
+  $db_last_result = $db_connection_handle->exec($sqlstr);
+  $s = $db_last_result->resultStatus;
+
+  if ( $s != PGRES_COMMAND_OK && $s != PGRES_TUPLES_OK ) { 
+    printf ("db_exec(%s) result:\n", $sqlstr) if ($db_debug_flag > 0);
+    sql_print_result($db_last_result) if ($db_debug_flag > 0);
+    return -1; 
+  }
+
+  return $db_last_result->ntuples if $s == PGRES_TUPLES_OK;
+  return 0;
+}
+
+
+sub db_query($$) {
+  my ($sqlstr,$aref) = @_;
+  Pg::doQuery($db_connection_handle,$sqlstr,$aref);
+}
+
+
+sub db_getvalue($$) {
+  my($row,$col) = @_;
+
+  return $db_last_result->getvalue($row,$col);
+}
+
+sub db_debug($) {
+  my($flag) = @_;
+
+  if ($flag > 0) {
+    $db_debug_flag=1;
+  } else {
+    $db_debug_flag=0;
+  }
+}
+
+sub db_vacuum() {
+  return db_exec("VACUUM ANALYZE;");
+}
+
+sub db_begin() {
+  return db_exec("BEGIN;");
+}
+
+
+sub db_commit() {
+  return db_exec("COMMIT;");
+}
+
+
+sub db_encode_str($) {
+  my($str) = @_;
+
+  return "NULL" unless ($str);
+  $str =~ s/\'/\\\'/g;
+  return "'" . $str . "'";
+}
+
+
+sub db_build_list_str($) {
+  my($list) = @_;
+  my ($tmp);
+
+  return "NULL" unless ($list);
+
+  foreach $f (@{$list}) {
+    $tmp.="," if ($tmp);
+    $f =~ s/\'/\\\'/g;
+    $f =~ s/\"/\\\\\"/g;
+    $tmp.="\"$f\"";
+  }
+  
+  return $tmp;
+}
+
+sub db_encode_list_str($) {
+  my($list) = @_;
+  
+  return "NULL" unless ($list);
+  return "'{" . db_build_list_str($list) . "}'";
+}
+
+
+sub db_decode_list_str($) {
+  my($str) = @_;
+  my($list,$c,$i);
+
+  $list=[];
+  return $list unless ($str =~ /^\{\".+\"\}$/);
+
+  $str =~ s/(^\{\"|\"\}$)//g;
+  @{$list} = split("\",\"",$str);
+  $c=@{$list};	     
+
+  for($i=0;$i < $c;$i++) {
+    $$list[$i] =~ s/\\\"/\"/g;
+  }
+
+  return $list;
+}

@@ -1,0 +1,13 @@
+# configuration
+$VER = "0.1a";
+
+$PROG_DIR = "/home/tjko/work/sauron/";
+
+
+
+$DB_CONNECT = "host=localhost port=5432 dbname=sauron";
+
+
+
+$LOOPBACK_NET = "127.0.0.0/24";
+$LOOPBACK_ZONE = "loopback.";
