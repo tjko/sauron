@@ -2,7 +2,7 @@
 #
 # adduser - utility to create users
 #
-# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000.
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000-2003.
 # $Id$
 #
 require 5;
@@ -29,11 +29,12 @@ do "$config_file" || die("cannot load config: $config_file");
 ##############################################
 
 my(
-   $result,$superuser,$user,$salt,$pwd,$cdate,
+   $result,$superuser,$user,$pwd,$cdate,
    $i,$t,$r,$res,%user
   );
 
 
+$SAURON_PWD_MODE = 0 unless (defined $SAURON_PWD_MODE);
 $cdate = time;
 $user = (getpwuid($<))[0];
 set_muser($user);
@@ -124,8 +125,7 @@ unless ($opt_passwd) {
 
 $superuser=($opt_superuser==1?"true":"false");
 $user = (getpwuid($<))[0];
-$salt=int(rand(900000)+100000);
-$pwd=pwd_crypt($opt_passwd,$salt);
+$pwd=pwd_make($opt_passwd,$SAURON_PWD_MODE);
 
 if ($i) { # ask confirmation only in interactive session...
   print "\t Username: $opt_user\n",

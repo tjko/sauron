@@ -19,7 +19,8 @@ require Exporter;
 	     adjust_ip
 	     remove_origin
 	     add_origin
-	     pwd_crypt
+	     pwd_crypt_md5
+	     pwd_crypt_unix
 	     pwd_make
 	     pwd_check
 	     fatal
@@ -255,7 +256,7 @@ sub add_origin($$) {
 
 
 # encrypts given pasword using salt... (MD5 based)
-sub pwd_crypt($$) {
+sub pwd_crypt_md5($$) {
   my($password,$salt) = @_;
   my($ctx);
 
@@ -264,31 +265,64 @@ sub pwd_crypt($$) {
   return "MD5:" . $salt . ":" . $ctx->hexdigest;
 }
 
-# encrypts given password 
-sub pwd_make($) {
+sub pwd_crypt_unix($$) {
+  my($password,$salt) = @_;
+
+  return "CRYPT:" . crypt($password,$salt);
+}
+
+
+# encrypts given password
+sub pwd_make_md5($) {
   my($password) = @_;
   my($salt);
 
-  $salt=int(rand(900000)+100000);
-  return pwd_crypt($password,$salt);
+  $salt=int(rand(9000000)+1000000);
+  return pwd_crypt_md5($password,$salt);
 }
 
-# check if passwords match
+# encrypts given password
+sub pwd_make_unix($) {
+  my($password) = @_;
+  my($salt,$smap,$sl,$i);
+
+  $smap = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789./';
+  $sl = length($smap);
+
+  $salt='';
+  for $i (1..2) { $salt .= substr($smap,int(rand($sl)),1); }
+  return pwd_crypt_unix($password,$salt);
+}
+
+# encrypt given password using configured method
+sub pwd_make($$) {
+  my($password,$mode) = @_;
+
+  return pwd_make_unix($password) if ($mode == 1);
+  return pwd_make_md5($password)
+}
+
+
+# check if passwords match (currently supports standard Unix crypt
+# passwords and our own simple md5 based passwords)
 sub pwd_check($$) {
   my($password,$pwd) = @_;
-  my($salt,$t);
+  my($salt);
 
-  if ($pwd =~ /^CRYPT:(\S{13})$/) {
-    $pwd=$1;
-    return -1 if (crypt($password,$pwd) ne $pwd);
+  if ($pwd =~ /^CRYPT:(\S{2})(\S{11})$/) {
+    $salt=$1;
+    return -1 if (pwd_crypt_unix($password,$salt) ne $pwd);
     return 0;
   }
 
-  $salt=$1 if ($pwd =~ /^MD5:(\S+):(\S+)$/);
-  return -2 if ($salt eq '');
-  $t=pwd_crypt($password,$salt);
-  return -1 if ($t ne $pwd);
-  return 0;
+  $salt=$1;
+  if ($pwd =~ /^MD5:(\S+):(\S+)$/) {
+    $salt=$1;
+    return -1 if (pwd_crypt_md5($password,$salt) ne $pwd);
+    return 0;
+  }
+
+  return -2;
 }
 
 # print error message and exit program
@@ -324,7 +358,7 @@ sub show_hash($) {
 
 # checks for valid IP-mask and also can test if given IP is within the mask
 # (dirty hack, clean up the code someday :)
-# 
+#
 sub check_ipmask($$) {
     my($mask,$ip) = @_;
 

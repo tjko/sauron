@@ -23,6 +23,7 @@ $0 = $PG_NAME;
 
 $SAURON_CGI_VER = ' $Revision$ $Date$ ';
 $SAURON_CHARSET='iso-8859-1' unless ($SAURON_CHARSET);
+$SAURON_PWD_MODE = 0 unless (defined($SAURON_PWD_MODE));
 $ALEVEL_VLANS = 5 unless (defined($ALEVEL_VLANS));
 $ALEVEL_RESERVATIONS = 1 unless (defined($ALEVEL_RESERVATIONS));
 $ALEVEL_PING = 1 unless (defined($ALEVEL_PING));
@@ -3100,7 +3101,7 @@ sub login_menu() {
 	        "</FONT>";
 	} else {
 	  unless (pwd_check(param('passwd_old'),$user{password})) {
-	    $password=pwd_make(param('passwd_new1'));
+	    $password=pwd_make(param('passwd_new1'),$SAURON_PWD_MODE);
 	    $ticks=time();
 	    if (db_exec("UPDATE users SET password='$password', " .
 			"last_pwd=$ticks WHERE id=$state{uid};") < 0) {

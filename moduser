@@ -2,7 +2,7 @@
 #
 # moduser - utility to modify user rights
 #
-# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000,2001.
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000-2003.
 # $Id$
 #
 require 5;
@@ -25,10 +25,9 @@ if (-r "/etc/sauron/config") {
 
 do "$config_file" || die("cannot load config: $config_file");
 
-
 $modgroup = ($PG_NAME eq 'modgroup' ? 1 : 0);
 $fooname=($modgroup ? 'groupname' : 'username');
-
+$SAURON_PWD_MODE = 0 unless (defined($SAURON_PWD_MODE));
 
 $user = (getpwuid($<))[0];
 $mdate = time;
@@ -36,11 +35,117 @@ $mdate = time;
 %addmodes=('server'=>1,'zone'=>2,'net'=>3,'host'=>4,'ipmask'=>5,
 	   'level'=>6,'elimit'=>7,'defdept'=>8);
 
+
+############################################
+
+sub ask_mode($) {
+  my($n) = @_;
+  my($mode,$t,$i);
+  my(%modehash);
+
+  if ($n==1) { %modehash=(1=>'RW',2=>'RWX'); }
+  else { %modehash=(1=>'R',2=>'RW',3=>'RWX'); }
+  print "Enter mode [";
+  foreach $i (keys %modehash) { print "$i=$modehash{$i} "; }
+  print "]: ";
+
+  chomp($t = <STDIN>);
+  $mode=$modehash{$t};
+
+  return $mode;
+}
+
+
+sub list_privs($$) {
+  my($id,$utype) = @_;
+  my($i,@d);
+
+  undef @d;
+  db_query("SELECT a.rule,b.name,a.id FROM user_rights a, servers b " .
+	   "WHERE a.rtype=1 AND a.rref=b.id AND a.ref=$id AND a.type=$utype;",
+	   \@d);
+  #print "Server records:\n";
+  for $i (0..$#d) {
+    $d[$i][0] =~ s/\s+$//;
+    printf "%-6s %-8s %-25s %s\n",$d[$i][2],"server",$d[$i][1],$d[$i][0];
+  }
+
+  undef @d;
+  db_query("SELECT a.rule,c.name||':'||b.name,a.id FROM user_rights a, zones b, servers c " .
+	   "WHERE a.rtype=2 AND a.rref=b.id AND b.server=c.id AND  a.ref=$id AND a.type=$utype;",
+	   \@d);
+  #print "Zone   records:\n";
+  for $i (0..$#d) { 
+    $d[$i][0] =~ s/\s+$//;
+    printf "%-6s %-8s %-25s %s\n",$d[$i][2],"zone",$d[$i][1],$d[$i][0];
+  }
+
+  undef @d;
+  db_query("SELECT a.rule,b.net,a.id,c.name FROM user_rights a, nets b, servers c " .
+	   "WHERE a.rtype=3 AND a.rref=b.id AND b.server=c.id AND a.ref=$id AND a.type=$utype;",
+	   \@d);
+  #print "Net    records:\n" . db_errormsg();
+  for $i (0..$#d) { 
+    $d[$i][0] =~ s/\s+$//;
+    printf "%-6s %-8s %-25s %s\n",$d[$i][2],"net",$d[$i][3].':'.$d[$i][1],
+      '(IP constraint)';
+  }
+
+  undef @d;
+  db_query("SELECT a.rule,a.id  FROM user_rights a " .
+	   "WHERE a.rtype=4 AND a.ref=$id AND a.type=$utype;",\@d);
+  #print "hostnamemask    records:\n";
+  for $i (0..$#d) { 
+    $d[$i][0] =~ s/\s+$//;
+    printf "%-6s %-8s %-25s %s\n",$d[$i][1],"hostname",$d[$i][0],
+      "(hostname constraint)";
+  }
+
+  undef @d;
+  db_query("SELECT a.rule,a.id  FROM user_rights a " .
+	   "WHERE a.rtype=5 AND a.ref=$id AND a.type=$utype;",\@d);
+  #print "IP-mask    records:\n";
+  for $i (0..$#d) { 
+    $d[$i][0] =~ s/\s+$//;
+    printf "%-6s %-8s %-25s %s\n",$d[$i][1],"IP-mask",$d[$i][0],
+      "(IP constraint)";
+  }
+
+  undef @d;
+  db_query("SELECT a.rule,a.id  FROM user_rights a " .
+	   "WHERE a.rtype=6 AND a.ref=$id AND a.type=$utype;",\@d);
+  #print "priv.level    records:\n";
+  for $i (0..$#d) { 
+    $d[$i][0] =~ s/\s+$//;
+    printf "%-6s %-8s %-25s %s\n",$d[$i][1],"Level",$d[$i][0],
+      "(privilege level)";
+  }
+
+  undef @d;
+  db_query("SELECT a.rule,a.id  FROM user_rights a " .
+	   "WHERE a.rtype=7 AND a.ref=$id AND a.type=$utype;",\@d);
+  for $i (0..$#d) {
+    $d[$i][0] =~ s/\s+$//;
+    printf "%-6s %-8s %-25s %s\n",$d[$i][1],"ELimit",$d[$i][0],
+      "(expiration limit)";
+  }
+
+  undef @d;
+  db_query("SELECT a.rule,a.id  FROM user_rights a " .
+	   "WHERE a.rtype=8 AND a.ref=$id AND a.type=$utype;",\@d);
+  for $i (0..$#d) {
+    $d[$i][0] =~ s/\s+$//;
+    printf "%-6s %-8s %-25s %s\n",$d[$i][1],"DefDept",$d[$i][0],
+      "(default department string)";
+  }
+
+}
+
 ##############################################
 
-$result = GetOptions("help|h","list!","add:s","delall!","del=s","passwd:s",
-  	     "group=s","name=s","superuser=s","lock!","unlock!","edit!",
-	      "email=s","comment=s","expiration=s");
+GetOptions("help|h","list!","add:s","delall!","del=s","passwd:s",
+	   "group=s","name=s","superuser=s","lock!","unlock!","edit!",
+	   "email=s","comment=s","expiration=s");
 
 $opt_user=$ARGV[0];
 
@@ -81,6 +186,7 @@ if ($opt_help || ($opt_user eq '' &&  $opt_list eq '')) {
   exit(0);
 }
 
+fatal("DB_CONNECT not defined in configuration!") unless ($DB_CONNECT);
 db_connect($DB_CONNECT);
 db_debug(1);
 
@@ -213,10 +319,10 @@ if ($modgroup) {
       chomp ($opt_passwd = <STDIN>);
     }
 
-    $salt=int(rand(900000)+100000);
-    $pwd=pwd_crypt($opt_passwd,$salt);
+    $pwd=pwd_make($opt_passwd,$SAURON_PWD_MODE);
     $res=db_exec("UPDATE users SET password='$pwd', " .
-		 " muser='$user',mdate='$mdate' WHERE id=$id;");
+		 " muser='$user', mdate='$mdate', last_pwd='$mdate' " .
+		 "WHERE id=$id;");
     fatal("Cannot update user password!") if ($res < 0);
     print "User password successfully updated.\n";
   }
@@ -243,7 +349,7 @@ if ($modgroup) {
   undef @q;
   db_query("SELECT u.id,u.name,u.superuser,u.comment,u.password,u.gid, " .
 	   " u.cdate,u.cuser,u.mdate,u.muser,u.expiration,u.email, ".
-	   " u.last_from,u.last " .
+	   " u.last_from,u.last,u.last_pwd " .
 	   "FROM users u " .
 	   "WHERE u.username='$opt_user';",\@q);
   fatal("Cannot find user '$opt_user' from users table!") if (@q < 1);
@@ -254,6 +360,7 @@ if ($modgroup) {
     } else {
       $status="Invalid password" ;
     }
+  $status .= ($q[0][14] > 0 ? ' (last changed '.localtime($q[0][14]).')' : '');
 
   $cdate_str=($q[0][6] > 0 ? localtime($q[0][6])." by $q[0][7]" : '<never>');
   $mdate_str=($q[0][8] > 0 ? localtime($q[0][8])." by $q[0][9]" : '<never>');
@@ -319,7 +426,7 @@ if (defined $opt_add) {
       db_query("SELECT id,name FROM servers WHERE name='$tmp';",\@d);
       if (@d < 1) { print "cannot find server!\n"; goto add_i; }
       if ($type==1) {
-	$mode=ask_mode();
+	$mode=ask_mode(0);
 	unless ($mode) { print "invalid mode!\n"; goto add_i; }
 	$ref=$d[0][0];
       } else {
@@ -333,7 +440,7 @@ if (defined $opt_add) {
       db_query("SELECT id,name FROM zones " .
 	       "WHERE server=$serverid AND name='$tmp';",\@d);
       if (@d < 1) { print "cannot find zone!\n"; goto add_i; }
-      $mode=ask_mode();
+      $mode=ask_mode(0);
       unless ($mode) { print "invalid mode!\n"; goto add_i; }
       $ref=$d[0][0];
     }
@@ -498,110 +605,4 @@ elsif ($opt_edit) {
 }
 
 
-exit;
-
-
-#####################
-
-sub ask_mode($n) {
-  my($n) = @_;
-  my($mode,$t,$i);
-  my(%modehash);
-
-  if ($n==1) { %modehash=(1=>'RW',2=>'RWX'); }
-  else { %modehash=(1=>'R',2=>'RW',3=>'RWX'); }
-  print "Enter mode [";
-  foreach $i (keys %modehash) { print "$i=$modehash{$i} "; }
-  print "]: ";
-
-  chomp($t = <STDIN>);
-  $mode=$modehash{$t};
-
-  return $mode;
-}
-
-
-sub list_privs($$) {
-  my($id,$utype) = @_;
-  my($i,@d);
-
-  undef @d;
-  db_query("SELECT a.rule,b.name,a.id FROM user_rights a, servers b " .
-	   "WHERE a.rtype=1 AND a.rref=b.id AND a.ref=$id AND a.type=$utype;",
-	   \@d);
-  #print "Server records:\n";
-  for $i (0..$#d) {
-    $d[$i][0] =~ s/\s+$//;
-    printf "%-6s %-8s %-25s %s\n",$d[$i][2],"server",$d[$i][1],$d[$i][0];
-  }
-
-  undef @d;
-  db_query("SELECT a.rule,c.name||':'||b.name,a.id FROM user_rights a, zones b, servers c " .
-	   "WHERE a.rtype=2 AND a.rref=b.id AND b.server=c.id AND  a.ref=$id AND a.type=$utype;",
-	   \@d);
-  #print "Zone   records:\n";
-  for $i (0..$#d) { 
-    $d[$i][0] =~ s/\s+$//;
-    printf "%-6s %-8s %-25s %s\n",$d[$i][2],"zone",$d[$i][1],$d[$i][0];
-  }
-
-  undef @d;
-  db_query("SELECT a.rule,b.net,a.id,c.name FROM user_rights a, nets b, servers c " .
-	   "WHERE a.rtype=3 AND a.rref=b.id AND b.server=c.id AND a.ref=$id AND a.type=$utype;",
-	   \@d);
-  #print "Net    records:\n" . db_errormsg();
-  for $i (0..$#d) { 
-    $d[$i][0] =~ s/\s+$//;
-    printf "%-6s %-8s %-25s %s\n",$d[$i][2],"net",$d[$i][3].':'.$d[$i][1],
-      '(IP constraint)';
-  }
-
-  undef @d;
-  db_query("SELECT a.rule,a.id  FROM user_rights a " .
-	   "WHERE a.rtype=4 AND a.ref=$id AND a.type=$utype;",\@d);
-  #print "hostnamemask    records:\n";
-  for $i (0..$#d) { 
-    $d[$i][0] =~ s/\s+$//;
-    printf "%-6s %-8s %-25s %s\n",$d[$i][1],"hostname",$d[$i][0],
-      "(hostname constraint)";
-  }
-
-  undef @d;
-  db_query("SELECT a.rule,a.id  FROM user_rights a " .
-	   "WHERE a.rtype=5 AND a.ref=$id AND a.type=$utype;",\@d);
-  #print "IP-mask    records:\n";
-  for $i (0..$#d) { 
-    $d[$i][0] =~ s/\s+$//;
-    printf "%-6s %-8s %-25s %s\n",$d[$i][1],"IP-mask",$d[$i][0],
-      "(IP constraint)";
-  }
-
-  undef @d;
-  db_query("SELECT a.rule,a.id  FROM user_rights a " .
-	   "WHERE a.rtype=6 AND a.ref=$id AND a.type=$utype;",\@d);
-  #print "priv.level    records:\n";
-  for $i (0..$#d) { 
-    $d[$i][0] =~ s/\s+$//;
-    printf "%-6s %-8s %-25s %s\n",$d[$i][1],"Level",$d[$i][0],
-      "(privilege level)";
-  }
-
-  undef @d;
-  db_query("SELECT a.rule,a.id  FROM user_rights a " .
-	   "WHERE a.rtype=7 AND a.ref=$id AND a.type=$utype;",\@d);
-  for $i (0..$#d) {
-    $d[$i][0] =~ s/\s+$//;
-    printf "%-6s %-8s %-25s %s\n",$d[$i][1],"ELimit",$d[$i][0],
-      "(expiration limit)";
-  }
-
-  undef @d;
-  db_query("SELECT a.rule,a.id  FROM user_rights a " .
-	   "WHERE a.rtype=8 AND a.ref=$id AND a.type=$utype;",\@d);
-  for $i (0..$#d) {
-    $d[$i][0] =~ s/\s+$//;
-    printf "%-6s %-8s %-25s %s\n",$d[$i][1],"DefDept",$d[$i][0],
-      "(default department string)";
-  }
-
-}
+# eof :-)

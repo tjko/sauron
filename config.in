@@ -57,6 +57,12 @@ $SAURON_SECURE_COOKIES = 0;
 #########################################################################
 # misc
 
+# default method for encrypting passwords:
+#        0 = simple MD5 based hash with salt
+#        1 = standard Unix crypt
+#
+$SAURON_PWD_MODE = 1;
+
 # uncomment to enable compatibilty with DHCP v2.0 ...
 # $SAURON_DCHP2_MODE = 1;
 
