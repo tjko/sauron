@@ -9,6 +9,13 @@
 INSERT INTO settings (setting,value) VALUES('dbversion','1.2');
 
 
+/* add BIND's built-in ACLs */
+INSERT INTO acls (server,name) VALUES(-1,'any');
+INSERT INTO acls (server,name) VALUES(-1,'none');
+INSERT INTO acls (server,name) VALUES(-1,'localhost');
+INSERT INTO acls (server,name) VALUES(-1,'localnets');
+
+
 
 
 /* eof */
