@@ -38,6 +38,7 @@ sub set_defaults() {
   undef $main::DB_CONNECT;
   undef $main::SERVER_ID;
 
+  $main::SAURON_DEBUG_MODE = 0;
   $main::SAURON_PRIVILEGE_MODE = 0;
   $main::SAURON_CHARSET='iso-8859-1';
   $main::SAURON_PWD_MODE = 1;
@@ -97,6 +98,8 @@ sub print_config() {
   print "DB_CONNECT=",$main::DB_CONNECT,"\n";
   print "SERVER_ID=",$main::SERVER_ID,"\n";
 
+
+  print "SAURON_DEBUG_MODE=",$main::SAURON_DEBUG_MODE,"\n";
   print "SAURON_PRIVILEGE_MODE=",$main::SAURON_PRIVILEGE_MODE,"\n";
   print "SAURON_CHARSET=",$main::SAURON_CHARSET,"\n";
   print "SAURON_PWD_MODE=",$main::SAURON_PWD_MODE,"\n";
