@@ -1,0 +1,296 @@
+#!/usr/bin/perl -I/usr/local/sauron
+#
+# import-zone - imports DNS zone from file or directly from DNS
+#
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2002,2003.
+# $Id$
+#
+require 5;
+use Net::Netmask;
+use Getopt::Long;
+use Sauron::DB;
+use Sauron::Util;
+use Sauron::UtilZone;
+use Sauron::BackEnd;
+use Sauron::Sauron;
+
+load_config();
+
+##############################
+
+GetOptions("help|h","verbose|v","notransaction","nameserver=s","zone=s",
+	   "group=s");
+
+if ($opt_help || @ARGV < 2) {
+    print "syntax: $0 [options] <servername> <zone> [<zone file>]\n";
+    print "options:\n",
+       "\t--nameserver=<server>\tuse this nameserver for zone transfer\n",
+       "\t--zone=<parentzone>\tinsert hosts from this zone into parent zone\n",
+       "\t--group=<name>\t\tassign new hosts into this group\n",
+       "\t--verbose\t\tdisplay more detailed progress reports\n",
+       "\t--help\t\t\tdisplay this help\n\n";
+    print "" if ($opt_help);
+    exit(1);
+}
+
+$opt_verbose = ($opt_verbose ? 1 : 0);
+$servername = shift;
+$zonename = shift;
+$zonefile = shift;
+$user = (getpwuid($<))[0];
+
+
+fatal("cannot read zone file: $zonefile") if ( $zonefile && ! -r $zonefile);
+fatal("DB_CONNECT not defined in configuration!") unless ($DB_CONNECT);
+
+set_muser($user);
+db_connect($DB_CONNECT);
+
+$serverid=get_server_id($servername);
+fatal("cannot find server: $servername") unless ($serverid > 0);
+
+fatal("invalid zone name: $zonename") unless (valid_domainname($zonename));
+$zonename =~ s/\.$//;
+$origin = $zonename . '.';
+
+if ($opt_zone) {
+  ($pzonename = $opt_zone) =~ s/\.$//;
+  $porigin = $pzonename . '.';
+  fatal("invalid parent zone: $pzonename")
+    unless (valid_domainname($pzonename));
+  fatal("parent zone ($pzonename) does not exist in server")
+    unless (($pzoneid = get_zone_id($pzonename,$serverid)) > 0);
+  print "Importing hosts from zone $zonename --> $pzonename !\n";
+  fatal("only import of hosts into zone's parent zone supported")
+    unless ($origin =~ /$porigin$/);
+} else {
+  fatal("zone already exists: $zonename")
+    if (get_zone_id($zonename,$serverid) > 0);
+  $pzoneid = -1;
+}
+
+if ($opt_nameserver) {
+    fatal("invalid nameserver IP/domainname specified: $opt_nameserver")
+	unless (valid_domainname($opt_nameserver) || is_cidr($opt_nameserver));
+}
+
+if ($opt_group) {
+  $gid=get_group_by_name($serverid,$opt_group);
+  fatal("cannot find group: $opt_group") unless ($gid > 0);
+} else {
+  $gid=-1;
+}
+
+fatal("import of 'reverse' zones not supported")
+    if ($zonename =~ /\.in-addr\.arpa\.?$/);
+
+if ($zonefile) {
+    process_zonefile($zonefile,$zonename,\%zonedata,0);
+} else {
+    process_zonedns($zonename,\%zonedata,$opt_nameserver,1);
+}
+
+$c = keys %zonedata;
+print "$c hosts found in zone\n";
+
+unless ($opt_notransaction) {
+  db_begin();
+  db_ignore_begin_and_commit(1);
+}
+
+
+$rec = $zonedata{$origin};
+fatal("No SOA record found in zone $zonename!") unless ($rec && $rec->{SOA});
+$ttl=$rec->{TTL};
+$class=$rec->{CLASS};
+
+unless ($pzoneid > 0) {
+  print "Creating zone record: $zonename\n";
+  $zonehash{server}=$serverid;
+  $zonehash{type}='M';
+  $zonehash{reverse}='false';
+  $zonehash{name}=$zonename;
+  $zonehash{ns}=[];
+  foreach $rtmp (@{$rec->{NS}}) { push @{$zonehash{ns}}, [0,$rtmp,'']; }
+  $zonehash{mx}=[];
+  foreach $rtmp (@{$rec->{MX}}) {
+    next unless ($rtmp =~ /^\s*(\d+)\s+(\S+)\s*$/);
+    push @{$zonehash{mx}}, [0,$1,$2,''];
+  }
+  $zonehash{txt}=[];
+  foreach $rtmp (@{$rec->{TXT}}) { push @{$zonehash{txt}}, [0,$rtmp,'']; }
+  $zonehash{ip}=[];
+  foreach $rtmp (@{$rec->{A}}) { push @{$zonehash{ip}},[0,$rtmp,'true','true']; }
+
+  @soa = split(/\s+/,$rec->{SOA});
+  $zonehash{serial}=$soa[2];
+  $zonehash{refresh}=$soa[3];
+  $zonehash{retry}=$soa[4];
+  $zonehash{expire}=$soa[5];
+  $zonehash{minimum}=$soa[6];
+  $zonehash{ttl}=$ttl if ($ttl > 0);
+
+  fatal("cannot add zone record") if (($zoneid=add_zone(\%zonehash)) < 0);
+} else {
+  $zoneid=$pzoneid;
+  $origin=$porigin;
+}
+
+
+# make MX templates...
+
+print "Generating MX templates...\n";
+
+foreach $host (keys %zonedata) {
+  $rec=$zonedata{$host};
+  $mxlist = db_build_list_str($rec->{MX});
+  $mxhash{$mxlist}+=1 if (length($mxlist) > 0);
+}
+foreach $mx (keys %mxhash) {
+  $c=$mxhash{$mx};
+  print "mx: $mx = $c\n" if ($opt_verbose);
+  $mx_i_count++;
+  undef @mxl;
+  $tmplist=db_decode_list_str("{$mx}");
+  foreach $rtmp (@{$tmplist}) {
+    next unless ($rtmp =~ /^\s*(\d+)\s+(\S+)\s*$/);
+    $pri=$1; $mxx=$2;
+    $mxx=remove_origin($mxx,$origin);
+    push @mxl, [0,$pri,$mxx,''];
+  }
+  $res = add_mx_template({zone=>$zoneid,
+			  name=>"$zonename:$mx_i_count",
+			  mx_l=>\@mxl});
+  fatal("cannot insert mx tamplate ($mx): ".db_lasterrormsg()) if ($res < 0);
+  $mxhash{$mx}=$res;
+}
+
+
+# insert hosts...
+
+foreach $host (sort keys %zonedata) {
+  $rec = $zonedata{$host};
+  next unless ($rec);
+  next if ($host eq $origin);
+  next if ($rec->{CNAME});
+
+  $host2 = remove_origin($host,$origin);
+  $hosttype=0;
+  $hosttype=1 if (@{$rec->{A}} > 0);
+  $hosttype=2 if ($nslist && $host2 ne '@');
+  $hosttype=3 if ($nslist eq '' && @{$rec->{A}} < 1 && @{$rec->{MX}} > 0);
+  $hosttype=8 if (@{$rec->{SRV}} > 0);
+
+  if ($hosttype == 0) {
+    print STDERR "Ignoring unknown host entry: $host\n";
+    delete $zonedata{$host};
+    next;
+  }
+
+  if ($hosttype == 2) {
+    foreach $tmp (@{$rec->{NS}}) {
+      if ($tmp =~ /^(\S*($host2))(\.$origin)?$/) {
+	print "glue record needed: $host ($tmp)\n";
+	push @gluelist, $1;
+      }
+    }
+  }
+
+  fatal("empty hostname adfter stripping origin: $host") unless ($host2);
+  print "host: $host ($host2) (type=$hosttype)\n" if ($opt_verbose);
+
+  $mxlist = db_build_list_str($rec->{MX});
+  $mx=($mxhash{$mxlist} ? $mxhash{$mxlist} : -1);
+  $host_ttl=(($rec->{TTL} > 0 && $rec->{TTL} ne $ttl) ? $rec->{TTL}:'');
+
+  $extrainfo='';
+  undef @txt_l;
+  if (@{$rec->{TXT}} > 0) {
+    $extrainfo=$rec->{TXT}->[0];
+    for $k (1..$#{$rec->{TXT}}) {
+      push @txt_l, [0,$rec->{TXT}->[$k],''];
+    }
+  }
+
+  undef @ip_l;
+  for $k (0..$#{$rec->{A}}) {
+    # print "A=",$rec->{A}->[$k],"\n";
+    push @ip_l, [0,$rec->{A}->[$k],'true','true'];
+  }
+  undef $ns_l;
+  for $k (0..$#{$rec->{NS}}) {
+    push @ns_l, [0,$rec->{NS}->[$k],''];
+  }
+
+  $res = add_host({zone=>$zoneid,
+		   type=>$hosttype,
+		   class=>$class,
+		   domain=>$host2,
+		   grp=>$gid,
+		   mx=>$mx,
+		   hinfo_hw=>$rec->{HINFO}[0],
+		   hinfo_sw=>$rec->{HINFO}[1],
+		   info=>$extrainfo,
+		   ttl=>$host_ttl,
+		   txt_l=>\@txt_l,
+		   ns_l=>\@ns_l,
+		   ip=>\@ip_l
+		  });
+
+  fatal("failed to insert host record for: $host ") if ($res < 0);
+  $rec->{ID}=$res;
+}
+
+
+# add aliases (CNAME)
+
+print "Adding aliases...\n";
+foreach $host (sort keys %zonedata) {
+  $rec = $zonedata{$host};
+  next unless ($rec->{CNAME});
+  next if ($host eq $origin);
+
+  $host2 = remove_origin($host,$origin);
+  $rec2 = $zonedata{$rec->{CNAME}};
+  unless ($rec2 && $rec2->{ID} > 0) {
+    $cname2=$rec->{CNAME};
+    $alias=-1;
+  } else {
+    $cname2='';
+    $alias=$rec2->{ID};
+  }
+
+  print "alias: $host ($host2) --> ($alias,$cname2)\n" if ($opt_verbose);
+  $res = add_host({zone=>$zoneid,
+		   type=>4,
+		   domain=>$host2,
+		   class=>$class,
+		   alias=>$alias,
+		   cname_txt=>$cname2
+		  });
+  fatal("failed to insert alias (host) record for: $host") if ($res < 0);
+}
+
+
+# update glue records...
+if (@gluelist > 0) {
+  for $host (@gluelist) {
+    $res = db_exec("UPDATE hosts SET type=6 WHERE zone=$zoneid " .
+		   " AND domain='$host'");
+    error("failed to change host record type into glue record: $host")
+      if ($res < 0);
+  }
+}
+
+#exit;
+unless ($opt_notransaction) {
+  db_ignore_begin_and_commit(0);
+  fatal("Cannot commit import to database!") if (db_commit() < 0);
+}
+
+
+print "All done.\n";
+exit(0);
+
+# eof
+
