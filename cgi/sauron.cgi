@@ -22,11 +22,11 @@ $CGI::POST_MAX = 100000; # max 100k posts
 my ($PG_DIR,$PG_NAME) = ($0 =~ /^(.*\/)(.*)$/);
 $0 = $PG_NAME;
 
+load_config();
+
 $SAURON_CGI_VER = ' $Revision$ $Date$ ';
 $debug_mode = $SAURON_DEBUG_MODE;
 #$|=1;
-
-load_config();
 
 %check_names_enum = (D=>'Default',W=>'Warn',F=>'Fail',I=>'Ignore');
 %yes_no_enum = (D=>'Default',Y=>'Yes', N=>'No');
@@ -1655,7 +1655,7 @@ sub hosts_menu() {
     }
     return;
   }
-  elsif ($sub eq 'Alias') {
+  elsif ($sub eq 'Alias') { # add static alias
     if ($id > 0) {
       $data{alias}=$id;
       $data{aliasname}=$host{domain};
@@ -2238,8 +2238,30 @@ sub hosts_menu() {
 
   copy_add_label:
     return if (check_perms('zone','RW'));
-    return if (($type!=1 && $type!=101) && check_perms('zone','RWX'));
-    return if ($type==101 && check_perms('level',$ALEVEL_RESERVATIONS));
+    if (check_perms('zone','RWX',1)) {
+      # check privilege flags if user doesn't have RWX permissions
+      if ($type==1) { }
+      elsif ($type==2) { return if check_perms('flags','DELEG'); }
+      elsif ($type==3) { return if check_perms('flags','MX'); }
+      elsif ($type==4) { return if check_perms('flags','SCNAME'); }
+      elsif ($type==5) { return if check_perms('flags','PRINTER'); }
+      elsif ($type==6) { return if check_perms('flags','GLUE'); }
+      elsif ($type==8) { return if check_perms('flags','SRV'); }
+      elsif ($type==9) { return if check_perms('flags','DHCP'); }
+      elsif ($type==101) {
+	if (check_perms('level',$ALEVEL_RESERVATIONS,1) &&
+	    check_perms('flags','RESERV',1)) {
+	  alert1("You are not authorized to add host reservations!");
+	  return;
+	}
+      }
+      else {
+	alert1("Access Denied!");
+	return;
+      }
+    }
+    #return if (($type!=1 && $type!=101) && check_perms('zone','RWX'));
+    #return if ($type==101 && check_perms('level',$ALEVEL_RESERVATIONS));
     $newhostform = (check_perms('zone','RWX',1) ? \%restricted_new_host_form :
 		    \%new_host_form);
     $newhostform = \%new_host_form if ($type == 101);
@@ -2269,7 +2291,8 @@ sub hosts_menu() {
     }
     elsif (param('addhost_submit')) {
       unless (($res=form_check_form('addhost',\%data,$newhostform))) {
-	if ($data{net} ne 'MANUAL' && not is_cidr($data{ip})) {
+	if ($data{type}==1 && $data{net} ne 'MANUAL' &&
+	    not is_cidr($data{ip})) {
 	  $tmpnet=new Net::Netmask($data{net});
 	  $ip=auto_address($serverid,$tmpnet->desc());
 	  unless (is_cidr($ip)) {
@@ -3566,6 +3589,12 @@ sub login_menu() {
 	    td(($perms{rhf}->{$s} ? 'Optional':'Required')),"</TR>";
     }
 
+    # Flags
+    foreach $s (sort keys %{$perms{flags}}) {
+      print "<TR bgcolor=\"#dddddd\">",td("Flag"),td("$s"),
+	    td('(add/modify permission)'),"</TR>";
+    }
+
     # alevel permissions
     print "<TR bgcolor=\"#dddddd\">",td("Level"),td($perms{alevel}),
 	     td("(authorization level)"),"</TR>";
@@ -4300,6 +4329,11 @@ sub check_perms($$$) {
     alert1("You are not authorized to modify this group") unless ($quiet);
     return 1;
   }
+  elsif ($type eq 'flags') {
+    return 0 if ($perms{flags}->{$rule});
+    alert1("Your are not authorized to add/modify: $rule") unless ($quiet);
+    return 1;
+  }
 
   alert1("Access to $type denied") unless ($quiet);
   return 1;
@@ -4314,6 +4348,16 @@ sub restricted_add_host($) {
   if (check_perms('host',$rec->{domain},1)) {
     alert1("Invalid hostname: does not conform your restrictions");
     return -101;
+  }
+
+  if ($rec->{type} == 4 && check_perms('flags','CNAME',1)) {
+    alert1("You don't have permission to add CNAME Aliases");
+    return -104;
+  }
+
+  if ($rec->{type} == 7 && check_perms('flags','AREC',1)) {
+    alert1("You don't have permission to add AREC Aliases");
+    return -107;
   }
 
   return add_host($rec);

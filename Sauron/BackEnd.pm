@@ -2818,6 +2818,7 @@ sub get_permissions($$) {
   $rec->{grpmask}=[];
   $rec->{delmask}=[];
   $rec->{rhf}={};
+  $rec->{flags}={};
   $rec->{alevel}=0;
 
   undef @q;
@@ -2853,7 +2854,7 @@ sub get_permissions($$) {
     elsif ($type == 10) { push @{$rec->{grpmask}}, $mode; }
     elsif ($type == 11) { push @{$rec->{delmask}}, $mode; }
     elsif ($type == 12) { $rec->{rhf}->{$mode}=$ref; }
-
+    elsif ($type == 13) { $rec->{flags}->{$mode}=1; }
   }
 
   return 0;

@@ -153,6 +153,14 @@ sub list_privs($$) {
     printf "%-6s %-8s %-25s %s\n",$d[$i][1],"RHF",$d[$i][0],
       ($d[$i][2] ? 'optional' : 'required');
   }
+
+  db_query("SELECT a.rule,a.id,a.rref  FROM user_rights a " .
+	   "WHERE a.rtype=13 AND a.ref=$id AND a.type=$utype ORDER BY id",\@d);
+  for $i (0..$#d) {
+    $d[$i][0] =~ s/\s+$//;
+    printf "%-6s %-8s %-25s %s\n",$d[$i][1],"Flag",$d[$i][0],
+           '(privilege flag)';
+  }
 }
 
 ##############################################
@@ -198,6 +206,9 @@ if ($opt_help || ($opt_user eq '' &&  $opt_list eq '')) {
         "   --add=\"grpmask,<mask>\"                add Group-mask\n",
         "   --add=\"delmask,<mask>\"                add (Host)Delete-mask\n",
         "   --add=\"rhf,<field>=0|1\"               add RequiredHostField-setting\n",
+	"   --add=\"flag,<name>\"                   add Privilege flag:\n",
+        "                                            CNAME,SCNAME,AREC,MX,DELEG,\n",
+        "                                            DHCP,PRINTER,SRV,RESERV\n",
         "   --del=<id>                            delete rule by id\n",
         "   --delall                              delete all rules\n",
         "\n";
@@ -428,10 +439,10 @@ if (defined $opt_add) {
     print "Record types:\t",
       "0=group,1=server,2=zone,3=net,4=hostmask,5=IP-mask,6=priv.level\n",
       "\t\t7=elimit,8=defdept,9=Template-mask,10=Group-mask,11=Delete-mask\n",
-      "\t\t12=ReqHostField\n",
+      "\t\t12=ReqHostField,13=Flag\n",
       "Record type: ";
     chomp($type = <STDIN>);
-    unless ($type ne '' && $type >= 0 && $type <=12) {
+    unless ($type ne '' && $type >= 0 && $type <=13) {
       print "invalid type!\n";
       goto add_i;
     }
@@ -538,6 +549,18 @@ if (defined $opt_add) {
       }
       $ref=$tmp;
     }
+    elsif ($type==13) {
+      print "Enter privilege flag (cname,scname,arec,mx,deleg,dhcp,printer,srv," .
+            "reserv): ";
+      chomp($tmp = <STDIN>);
+      $tmp =~ s/\s+|\s+$//g;
+      $tmp=uc($tmp);
+      unless ($tmp =~ /^(CNAME|SCNAME|AREC|MX|DELEG|GLUE|DHCP|PRINTER|SRV|RESERV)$/) {
+	print "Invalid flag name\n"; goto add_i;
+      }
+      $mode=$tmp;
+      $ref=-1;
+    }
 
     $mode=db_encode_str($mode);
     $res=db_exec("INSERT INTO user_rights (type,ref,rtype,rref,rule) " .
@@ -547,7 +570,7 @@ if (defined $opt_add) {
   }
 
   fatal("invalid parameter '$opt_add' for add option!")
-    unless ($opt_add =~ /^(server|zone|net|host|ipmask|level|elimit|defdept|tmplmask|grpmask|delmask|rhf),([^,\s]+)(,(R|RW|RWX))?$/);
+    unless ($opt_add =~ /^(server|zone|net|host|ipmask|level|elimit|defdept|tmplmask|grpmask|delmask|rhf|flag),([^,\s]+)(,(R|RW|RWX))?$/);
   $type=$addmodes{$1};
   $tmp=$2;
   $mode=$4;
@@ -619,7 +642,14 @@ if (defined $opt_add) {
       unless ($tmp =~ /^(huser|dept|location|info|ether|asset_id|model|serial|misc)\=(1|0)$/);
     $mode=$1;
     $ref=$2;
-    print "add: $mode,$ref\n";
+  }
+  elsif ($type==13) {
+    $tmp =~ s/^\s+|\s+$//g;
+    $tmp = uc($tmp);
+    fatal("invalid field and/or mode '$tmp'")
+      unless ($tmp =~ /^(CNAME|SCNAME|AREC|MX|DELEG|GLUE|DHCP|PRINTER|SRV|RESERV)$/);
+    $mode=$1;
+    $ref=-1;
   }
 
   $mode=db_encode_str($mode);

@@ -26,7 +26,8 @@ CREATE TABLE user_rights (
 				9=templatemask,
 				10=groupmask,
                                 11=deletemask (hostname),
-	                        12=reqhostfield */
+	                        12=reqhostfield,
+	                        13=privilege flags (AREC,CNAME,MX,...) */
 	rref	INT NOT NULL, /* ptr to table specified by type field */
 	rule	CHAR(40) /* R,RW,RWS or regexp */     
 );

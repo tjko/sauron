@@ -1,6 +1,8 @@
 $Id$
 
 0.7.0beta
+	- added new user/group privileges that can be used to 
+	  control what type records user can add
 	- improved code for detecting wheter zone serial should
 	  be increased or not (detects removed hosts and work
 	  with reverse zones)

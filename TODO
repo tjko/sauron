@@ -8,9 +8,7 @@ general:
 	- change database routines to be less PostgreSQL dependant
 	- support for "DHCP only" entries without IP
 	- support for custom DHCP classes (groups)	
-	- add VMPS support
 	- add DNSSEC (tsig) support
-	- finer configuration of user rights (CNAME,MX,Delegation)
 
 import:
 	- real parser for both imports
@@ -31,6 +29,7 @@ sauron.cgi:
 	- advertise "Save settings" feature if user doesn't have any
           default settings	
 	- module support for easily extending user interface
+	- support for external (Apache) authentication
 	
 
 browser.cgi:
