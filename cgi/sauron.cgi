@@ -1120,12 +1120,14 @@ sub zones_menu() {
 	     "ORDER BY h.domain;",\@q);
     print "<TABLE width=\"98%\" bgcolor=\"#eeeebf\" cellspacing=1 border=0>",
           "<TR bgcolor=\"#aaaaff\">",th("#"),th("Hostname"),
-	  "<TH colspan=2>Created</TH><TH colspan=2>Modified</TH></TR>";
+	  "<TH>Action</TH><TH>Date</TH><TH>By</TH></TR>";
     for $i (0..$#q) {
+      $action=($q[$i][2] > $q[$i][3] ? 'Create' : 'Modify');
+      $date=localtime(($action eq 'Create' ? $q[$i][2] : $q[$i][3]));
+      $user=($action eq 'Create' ? $q[$i][4] : $q[$i][5]);
       print "<TR>",td($i."."),
 	    td("<a href=\"$selfurl?menu=hosts&h_id=$q[$i][0]\">$q[$i][1]</a>"),
-	    td("".localtime($q[$i][2])),td($q[$i][4]),
-	    td("".localtime($q[$i][3])),td($q[$i][5]),"</TR>";
+	    td($action),td($date),td($user),"</TR>";
     }
     print "</TABLE>";
     return;

@@ -637,7 +637,8 @@ sub get_zone($$) {
 		     localtime($rec->{mdate}).' by '.$rec->{muser} : '');
 
   db_query("SELECT COUNT(h.id) FROM hosts h, zones z " .
-	   "WHERE z.id=$id AND h.zone=$id AND h.mdate > z.serial_date;",\@q);
+	   "WHERE z.id=$id AND h.zone=$id " .
+	   " AND (h.mdate > z.serial_date OR h.cdate > z.serial_date);",\@q);
   $rec->{pending_info}=($q[0][0] > 0 ? 
 			"<FONT color=\"#ff0000\">$q[0][0]</FONT>" : 'None');
 
