@@ -151,7 +151,7 @@ load_config();
   {ftype=>3, tag=>'dhcp_flags_ad', name=>'auto-domainnames',
    type=>'enum', enum=>{0=>'No',1=>'Yes'}, iff=>['masterserver','-1']},
   {ftype=>2, tag=>'dhcp', name=>'Global DHCP Settings', type=>['text','text'],
-   fields=>2, len=>[50,20], maxlen=>[100,20], empty=>[0,1],
+   fields=>2, len=>[50,20], maxlen=>[200,20], empty=>[0,1],
    elabels=>['dhcptab line','comment'], iff=>['masterserver','-1']},
 
   {ftype=>0, name=>'DHCP Failover Settings'},
@@ -290,8 +290,8 @@ load_config();
 
   {ftype=>0, name=>'DHCP', iff=>['type','M']},
   {ftype=>2, tag=>'dhcp', name=>'Zone specific DHCP entries',
-   type=>['text','text'], fields=>2,
-   len=>[40,20], empty=>[0,1], elabels=>['DHCP','comment'], iff=>['type','M']},
+   type=>['text','text'], fields=>2, maxlen=>[200,20],
+   len=>[50,20], empty=>[0,1], elabels=>['DHCP','comment'], iff=>['type','M']},
 
   {ftype=>0, name=>'Record info', no_edit=>1},
   {ftype=>4, name=>'Record created', tag=>'cdate_str', no_edit=>1},
@@ -387,7 +387,7 @@ load_config();
    type=>['text','text'], fields=>2,len=>[40,20], empty=>[0,1], 
    elabels=>['PRINTER','comment'], iff=>['type','[15]']},
   {ftype=>2, tag=>'dhcp_l', name=>'DHCP entries', no_empty=>1,
-   type=>['text','text'], fields=>2,len=>[40,20], empty=>[0,1], 
+   type=>['text','text'], fields=>2,len=>[50,20], maxlen=>[200,20], empty=>[0,1], 
    elabels=>['DHCP','comment'], iff=>['type','[15]']},
 
   {ftype=>0, name=>'Aliases', no_edit=>1, iff=>['type','1']},
@@ -725,8 +725,8 @@ load_config();
   {ftype=>3, tag=>'no_dhcp', name=>'DHCP', type=>'enum', conv=>'L',
    enum=>{f=>'Enabled',t=>'Disabled'}},
   {ftype=>2, tag=>'dhcp_l', name=>'Net specific DHCP entries', 
-   type=>['text','text'], fields=>2,
-   len=>[40,20], empty=>[0,1], elabels=>['DHCP','comment']},
+   type=>['text','text'], fields=>2, maxlen=>[200,20],
+   len=>[50,20], empty=>[0,1], elabels=>['DHCP','comment']},
 
   {ftype=>0, name=>'Record info', no_edit=>1},
   {ftype=>4, name=>'Record created', tag=>'cdate_str', no_edit=>1},
@@ -749,8 +749,8 @@ load_config();
 
   {ftype=>0, name=>'DHCP'},
   {ftype=>2, tag=>'dhcp_l', name=>'VLAN specific DHCP entries',
-   type=>['text','text'], fields=>2,
-   len=>[40,20], empty=>[0,1], elabels=>['DHCP','comment']},
+   type=>['text','text'], fields=>2, maxlen=>[200,20],
+   len=>[50,20], empty=>[0,1], elabels=>['DHCP','comment']},
 
   {ftype=>0, name=>'Record info', no_edit=>1},
   {ftype=>4, name=>'Record created', tag=>'cdate_str', no_edit=>1},
@@ -820,8 +820,8 @@ load_config();
    len=>3, empty=>0},
   {ftype=>1, tag=>'comment', name=>'Comment', type=>'text', len=>60, empty=>1},
   {ftype=>2, tag=>'dhcp', name=>'DHCP entries', 
-   type=>['text','text'], fields=>2,
-   len=>[40,20], empty=>[0,1], elabels=>['DHCP','comment']},
+   type=>['text','text'], fields=>2, maxlen=>[200,20],
+   len=>[50,20], empty=>[0,1], elabels=>['DHCP','comment']},
   {ftype=>2, tag=>'printer', name=>'PRINTER entries', 
    type=>['text','text'], fields=>2, len=>[40,20], empty=>[0,1], 
    elabels=>['PRINTER','comment'], iff=>['type','[1]']},
