@@ -26,7 +26,7 @@ CREATE TABLE servers (
 					0x01 = auto-generate domainnames
 					0x02 = enable failover protocol */
 	named_flags	INT DEFAULT 0, /* named option flags:
-			      0x01 = access control from master (slave only) */
+			      0x01 = access control from master (slave only)
 			      0x02 = include also slave zones from master
 				     (slave only)
 			      0x04 = do NOT generate HINFO records
