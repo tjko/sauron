@@ -40,6 +40,7 @@ $VERSION = '$Id$ ';
 	     run_command_quiet
 	     print_csv
 	     join_strings
+	     new_serial
 	    );
 
 
@@ -571,6 +572,26 @@ sub join_strings {
 
   return $s;
 }
+
+sub new_serial($) {
+  my ($serial) = @_;
+  my ($sec,$min,$hour,$day,$mon,$year,$s);
+
+  if (! $serial) {
+    error("no serial number passed to new_serial() !");
+    return "0";
+  }
+
+  ($sec,$min,$hour,$day,$mon,$year) = localtime(time);
+
+  $s=sprintf("%04d%02d%02d%02d",1900+$year,1+$mon,$day,$hour);
+  $s=$serial + 1 if ($s <= $serial);
+
+  fatal("new_serial($serial) failed! return value='$s'") if ($s <= $serial);
+
+  return $s;
+}
+
 
 1;
 # eof

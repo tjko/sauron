@@ -15,11 +15,9 @@ $VERSION = '$Id$ ';
 
 @ISA = qw(Exporter); # Inherit from Exporter
 @EXPORT = qw(
-	     sauron_version
 	     sauron_db_version
 	     get_db_version
 	     set_muser
-	     new_serial
 	     auto_address
 	     next_free_ip
 	     ip_in_use
@@ -125,12 +123,8 @@ $VERSION = '$Id$ ';
 
 my($muser);
 
-sub sauron_version() {
-  return "0.6.1"; # current back end version
-}
-
 sub sauron_db_version() {
-  return "1.0"; # required db format version for backend
+  return "1.0"; # required db format version for this backend
 }
 
 sub get_db_version() {
@@ -144,24 +138,6 @@ sub set_muser($) {
   $muser=$usr;
 }
 
-sub new_serial($) {
-  my ($serial) = @_;
-  my ($sec,$min,$hour,$day,$mon,$year,$s);
-
-  if (! $serial) {
-    error("no serial number passed to new_serial() !");
-    return "0";
-  }
-
-  ($sec,$min,$hour,$day,$mon,$year) = localtime(time);
-
-  $s=sprintf("%04d%02d%02d%02d",1900+$year,1+$mon,$day,$hour);
-  $s=$serial + 1 if ($s <= $serial);
-
-  fatal("new_serial($serial) failed! return value='$s'") if ($s <= $serial);
-
-  return $s;
-}
 
 sub auto_address($$) {
   my($serverid,$net) = @_;

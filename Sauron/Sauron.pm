@@ -15,9 +15,14 @@ $VERSION = '$Id$ ';
 @EXPORT = qw(
 	     load_config
 	     load_browser_config
-
 	     logmsg
+	     sauron_version
 	    );
+
+
+sub sauron_version() {
+  return "0.6.1"; # current Sauron version
+}
 
 
 sub set_defaults() {
