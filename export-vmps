@@ -85,7 +85,8 @@ print FILE "! VMPS domain\n",
       "! VLAN to use if MAC not known\n",
       ($vmps{fallback}==-1 ? '! ':'')."vmps fallback $fallback\n!\n!\n",
       "! MAC Addresses\n!\n",
-      "! address <addr> vlan-name <vlan-name>\n!\n";
+      "! address <addr> vlan-name <vlan-name>\n!\n",
+      "vmps-mac-addrs\n\n";
 
 
 db_query("SELECT h.id,h.domain,h.ether,v.name,a.ip,h.expiration " .
