@@ -18,9 +18,9 @@ CREATE TABLE common_fields (
 /** global settings table **/
 
 CREATE TABLE settings (
-	setting	TEXT NOT NULL CHECK(key <> ''), /* name of setting tuple */
+	setting	TEXT NOT NULL CHECK(setting <> ''), /* name of setting tuple */
 	value	TEXT, /* string value of setting */
 	ivalue  INT4, /* interger value of setting */
 	
-	CONSTRAINT global_key PRIMARY KEY (key)
+	CONSTRAINT global_key PRIMARY KEY (setting)
 );
