@@ -17,16 +17,16 @@ CREATE TABLE zones ( /* zone table; contains zones */
        reverse	   BOOL DEFAULT false, /* true for reverse (arpa) zones */
        noreverse   BOOL DEFAULT false, /* if true, zone not used in reverse
 				          map generation */
-       nnotify	   BOOL DEFAULT true,
-       chknames    CHAR(1) DEFAULT 'W', /* (W)arn, (F)ail, (I)gnore */
+       nnotify	   CHAR(1) DEFAULT 'D', /* D=default, Y=yes, N=no */
+       chknames    CHAR(1) DEFAULT 'D', /* D=default,W=warn,F=fail,I=ignore */
        class	   CHAR(2) DEFAULT 'in',
        name	   TEXT NOT NULL CHECK (name <> ''),
        hostmaster  TEXT,
        serial	   CHAR(10) DEFAULT '1999123001',
-       refresh	   INT4 DEFAULT 43200,
-       retry	   INT4 DEFAULT 3600,
-       expire	   INT4 DEFAULT 604800,
-       minimum	   INT4 DEFAULT 86400,
+       refresh	   INT4 DEFAULT -1,
+       retry	   INT4 DEFAULT -1,
+       expire	   INT4 DEFAULT -1,
+       minimum	   INT4 DEFAULT -1,
        ttl	   INT4 DEFAULT -1,
        comment	   TEXT,
 

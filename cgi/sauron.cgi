@@ -37,6 +37,8 @@ do "$PROG_DIR/util.pl";
 do "$PROG_DIR/db.pl";
 do "$PROG_DIR/back_end.pl";
 
+%check_names_enum = (D=>'Default',W=>'Warn',F=>'Fail',I=>'Ignore');
+%yes_no_enum = (D=>'Default',Y=>'Yes', N=>'No');
 
 %server_form = (
  data=>[
@@ -45,24 +47,56 @@ do "$PROG_DIR/back_end.pl";
   {ftype=>4, tag=>'id', name=>'Server ID'},
   {ftype=>3, tag=>'zones_only', name=>'Output mode', type=>'enum',
    conv=>'L', enum=>{t=>'Generate named.zones',f=>'Generate full named.conf'}},
+  {ftype=>3, tag=>'nnotify', name=>'Notify', type=>'enum',
+   conv=>'U', enum=>\%yes_no_enum},
+  {ftype=>3, tag=>'recursion', name=>'Recursion', type=>'enum',
+   conv=>'U', enum=>\%yes_no_enum},
+  {ftype=>3, tag=>'checknames_m', name=>'Check-names (Masters)', type=>'enum',
+   conv=>'U', enum=>\%check_names_enum},
+  {ftype=>3, tag=>'checknames_s', name=>'Check-names (Slaves)', type=>'enum',
+   conv=>'U', enum=>\%check_names_enum},
+  {ftype=>3, tag=>'checknames_r', name=>'Check-names (Responses)',type=>'enum',
+   conv=>'U', enum=>\%check_names_enum},
   {ftype=>1, tag=>'comment', name=>'Comments',  type=>'text', len=>60,
    empty=>1},
-  {ftype=>0, name=>'DNS'},
+
+  {ftype=>0, name=>'Defaults for zones'},
   {ftype=>1, tag=>'hostmaster', name=>'Hostmaster', type=>'fqdn', len=>30,
    default=>'hostmaster.my.domain.'},
   {ftype=>1, tag=>'hostname', name=>'Hostname',type=>'fqdn', len=>30,
    default=>'ns.my.domain.'},
+  {ftype=>1, tag=>'refresh', name=>'Refresh', type=>'int', len=>10},
+  {ftype=>1, tag=>'retry', name=>'Rery', type=>'int', len=>10},
+  {ftype=>1, tag=>'expire', name=>'Expire', type=>'int', len=>10},
+  {ftype=>1, tag=>'minimum', name=>'Minimum (negative caching TTL)', 
+   type=>'int', len=>10},
+  {ftype=>1, tag=>'ttl', name=>'Default TTL', type=>'int', len=>10},
+  {ftype=>2, tag=>'txt', name=>'Default zone TXT', type=>['text','text'], 
+   fields=>2, len=>[40,15], empty=>[0,1], elabels=>['TXT','comment']},
+
+  {ftype=>0, name=>'Paths'},
+  {ftype=>1, tag=>'directory', name=>'Configuration directory', type=>'path',
+   len=>30, empty=>0},
   {ftype=>1, tag=>'pzone_path', name=>'Primary zone-file path', type=>'path',
    len=>30, empty=>1},
   {ftype=>1, tag=>'szone_path', name=>'Slave zone-file path', type=>'path',
    len=>30, empty=>1, default=>'NS2/'},
   {ftype=>1, tag=>'named_ca', name=> 'Root-server file', type=>'text', len=>30,
    default=>'named.ca'},
+  {ftype=>1, tag=>'pid_file', name=>'pid-file path', type=>'text',
+   len=>30, empty=>1},
+  {ftype=>1, tag=>'dump_file', name=>'dump-file path', type=>'text',
+   len=>30, empty=>1},
+  {ftype=>1, tag=>'stats_file', name=>'stats-file path', type=>'text',
+   len=>30, empty=>1},
+  {ftype=>1, tag=>'named_xfer', name=>'named-xfer path', type=>'text',
+   len=>30, empty=>1},
+
+  {ftype=>0, name=>'Access control'},
   {ftype=>2, tag=>'allow_transfer', name=>'Allow-transfer', fields=>2,
    type=>['cidr','text'], len=>[20,30], empty=>[0,1], 
    elabels=>['IP','comment']},
-  {ftype=>2, tag=>'txt', name=>'Default zone TXT', type=>['text','text'], 
-   fields=>2, len=>[40,15], empty=>[0,1], elabels=>['TXT','comment']},
+
   {ftype=>0, name=>'DHCP'},
   {ftype=>2, tag=>'dhcp', name=>'Global DHCP', type=>['text','text'], 
    fields=>2, len=>[35,20], empty=>[0,1],elabels=>['dhcptab line','comment']} 
@@ -102,20 +136,23 @@ do "$PROG_DIR/back_end.pl";
   {ftype=>2, tag=>'masters', name=>'Masters', type=>['cidr','text'], fields=>2,
    len=>[15,45], empty=>[0,1], elabels=>['IP','comment'], iff=>['type','S']},
   {ftype=>1, tag=>'hostmaster', name=>'Hostmaster', type=>'domain', len=>30,
-   empty=>1, iff=>['type','M']},
-  {ftype=>3, tag=>'nnotify', name=>'Notify', type=>'enum', conv=>'L',
-   enum=>{f=>'No',t=>'Yes'}, iff=>['type','M']},
+   empty=>1, definfo=>['','Default (from server)'], iff=>['type','M']},
+  {ftype=>3, tag=>'chknames', name=>'Check-names', type=>'enum',
+   conv=>'U', enum=>\%check_names_enum},
+  {ftype=>3, tag=>'nnotify', name=>'Notify', type=>'enum', conv=>'U',
+   enum=>\%yes_no_enum, iff=>['type','M']},
   {ftype=>4, tag=>'serial', name=>'Serial', iff=>['type','M']},
   {ftype=>1, tag=>'refresh', name=>'Refresh', type=>'int', len=>10, 
-   iff=>['type','M']},
+   definfo=>['-1','Default (from server)'], iff=>['type','M']},
   {ftype=>1, tag=>'retry', name=>'Rery', type=>'int', len=>10, 
-   iff=>['type','M']},
+   definfo=>['-1','Default (from server)'], iff=>['type','M']},
   {ftype=>1, tag=>'expire', name=>'Expire', type=>'int', len=>10,
-   iff=>['type','M']},
+   definfo=>['-1','Default (from server)'], iff=>['type','M']},
   {ftype=>1, tag=>'minimum', name=>'Minimum (negative caching TTL)', 
-   type=>'int', len=>10, iff=>['type','M']},
-  {ftype=>1, tag=>'ttl', name=>'Default TTL', type=>'int', len=>10, 
+   definfo=>['-1','Default (from server)'], type=>'int', len=>10, 
    iff=>['type','M']},
+  {ftype=>1, tag=>'ttl', name=>'Default TTL', type=>'int', len=>10, 
+   definfo=>['-1','Default (from server)'], iff=>['type','M']},
   {ftype=>2, tag=>'ns', name=>'Name servers (NS)', type=>['text','text'], 
    fields=>2,
    len=>[30,20], empty=>[0,1], elabels=>['NS','comment'], iff=>['type','M']},
@@ -2951,7 +2988,11 @@ sub form_magic($$$) {
 	  textfield(-name=>$p1,-size=>$rec->{len},-maxlength=>$maxlen,
 		    -value=>param($p1));
       }
-
+      if ($rec->{definfo}) {
+	$def_info=$rec->{definfo}[0];
+	$def_info='empty' if ($def_info eq '');
+	print "<FONT size=-1 color=\"blue\"> ($def_info = default)</FONT>";
+      }
       print "<FONT size=-1 color=\"red\"><BR> ",
             form_check_field($rec,param($p1),0),
             "</FONT></TD></TR>";
@@ -3213,6 +3254,12 @@ sub display_form($$) {
     } elsif ($rec->{ftype} == 1 || $rec->{ftype} == 101) {
       $val =~ s/\/32$// if ($rec->{type} eq 'ip');
       #print Tr,td([$rec->{name},$data->{$rec->{tag}}]);
+      if ($rec->{definfo}) {
+	if ($val eq $rec->{definfo}[0]) {
+	  $val="<FONT color=\"blue\">$rec->{definfo}[1]</FONT>";
+	}
+      }
+
       $val='&nbsp;' if ($val eq '');
       print Tr,"<TD WIDTH=\"",$form->{nwidth},"\">",$rec->{name},"</TD><TD>",
             "$val</TD>\n";

@@ -27,6 +27,7 @@ DROP TABLE user_rights;
 DROP TABLE ether_info;
 DROP TABLE settings;
 DROP TABLE hinfo_templates;
+DROP TABLE root_servers;
 DROP TABLE pokemon;
 
 
@@ -51,5 +52,6 @@ DROP SEQUENCE host_info_id_seq;
 DROP SEQUENCE users_id_seq;
 DROP SEQUENCE user_rights_id_seq;
 DROP SEQUENCE hinfo_templates_id_seq;
+DROP SEQUENCE root_servers_id_seq;
 
 /* eof */

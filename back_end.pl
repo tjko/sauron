@@ -314,11 +314,12 @@ sub get_server($$) {
   my ($res);
 
   $res = get_record("servers",
-		    "name,directory,named_ca,zones_only," .
+            "name,directory,no_roots,named_ca,zones_only,pid_file,dump_file," .
+		    "named_xfer,stats_file,query_src_ip,query_src_port," .
+		    "listen_on_port,checknames_m,checknames_s,checknames_r," .
+		    "nnotify,recursion,ttl,refresh,retry,expire,minimum," .
 		    "pzone_path,szone_path,hostname,hostmaster,comment",
-		    $id,
-		    $rec,"id");
-
+		    $id,$rec,"id");
   return -1 if ($res < 0);
 
   get_array_field("cidr_entries",3,"id,ip,comment","IP,Comments",

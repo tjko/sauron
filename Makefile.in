@@ -34,7 +34,6 @@ mandir = $(prefix)/man
 RUNSQL = $(srcdir)/runsql
 
 
-
 CC        = @CC@ 
 XCPPFLAGS = @CPPFLAGS@
 CFLAGS    = @CFLAGS@ $(XCPPFLAGS) $(DEFS)
@@ -62,7 +61,7 @@ SQL_TABLES = 	sql/common.sql \
 	        sql/user_rights.sql sql/users.sql \
 		sql/wks_entries.sql sql/wks_templates.sql \
 		sql/zones.sql sql/utmp.sql sql/hinfo_templates.sql \
-		sql/arec_entries.sql 
+		sql/arec_entries.sql sql/root_servers.sql
 
 
 DIRNAME = $(shell basename `pwd`) 
@@ -94,13 +93,22 @@ clean:
 clean_all: clean
 	rm -f Makefile config.h config.log config.cache config.status
 
-clean_tables:
+drop_tables:
 	$(RUNSQL) -v -n sql/drop_tables.sql
 	@echo "Database cleaned..."
 
-init_tables: 
+make_tables: 
+	@echo "Creating tables..."
 	$(RUNSQL) $(SQL_TABLES)
-	@echo "Database initialized..."
+
+init_tables:
+	@echo "Inserting ether infos..."
+	$(srcdir)/import-ethers $(srcdir)/contrib/Ethernet.txt
+	$(srcdir)/import-ethers --force \
+	             $(srcdir)/contrib/additional-ether-codes.txt
+	@echo "Inserting default HINFO templates..."
+	$(RUNSQL) contrib/hinfo_hw.sql
+	$(RUNSQL) contrib/hinfo_sw.sql
 
 grant_full:
 	perl -e 'while (<>) { s/:user:/tjko/g; print; }' init/full-privileges.sql | psql sauron
