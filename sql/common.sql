@@ -6,12 +6,12 @@
 
 /** virtual table; generic fields for most of the tables **/
 
-CREATE TABLE pokemon ( 
-       cdate	   TIMESTAMP DEFAULT CURRENT_TIMESTAMP, /* creation date */
-       cuser	   CHAR(32) DEFAULT 'unknown',   /* creating user */
-       mdate	   TIMESTAMP DEFAULT CURRENT_TIMESTAMP, /* modification date */
-       muser	   CHAR(32) DEFAULT 'unknown', /* last changed by this user */
-       expiration  TIMESTAMP
+CREATE TABLE common_fields ( 
+       cdate	   INT4, /* creation date */
+       cuser	   CHAR(8) DEFAULT 'unknown',   /* creating user */
+       mdate	   INT4, /* modification date */
+       muser	   CHAR(8) DEFAULT 'unknown', /* last changed by this user */
+       expiration  INT4  /* expiration date */
 );
 
 

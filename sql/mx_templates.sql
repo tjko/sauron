@@ -12,5 +12,5 @@ CREATE TABLE mx_templates (
 					  -->zones.id */
 	name		TEXT, /* template name */
 	comment		TEXT 
-);
+) INHERITS(common_fields);
 

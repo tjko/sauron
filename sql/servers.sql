@@ -60,6 +60,6 @@ CREATE TABLE servers (
 	comment		TEXT,
 	
 	CONSTRAINT	servers_name_key UNIQUE(name)
-) INHERITS(pokemon);
+) INHERITS(common_fields);
 
 

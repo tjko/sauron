@@ -50,5 +50,5 @@ CREATE TABLE zones (
        parent	   INT4 DEFAULT -1, /* unused */
 
        CONSTRAINT  zones_key PRIMARY KEY (name,server)
-) INHERITS(pokemon);
+) INHERITS(common_fields);
 

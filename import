@@ -32,6 +32,7 @@ if (@ARGV != 2) {
 $servername = $ARGV[0];
 $namedf = $ARGV[1];
 $user = (getpwuid($<))[0];
+$cdate = time;
 %zonedata = {};
 
 db_connect();
@@ -258,9 +259,9 @@ for ($i=0; $i <= $#zones; $i+=1) {
 
 
   $sqlstr="INSERT INTO zones " .
-    "(cuser,muser,server,type,reverse,name,chknames) " .
-      "VALUES" .
-	"('$user','$user',$serverid,'$type',$rev,'$zone','$check_names');";
+    "(cdate,cuser,muser,server,type,reverse,name,chknames) " .
+    "VALUES" .
+    "($cdate,'$user','$user',$serverid,'$type',$rev,'$zone','$check_names');";
   $res=db_exec($sqlstr);
   if ($res < 0) {
     print "zone allready exists! skipping\n";
@@ -379,8 +380,8 @@ for ($i=0; $i <= $#zones; $i+=1) {
       $hosttype=2;
 
       $sqlstr = "INSERT INTO hosts " .
-	"(cuser,muser,zone,type,domain,class) " .
-	"VALUES('$user','$user',$zoneid,$hosttype,'$host2','$class');";
+	"(cdate,cuser,muser,zone,type,domain,class) " .
+	"VALUES($cdate,'$user','$user',$zoneid,$hosttype,'$host2','$class');";
 
       $res = db_exec($sqlstr);
       die("cannot insert (reverse) host record '$host'") if ($res < 0);
@@ -479,8 +480,8 @@ for ($i=0; $i <= $#zones; $i+=1) {
 
   # add host record for zone....
   die("Cannot insert host record for zone $zone")
-    if (db_exec("INSERT INTO hosts (zone,type,domain,comment) " .
-		"VALUES($zoneid,1,'\@','zone record');") < 0);
+    if (db_exec("INSERT INTO hosts (cdate,cuser,zone,type,domain,comment) " .
+		"VALUES($cdate,'$cuser',$zoneid,1,'\@','zone record');") < 0);
   $oid=db_lastoid();
   die("cannot get id for zone host record!")
     if(db_exec("SELECT id FROM hosts WHERE OID=$oid;") < 0);

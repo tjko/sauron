@@ -25,6 +25,6 @@ CREATE TABLE nets (
        comment	   TEXT, /* comment */
 
        CONSTRAINT  nets_key PRIMARY KEY (net,server)
-) INHERITS(pokemon);
+) INHERITS(common_fields);
 
 

@@ -12,5 +12,5 @@ CREATE TABLE wks_templates (
 					  -->servers.id */
 	name		TEXT, /* template name */
 	comment		TEXT
-);
+) INHERITS(common_fields);
 

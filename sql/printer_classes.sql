@@ -11,5 +11,5 @@ CREATE TABLE printer_classes (
        name	    TEXT UNIQUE NOT NULL CHECK(name <> ''), /* class name */
 
        comment	    TEXT 
-) INHERITS(pokemon);
+) INHERITS(common_fields);
 

@@ -62,5 +62,5 @@ CREATE TABLE hosts (
        comment	   TEXT,       /* comment */
 
        CONSTRAINT  hosts_key PRIMARY KEY (domain,zone)
-) INHERITS(pokemon);
+) INHERITS(common_fields);
 

@@ -16,5 +16,5 @@ CREATE TABLE groups (
        comment	    TEXT,
 
        CONSTRAINT   groups_key UNIQUE(name,server)
-) INHERITS(pokemon);
+) INHERITS(common_fields);
 
