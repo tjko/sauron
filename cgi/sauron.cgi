@@ -2058,23 +2058,23 @@ sub hosts_menu() {
 	    if ($data{ip} && $data{net} eq 'MANUAL') {
 	      $ip=$data{ip};
 	      delete $data{ip};
-	      $data{ip}=[[$ip,'t','t','']];
+	      $data{ip}=[[0,$ip,'t','t','']];
 	    } else {
 	      $tmpnet=new Net::Netmask($data{net});
 	      $ip=auto_address($serverid,$tmpnet->desc());
-	      unless (is_cidr($ip)) { 
+	      unless (is_cidr($ip)) {
 		logmsg("notice","auto_address($serverid,$data{net}) failed!");
 		alert1("Cannot get IP: $ip");
 		return;
 	      }
-	      $data{ip}=[[$ip,'t','t','']];
+	      $data{ip}=[[0,$ip,'t','t','']];
 	    }
 	  } elsif ($data{type} == 6) {
 	    $ip=$data{glue}; delete $data{glue};
-	    $data{ip}=[[$ip,'t','t','']];
+	    $data{ip}=[[0,$ip,'t','t','']];
 	  } elsif ($data{type} == 9) {
 	    $ip=$data{ip}; delete $data{ip};
-	    $data{ip}=[[$ip,'f','f','']];
+	    $data{ip}=[[0,$ip,'f','f','']];
 	  }
 	  delete $data{net};
 	  #show_hash(\%data);
@@ -3926,7 +3926,7 @@ sub add_default_zones($$) {
     $zone{ns}=[[],[0,'localhost.','',2]];
     print "update failed\n" if (update_zone(\%zone) < 0);
 
-    %host=(domain=>'@',zone=>$id,type=>1,ip=>[['127.0.0.1','t','t','']]);
+    %host=(domain=>'@',zone=>$id,type=>1,ip=>[[0,'127.0.0.1','t','t','']]);
     print "host add failed\n" if (add_host(\%host) < 0);
   }
 

@@ -130,7 +130,7 @@ foreach $host (keys %zonedata) {
   print "out-of-zone: $host\n";
 
   undef @q;
-  for $i (0..$#{$rec->{A}}) { push @q,[$rec->{A}[$i],true,true]; }
+  for $i (0..$#{$rec->{A}}) { push @q,[0,$rec->{A}[$i],true,true]; }
   fatal("cannot insert host $host!")
     if (add_host({zone=>$zoneid,type=>1,domain=>$host,ip=>\@q}) < 0);
 

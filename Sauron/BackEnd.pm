@@ -1489,54 +1489,33 @@ sub add_host($) {
   $id=$res;
 
   # IPs
-  for $i (0..$#{$rec->{ip}}) {
-    #print "<br>",$rec->{ip}[$i][0];
-    $res=db_exec("INSERT INTO a_entries (host,ip,reverse,forward) " .
-       "VALUES($id,'$rec->{ip}[$i][0]','$rec->{ip}[$i][1]'," .
-       " '$rec->{ip}[$i][2]');");
-    if ($res < 0) { db_rollback(); return -2; }
-  }
+  $res = add_array_field('a_entries','ip,reverse,forward','ip',$rec,
+			 'host',"$id");
+  if ($res < 0) { db_rollback(); return -2; }
 
   # MXs
-  for $i (0..$#{$rec->{mx_l}}) {
-    #print "<br>",$rec->{mx_l}[$i][1];
-    $res=db_exec("INSERT INTO mx_entries (type,ref,pri,mx,comment) " .
-       "VALUES(2,$id,'$rec->{mx_l}[$i][1]','$rec->{mx_l}[$i][2]'," .
-       " '$rec->{mx_l}[$i][3]');");
-    if ($res < 0) { db_rollback(); return -3; }
-  }
+  $res = add_array_field('mx_entries','pri,mx,comment','mx_l',$rec,
+			 'type,ref',"2,$id");
+  if ($res < 0) { db_rollback(); return -3; }
 
   # NSs
-  for $i (0..$#{$rec->{ns_l}}) {
-    #print "<br>",$rec->{ns_l}[$i][1];
-    $res=db_exec("INSERT INTO ns_entries (type,ref,ns,comment) " .
-       "VALUES(2,$id,'$rec->{ns_l}[$i][1]','$rec->{ns_l}[$i][2]');");
-    if ($res < 0) { db_rollback(); return -4; }
-  }
+  $res = add_array_field('ns_entries','ns,comment','ns_l',$rec,
+			 'type,ref',"2,$id");
+  if ($res < 0) { db_rollback(); return -4; }
 
   # PRINTERs
-  for $i (0..$#{$rec->{printer_l}}) {
-    #print "<br>",$rec->{printer_l}[$i][1];
-    $res=db_exec("INSERT INTO printer_entries (type,ref,printer,comment) " .
-       "VALUES(2,$id,'$rec->{printer_l}[$i][1]','$rec->{printer_l}[$i][2]');");
-    if ($res < 0) { db_rollback(); return -5; }
-  }
+  $res = add_array_field('printer_entries','printer,comment','printer_l',$rec,
+			 'type,ref',"2,$id");
+  if ($res < 0) { db_rollback(); return -5; }
+
+  # SRVs
+  $res = add_array_field('srv_entries','pri,weight,port,target,comment',
+			 'srv_l',$rec,'type,ref',"1,$id");
+  if ($res < 0) { db_rollback(); return -6; }
 
   # ARECs
   if ($rec->{type}==7) {
     $res=db_exec("INSERT INTO arec_entries (host,arec) VALUES($id,$a_id);");
-    if ($res < 0) { db_rollback(); return -6; }
-  }
-
-  # SRVs
-  for $i (0..$#{$rec->{srv_l}}) {
-    #print "<br> SRV",$rec->{srv_l}[$i][1];
-    $res=db_exec("INSERT INTO srv_entries ".
-		 " (type,ref,pri,weight,port,target,comment) " .
-                 "VALUES(1,$id,$rec->{srv_l}[$i][1],$rec->{srv_l}[$i][2],".
-		 " $rec->{srv_l}[$i][3],".
-		 db_encode_str($rec->{srv_l}[$i][4]).",".
-                 db_encode_str($rec->{srv_l}[$i][5]).");");
     if ($res < 0) { db_rollback(); return -7; }
   }
 

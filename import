@@ -731,7 +731,7 @@ if ($oips_zid > 0) {
       unless ($host =~ /($zonenamemask)\.?$/) {
 	print "$host ($ip)\n";
 	$res=add_host({zone=>$oips_zid,type=>1,domain=>$host,
-		       ip=>[[$ip,'true','false']]});
+		       ip=>[[0,$ip,'true','false']]});
 	fatal("cannot add host record for ($host)") if ($res < 0);
       }
     }
