@@ -14,8 +14,10 @@ general:
 	- add Internationalized Domain Names (IDN) support
 	- user_rights: hostmasks should be either global, by server, or
 	  by zone....
+	- user_rights: should be possible to refer only a zone within
+	  a server (or all zones within server)
 	- allow moving of hosts between zones ("move")
-	  
+
 
 import:
 	- real parser for both imports
@@ -24,6 +26,8 @@ import:
 sauron:
 	- more sanity checks
 	- printcap generation
+        - changes to server configuration should cause status
+          command to list pending "changes" for that server
 	- tinydns support (?)
 
 
@@ -36,7 +40,9 @@ sauron.cgi:
           "last" command-line command)
         - more detailed logging (especially  host add/edit/delete)
 	- allow MX template selection fro AREC aliases
-          
+	- allow creation of host with IP that is already reserved
+	  (now one has to create host with temp ip and then edit ip)
+	- mechanism to select multiple hosts and edit/move/delete them..
 
 browser.cgi:
 	- optional user authentication support
