@@ -234,12 +234,17 @@
         <simplelist type=vert columns=1>
 	  <member>
 	     <ulink url="http://sauron.jyu.fi/pub/sauron/">
-              <citetitle>http://sauron.jyu.fi/pub/sauron/</>
+              <citetitle>Primary Site (HTTP)</>
              </ulink>
           </member>
 	  <member>
 	     <ulink url="ftp://ftp.jyu.fi/pub/sauron/">
-              <citetitle>ftp://ftp.jyu.fi/pub/sauron/</>
+              <citetitle>Secondary Site (FTP)</>
+             </ulink>
+          </member>
+	  <member>
+	     <ulink url="http://ftp.jyu.fi/ftp/pub/sauron/">
+              <citetitle>Secondary Site (HTTP)</>
              </ulink>
           </member>
         </simplelist>
@@ -695,7 +700,7 @@ No servers found in database!
 
       <para>
          Sauron web interface uses several icons and images that are
-         by default installed under the top-level sauron directory.
+         by default installed under the top-level Sauron directory.
          You need to make these available through your web server
          via <filename class=directory>/sauron/icons/</> directory
          (unless you're installing from the RPM which does this automatically
@@ -781,7 +786,7 @@ User admin added successfully.
       <quote>scratch</> and create new server and zones interactively
       using Sauron's web interface. Following sections show example
       how to do this both ways (there is also section showing how to
-      use the included demo database to take a quick look how sauron
+      use the included demo database to take a quick look how Sauron
       works; <xref linkend="demo-db-sec">).
     </para>
       <section> 
@@ -890,7 +895,7 @@ Adding zone: 255.in-addr.arpa...OK (id=4)
       </para>
       <para>
         First step is to import your existing BIND configuration into
-        sauron.  This can be done as follows:
+        Sauron.  This can be done as follows:
         <screen>
         ./import ns1 /etc/named.conf
         </screen>
@@ -1051,7 +1056,7 @@ $SAURON_MAIL_FROM = 'postmaster@middle.earth';
   <warning>
   <para>
     There is no access control when using the command-line utilities. Thus,
-    it may be necessary protect access to the sauron database (in PostgreSQL)
+    it may be necessary protect access to the Sauron database (in PostgreSQL)
     and configuration file <filename>config</> (if it contains password
     to access the database).
   </para>
@@ -1269,7 +1274,7 @@ ID     Type     Ref.                      Mode
     </para>
     <para>
       Locking user account <quote>pippin</>, issue following command from
-      sauron top-level directory:
+      Sauron top-level directory:
       <screen>
       ./moduser pippin --lock
       </screen>
@@ -1389,7 +1394,7 @@ ID     Type     Ref.                      Mode
   </para>
   <para>
     To enable external user authentication, <varname>SAURON_AUTH_PROG</> in
-    variable in sauron configuration file must be set to point to external 
+    variable in Sauron configuration file must be set to point to external 
     authentication script or program.
   </para>
   <para>
@@ -2210,7 +2215,7 @@ ID     Type     Ref.                      Mode
       This appendix describes the Sauron database layout. Sauron database
       contains database version number stored in <filename>settings</>
       table. This database version number must match with the version
-      sauron <quote>back end</> was made for. If database format changes
+      Sauron <quote>back end</> was made for. If database format changes
       in future versions, the database version number will be incremented 
       and a conversion script from previous version will be shipped with
       Sauron.
