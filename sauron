@@ -66,7 +66,7 @@ sub clean_up() {
   db_query("SELECT h.id,h.expiration,h.domain,h.type " .
 	   "FROM hosts h, zones z " .
 	   "WHERE z.server=$serverid AND h.zone=z.id " .
-	   " AND h.expiration > 0 AND h.expiration < $time_now_ticks " .
+	   " AND h.expiration > 0 AND h.expiration < $t " .
 	   "ORDER BY h.expiration",\@q);
   error(db_errormsg()) if (db_errormsg());
   $count=@q;
