@@ -3,7 +3,7 @@
 # browser.cgi
 # $Id$
 #
-# Copyright (c) Timo Kokkonen <tjko@iki.fi>, 2001-2002.
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>, 2001-2003.
 # All Rights Reserved.
 #
 use CGI qw/:standard *table -no_xhtml/;
@@ -13,6 +13,7 @@ use Sauron::DB;
 use Sauron::Util;
 use Sauron::BackEnd;
 use Sauron::CGIutil;
+use Sauron::Sauron;
 
 $CGI::DISABLE_UPLOADS = 1; # no uploads
 $CGI::POST_MAX = 10000; # max 10k posts
@@ -22,22 +23,7 @@ $0 = $PG_NAME;
 #$|=1;
 $debug_mode = 0;
 
-if (-f "/etc/sauron/config-browser") {
-  $conf_dir='/etc/sauron';
-}
-elsif (-f "/usr/local/etc/sauron/config-browser") {
-  $conf_dir='/usr/local/etc/sauron';
-}
-elsif (-f "/opt/etc/sauron/config-browser") {
-  $conf_dir='/opt/etc/sauron';
-}
-else { die("cannot find configuration file!\n"); }
-
-do "$conf_dir/config-browser" || die("cannot load configuration!");
-die("invalid configuration file") unless ($DB_CONNECT);
-$BROWSER_CHARSET = 'iso-8859-1' unless ($BROWSER_CHARSET);
-$BROWSER_SHOW_FIELDS = 'huser,location,info,dept'
-  unless ($BROWSER_SHOW_FIELDS);
+load_browser_config();
 
 
 %host_types=(0=>'Any type',1=>'Host',2=>'Delegation',3=>'Plain MX',
@@ -152,8 +138,7 @@ print header(-charset=>$BROWSER_CHARSET),
       start_html(-title=>"Sauron DNS Browser $VER",-BGCOLOR=>$bgcolor,
 		 -meta=>{'keywords'=>'GNU Sauron DNS DHCP tool'}),
       "\n\n<!-- Sauron DNS Browser v$VER -->\n",
-      "<!-- Copyright (c) Timo Kokkonen <tjko\@iki.fi>  2001-2002. -->\n\n";
-
+      "<!-- Copyright (c) Timo Kokkonen <tjko\@iki.fi>  2001-2003. -->\n\n";
 
 
 $key = $pathinfo;
@@ -173,7 +158,7 @@ html_error2("Invalid configuration: cannot find zone") unless ($zoneid>0);
 cgi_util_set_zoneid($zoneid);
 cgi_util_set_serverid($serverid);
 
-$help_str = ( @{$$BROWSER_HELP{$key}} == 2 ? 
+$help_str = ( @{$$BROWSER_HELP{$key}} == 2 ?
 	  "<a href=\"$$BROWSER_HELP{$key}[1]\">$$BROWSER_HELP{$key}[0]</a>" :
           "&nbsp;" );
 
