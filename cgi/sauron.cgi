@@ -194,7 +194,7 @@ sub logmsg($$) {
   my($type,$msg)=@_;
 
   open(LOGFILE,">>/tmp/sauron.log");
-  print LOGFILE "sauron: $msg\n";
+  print LOGFILE localtime(time) . " sauron: $msg\n";
   close(LOGFILE);
   
   #openlog("sauron","cons,pid","user");
@@ -827,17 +827,22 @@ sub login_auth() {
 sub top_menu($) {
   my($mode)=@_;
   
-  print '<TABLE bgcolor="white" border="0" cellspacing="0" width="100%">' .
-        '<TR align="left" valign="bottom"><TD rowspan="2">' . 
-	'<IMG src="' .$ICON_PATH . '/logo.png" alt=""></TD>';
+  print	'<IMG src="' .$ICON_PATH . '/logo.png" alt="Sauron">';
+
+  print '<TABLE border="0" cellspacing="0" width="100%">';
+#        '<TR align="left" valign="bottom"><TD rowspan="1">' . 
+#	'<IMG src="' .$ICON_PATH . '/logo.png" alt=""></TD>';
 
   #print "<TD>mode=$mode<TD>foo<TD>foo<TD>";
-  print '<TR align="left" valign="bottom">';
-  print td("<A HREF=\"$s_url?menu=servers\">Servers</A>"),
-        td("<A HREF=\"$s_url?menu=zones\">Zones</A>"),
-        td("<A HREF=\"$s_url?menu=hosts\">Hosts</A>"),
-	td("<A HREF=\"$s_url?menu=login\">login</A>");
-  print "</TABLE>";
+  print '<TR bgcolor="#002d5f" align="left" valign="center">',
+        '<TD width="17%" height="24">',
+        '<FONT color="white">&nbsp;GNU/Sauron</FONT></TD>',
+        '<TD><FONT color="#ffffff">',
+        "<A HREF=\"$s_url?menu=servers\"><FONT color=\"#ffffff\">Servers</FONT></A> | ",
+        "<A HREF=\"$s_url?menu=zones\"><FONT color=\"#ffffff\">Zones</FONT></A> | ",
+        "<A HREF=\"$s_url?menu=hosts\"><FONT color=\"#ffffff\">Hosts</FONT></A> | " ,
+	"<A HREF=\"$s_url?menu=login\"><FONT color=\"#ffffff\">login</FONT></A> | ";
+  print "</FONT></TABLE>";
 }
 
 sub left_menu($) {
@@ -847,11 +852,12 @@ sub left_menu($) {
   $w="\"100\"";
   
   $url=$s_url;
-  print "<BR><TABLE width=$w bgcolor=\"#f7bb10\" border=\"0\" " .
-          "cellspacing=\"0\" cellpadding=\"0\">",Tr,th(h3("Menu:<br>$menu")),
-        Tr,"<TD><TABLE width=\"100%\" cellspacing=\"2\" cellpadding=\"1\" " .
-	   "border=\"0\">",
-	  "<TD BGCOLOR=\"white\">";
+  print "<BR><TABLE width=$w bgcolor=\"#002d5f\" border=\"0\" " .
+        "cellspacing=\"0\" cellpadding=\"0\">", # Tr,th(h4("$menu")),
+        "<TR><TD><TABLE width=\"100%\" cellspacing=\"2\" cellpadding=\"1\" " ,
+	 "border=\"0\">",
+         "<TR><TH><FONT color=\"#ffffff\">$menu</FONT></TH></TR>",
+	  "<TR><TD BGCOLOR=\"#eeeeee\">";
   #print "<p>mode=$mode";
 
   if ($menu eq 'servers') {
@@ -880,9 +886,9 @@ sub left_menu($) {
   } else {
     print "<p><p>empty menu\n";
   }
-  print "</TABLE></TD></TABLE><BR>";
+  print "</TR></TABLE></TD></TABLE><BR>";
 
-  print "<TABLE width=$w bgcolor=\"#f7bb10\" border=\"0\" cellspacing=\"0\" " .
+  print "<TABLE width=$w bgcolor=\"#002d5f\" border=\"0\" cellspacing=\"0\" " .
         "cellpadding=\"0\">", #<TR><TD><H4>Current selections</H4></TD></TR>",
         "<TR><TD><TABLE width=\"100%\" cellspacing=\"2\" cellpadding=\"1\" " .
 	"border=\"0\">",
