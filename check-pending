@@ -36,7 +36,10 @@ fatal("Mail from address not defined in configuration!")
 fatal("Cannot find program: $PROG_DIR/status") unless (-x "$PROG_DIR/status");
 $SAURON_MAILER_ARGS='' unless (defined($SAURON_MAILER_ARGS));
 
-open(PIPE,"$PROG_DIR/status --quiet --pending=$server |")
+$res = (system("$PROG_DIR/status","--pending=$server","--quiet") >> 8);
+exit(0) unless ($res==2);
+
+open(PIPE,"$PROG_DIR/status --pending=$server |")
     || fatal("status command pipe failed");
 while(<PIPE>) {
     next if /^\s*$/;
