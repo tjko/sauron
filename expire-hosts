@@ -1,0 +1,196 @@
+#!/usr/bin/perl -I/usr/local/sauron
+#
+# expire-hosts - utility to expire hosts w/o recent dhcp activity
+#
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2002.
+# $Id$
+#
+require 5;
+use Getopt::Long;
+use Net::Netmask;
+use Time::Local;
+use Sauron::DB;
+use Sauron::Util;
+use Sauron::BackEnd;
+
+my ($PG_DIR,$PG_NAME) = ($0 =~ /^(.*\/)(.*)$/);
+$0 = $PG_NAME;
+
+if (-r "/etc/sauron/config") {
+  $config_file="/etc/sauron/config";
+} elsif (-r "/usr/local/etc/sauron/config") {
+  $config_file="/usr/local/etc/sauron/config"; 
+} else {
+  die("cannot find config file in /etc/sauron or /usr/local/etc/sauron");
+}
+
+do "$config_file" || die("cannot load config: $config_file");
+
+##############################################
+
+$user = (getpwuid($<))[0];
+
+GetOptions("help|h","cidr=s","netname=s","name=s","norecord",
+	   "commit","verbose","treshold=s","edate=s");
+
+if ($opt_help || @ARGV < 1) {
+  print "syntax: $0 <server> [options]\n\n",
+    "options:\n",
+    "\t--cidr=<cidr>\t\tselect hosts within CIDR block\n",
+    "\t--name=<regexp>\t\tselect hostnames matching the regexp\n",
+    "\t--netname=<regexp>\tselect hosts in networks matching the regexp\n",
+    "\t\t\t\t(selects only hosts within auto assign ranges)\n",
+    "\t--treshold=<days>\texpire hosts with no dhcp activity in\n",
+    "\t\t\t\tlast <days> days (default: 90)\n",
+    "\t--norecord\t\tonly expire hosts with no recorded dhcp activity\n",
+    "\t--edate=<dd-mm-yyy>\tset hosts to expire on this date (default: now)\n",
+    "\n",
+    "\t--commit\t\tcommit changes (w/o this NO changes are made)\n",
+    "\n";
+  exit(0);
+}
+
+
+fatal("DB_CONNECT not defined in configuration!") unless ($DB_CONNECT);
+db_connect($DB_CONNECT);
+
+set_muser($user);
+
+$server=shift;
+$verbose=($opt_verbose?1:0);
+
+$serverid=get_server_id($server);
+fatal("cannot find server '$server'") unless ($serverid > 0);
+
+fatal("no host selection criteria(s) specified")
+	  unless ($opt_cidr || $opt_name || $opt_netname);
+
+fatal("cannot specify both --cidr and --netname options")
+  if ($opt_cidr && $opt_netname);
+fatal("cannot specify both --treshold and --norecord options")
+  if ($opt_treshold && $opt_norecord);
+
+if ($opt_treshold) {
+  fatal("invalid treshold specified") unless ($opt_treshold > 0);
+} else {
+  $opt_treshold=90;
+  print "Using default treshold of 90 days\n" unless ($opt_norecord);
+}
+
+$date = time() - $opt_treshold * 86400;
+
+if ($opt_norecord) {
+  $date = 0;
+  print "Expiring hosts with no recorded dhcp activity\n" if ($verbose);
+}
+
+if ($opt_edate) {
+  fatal("invalid argument to --edate option")
+    unless ($opt_edate =~ /^\s*(\d{1,2})-(\d{1,2})-(\d{4})\s*$/);
+  $day=$1;
+  $mon=$2;
+  $year=$3;
+  $etime = timelocal(0,0,0,$day,$mon-1,$year-1900);
+} else {
+  $etime = time();
+}
+
+print "Expiration date will be set to: ".localtime($etime)."\n";
+
+if ($opt_cidr) {
+  fatal("invalid CIDR: $cidr") unless (is_cidr($opt_cidr));
+  if ($opt_cidr =~ /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(\/32)?$/) {
+    $cidr .= " AND a.ip = '$opt_cidr' ";
+  } else {
+    $cidr.= " AND a.ip << '$opt_cidr' ";
+  }
+  print "CIDR criteria: $opt_cidr\n";
+}
+
+if ($opt_netname) {
+  print "Checking hosts in these networks:\n" if ($verbose);
+  $opt_netname = db_encode_str($opt_netname);
+  db_query("SELECT id,net,netname,range_start,range_end FROM nets " .
+	   "WHERE server=$serverid AND netname ~ $opt_netname ORDER BY net",
+	   \@nets);
+  for $i (0..$#nets) {
+    $net = $nets[$i][1];
+    next if ($net =~ /\/32$/);
+#    $tmpnet = new Net::Netmask($net);
+#    $nets[$i][3] = $tmpnet->nth(1) unless (is_cidr($nets[$i][3]));
+#    $nets[$i][4] = $tmpnet->nth(-2) unless (is_cidr($nets[$i][4]));
+    next unless (is_cidr($nets[$i][3]) && is_cidr($nets[$i][4]));
+
+    printf "%-18s %-25s (%-15s-%-15s)\n",
+           $net,$nets[$i][2],$nets[$i][3],$nets[$i][4] if ($verbose);
+    $netnames .= " OR " if ($netnames);
+    $netnames .= " a.ip << '$net' ";
+    push @chklist, [ip2int($nets[$i][3]), ip2int($nets[$i][4])];
+  }
+
+  $netnames = " AND ($netnames) ";
+}
+
+if ($opt_name) {
+  $name=" AND h.domain ~* '$opt_name' ";
+  print "Hostname regexp: $opt_name\n";
+}
+
+
+#################
+
+
+$sql="SELECT h.id,h.domain,h.ether,h.ether_alias," .
+     " h.expiration,h.dhcp_date,a.ip " .
+     "FROM hosts h, a_entries a, zones z " .
+     "WHERE h.zone=z.id AND z.server=$serverid AND a.host=h.id " .
+     " $cidr $netnames $name ORDER BY h.domain;";
+
+#print "$sql\n" if ($verbose);
+
+db_query($sql,\@q);
+fatal(db_errormsg()) if (db_errormsg());
+
+$count=@q;
+print "Found $count hosts(s) to check in database.\n";
+exit unless ($count > 0);
+$ecount=0;
+
+for $i (0..$#q) {
+  ($id,$domain,$ether,$etheralias,$expiration,$ddate,$ip) = @{$q[$i]};
+
+  next if ($etheralias > 0);
+  if ($opt_netname) {
+    # skip hosts outside IP-ranges in chklist
+    $ipi=ip2int($ip);
+    $ok=0;
+    for $j (0..$#chklist) {
+      if ($ipi >= $chklist[$j][0] && $ipi <= $chklist[$j][1]) {
+	$ok=1;
+	last;
+      }
+    }
+    next unless $ok;
+  }
+
+  print "Skipping host w/o Ethernet address $domain $ip\n"
+    unless ($ether && $verbose);
+
+  $ddate=0 unless ($ddate > 0);
+  next if ($ddate == 0 && not $opt_norecord);
+  next if ($expiration > 0 && $expiration <= $etime);
+  next unless ($ddate <= $date);
+
+  print "$domain $ip $ether ".($ddate > 0 ? localtime($ddate) : 'N/A')."\n";
+  $ecount++;
+
+  if ($opt_commit) {
+    fatal("failed to update host record id=$id")
+      if (db_exec("UPDATE hosts SET expiration=$etime WHERE id=$id")<0);
+  }
+}
+
+print "$ecount hosts ".($opt_commit ? 'expired' : 'to expire')."\n";
+
+# eof :-)
+
