@@ -24,9 +24,11 @@ sub set_defaults() {
   $main::SAURON_TRACEROUTE_TIMEOUT = 15;
   $main::SAURON_SECURE_COOKIES = 0;
   $main::SAURON_USER_TIMEOUT = 3600;
+  $main::SAURON_DTD_HACK = 0;
   $main::SAURON_ICON_PATH = '/sauron/icons';
   $main::SAURON_BGCOLOR = 'white';
   $main::SAURON_FGCOLOR = 'black';
+  $main::SAURON_AUTH_PROG = '';
 
   $main::SAURON_RHF{huser}    = 0; # User
   $main::SAURON_RHF{dept}     = 0; # Dept.
