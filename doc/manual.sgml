@@ -5,9 +5,12 @@
 <!ENTITY gpl SYSTEM "gpl.sgml">
 <!ENTITY sql-tables SYSTEM "tables.sgml">
 <!ENTITY form-new-server SYSTEM "form-new-server.sgml">
+<!ENTITY form-edit-server SYSTEM "form-edit-server.sgml">
 <!ENTITY form-new-zone SYSTEM "form-new-zone.sgml">
 <!ENTITY form-edit-zone SYSTEM "form-edit-zone.sgml">
 <!ENTITY form-new-host SYSTEM "form-new-host.sgml">
+<!ENTITY form-search-hosts SYSTEM "form-search-hosts.sgml">
+<!ENTITY form-edit-net SYSTEM "form-edit-net.sgml">
 ]>
 
 
@@ -731,9 +734,8 @@ User admin added succesfully.
         First, login using the web interface as an administrator into Sauron.
         You should now be in <quote>Select server</> dialog, 
         with empty list of servers to choose from. Now select <quote>Add</>
-        to add a new server. 
-
-        &form-new-server;
+        to add a new server. See <xref linkend="new-server-dialog"> for
+        information of the fields used in this dialog.
       </para>
 
       <para>
@@ -787,14 +789,14 @@ Adding zone: 255.in-addr.arpa...OK (id=4)
       <para>
         Now its time to add your zone(s) into the server. This can be
         done from <guimenu>Zones</> using the <guimenuitem>Add</> command.
-
-        &form-new-zone;
-
+        See <xref linkend="new-zone-dialog"> for description of the
+        fields used in this dialog.
+      
         After creating a zone, edit the zone by selecting <guimenuitem>Edit</>
         from <guimenu>Zones</> menu, and add Name server (<acronym>NS</>) 
         entries and other needed entries for the zone.
-
-        &form-edit-zone;
+        See <xref linkend="edit-zone-dialog"> for description of the fields
+        used in this dialog.
       </para>
 
       <para>
@@ -808,8 +810,8 @@ Adding zone: 255.in-addr.arpa...OK (id=4)
         existing host, first select the host and press <guibutton>Copy</>
         button. This will fill out the new host dialog with information
         from the current host.
-
-        &form-new-host;
+        See <xref linkend="new-host-dialog"> for description of the fields
+        used in this dialog.
       </para>
 
       <para>
@@ -1349,7 +1351,7 @@ ID     Type     Ref.                      Mode
     </screen>
     Authentication program should then authenticate the user using the
     given username and password, and return with exit code 0 (zero) if 
-    authentication was successfull. Otherwise non zero exit code should 
+    authentication was successfull. Otherwise a non-zero exit code should 
     be used.
   </para>
   </section>
@@ -1360,42 +1362,552 @@ ID     Type     Ref.                      Mode
   <chapter id="web-interface">
     <title>Web Interface</>
     <para>
-      FIXME
+      Web based user interface for Sauron is implemeted as 
+      a single <acronym>CGI</> script (<filename>sauron.cgi</>).
+      To use this script a www server software that supports 
+      CGI programs is needed. Currently this interface is developed
+      and tested using <application>Apache</>, but it should work
+      with any www server software, as long as it has support for CGIs.
+    </para>
+    <para>
+      It is recommended to setup your www server to use <acronym>HTTPS</>
+      and only allow access to the <filename>sauron.cgi</> CGI script
+      using encrypted <acronym>HTTPS</> conection. If your www server
+      supports both unencrypted (<acronym>HTTP</>) and encrypted
+      (<acronym>HTTPS</>) connections, it is recommended to setup
+      a separate <quote>cgi-bin</> directory for <acronym>HTTPS</>
+      connections and place <filename>sauron.cgi</> (or symbolic
+      link to it) only in that directory.
+    </para>
+    <para> 
+      Altough <filename>sauron.cgi</> has it's own access control 
+      mechanism, it is recommended to further improve security 
+      by restricting access
+      to the web interface for only the hosts that need access to the
+      Sauron using the www server configuration and/or a firewall.
+    </para>
+    <para> 
+      Sauron's web interface doesn't use JavaScript, only standard 
+      <acronym>HTML</> is used. Goal is to keep the web interace
+      light weight and usable by all browsers (graphical as well as
+      text-based). 
+    </para>
+    <para>
+      For session tracking <filename>sauron.cgi</> uses cookies.
+      Each generated cookie contains only a <acronym>MD5</> hash of
+      user's session identifier and has maximum life of a week.
+      Normally the cookie is deleted when user logs out. Cookies are only
+      sent back to the issuing server. Sauron supports the use of
+      <quote>secure cookies</> via configuration file setting
+      <varname>SAURON_SECURE_COOKIES</> (this is not enabled by default
+      since some buggy browsers don't handle secure cookies correctly).
     </para>
 
     <section id="servers-menu">
-    <title>Servers</>
+    <title>Servers Menu</>
     <para>
-      FIXME  
+      <guimenu>Servers</> menu provides commands for creating and
+      modifying servers for administrator. For normal user it only
+      provides server selection command for selecting the active
+      server.
+    </para>
+    
+    <section><title>Show Current</>
+    <para>
+    <guimenuitem>Show Current</> command displays the currently selected
+    server information. It is default command when entering 
+    <guimenu>Servers</> menu.
     </para>
     </section>
+
+    <section><title>Select</>
+    <para>
+    <guimenuitem>Select</> command displays list of available servers for
+    selecting active server. For normal user's this list will include
+    only the servers user has at least read access to.
+    </para>
+    </section>
+
+    <section><title>Add</>
+    <para>
+    <guimenuitem>Add</> command is used to create a new server. This
+    option is available only for administrator. 
+    See <xref linkend="new-server-dialog"> for descriptions of the
+    fields used in the command dialog.
+    
+    &form-new-server;
+    </para>
+    </section>
+
+    <section><title>Delete</>
+    <para>
+    <guimenuitem>Delete</> command allows removal of a server.
+    This command should be used with cauion, since it will remove the
+    entire server from the database.
+    This command is available only for administrator.
+    </para>
+    </section>
+
+    <section><title>Edit</>
+    <para>
+    <guimenuitem>Edit</> command is used to edit existing server. This
+    option is available only for administrator. 
+    See <xref linkend="edit-server-dialog"> for descriptions of the
+    fields used in the command dialog.
+    
+    &form-edit-server;
+    </para>
+    </section>
+
+    </section>
+
 
     <section id="zones-menu">
     <title>Zones</>
     <para>
-      FIXME
+      <guimenu>Zones</guimenu> menu contains commands for creating and
+      modifying zones for administrator. For normal user it only
+      provides zone selection command for selecting the active zone.
+    </para>
+ 
+    <section><title>Show Current</>
+    <para>
+    <guimenuitem>Show Current</> command displays the currently selected
+    zone information. It is default command when entering 
+    <guimenu>Zones</> menu. Name of the currently selected zone can 
+    be seen on the left side of the screen in 
+    <quote>Current selections</> box.
     </para>
     </section>
+
+    <section><title>Show Pending</>
+    <para>
+    <guimenuitem>Show Pending</> command displays list of pendig changes
+    for hosts in this zone. This list currently displays all new
+    or modified hosts (or aliases) since DNS configuration was last
+    time generated. 
+    </para>
+    <para> 
+    Also when viewing a host record, there is word PENDING at the end of
+    the <quote>Record created</> or <quote>Last modified</> fields
+    if changes to this record are not yet in effect.
+    </para>
+    </section>
+
+    <section><title>Select</>
+    <para>
+    <guimenuitem>Select</> command displays list of available zones 
+    in current server for selecting active zone.
+    </para>
+    </section>
+
+    <section><title>Add</>
+    <para>
+    <guimenuitem>Add</> command is used to create a new zone. This
+    command is only available for administrator. 
+    See <xref linkend="new-zone-dialog"> for descriptions of the
+    fields used in the command dialog.
+    
+    &form-new-zone;
+    </para>
+    </section>
+
+    <section><title>Add Default Zones</>
+    <para>
+    <guimenuitem>Add Default Zones</> command is used to automatically
+    add the standard zones for normal DNS server. This command will try
+    to add following zones into current server:
+    <screen>
+    localhost
+    127.in-addr.arpa
+    0.in-addr.arpa
+    255.in-arrd.arpa
+    </screen>
+    This command is only available for administrator. 
+    </para>
+    </section>
+
+    <section><title>Copy</>
+    <para>
+    <guimenuitem>Copy</> command copies entire zone (including all the
+    hosts in a master zone) under new name. This option can be used
+    to use existing zone as a template when creating new zones.
+    This command is availabele only for administrator.
+    </para>
+    </section>
+
+    <section><title>Delete</>
+    <para>
+    <guimenuitem>Delete</> command allows removal of a zone.
+    This command should be used with cauion, since it will remove the
+    entire zone from the database.
+    This command is available only for administrator.
+    </para>
+    </section>
+
+    <section><title>Edit</>
+    <para>
+    <guimenuitem>Edit</> command is used to edit existing zone. This
+    command is only available for administrator. 
+    See <xref linkend="edit-zone-dialog"> for descriptions of the
+    fields used in the command dialog.
+    
+    &form-edit-zone;
+    </para>
+    </section>
+
+    </section>
+
 
     <section id="hosts-menu">
     <title>Hosts</>
     <para>
-      FIXME  
+      <guimenu>Hosts</> menu contains commands for creating and modifying
+      hosts. In addition, this menu provides the search commands for
+      searching hosts within a zone.
     </para>
+      <section><title>Search</>
+      <para>
+        <guimenuitem>Search</> command is the default command when entering
+        into <guimenu>Hosts</> menu. This command provides powerful
+        search engine for hosts within current zone. 
+        See <xref linkend="search-hosts-dialog"> for descriptions of the
+        fields used in the command dialog.
+
+        &form-search-hosts;
+      </para>
+      </section>
+
+      <section><title>Last Search</>
+      <para>
+        <guimenuitem>Last Search</> command performs the previous search 
+        again. This provis a quick way to redo a search you did earlier.
+      </para>
+      </section>
+
+      <section><title>Add host</>
+      <para>
+        <guimenuitem>Add host</> command is used to create a host.
+        This command displays slightly different dialog for aministrators
+        or users with <quote>RWX</> access to the zone than normal
+        users who will get more restrictive dialog.
+        See <xref linkend="new-host-dialog"> for descriptions of the
+        fields used in the command dialog.
+    
+        &form-new-host;
+      </para>
+      </section>
+
+      <section><title>Add alias</>
+      <para>
+        <guimenuitem>Add alias</> command is used to add a static
+        (CNAME) alias. This command is meant for adding static
+        <quote>out-of-zone</> aliases only. Normally aliases should
+        be added using <guibutton>Alias</> button from 
+        <guimenuitem>Host Display Dialog</> which will create a dynamic
+        alias for that host.
+
+        This command is available for administrator and users with
+        <quote>RWX</> access to the zone.
+      </para>
+      </section>
+
+      <section><title>Add MX entry</>
+      <para>
+        <guimenuitem>Add MX entry</> command is used to add 
+        plain MX record (without A records or anything). 
+
+        This command is available for administrator and users with
+        <quote>RWX</> access to the zone.
+      </para>
+      </section>
+
+      <section><title>Add delegation</>
+      <para>
+        <guimenuitem>Add delegation</> command is used to add 
+        a zone delegation (NS records).
+
+        This command is available for administrator and users with
+        <quote>RWX</> access to the zone.
+      </para>
+      </section>
+
+      <section><title>Add glue rec.</>
+      <para>
+        <guimenuitem>Add glue rec.</> command is used to add 
+        glue records that are sometimes required for delegations
+        where one ore more delegated zone's name servers are within
+        that zone.
+
+        This command is available for administrator and users with
+        <quote>RWX</> access to the zone.
+      </para>
+      </section>
+
+      <section><title>Add DHCP entry</>
+      <para>
+        <guimenuitem>Add DHCP entry</> command is used to add 
+        a <quote>host</> entry that will only appear in DHCP
+        configuration, but not in DNS configuration.
+
+        This command is available for administrator and users with
+        <quote>RWX</> access to the zone.
+      </para>
+      </section>
+
+      <section><title>Add SRV rec.</>
+      <para>
+        <guimenuitem>Add SRV rec.</> command is used to add 
+        a SRV records.
+
+        This command is available for administrator and users with
+        <quote>RWX</> access to the zone.
+      </para>
+      </section>
+
+      <section><title>Add reservation</>
+      <para>
+        <guimenuitem>Add reservation</> command is used to add 
+        a host reservations. Host reservations can be used to reserve
+        hostnames and IP numbers for future use.
+      </para>
+      </section>
+
     </section>
 
     <section id="templates-menu">
-    <title>Templates and Groups</>
+    <title>Templates</>
     <para>
-      FIXME  
+      <guimenu>Templates</> menu contains commans for creating and modifying
+      teamplates. Only <quote>show</> commands under this menu are available
+      for normal users. 
     </para>
+    <para>
+      Templates are used by hosts, they can be used to specify 
+      common MX, WKS, or HINFO records for groups of hosts. 
+      Normal users can only use templates that have same or lover
+      privilige level than the user has.
+    </para>
+
+      <section><title>Show MX</>
+      <para>
+        <guimenuitem>Show MX</> command displays list of MX templates
+        defined for this zone. To view specific MX template click on 
+        it's name. 
+        To edit or delete a MX template use <guibutton>Edit</> or
+        <guibutton>Delete</> buttons from the bottom of the screen
+        when viewing a template.
+      </para>
+      </section>
+
+      <section><title>Show WKS</>
+      <para>
+        <guimenuitem>Show WKS</> command displays list of WKS templates
+        defined for this server. To view specific WKS template click on 
+        it's name. 
+        To edit or delete a WKS template use <guibutton>Edit</> or
+        <guibutton>Delete</> buttons from the bottom of the screen
+        when viewing a template.
+      </para>
+      </section>
+
+      <section><title>Show HINFO</>
+      <para>
+        <guimenuitem>Show HINFO</> command displays list of HINFO templates
+        defined for this Sauron installation. 
+        To view specific HINFO template click on it's name. 
+        To edit or delete a HINFO template use <guibutton>Edit</> or
+        <guibutton>Delete</> buttons from the bottom of the screen
+        when viewing a template.
+      </para>
+      </section>
+
+      <section><title>Add MX</>
+      <para>
+        <guimenuitem>Add MX</> command is used to create a new 
+        MX template for selected zone.
+        This command is only available for administrator.
+      </para>
+      </section>
+
+      <section><title>Add WKS</>
+      <para>
+        <guimenuitem>Add WKS</> command is used to create a new 
+        WMX template for selected server.
+        This command is only available for administrator.
+      </para>
+      </section>
+
+      <section><title>Add HINFO</>
+      <para>
+        <guimenuitem>Add HINFO</> command is used to create a new 
+        HINFO template. These templates are global and available
+        to all servers in this database (Sauron installation).
+        This command is only available for administrator.
+      </para>
+      </section>
+
+    </section>
+
+    <section id="groups-menu">
+    <title>Groups</>
+    <para>
+      <guimenu>Groups</> menu contains commans for creating and modifying
+      (host) groups. Normal users can only list and view group details,
+      all other commands are for administrator only.
+    </para>
+    <para>
+      Groups are used by hosts, they are used to specify common
+      attributes for hosts. 
+      Normal users can only use groups that have same or lover
+      privilige level than the user has.
+      There are currently three different types of groups.
+      <variablelist><title>Group Types</>
+        <varlistentry>
+          <term>Normal</>
+          <listitem><para>
+            Normal group is used to specify common DHCP and PRINTER
+            entries for hosts.
+          </para></listitem>
+        </varlistentry>
+        <varlistentry>
+          <term>DHCP class</>
+          <listitem><para>
+            This group is like normal group, but in DHCP configuration
+            a class named after this group will be created and all
+            hosts in this group will be <quote>subclassed</> into that
+            class. This class can be used for example to allow only
+            hosts in this group to use certain dynamic address pool.
+          </para></listitem>
+        </varlistentry>
+        <varlistentry>
+          <term>Dynamic Address Pool</>
+          <listitem><para>
+            This group is used only for hosts (IPs) that belong to a certain
+            IP address pool for a DHCP server. For each dynamic address pool
+            for DHCP server, group of host entries that belong to this group
+            should be created (IP addresses of these hosts don't 
+            necessarily have to be successive, but for each group a spearate
+            pool statement will be created in <filename>dhcpd.conf</>).
+            When generating DHCP configuration, 
+            dynamic address pools are automatically
+            generated for each group of this type. DHCP entries set
+            for this group are put inside <quote>pool</> declaration
+            in <filename>dhcpd.conf</> (these can be used to deny/allow
+            certain classes of hosts to use this pool).
+          </para></listitem>
+        </varlistentry>
+      </variablelist>
+    </para>
+   
+      <section><title>Show Groups</>
+      <para>
+        <guimenuitem>Show Groups</> command displays list of (host) groups
+        defined for active server.
+        To view details about a specific group, just click on it's name. 
+        To edit or delete a group use <guibutton>Edit</> or
+        <guibutton>Delete</> buttons from the bottom of the screen
+        when viewing a template.
+      </para>
+      </section>
+
+      <section><title>Add</>
+      <para> 
+        <guimenuitem>Add</> command is used to create new (host) group
+        for currently active server.
+        This command is only available for administrator.
+      </para>
+      </section>
+
     </section>
 
     <section id="nets-menu">
     <title>Nets</>
     <para>
-      FIXME
+      <guimenu>Nets</> menu contains commands for managing networks and
+      <acronym>VLANs</> (Layer-2 networks). Normal user can only see
+      list of networks that have lower or same privilige level set than
+      the user has. VLAN information is by default visible only for
+      users with privilige leverl 5 or above (this can be controlled
+      via <varname>ALEVEL_VLANS</> variable in configuration file).
     </para>
+    <para>
+      Networks are divided into two types <quote>Net</> and <quote>Subnet</>.
+      Where <quote>Net</> is used for networks that are delegated 
+      for your use (and you generate reverse zones for). <quote>Subnet</>
+      is used for networks (subnets) within these <quote>Nets</> (networks).
+      This information is used (along with VLAN information) to generate
+      network topology for DHCP configuration.
+    </para>
+    <para>
+      VLANs are used to describe the <quote>Layer-2 network</> topology
+      of your network. Each network can be assigned to one VLAN. All
+      networks that don't have VLAN set are part of virtual VLAN
+      calles <quote>CHAOS</> (normal VLAN names are always lower case).
+    </para>
+
+      <section><title>Networks</>
+      <para>
+        <guimenuitem>Networks</> command lists all the networks that
+        are defined for active server. To view details of a network, just
+        click on the network. To edit or delete selected network use
+        <guibutton>Edit</> or <guibutton>Delete</> buttons. For information
+        about selected network use <guibutton>Net Info</> button that 
+        displays technical information about given network and map
+        of IPs currently in use. 
+      </para>
+      </section>
+
+      <section><title>Add net</>
+      <para>
+        <guimenuitem>Add net</> command is used to create a new 
+        <quote>Net</> (network) for active server. This should be used
+        only for networks that are delegated for your use.
+        This command is only available for administrator.
+      </para>
+      </section>
+
+      <section><title>Add subnet</>
+      <para>
+        <guimenuitem>Add subnet</> command is used to create a new 
+        <quote>Subnet</> for active server. This should be used
+        for all subnets within your official networks.
+        This command is only available for administrator.
+      </para>
+      </section>
+
+      <section><title>Edit (button)</>
+      <para>
+        <guibutton>Edit</> button is used to modify existing
+        network. 
+        See <xref linkend="edit-net-dialog"> for information about
+        fields used in this dialog.
+        This button is only available for administrator when
+        viewing network details.
+
+        &form-edit-net;
+      </para>
+      </section>
+
+      <section><title>VLANs</>
+      <para>
+        <guimenuitem>VLANs</> command lists all VLANs (Layer-2 networks)
+        that are defined for active server. To view details of a VLAN, just
+        click on the network. To edit or delete selected network use
+        <guibutton>Edit</> or <guibutton>Delete</> buttons.
+        This command is only available for users with sufficiently high
+        authorization level.
+      </para>
+      </section>
+
+      <section><title>Add vlan</>
+      <para>
+        <guimenuitem>Add vlan</> command is used to create a new VLAN
+        (Layer-2 netowrk) entry for active server.
+        This command is only available for administrator.
+      </para>
+      </section>
+
     </section>
 
     <section id="login-menu">
