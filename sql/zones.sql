@@ -27,7 +27,10 @@ CREATE TABLE zones (
 				          map generation */
        nnotify	   CHAR(1) DEFAULT 'D', /* notify: D=default, Y=yes, N=no */
        chknames    CHAR(1) DEFAULT 'D', /* check-names:
-					  D=default,W=warn,F=fail,I=ignore */
+					     	D=default,
+						W=warn,
+						F=fail,
+						I=ignore */
        class	   CHAR(2) DEFAULT 'in', /* zone class (IN) */
        name	   TEXT NOT NULL CHECK (name <> ''), /* zone name */
        hostmaster  TEXT, /* hostmaster (email)

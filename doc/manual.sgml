@@ -1,0 +1,162 @@
+<!doctype book PUBLIC "-//OASIS//DTD DocBook V4.0//EN" [
+
+<!ENTITY sauron-logo SYSTEM "sauron_tower_bare.eps" NDATA EPS>
+<!ENTITY overview-pic SYSTEM "overview.eps" NDATA EPS>
+<!ENTITY relations-pic SYSTEM "relations.eps" NDATA EPS>
+<!ENTITY gpl SYSTEM "gpl.sgml">
+<!ENTITY sql-tables SYSTEM "tables.sgml">
+]>
+
+
+
+<book id="sauron-manual">
+
+  <bookinfo>
+    <title>GNU/Sauron: User's Guide</>
+    <subtitle>Version 0.5</>
+    <date>$Date$</>
+    <authorgroup>
+      <author>
+	<firstname>Timo</>
+	<surname>Kokkonen</>
+      </author>
+    </authorgroup>
+    <copyright>
+      <year>2001</>
+      <holder>Timo Kokkonen</>
+    </copyright>
+    <legalnotice>
+      <para>
+	This software and manual are distributed under the 
+	GNU General Public License.
+      </para>
+    </legalnotice>
+  </bookinfo>
+
+  <preface>
+    <title>Preface</>
+    <para>
+      This manual describes the GNU/Sauron, a free DNS &amp; DHCP management
+      system. 
+    </para>
+
+    <section id="copyright">
+      <title>Copyright Notice</>
+      <para>
+	Sauron is Copyright (C) 1999-2001 Timo Kokkonen and others.
+      </para>
+      <para>
+	This  program  is  free  software; you can redistribute it
+	and/or modify it under the terms of the GNU General Public
+	License  as  published  by  the  Free Software Foundation;
+	either version 2 of the License, or (at your  option)  any
+	later version.
+      </para>
+      <para>
+	This  program  is distributed in the hope that it will be
+	useful, but WITHOUT ANY WARRANTY; without even the implied
+	warranty  of  MERCHANTABILITY  or FITNESS FOR A PARTICULAR
+	PURPOSE.  See the GNU  General  Public  License  for  more
+	details.
+      </para>
+      <para>
+	You should have received a copy of the GNU General Public
+	License along with this program; if not, write to the Free
+	Software  Foundation,  Inc.,  675  Mass Ave, Cambridge, MA
+	02139, USA.
+      </para>
+    </section>
+
+  </preface>
+
+  <toc>
+  </toc>
+
+
+  <chapter id="intro-chapter">
+    <title>Introduction</>
+    <para>
+      Sauron is a complete DNS and DHCP management system. Sauron is
+      designed to be easily extensible and configurable. System support
+      management of multiple DNS/DHCP servers. 
+    </para>
+    
+    <section>
+      <title>Sauron Home Page</>
+      <para>
+	Currently Sauron homepage is located at:
+	<ulink url="http://sauron.jyu.fi/">
+	  <citetitle>http://sauron.jyu.fi/</>
+	</ulink>
+      </para>
+    </section>
+
+    <section>
+      <title>Software Distribution Sites</>
+      <para>
+	FIXME
+      </para>
+    </section>
+
+    <section>
+      <title>Mailing lists</>
+      <para>
+	FIXME
+      </para>
+    </section>
+
+
+    <section>
+      <title>Acknowledgements</>
+      <para>
+	Special thanks for following people, who have been very
+	helpful to the development of Sauron:
+      </para>
+      <para>
+	Otto J. Mäkelä <email>om@iki.fi</>
+	Teemu Lähteenmäki <email>tola@iki.fi</>
+      </para>
+    </section>
+
+
+
+  </chapter>
+
+  
+  <chapter id="getting-started">
+    <title>Getting Started</>
+    <para>
+      FIXME
+    </para>
+  </chapter>
+
+
+  <chapter id="reference">
+    <title>Reference</>
+    <para>
+      FIXME
+    </para>
+  </chapter>
+
+  <appendix id="command-ref">
+    <title>Command Reference</>
+    <para>
+      FIXME
+    </para>
+  </appendix>
+
+  <appendix id="tech-details">
+    <title>Technical Details</>
+    <para>
+      FIXME
+    </para>
+    &sql-tables;
+  </appendix>
+
+  <appendix id="license">
+    <title>Software License</>
+    &gpl;
+  </appendix>
+
+</book>
+
