@@ -7,9 +7,13 @@ package Sauron::UtilZone;
 require Exporter;
 
 @ISA = qw(Exporter); # Inherit from Exporter
-@EXPORT = qw(process_zonefile);
+@EXPORT = qw(
+	     process_zonefile
+	     process_zonedns
+	    );
 
 use IO::File;
+use Net::DNS;
 use Sauron::Util;
 use strict;
 
@@ -299,6 +303,109 @@ sub process_zonefile($$$$) {
   }
 
   close($fh);
+}
+
+
+# reads zone from DNS using zone transfer, produces simila hash as
+# result as process_zone function
+#
+sub process_zonedns($$$$) {
+    my ($zone,$data,$nameserver,$verbose) = @_;
+    my (@zonedata,$rr,$domain,$type,$class,$ttl,$c,$rec,$tmp);
+    my $resolver = Net::DNS::Resolver->new;
+    my $ucount = 0;
+    my $origin = $zone;
+
+    $origin .= '.' unless ($origin =~ /\.$/);
+
+
+    $resolver->nameservers($nameserver) if ($nameserver);
+    print "Zone transfer...\n" if ($verbose);
+    @zonedata = $resolver->axfr($zone);
+    fatal("zone transfer failed: " . $resolver->errorstring)
+	if (@zonedata < 1);
+
+    foreach $rr (@zonedata) {
+	$domain = $rr->name . '.';
+	$type = $rr->type;
+	$class = $rr->class;
+	$ttl = $rr->ttl;
+
+	next unless ($class eq 'IN');
+	unless ($type =~ /^(SOA|A|PTR|CNAME|MX|NS|TXT|HINFO|SRV|WKS)$/) {
+	    $ucount++;
+	    print "Skipping: " . $rr->string . "\n" if ($verbose);
+	    next;
+	}
+
+	unless ($data->{$domain}) {
+	    $data->{$domain} = {
+		TTL => $ttl,
+		CLASS => $class,
+		SOA => '',
+		A => [],
+		PTR => [],
+		CNAME => '',
+		MX => [],
+		NS => [],
+		TXT => [],
+		HINFO => ['',''],
+		WKS => [],
+		SRV => []
+	      };
+	}
+
+	$rec = $data->{$domain};
+
+	if ($type eq 'A') {
+	    push @{$rec->{A}}, $rr->address;
+	}
+	elsif ($type eq 'SOA') {
+	    $rec->{SOA} = join(" ",($rr->mname,$rr->rname,$rr->serial,
+				    $rr->refresh,$rr->retry,
+				    $rr->expire,$rr->minimum));
+	}
+	elsif ($type eq 'PTR') {
+	    push @{$rec->{PTR}}, $rr->ptrdname;
+	}
+	elsif ($type eq 'CNAME') {
+	    $rec->{CNAME} = $rr->cname . '.';
+	}
+	elsif ($type eq 'MX') {
+	    $tmp = $rr->exchange . '.';
+	    $tmp = '$DOMAIN'
+		if (remove_origin($tmp,$origin) eq
+		    remove_origin($domain,$origin));
+
+	    push @{$rec->{MX}}, $rr->preference . " " . $tmp;
+	}
+	elsif ($type eq 'NS') {
+	    push @{$rec->{NS}}, $rr->nsdname . '.';
+	}
+	elsif ($type eq 'TXT') {
+	    push @{$rec->{TXT}}, $rr->txtdata;
+	}
+	elsif ($type eq 'WKS') {
+	   # ignore... no support in Net:DNS yet...
+	}
+	elsif ($type eq 'HINFO') {
+	    $rec->{HINFO}[0] = $rr->cpu;
+	    $rec->{HINFO}[1] = $rr->os;
+	}
+	elsif ($type eq 'SRV') {
+	    push @{$rec->{SRV}}, join(" ",($rr->priority,$rr->weight,
+					   $rr->port,$rr->target . '.'));
+	}
+	else {
+	    fatal("internal error: unsupported RR-type $type");
+	}
+
+	$c++;
+    }
+
+    print "Processed $c records (ignored $ucount records)\n"
+	if ($verbose);
+
 }
 
 
