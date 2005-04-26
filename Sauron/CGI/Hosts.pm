@@ -903,7 +903,7 @@ sub menu_handler {
     }
     elsif (param('lastsearch')) {
       if ($state->{searchopts} =~
-	  /^(\d+),(\d+),(\d+),(-?\d+),(\d+),(\S*),(\S*),(\S*),(\d+)$/) {
+	  /^(\d+),(\d+),(\d+),(-?\d+),(\d+),(\S*),(\S*),(\S*),(-?\d+)$/) {
 	param('bh_type',$1);
 	param('bh_order',$2) unless (param('bh_order'));
 	param('bh_size',$3);
@@ -1085,7 +1085,8 @@ sub menu_handler {
 	push @pingiplist, $ip;
       }
 
-      print h3("Please wait...Running Ping sweep.");
+      print h3("Please wait..." .
+	       "Running Ping sweep ($pingiplist[0]..$pingiplist[-1])...");
       update_history($state->{uid},$state->{sid},2,"Hosts PING Sweep",
 		     "zone: $zone ($pingiplist[0]..$pingiplist[-1])",$zoneid);
       $res = run_ping_sweep(\@pingiplist,\%nmaphash,$state->{user});
@@ -1413,7 +1414,7 @@ sub menu_handler {
   %bdata=(domain=>'',net=>'ANY',nets=>\%nethash,nets_k=>\@netkeys,
 	    type=>1,order=>2,stype=>0,size=>3,sdtype=>0,grp=>-1);
   if ($state->{searchopts} =~
-      /^(\d+),(\d+),(\d+),(-?\d+),(\d+),(\S*),(\S*),(\S*),(\d+)$/) {
+      /^(\d+),(\d+),(\d+),(-?\d+),(\d+),(\S*),(\S*),(\S*),(-?\d+)$/) {
     $bdata{type}=$1;
     $bdata{order}=$2;
     $bdata{size}=$3;
