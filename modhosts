@@ -62,7 +62,7 @@ $zoneid=get_zone_id($zone,$serverid);
 fatal("cannot find zone '$zone'") unless ($zoneid > 0);
 
 fatal("no host selection criteria(s) specified")
-	  unless ($opt_cidr || $opt_name || $opt_info);
+	  unless ($opt_cidr || $opt_name || $opt_info || $opt_ether);
 
 
 if ($opt_cidr || $opt_move) {
