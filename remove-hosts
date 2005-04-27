@@ -13,13 +13,14 @@ use Sauron::Sauron;
 
 load_config();
 
-GetOptions("help|h","mac","ip","commit");
+GetOptions("help|h","mac","ip","host","commit");
 
 if ($opt_help || @ARGV < 2) {
   print "syntax: $0 [OPTIONS] <servername> <inputfile>\n\n",
         "\toptions:\n",
 	"\t--mac\t\tinput file contains MAC addresses (one per line)\n",
-	"\t--ip\t\tinput file contains IP addresses (one per line)\n\n",
+	"\t--ip\t\tinput file contains IP addresses (one per line)\n",
+	"\t--host\t\tinput file contains hostnames (one per line)\n\n",
 	"\t--commit\tcommit changes (without this no changes are made)\n\n";
   exit(($opt_help ? 0 : 1));
 }
@@ -28,18 +29,18 @@ $server=shift;
 $filename=shift;
 $opt_commit=($opt_commit ? 1 : 0);
 
-fatal("cannot find mohosts script in PROG_DIR ($PROG_DIR)")
+fatal("cannot find modhosts script in PROG_DIR ($PROG_DIR)")
   unless (-x "$PROG_DIR/modhosts");
 fatal("cannot read input file: $filename")
   if ($filename ne '-' && ! -r $filename);
 fatal("cannot specify both --ip and --mac options")  if ($opt_ip && $opt_mac);
-fatal("neither --ip or --mac option specified") unless ($opt_ip || $opt_mac);
+fatal("neither --ip or --mac or --host option specified") 
+  unless ($opt_ip || $opt_mac || $opt_host );
 
 db_connect();
 
 $serverid=get_server_id($server);
 fatal("cannot find server '$server'") unless ($serverid > 0);
-
 
 
 open(FILE,$filename) || fatal("cannot open file: $filename");
@@ -48,7 +49,7 @@ while(<FILE>) {
   chomp;
   next if /^\s*$/;
 
-  $ip=''; $mac='';
+  $ip=''; $mac=''; $host='';
 
   if ($opt_mac) {
     s/[\s:-]//g;
@@ -79,7 +80,20 @@ while(<FILE>) {
       print "not found\n";
     }
   }
-
+  elsif ($opt_host) {
+    next unless /([0-9A-Za-z\.\-]+)/;
+    $host=lc($1);
+    print "Host=$host ";
+    db_query("SELECT h.id,h.domain FROM hosts h, zones z, a_entries a " .
+             "WHERE z.server=$serverid AND h.zone=z.id AND a.host=h.id " .
+             " AND h.domain='$host'",\@q);
+    if ($q[0][0] > 0) {
+      print "$q[0][1] (id=$q[0][0])\n";
+      $delhash{$q[0][0]}++;
+    } else {
+      print "not found\n";
+    }
+  }
 }
 
 close(FILE);
