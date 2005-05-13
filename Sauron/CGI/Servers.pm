@@ -1,6 +1,6 @@
 # Sauron::CGI::Servers.pm
 #
-# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2003.
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2003-2005.
 # $Id$
 #
 package Sauron::CGI::Servers;
@@ -198,7 +198,7 @@ sub menu_handler {
   my $serverid = $state->{serverid};
   my $scookie = $state->{cookie};
 
-  $server_form{serverid}=$state->{serverid};
+  $server_form{serverid}=$serverid;
   $server_form{zoneid}=$state->{zoneid};
 
   my($res,%data,%serv,%srec,@l,$server);
@@ -261,13 +261,14 @@ sub menu_handler {
  display_new_server:
   if ($serverid && $sub ne 'select') {
     #display selected server info
-    if ($serverid < 1) {
+    unless ($serverid > 0) {
       print h3("Cannot select server!"),p;
       goto select_server;
     }
+    my $serveridsave = $state->{'serverid'};
     $state->{'serverid'}=$serverid;
     my $pcheck = check_perms('server','R');
-    $state->{'serverid'}=-1;
+    $state->{'serverid'}=$serveridsave;
     goto select_server if ($pcheck);
     get_server($serverid,\%serv);
     $server=$serv{name};
