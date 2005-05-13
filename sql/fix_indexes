@@ -1,0 +1,30 @@
+/* fixes some broken indexes that may be present if your Sauron database */
+/* was upgraded with some old versions of PostgreSQL... */
+
+/* vmps */
+ALTER TABLE vmps DROP CONSTRAINT vmps_key;
+DROP INDEX vmps_id_key;
+ALTER TABLE vmps ADD CONSTRAINT vmps_key UNIQUE(name,server);
+ALTER TABLE vmps ADD PRIMARY KEY(id);
+
+/* vlans */
+ALTER TABLE vlans DROP CONSTRAINT vlans_key;
+DROP INDEX vlans_id_key;
+ALTER TABLE vlans ADD CONSTRAINT vlans_key UNIQUE(name,server);
+ALTER TABLE vlans ADD PRIMARY KEY(id);
+
+/* nets */
+ALTER TABLE nets DROP CONSTRAINT nets_key;
+DROP INDEX nets_id_key;
+ALTER TABLE nets ADD CONSTRAINT nets_key UNIQUE(net,server);
+ALTER TABLE nets ADD PRIMARY KEY(id);
+
+/* zones */
+ALTER TABLE zones DROP CONSTRAINT zones_pkey;
+DROP INDEX zones_id_key;
+ALTER TABLE zones ADD CONSTRAINT zones_key UNIQUE(name,server);
+ALTER TABLE zones ADD PRIMARY KEY(id);
+
+
+/* eof */
+
