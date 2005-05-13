@@ -22,3 +22,5 @@ CREATE TABLE txt_entries (
         comment     TEXT            /* comments */
 );
 
+CREATE INDEX txt_entries_ref_index ON txt_entries (type,ref);
+

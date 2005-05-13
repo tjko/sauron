@@ -23,4 +23,6 @@ CREATE TABLE history (
 	info		CHAR(80)  /* extra info */	
 );
 
+CREATE INDEX history_sid_index ON history(sid);
+CREATE INDEX history_uid_index ON history(uid);
 

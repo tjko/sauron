@@ -22,3 +22,7 @@ CREATE TABLE leases (
       info	   TEXT  /* extra info */
 );
 
+CREATE INDEX leases_mac_index ON leases (mac);
+CREATE INDEX leases_ip_index ON leases (ip);
+CREATE INDEX leases_host_index ON leases (host);
+

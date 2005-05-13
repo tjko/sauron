@@ -18,3 +18,6 @@ CREATE TABLE a_entries (
       comment	   CHAR(20)
 );
 
+CREATE INDEX a_entries_ip_index ON a_entries (ip);
+CREATE INDEX a_entries_host_index ON a_entries (host);
+

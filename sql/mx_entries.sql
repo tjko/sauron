@@ -20,3 +20,5 @@ CREATE TABLE mx_entries (
         comment     TEXT
 );
 
+CREATE INDEX mx_entries_ref_index ON mx_entries (type,ref);
+

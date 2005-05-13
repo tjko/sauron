@@ -34,4 +34,5 @@ CREATE TABLE user_rights (
 	rule	CHAR(40) /* R,RW,RWS or regexp */     
 );
 
+CREATE INDEX user_rights_ref_index ON user_rights (type,ref);
 

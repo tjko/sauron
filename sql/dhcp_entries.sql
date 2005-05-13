@@ -24,3 +24,5 @@ CREATE TABLE dhcp_entries (
         comment     TEXT
 );
 
+CREATE INDEX dhcp_entries_ref_index ON dhcp_entries (type,ref);
+

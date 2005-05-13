@@ -18,3 +18,5 @@ CREATE TABLE srv_entries (
         comment     TEXT /* comment */
 );
 
+CREATE INDEX srv_entries_ref_index ON srv_entries (type,ref);
+

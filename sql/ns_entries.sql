@@ -17,3 +17,5 @@ CREATE TABLE ns_entries (
         comment     TEXT
 );
 
+CREATE INDEX ns_entries_ref_index ON ns_entries (type,ref);
+

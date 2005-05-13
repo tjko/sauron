@@ -13,3 +13,5 @@ CREATE TABLE arec_entries (
 					-->hosts.id */
 );
 
+CREATE INDEX arec_entries_host_index ON arec_entries (host);
+

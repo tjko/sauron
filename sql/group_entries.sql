@@ -14,3 +14,5 @@ CREATE TABLE group_entries (
 					-->groups.id */
 );
 
+CREATE INDEX group_entries_host_index ON group_entries (host);
+
