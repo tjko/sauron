@@ -32,7 +32,7 @@ load_config();
 		sql/arec_entries.sql sql/root_servers.sql
 		sql/history.sql sql/lastlog.sql sql/news.sql
 		sql/vlans.sql sql/vmps.sql sql/group_entries.sql
-                sql/keys.sql sql/acls.sql   
+                sql/keys.sql sql/acls.sql sql/leases.sql
 
                 sql/DEFAULTS.sql sql/misc.sql sql/copy_tables.sql
 		sql/hinfo_hw.sql sql/hinfo_sw.sql
