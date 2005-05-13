@@ -2,52 +2,65 @@
 -- PostgreSQL database dump
 --
 
--- \connect - tjko
+SET client_encoding = 'SQL_ASCII';
+SET check_function_bodies = false;
+
+SET SESSION AUTHORIZATION 'postgres';
+
+--
+-- TOC entry 4 (OID 2200)
+-- Name: public; Type: ACL; Schema: -; Owner: postgres
+--
+
+REVOKE ALL ON SCHEMA public FROM PUBLIC;
+GRANT ALL ON SCHEMA public TO PUBLIC;
+
+
+-- SET SESSION AUTHORIZATION 'tjko';
 
 SET search_path = public, pg_catalog;
 
 --
--- TOC entry 58 (OID 78489)
+-- TOC entry 61 (OID 601453)
 -- Name: common_fields; Type: TABLE; Schema: public; Owner: tjko
 --
 
 CREATE TABLE common_fields (
     cdate integer,
-    cuser character(8) DEFAULT 'unknown',
+    cuser character(8) DEFAULT 'unknown'::bpchar,
     mdate integer,
-    muser character(8) DEFAULT 'unknown',
+    muser character(8) DEFAULT 'unknown'::bpchar,
     expiration integer
 );
 
 
 --
--- TOC entry 59 (OID 78493)
+-- TOC entry 62 (OID 601457)
 -- Name: settings; Type: TABLE; Schema: public; Owner: tjko
 --
 
 CREATE TABLE settings (
-    "key" text NOT NULL,
+    setting text NOT NULL,
     value text,
     ivalue integer,
-    CONSTRAINT settings_key CHECK (("key" <> ''::text))
+    CONSTRAINT settings_key CHECK ((setting <> ''::text))
 );
 
 
 --
--- TOC entry 2 (OID 78501)
+-- TOC entry 5 (OID 601463)
 -- Name: servers_id_seq; Type: SEQUENCE; Schema: public; Owner: tjko
 --
 
 CREATE SEQUENCE servers_id_seq
-    START 1
-    INCREMENT 1
-    MAXVALUE 9223372036854775807
-    MINVALUE 1
+    INCREMENT BY 1
+    NO MAXVALUE
+    NO MINVALUE
     CACHE 1;
 
 
 --
--- TOC entry 60 (OID 78503)
+-- TOC entry 63 (OID 601465)
 -- Name: servers; Type: TABLE; Schema: public; Owner: tjko
 --
 
@@ -67,23 +80,23 @@ CREATE TABLE servers (
     named_xfer text,
     stats_file text,
     memstats_file text,
-    named_ca text DEFAULT 'named.ca',
-    pzone_path text DEFAULT '',
-    szone_path text DEFAULT 'NS2/',
+    named_ca text DEFAULT 'named.ca'::text,
+    pzone_path text DEFAULT ''::text,
+    szone_path text DEFAULT 'NS2/'::text,
     query_src_ip text,
     query_src_port text,
     listen_on_port text,
     transfer_source inet,
-    "forward" character(1) DEFAULT 'D',
-    checknames_m character(1) DEFAULT 'D',
-    checknames_s character(1) DEFAULT 'D',
-    checknames_r character(1) DEFAULT 'D',
-    nnotify character(1) DEFAULT 'D',
-    recursion character(1) DEFAULT 'D',
-    authnxdomain character(1) DEFAULT 'D',
-    dialup character(1) DEFAULT 'D',
-    multiple_cnames character(1) DEFAULT 'D',
-    rfc2308_type1 character(1) DEFAULT 'D',
+    "forward" character(1) DEFAULT 'D'::bpchar,
+    checknames_m character(1) DEFAULT 'D'::bpchar,
+    checknames_s character(1) DEFAULT 'D'::bpchar,
+    checknames_r character(1) DEFAULT 'D'::bpchar,
+    nnotify character(1) DEFAULT 'D'::bpchar,
+    recursion character(1) DEFAULT 'D'::bpchar,
+    authnxdomain character(1) DEFAULT 'D'::bpchar,
+    dialup character(1) DEFAULT 'D'::bpchar,
+    multiple_cnames character(1) DEFAULT 'D'::bpchar,
+    rfc2308_type1 character(1) DEFAULT 'D'::bpchar,
     ttl integer DEFAULT 86400,
     refresh integer DEFAULT 43200,
     retry integer DEFAULT 3600,
@@ -100,26 +113,26 @@ CREATE TABLE servers (
     hostaddr inet,
     hostmaster text,
     "comment" text,
+    lastrun integer DEFAULT -1,
     CONSTRAINT servers_name CHECK ((name <> ''::text))
 )
 INHERITS (common_fields);
 
 
 --
--- TOC entry 4 (OID 78544)
+-- TOC entry 7 (OID 601504)
 -- Name: zones_id_seq; Type: SEQUENCE; Schema: public; Owner: tjko
 --
 
 CREATE SEQUENCE zones_id_seq
-    START 1
-    INCREMENT 1
-    MAXVALUE 9223372036854775807
-    MINVALUE 1
+    INCREMENT BY 1
+    NO MAXVALUE
+    NO MINVALUE
     CACHE 1;
 
 
 --
--- TOC entry 61 (OID 78546)
+-- TOC entry 64 (OID 601506)
 -- Name: zones; Type: TABLE; Schema: public; Owner: tjko
 --
 
@@ -132,13 +145,13 @@ CREATE TABLE zones (
     reverse boolean DEFAULT false,
     noreverse boolean DEFAULT false,
     flags integer DEFAULT 0,
-    "forward" character(1) DEFAULT 'D',
-    nnotify character(1) DEFAULT 'D',
-    chknames character(1) DEFAULT 'D',
-    "class" character(2) DEFAULT 'in',
+    "forward" character(1) DEFAULT 'D'::bpchar,
+    nnotify character(1) DEFAULT 'D'::bpchar,
+    chknames character(1) DEFAULT 'D'::bpchar,
+    "class" character(2) DEFAULT 'in'::bpchar,
     name text NOT NULL,
     hostmaster text,
-    serial character(10) DEFAULT '1999123001',
+    serial character(10) DEFAULT '1999123001'::bpchar,
     serial_date integer DEFAULT 0,
     refresh integer,
     retry integer,
@@ -150,26 +163,26 @@ CREATE TABLE zones (
     reversenet cidr,
     parent integer DEFAULT -1,
     rdate integer DEFAULT 0,
+    transfer_source inet,
     CONSTRAINT zones_name CHECK ((name <> ''::text))
 )
 INHERITS (common_fields);
 
 
 --
--- TOC entry 6 (OID 78569)
+-- TOC entry 9 (OID 601528)
 -- Name: hosts_id_seq; Type: SEQUENCE; Schema: public; Owner: tjko
 --
 
 CREATE SEQUENCE hosts_id_seq
-    START 1
-    INCREMENT 1
-    MAXVALUE 9223372036854775807
-    MINVALUE 1
+    INCREMENT BY 1
+    NO MAXVALUE
+    NO MINVALUE
     CACHE 1;
 
 
 --
--- TOC entry 62 (OID 78571)
+-- TOC entry 65 (OID 601530)
 -- Name: hosts; Type: TABLE; Schema: public; Owner: tjko
 --
 
@@ -179,7 +192,7 @@ CREATE TABLE hosts (
     "type" integer DEFAULT 0,
     "domain" text NOT NULL,
     ttl integer,
-    "class" character(2) DEFAULT 'IN',
+    "class" character(2) DEFAULT 'IN'::bpchar,
     grp integer DEFAULT -1,
     alias integer DEFAULT -1,
     cname_txt text,
@@ -188,8 +201,8 @@ CREATE TABLE hosts (
     loc text,
     wks integer DEFAULT -1,
     mx integer DEFAULT -1,
-    rp_mbox text DEFAULT '.',
-    rp_txt text DEFAULT '.',
+    rp_mbox text DEFAULT '.'::text,
+    rp_txt text DEFAULT '.'::text,
     router integer DEFAULT 0,
     prn boolean DEFAULT false,
     flags integer DEFAULT 0,
@@ -208,26 +221,26 @@ CREATE TABLE hosts (
     "comment" text,
     vmps integer DEFAULT -1,
     dhcp_last integer DEFAULT -1,
+    email text,
     CONSTRAINT hosts_domain CHECK (("domain" <> ''::text))
 )
 INHERITS (common_fields);
 
 
 --
--- TOC entry 8 (OID 78594)
+-- TOC entry 11 (OID 601553)
 -- Name: groups_id_seq; Type: SEQUENCE; Schema: public; Owner: tjko
 --
 
 CREATE SEQUENCE groups_id_seq
-    START 1
-    INCREMENT 1
-    MAXVALUE 9223372036854775807
-    MINVALUE 1
+    INCREMENT BY 1
+    NO MAXVALUE
+    NO MINVALUE
     CACHE 1;
 
 
 --
--- TOC entry 63 (OID 78596)
+-- TOC entry 66 (OID 601555)
 -- Name: groups; Type: TABLE; Schema: public; Owner: tjko
 --
 
@@ -245,20 +258,19 @@ INHERITS (common_fields);
 
 
 --
--- TOC entry 10 (OID 78608)
+-- TOC entry 13 (OID 601566)
 -- Name: nets_id_seq; Type: SEQUENCE; Schema: public; Owner: tjko
 --
 
 CREATE SEQUENCE nets_id_seq
-    START 1
-    INCREMENT 1
-    MAXVALUE 9223372036854775807
-    MINVALUE 1
+    INCREMENT BY 1
+    NO MAXVALUE
+    NO MINVALUE
     CACHE 1;
 
 
 --
--- TOC entry 64 (OID 78610)
+-- TOC entry 67 (OID 601568)
 -- Name: nets; Type: TABLE; Schema: public; Owner: tjko
 --
 
@@ -273,31 +285,31 @@ CREATE TABLE nets (
     alevel integer DEFAULT 0,
     "type" integer DEFAULT 0,
     ipv6 text,
-    rp_mbox text DEFAULT '.',
-    rp_txt text DEFAULT '.',
+    rp_mbox text DEFAULT '.'::text,
+    rp_txt text DEFAULT '.'::text,
     no_dhcp boolean DEFAULT false,
     range_start inet,
     range_end inet,
-    "comment" text
+    "comment" text,
+    dummy boolean DEFAULT false
 )
 INHERITS (common_fields);
 
 
 --
--- TOC entry 12 (OID 78627)
+-- TOC entry 15 (OID 601583)
 -- Name: cidr_entries_id_seq; Type: SEQUENCE; Schema: public; Owner: tjko
 --
 
 CREATE SEQUENCE cidr_entries_id_seq
-    START 1
-    INCREMENT 1
-    MAXVALUE 9223372036854775807
-    MINVALUE 1
+    INCREMENT BY 1
+    NO MAXVALUE
+    NO MINVALUE
     CACHE 1;
 
 
 --
--- TOC entry 65 (OID 78629)
+-- TOC entry 68 (OID 601585)
 -- Name: cidr_entries; Type: TABLE; Schema: public; Owner: tjko
 --
 
@@ -306,25 +318,28 @@ CREATE TABLE cidr_entries (
     "type" integer NOT NULL,
     ref integer NOT NULL,
     ip cidr,
-    "comment" text
+    "comment" text,
+    "mode" integer DEFAULT 0,
+    acl integer DEFAULT -1,
+    tkey integer DEFAULT -1,
+    op integer DEFAULT 0
 );
 
 
 --
--- TOC entry 14 (OID 78637)
+-- TOC entry 17 (OID 601591)
 -- Name: dhcp_entries_id_seq; Type: SEQUENCE; Schema: public; Owner: tjko
 --
 
 CREATE SEQUENCE dhcp_entries_id_seq
-    START 1
-    INCREMENT 1
-    MAXVALUE 9223372036854775807
-    MINVALUE 1
+    INCREMENT BY 1
+    NO MAXVALUE
+    NO MINVALUE
     CACHE 1;
 
 
 --
--- TOC entry 66 (OID 78639)
+-- TOC entry 69 (OID 601593)
 -- Name: dhcp_entries; Type: TABLE; Schema: public; Owner: tjko
 --
 
@@ -338,7 +353,7 @@ CREATE TABLE dhcp_entries (
 
 
 --
--- TOC entry 67 (OID 78647)
+-- TOC entry 70 (OID 601599)
 -- Name: ether_info; Type: TABLE; Schema: public; Owner: tjko
 --
 
@@ -349,20 +364,19 @@ CREATE TABLE ether_info (
 
 
 --
--- TOC entry 16 (OID 78654)
+-- TOC entry 19 (OID 601604)
 -- Name: mx_entries_id_seq; Type: SEQUENCE; Schema: public; Owner: tjko
 --
 
 CREATE SEQUENCE mx_entries_id_seq
-    START 1
-    INCREMENT 1
-    MAXVALUE 9223372036854775807
-    MINVALUE 1
+    INCREMENT BY 1
+    NO MAXVALUE
+    NO MINVALUE
     CACHE 1;
 
 
 --
--- TOC entry 68 (OID 78656)
+-- TOC entry 71 (OID 601606)
 -- Name: mx_entries; Type: TABLE; Schema: public; Owner: tjko
 --
 
@@ -378,20 +392,19 @@ CREATE TABLE mx_entries (
 
 
 --
--- TOC entry 18 (OID 78665)
+-- TOC entry 21 (OID 601613)
 -- Name: mx_templates_id_seq; Type: SEQUENCE; Schema: public; Owner: tjko
 --
 
 CREATE SEQUENCE mx_templates_id_seq
-    START 1
-    INCREMENT 1
-    MAXVALUE 9223372036854775807
-    MINVALUE 1
+    INCREMENT BY 1
+    NO MAXVALUE
+    NO MINVALUE
     CACHE 1;
 
 
 --
--- TOC entry 69 (OID 78667)
+-- TOC entry 72 (OID 601615)
 -- Name: mx_templates; Type: TABLE; Schema: public; Owner: tjko
 --
 
@@ -406,20 +419,19 @@ INHERITS (common_fields);
 
 
 --
--- TOC entry 20 (OID 78678)
+-- TOC entry 23 (OID 601624)
 -- Name: ns_entries_id_seq; Type: SEQUENCE; Schema: public; Owner: tjko
 --
 
 CREATE SEQUENCE ns_entries_id_seq
-    START 1
-    INCREMENT 1
-    MAXVALUE 9223372036854775807
-    MINVALUE 1
+    INCREMENT BY 1
+    NO MAXVALUE
+    NO MINVALUE
     CACHE 1;
 
 
 --
--- TOC entry 70 (OID 78680)
+-- TOC entry 73 (OID 601626)
 -- Name: ns_entries; Type: TABLE; Schema: public; Owner: tjko
 --
 
@@ -433,20 +445,20 @@ CREATE TABLE ns_entries (
 
 
 --
--- TOC entry 22 (OID 78688)
+-- TOC entry 25 (OID 601632)
 -- Name: printer_classes_id_seq; Type: SEQUENCE; Schema: public; Owner: tjko
 --
 
 CREATE SEQUENCE printer_classes_id_seq
-    START 1
-    INCREMENT 1
-    MAXVALUE 9223372036854775807
-    MINVALUE 1
+    START WITH 1
+    INCREMENT BY 1
+    NO MAXVALUE
+    NO MINVALUE
     CACHE 1;
 
 
 --
--- TOC entry 71 (OID 78690)
+-- TOC entry 74 (OID 601634)
 -- Name: printer_classes; Type: TABLE; Schema: public; Owner: tjko
 --
 
@@ -460,20 +472,20 @@ INHERITS (common_fields);
 
 
 --
--- TOC entry 24 (OID 78701)
+-- TOC entry 27 (OID 601643)
 -- Name: printer_entries_id_seq; Type: SEQUENCE; Schema: public; Owner: tjko
 --
 
 CREATE SEQUENCE printer_entries_id_seq
-    START 1
-    INCREMENT 1
-    MAXVALUE 9223372036854775807
-    MINVALUE 1
+    START WITH 1
+    INCREMENT BY 1
+    NO MAXVALUE
+    NO MINVALUE
     CACHE 1;
 
 
 --
--- TOC entry 72 (OID 78703)
+-- TOC entry 75 (OID 601645)
 -- Name: printer_entries; Type: TABLE; Schema: public; Owner: tjko
 --
 
@@ -487,20 +499,19 @@ CREATE TABLE printer_entries (
 
 
 --
--- TOC entry 26 (OID 78711)
+-- TOC entry 29 (OID 601651)
 -- Name: a_entries_id_seq; Type: SEQUENCE; Schema: public; Owner: tjko
 --
 
 CREATE SEQUENCE a_entries_id_seq
-    START 1
-    INCREMENT 1
-    MAXVALUE 9223372036854775807
-    MINVALUE 1
+    INCREMENT BY 1
+    NO MAXVALUE
+    NO MINVALUE
     CACHE 1;
 
 
 --
--- TOC entry 73 (OID 78713)
+-- TOC entry 76 (OID 601653)
 -- Name: a_entries; Type: TABLE; Schema: public; Owner: tjko
 --
 
@@ -517,20 +528,19 @@ CREATE TABLE a_entries (
 
 
 --
--- TOC entry 28 (OID 78724)
+-- TOC entry 31 (OID 601662)
 -- Name: txt_entries_id_seq; Type: SEQUENCE; Schema: public; Owner: tjko
 --
 
 CREATE SEQUENCE txt_entries_id_seq
-    START 1
-    INCREMENT 1
-    MAXVALUE 9223372036854775807
-    MINVALUE 1
+    INCREMENT BY 1
+    NO MAXVALUE
+    NO MINVALUE
     CACHE 1;
 
 
 --
--- TOC entry 74 (OID 78726)
+-- TOC entry 77 (OID 601664)
 -- Name: txt_entries; Type: TABLE; Schema: public; Owner: tjko
 --
 
@@ -544,20 +554,20 @@ CREATE TABLE txt_entries (
 
 
 --
--- TOC entry 30 (OID 78734)
+-- TOC entry 33 (OID 601670)
 -- Name: srv_entries_id_seq; Type: SEQUENCE; Schema: public; Owner: tjko
 --
 
 CREATE SEQUENCE srv_entries_id_seq
-    START 1
-    INCREMENT 1
-    MAXVALUE 9223372036854775807
-    MINVALUE 1
+    START WITH 1
+    INCREMENT BY 1
+    NO MAXVALUE
+    NO MINVALUE
     CACHE 1;
 
 
 --
--- TOC entry 75 (OID 78736)
+-- TOC entry 78 (OID 601672)
 -- Name: srv_entries; Type: TABLE; Schema: public; Owner: tjko
 --
 
@@ -568,7 +578,7 @@ CREATE TABLE srv_entries (
     pri integer NOT NULL,
     weight integer NOT NULL,
     port integer NOT NULL,
-    target text DEFAULT '.' NOT NULL,
+    target text DEFAULT '.'::text NOT NULL,
     "comment" text,
     CONSTRAINT srv_entries_port CHECK ((port >= 0)),
     CONSTRAINT srv_entries_pri CHECK ((pri >= 0)),
@@ -577,20 +587,19 @@ CREATE TABLE srv_entries (
 
 
 --
--- TOC entry 32 (OID 78748)
+-- TOC entry 35 (OID 601682)
 -- Name: users_id_seq; Type: SEQUENCE; Schema: public; Owner: tjko
 --
 
 CREATE SEQUENCE users_id_seq
-    START 1
-    INCREMENT 1
-    MAXVALUE 9223372036854775807
-    MINVALUE 1
+    INCREMENT BY 1
+    NO MAXVALUE
+    NO MINVALUE
     CACHE 1;
 
 
 --
--- TOC entry 76 (OID 78750)
+-- TOC entry 79 (OID 601684)
 -- Name: users; Type: TABLE; Schema: public; Owner: tjko
 --
 
@@ -603,7 +612,7 @@ CREATE TABLE users (
     superuser boolean DEFAULT false,
     server integer DEFAULT -1,
     "zone" integer DEFAULT -1,
-    last integer DEFAULT 0,
+    "last" integer DEFAULT 0,
     last_pwd integer DEFAULT 0,
     last_from text,
     search_opts text,
@@ -615,20 +624,19 @@ INHERITS (common_fields);
 
 
 --
--- TOC entry 34 (OID 78768)
+-- TOC entry 37 (OID 601699)
 -- Name: user_rights_id_seq; Type: SEQUENCE; Schema: public; Owner: tjko
 --
 
 CREATE SEQUENCE user_rights_id_seq
-    START 1
-    INCREMENT 1
-    MAXVALUE 9223372036854775807
-    MINVALUE 1
+    INCREMENT BY 1
+    NO MAXVALUE
+    NO MINVALUE
     CACHE 1;
 
 
 --
--- TOC entry 77 (OID 78770)
+-- TOC entry 80 (OID 601701)
 -- Name: user_rights; Type: TABLE; Schema: public; Owner: tjko
 --
 
@@ -643,20 +651,19 @@ CREATE TABLE user_rights (
 
 
 --
--- TOC entry 36 (OID 78775)
+-- TOC entry 39 (OID 601704)
 -- Name: user_groups_id_seq; Type: SEQUENCE; Schema: public; Owner: tjko
 --
 
 CREATE SEQUENCE user_groups_id_seq
-    START 1
-    INCREMENT 1
-    MAXVALUE 9223372036854775807
-    MINVALUE 1
+    INCREMENT BY 1
+    NO MAXVALUE
+    NO MINVALUE
     CACHE 1;
 
 
 --
--- TOC entry 78 (OID 78777)
+-- TOC entry 81 (OID 601706)
 -- Name: user_groups; Type: TABLE; Schema: public; Owner: tjko
 --
 
@@ -669,20 +676,19 @@ CREATE TABLE user_groups (
 
 
 --
--- TOC entry 38 (OID 78786)
+-- TOC entry 41 (OID 601713)
 -- Name: wks_entries_id_seq; Type: SEQUENCE; Schema: public; Owner: tjko
 --
 
 CREATE SEQUENCE wks_entries_id_seq
-    START 1
-    INCREMENT 1
-    MAXVALUE 9223372036854775807
-    MINVALUE 1
+    INCREMENT BY 1
+    NO MAXVALUE
+    NO MINVALUE
     CACHE 1;
 
 
 --
--- TOC entry 79 (OID 78788)
+-- TOC entry 82 (OID 601715)
 -- Name: wks_entries; Type: TABLE; Schema: public; Owner: tjko
 --
 
@@ -697,20 +703,19 @@ CREATE TABLE wks_entries (
 
 
 --
--- TOC entry 40 (OID 78796)
+-- TOC entry 43 (OID 601721)
 -- Name: wks_templates_id_seq; Type: SEQUENCE; Schema: public; Owner: tjko
 --
 
 CREATE SEQUENCE wks_templates_id_seq
-    START 1
-    INCREMENT 1
-    MAXVALUE 9223372036854775807
-    MINVALUE 1
+    INCREMENT BY 1
+    NO MAXVALUE
+    NO MINVALUE
     CACHE 1;
 
 
 --
--- TOC entry 80 (OID 78798)
+-- TOC entry 83 (OID 601723)
 -- Name: wks_templates; Type: TABLE; Schema: public; Owner: tjko
 --
 
@@ -725,7 +730,7 @@ INHERITS (common_fields);
 
 
 --
--- TOC entry 81 (OID 78809)
+-- TOC entry 84 (OID 601732)
 -- Name: utmp; Type: TABLE; Schema: public; Owner: tjko
 --
 
@@ -744,7 +749,7 @@ CREATE TABLE utmp (
     zoneid integer DEFAULT -1,
     "zone" text,
     login integer DEFAULT 0,
-    last integer DEFAULT 0,
+    "last" integer DEFAULT 0,
     searchopts text,
     searchdomain text,
     searchpattern text
@@ -752,20 +757,19 @@ CREATE TABLE utmp (
 
 
 --
--- TOC entry 42 (OID 78822)
+-- TOC entry 45 (OID 601743)
 -- Name: hinfo_templates_id_seq; Type: SEQUENCE; Schema: public; Owner: tjko
 --
 
 CREATE SEQUENCE hinfo_templates_id_seq
-    START 1
-    INCREMENT 1
-    MAXVALUE 9223372036854775807
-    MINVALUE 1
+    INCREMENT BY 1
+    NO MAXVALUE
+    NO MINVALUE
     CACHE 1;
 
 
 --
--- TOC entry 82 (OID 78824)
+-- TOC entry 85 (OID 601745)
 -- Name: hinfo_templates; Type: TABLE; Schema: public; Owner: tjko
 --
 
@@ -780,20 +784,20 @@ INHERITS (common_fields);
 
 
 --
--- TOC entry 44 (OID 78837)
+-- TOC entry 47 (OID 601756)
 -- Name: arec_entries_id_seq; Type: SEQUENCE; Schema: public; Owner: tjko
 --
 
 CREATE SEQUENCE arec_entries_id_seq
-    START 1
-    INCREMENT 1
-    MAXVALUE 9223372036854775807
-    MINVALUE 1
+    START WITH 1
+    INCREMENT BY 1
+    NO MAXVALUE
+    NO MINVALUE
     CACHE 1;
 
 
 --
--- TOC entry 83 (OID 78839)
+-- TOC entry 86 (OID 601758)
 -- Name: arec_entries; Type: TABLE; Schema: public; Owner: tjko
 --
 
@@ -805,20 +809,19 @@ CREATE TABLE arec_entries (
 
 
 --
--- TOC entry 46 (OID 78844)
+-- TOC entry 49 (OID 601761)
 -- Name: root_servers_id_seq; Type: SEQUENCE; Schema: public; Owner: tjko
 --
 
 CREATE SEQUENCE root_servers_id_seq
-    START 1
-    INCREMENT 1
-    MAXVALUE 9223372036854775807
-    MINVALUE 1
+    INCREMENT BY 1
+    NO MAXVALUE
+    NO MINVALUE
     CACHE 1;
 
 
 --
--- TOC entry 84 (OID 78846)
+-- TOC entry 87 (OID 601763)
 -- Name: root_servers; Type: TABLE; Schema: public; Owner: tjko
 --
 
@@ -833,20 +836,19 @@ CREATE TABLE root_servers (
 
 
 --
--- TOC entry 48 (OID 78855)
+-- TOC entry 51 (OID 601770)
 -- Name: history_id_seq; Type: SEQUENCE; Schema: public; Owner: tjko
 --
 
 CREATE SEQUENCE history_id_seq
-    START 1
-    INCREMENT 1
-    MAXVALUE 9223372036854775807
-    MINVALUE 1
+    INCREMENT BY 1
+    NO MAXVALUE
+    NO MINVALUE
     CACHE 1;
 
 
 --
--- TOC entry 85 (OID 78857)
+-- TOC entry 88 (OID 601772)
 -- Name: history; Type: TABLE; Schema: public; Owner: tjko
 --
 
@@ -863,20 +865,19 @@ CREATE TABLE history (
 
 
 --
--- TOC entry 50 (OID 78862)
+-- TOC entry 53 (OID 601775)
 -- Name: lastlog_id_seq; Type: SEQUENCE; Schema: public; Owner: tjko
 --
 
 CREATE SEQUENCE lastlog_id_seq
-    START 1
-    INCREMENT 1
-    MAXVALUE 9223372036854775807
-    MINVALUE 1
+    INCREMENT BY 1
+    NO MAXVALUE
+    NO MINVALUE
     CACHE 1;
 
 
 --
--- TOC entry 86 (OID 78864)
+-- TOC entry 89 (OID 601777)
 -- Name: lastlog; Type: TABLE; Schema: public; Owner: tjko
 --
 
@@ -893,20 +894,19 @@ CREATE TABLE lastlog (
 
 
 --
--- TOC entry 52 (OID 78873)
+-- TOC entry 55 (OID 601784)
 -- Name: news_id_seq; Type: SEQUENCE; Schema: public; Owner: tjko
 --
 
 CREATE SEQUENCE news_id_seq
-    START 1
-    INCREMENT 1
-    MAXVALUE 9223372036854775807
-    MINVALUE 1
+    INCREMENT BY 1
+    NO MAXVALUE
+    NO MINVALUE
     CACHE 1;
 
 
 --
--- TOC entry 87 (OID 78875)
+-- TOC entry 90 (OID 601786)
 -- Name: news; Type: TABLE; Schema: public; Owner: tjko
 --
 
@@ -919,20 +919,19 @@ INHERITS (common_fields);
 
 
 --
--- TOC entry 54 (OID 78886)
+-- TOC entry 57 (OID 601795)
 -- Name: vlans_id_seq; Type: SEQUENCE; Schema: public; Owner: tjko
 --
 
 CREATE SEQUENCE vlans_id_seq
-    START 1
-    INCREMENT 1
-    MAXVALUE 9223372036854775807
-    MINVALUE 1
+    INCREMENT BY 1
+    NO MAXVALUE
+    NO MINVALUE
     CACHE 1;
 
 
 --
--- TOC entry 88 (OID 78888)
+-- TOC entry 91 (OID 601797)
 -- Name: vlans; Type: TABLE; Schema: public; Owner: tjko
 --
 
@@ -949,20 +948,19 @@ INHERITS (common_fields);
 
 
 --
--- TOC entry 56 (OID 78899)
+-- TOC entry 59 (OID 601806)
 -- Name: sid_seq; Type: SEQUENCE; Schema: public; Owner: tjko
 --
 
 CREATE SEQUENCE sid_seq
-    START 1
-    INCREMENT 1
-    MAXVALUE 9223372036854775807
-    MINVALUE 1
+    INCREMENT BY 1
+    NO MAXVALUE
+    NO MINVALUE
     CACHE 1;
 
 
 --
--- TOC entry 89 (OID 78901)
+-- TOC entry 92 (OID 601808)
 -- Name: deleted_hosts; Type: TABLE; Schema: public; Owner: tjko
 --
 
@@ -1008,7 +1006,7 @@ CREATE TABLE deleted_hosts (
 
 
 --
--- TOC entry 90 (OID 80205)
+-- TOC entry 93 (OID 601815)
 -- Name: vmps; Type: TABLE; Schema: public; Owner: tjko
 --
 
@@ -1027,7 +1025,80 @@ INHERITS (common_fields);
 
 
 --
--- Data for TOC entry 135 (OID 78489)
+-- TOC entry 94 (OID 603202)
+-- Name: group_entries; Type: TABLE; Schema: public; Owner: tjko
+--
+
+CREATE TABLE group_entries (
+    id serial NOT NULL,
+    host integer NOT NULL,
+    grp integer NOT NULL
+);
+
+
+--
+-- TOC entry 95 (OID 603209)
+-- Name: keys; Type: TABLE; Schema: public; Owner: tjko
+--
+
+CREATE TABLE keys (
+    id serial NOT NULL,
+    "type" integer NOT NULL,
+    ref integer NOT NULL,
+    name text NOT NULL,
+    keytype integer DEFAULT 0,
+    nametype integer DEFAULT 0,
+    protocol integer NOT NULL,
+    algorithm integer NOT NULL,
+    "mode" integer DEFAULT 0,
+    keysize integer DEFAULT -1,
+    strength integer DEFAULT 0,
+    publickey text,
+    secretkey text,
+    "comment" text
+)
+INHERITS (common_fields);
+
+
+--
+-- TOC entry 96 (OID 603228)
+-- Name: acls; Type: TABLE; Schema: public; Owner: tjko
+--
+
+CREATE TABLE acls (
+    id serial NOT NULL,
+    server integer NOT NULL,
+    name text NOT NULL,
+    "type" integer DEFAULT 0 NOT NULL,
+    "comment" text,
+    CONSTRAINT acls_name CHECK ((name <> ''::text))
+)
+INHERITS (common_fields);
+
+
+--
+-- TOC entry 97 (OID 603248)
+-- Name: leases; Type: TABLE; Schema: public; Owner: tjko
+--
+
+CREATE TABLE leases (
+    id serial NOT NULL,
+    server integer NOT NULL,
+    host integer NOT NULL,
+    ip inet,
+    ipv6 text,
+    lstart integer,
+    lend integer,
+    mac character(12),
+    state integer DEFAULT 0,
+    uid text,
+    hostname text,
+    info text
+);
+
+
+--
+-- Data for TOC entry 171 (OID 601453)
 -- Name: common_fields; Type: TABLE DATA; Schema: public; Owner: tjko
 --
 
@@ -1036,125 +1107,125 @@ COPY common_fields (cdate, cuser, mdate, muser, expiration) FROM stdin;
 
 
 --
--- Data for TOC entry 136 (OID 78493)
+-- Data for TOC entry 172 (OID 601457)
 -- Name: settings; Type: TABLE DATA; Schema: public; Owner: tjko
 --
 
-COPY settings ("key", value, ivalue) FROM stdin;
-dbversion	1.1	\N
+COPY settings (setting, value, ivalue) FROM stdin;
+dbversion	1.3	\N
 \.
 
 
 --
--- Data for TOC entry 137 (OID 78503)
+-- Data for TOC entry 173 (OID 601465)
 -- Name: servers; Type: TABLE DATA; Schema: public; Owner: tjko
 --
 
-COPY servers (cdate, cuser, mdate, muser, expiration, id, name, zones_only, no_roots, dhcp_mode, dhcp_flags, named_flags, masterserver, "version", directory, pid_file, dump_file, named_xfer, stats_file, memstats_file, named_ca, pzone_path, szone_path, query_src_ip, query_src_port, listen_on_port, transfer_source, "forward", checknames_m, checknames_s, checknames_r, nnotify, recursion, authnxdomain, dialup, multiple_cnames, rfc2308_type1, ttl, refresh, retry, expire, minimum, ipv6, df_port, df_max_delay, df_max_uupdates, df_mclt, df_split, df_loadbalmax, hostname, hostaddr, hostmaster, "comment") FROM stdin;
-1040592460	tjko    	1041850645	admin   	\N	1	test	f	f	1	0	0	-1	none of your business	/opt/ns/	\N	\N	\N	\N	\N	named.ca	\N	NS2/	\N	\N	\N	\N	D	D	D	D	D	D	D	D	D	D	86400	43200	3600	2419200	86400	\N	519	60	10	3600	128	3	ns1.middle.earth.	10.10.100.10	hostmaster.middle.earth.	demo server
+COPY servers (cdate, cuser, mdate, muser, expiration, id, name, zones_only, no_roots, dhcp_mode, dhcp_flags, named_flags, masterserver, "version", directory, pid_file, dump_file, named_xfer, stats_file, memstats_file, named_ca, pzone_path, szone_path, query_src_ip, query_src_port, listen_on_port, transfer_source, "forward", checknames_m, checknames_s, checknames_r, nnotify, recursion, authnxdomain, dialup, multiple_cnames, rfc2308_type1, ttl, refresh, retry, expire, minimum, ipv6, df_port, df_max_delay, df_max_uupdates, df_mclt, df_split, df_loadbalmax, hostname, hostaddr, hostmaster, "comment", lastrun) FROM stdin;
+1040592460	tjko    	1041850645	admin   	\N	1	test	f	f	1	0	0	-1	none of your business	/opt/ns/	\N	\N	\N	\N	\N	named.ca	\N	NS2/	\N	\N	\N	\N	D	D	D	D	D	D	D	D	D	D	86400	43200	3600	2419200	86400	\N	519	60	10	3600	128	3	ns1.middle.earth.	10.10.100.10	hostmaster.middle.earth.	demo server	\N
 \.
 
 
 --
--- Data for TOC entry 138 (OID 78546)
+-- Data for TOC entry 174 (OID 601506)
 -- Name: zones; Type: TABLE DATA; Schema: public; Owner: tjko
 --
 
-COPY zones (cdate, cuser, mdate, muser, expiration, id, server, active, dummy, "type", reverse, noreverse, flags, "forward", nnotify, chknames, "class", name, hostmaster, serial, serial_date, refresh, retry, expire, minimum, ttl, zone_ttl, "comment", reversenet, parent, rdate) FROM stdin;
-1040592461	tjko    	1041848223	admin   	\N	4	1	t	f	M	f	f	0	D	D	D	in	localhost	\N	2003010612	1041848313	43200	3600	604800	86400	86400	\N	\N	\N	-1	0
-1040592461	tjko    	1041834218	admin   	\N	3	1	t	f	M	f	f	0	D	D	D	in	middle.earth	\N	2003010612	1041848313	14400	1800	2419200	43200	43200	\N	\N	\N	-1	0
-1040592460	tjko    	1041848203	admin   	\N	1	1	t	f	M	t	f	0	D	D	D	in	10.10.in-addr.arpa	\N	2003010612	1041848313	604800	86400	2419200	604800	604800	\N	\N	10.10.0.0/16	-1	0
-1040592461	tjko    	1041848182	admin   	\N	2	1	t	f	M	t	f	0	D	N	D	in	127.in-addr.arpa	\N	2003010612	1041848313	604800	86400	2419200	604800	604800	\N	\N	127.0.0.0/8	-1	0
+COPY zones (cdate, cuser, mdate, muser, expiration, id, server, active, dummy, "type", reverse, noreverse, flags, "forward", nnotify, chknames, "class", name, hostmaster, serial, serial_date, refresh, retry, expire, minimum, ttl, zone_ttl, "comment", reversenet, parent, rdate, transfer_source) FROM stdin;
+1040592461	tjko    	1041848223	admin   	\N	4	1	t	f	M	f	f	0	D	D	D	in	localhost	\N	2003010612	1041848313	43200	3600	604800	86400	86400	\N	\N	\N	-1	0	\N
+1040592461	tjko    	1041834218	admin   	\N	3	1	t	f	M	f	f	0	D	D	D	in	middle.earth	\N	2003010612	1041848313	14400	1800	2419200	43200	43200	\N	\N	\N	-1	0	\N
+1040592460	tjko    	1041848203	admin   	\N	1	1	t	f	M	t	f	0	D	D	D	in	10.10.in-addr.arpa	\N	2003010612	1041848313	604800	86400	2419200	604800	604800	\N	\N	10.10.0.0/16	-1	0	\N
+1040592461	tjko    	1041848182	admin   	\N	2	1	t	f	M	t	f	0	D	N	D	in	127.in-addr.arpa	\N	2003010612	1041848313	604800	86400	2419200	604800	604800	\N	\N	127.0.0.0/8	-1	0	\N
 \.
 
 
 --
--- Data for TOC entry 139 (OID 78571)
+-- Data for TOC entry 175 (OID 601530)
 -- Name: hosts; Type: TABLE DATA; Schema: public; Owner: tjko
 --
 
-COPY hosts (cdate, cuser, mdate, muser, expiration, id, "zone", "type", "domain", ttl, "class", grp, alias, cname_txt, hinfo_hw, hinfo_sw, loc, wks, mx, rp_mbox, rp_txt, router, prn, flags, ether, ether_alias, dhcp_date, dhcp_info, info, "location", dept, huser, model, serial, misc, asset_id, "comment", vmps, dhcp_last) FROM stdin;
-\N	unknown 	\N	unknown 	\N	1	1	10	@	\N	IN	-1	-1	\N	\N	\N	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	zone record	-1	-1
-\N	unknown 	\N	unknown 	\N	2	2	10	@	\N	IN	-1	-1	\N	\N	\N	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	zone record	-1	-1
-\N	unknown 	\N	unknown 	\N	3	3	10	@	\N	IN	-1	-1	\N	\N	\N	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	zone record	-1	-1
-\N	unknown 	\N	unknown 	\N	4	3	1	ns2	\N	IN	-1	-1	\N	SUN-ULTRA	UNIX-SOLARIS	\N	1	3	.	.	0	f	0	\N	-1	\N	\N	secondary DNS server	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-\N	unknown 	\N	unknown 	\N	13	3	1	server-3	\N	IN	-1	-1	\N	\N	\N	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-\N	unknown 	\N	unknown 	\N	17	3	1	server-1	\N	IN	-1	-1	\N	\N	\N	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-\N	unknown 	\N	unknown 	\N	18	3	1	ns1	\N	IN	-1	-1	\N	SUN-ULTRA	UNIX-SOLARIS	\N	1	3	.	.	0	f	0	\N	-1	\N	\N	primary DNS server	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-\N	unknown 	\N	unknown 	\N	21	3	1	mail1	\N	IN	-1	-1	\N	PC	UNIX-LINUX	\N	2	2	.	.	0	f	0	\N	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-\N	unknown 	\N	unknown 	\N	26	3	1	server-2	\N	IN	-1	-1	\N	\N	\N	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-\N	unknown 	\N	unknown 	\N	28	3	2	south	\N	IN	-1	-1	\N	\N	\N	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-\N	unknown 	\N	unknown 	\N	31	3	2	north	\N	IN	-1	-1	\N	\N	\N	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-1040592460	tjko    	\N	unknown 	\N	34	3	4	nfs	\N	IN	-1	26	\N	\N	\N	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-1040592460	tjko    	\N	unknown 	\N	35	3	4	www	\N	IN	-1	17	\N	\N	\N	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-1040592460	tjko    	\N	unknown 	\N	36	3	4	pop3	\N	IN	-1	13	\N	\N	\N	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-1040592460	tjko    	\N	unknown 	\N	37	3	4	imap	\N	IN	-1	13	\N	\N	\N	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-1040592460	tjko    	\N	unknown 	\N	38	3	4	smtp	\N	IN	-1	13	\N	\N	\N	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-\N	unknown 	\N	unknown 	\N	22	3	6	ns.south	\N	IN	-1	-1	\N	\N	\N	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-\N	unknown 	\N	unknown 	\N	32	3	6	ns.north	\N	IN	-1	-1	\N	\N	\N	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-\N	unknown 	\N	unknown 	\N	39	4	10	@	\N	IN	-1	-1	\N	\N	\N	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	zone record	-1	-1
-\N	unknown 	1040595853	tjko    	\N	7	3	1	terminal2	\N	IN	1	-1	\N	\N	\N	\N	-1	-1	.	.	0	f	0	001020304002	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-\N	unknown 	1040595853	tjko    	\N	12	3	1	ws3	\N	IN	-1	-1	\N	\N	\N	\N	-1	-1	.	.	0	f	0	003040506002	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-\N	unknown 	1040595853	tjko    	\N	9	3	1	ws8	\N	IN	-1	-1	\N	\N	\N	\N	-1	-1	.	.	0	f	0	003040506007	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-\N	unknown 	1040595853	tjko    	\N	5	3	1	terminal1	\N	IN	1	-1	\N	\N	\N	\N	-1	-1	.	.	0	f	0	001020304001	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-\N	unknown 	1040595853	tjko    	\N	19	3	1	terminal5	\N	IN	1	-1	\N	\N	\N	\N	-1	-1	.	.	0	f	0	001020304005	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-\N	unknown 	1040595853	tjko    	\N	24	3	1	ws6	\N	IN	-1	-1	\N	\N	\N	\N	-1	-1	.	.	0	f	0	003040506005	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-\N	unknown 	1040595853	tjko    	\N	25	3	1	ws7	\N	IN	-1	-1	\N	\N	\N	\N	-1	-1	.	.	0	f	0	003040506006	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-\N	unknown 	1040595853	tjko    	\N	23	3	1	ws5	\N	IN	-1	-1	\N	\N	\N	\N	-1	-1	.	.	0	f	0	003040506004	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-\N	unknown 	1040595853	tjko    	\N	30	3	1	terminal3	\N	IN	1	-1	\N	\N	\N	\N	-1	-1	.	.	0	f	0	001020304003	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-\N	unknown 	1040595853	tjko    	\N	27	3	1	terminal4	\N	IN	1	-1	\N	\N	\N	\N	-1	-1	.	.	0	f	0	001020304004	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-\N	unknown 	1040595853	tjko    	\N	10	3	1	ws1	\N	IN	-1	-1	\N	\N	\N	\N	-1	-1	.	.	0	f	0	003040506000	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-\N	unknown 	1040595853	tjko    	\N	29	3	1	ws4	\N	IN	-1	-1	\N	\N	\N	\N	-1	-1	.	.	0	f	0	003040506003	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-\N	unknown 	1040595853	tjko    	\N	14	3	1	ws2	\N	IN	-1	-1	\N	\N	\N	\N	-1	-1	.	.	0	f	0	003040506001	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-\N	unknown 	1040595853	tjko    	\N	20	3	1	default-gw.net031	\N	IN	-1	-1	\N	\N	\N	\N	-1	-1	.	.	1	f	0	\N	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-\N	unknown 	1040595853	tjko    	\N	33	3	1	default-gw.net098	\N	IN	-1	-1	\N	\N	\N	\N	-1	-1	.	.	1	f	0	\N	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-\N	unknown 	1040595853	tjko    	\N	6	3	1	default-gw.net032	\N	IN	-1	-1	\N	\N	\N	\N	-1	-1	.	.	1	f	0	\N	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-\N	unknown 	1040595853	tjko    	\N	16	3	1	default-gw.net030	\N	IN	-1	-1	\N	\N	\N	\N	-1	-1	.	.	1	f	0	\N	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-\N	unknown 	1040595853	tjko    	\N	11	3	1	default-gw.net100	\N	IN	-1	-1	\N	\N	\N	\N	-1	-1	.	.	1	f	0	\N	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-\N	unknown 	1040595853	tjko    	\N	15	3	1	default-gw.net101	\N	IN	-1	-1	\N	\N	\N	\N	-1	-1	.	.	1	f	0	\N	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-1041847201	admin   	\N	unknown 	0	41	3	1	ws02.research	\N	IN	-1	-1	\N	PC	MS-WINDOWS-98	\N	-1	-1	.	.	0	f	0	2345673344FF	-1	\N	\N	\N	R232	Research	user 2	\N	\N	\N	\N	\N	-1	-1
-1041847220	admin   	\N	unknown 	0	42	3	1	ws03.research	\N	IN	-1	-1	\N	PC	MS-WINDOWS-98	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	\N	R233	Research	user 3	\N	\N	\N	\N	\N	-1	-1
-1041847233	admin   	\N	unknown 	0	43	3	1	ws04.research	\N	IN	-1	-1	\N	PC	MS-WINDOWS-2000	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	\N	R234	Research	user 4	\N	\N	\N	\N	\N	-1	-1
-1041847279	admin   	\N	unknown 	0	44	3	1	ws05.research	\N	IN	2	-1	\N	PC-PORTABLE	UNIX-LINUX	\N	-1	-1	.	.	0	f	0	453466010203	-1	\N	\N	\N	R234	Research	user 4	\N	\N	\N	\N	\N	-1	-1
-1041847339	admin   	1041847356	admin   	0	45	3	1	dynamic01.research	\N	IN	5	-1	\N	PC	DYNAMIC-IP	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	dynamic IP	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-1041847365	admin   	\N	unknown 	0	46	3	1	dynamic02.research	\N	IN	5	-1	\N	PC	DYNAMIC-IP	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	dynamic IP	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-1041847370	admin   	\N	unknown 	0	47	3	1	dynamic03.research	\N	IN	5	-1	\N	PC	DYNAMIC-IP	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	dynamic IP	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-1041847374	admin   	\N	unknown 	0	48	3	1	dynamic04.research	\N	IN	5	-1	\N	PC	DYNAMIC-IP	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	dynamic IP	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-1041847378	admin   	\N	unknown 	0	49	3	1	dynamic05.research	\N	IN	5	-1	\N	PC	DYNAMIC-IP	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	dynamic IP	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-1041847382	admin   	\N	unknown 	0	50	3	1	dynamic06.research	\N	IN	5	-1	\N	PC	DYNAMIC-IP	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	dynamic IP	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-1041847386	admin   	\N	unknown 	0	51	3	1	dynamic07.research	\N	IN	5	-1	\N	PC	DYNAMIC-IP	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	dynamic IP	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-1041847391	admin   	\N	unknown 	0	52	3	1	dynamic08.research	\N	IN	5	-1	\N	PC	DYNAMIC-IP	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	dynamic IP	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-1041847395	admin   	\N	unknown 	0	53	3	1	dynamic09.research	\N	IN	5	-1	\N	PC	DYNAMIC-IP	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	dynamic IP	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-1041847399	admin   	\N	unknown 	0	54	3	1	dynamic10.research	\N	IN	5	-1	\N	PC	DYNAMIC-IP	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	dynamic IP	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-1041847468	admin   	\N	unknown 	0	55	3	1	ws001.sales	\N	IN	-1	-1	\N	PC	MS-WINDOWS-2000	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	\N	S102	Sales	sales droid 1	\N	\N	\N	\N	\N	-1	-1
-1041847479	admin   	\N	unknown 	0	56	3	1	ws002.sales	\N	IN	-1	-1	\N	PC	MS-WINDOWS-2000	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	\N	S134	Sales	sales droid 2	\N	\N	\N	\N	\N	-1	-1
-1041847488	admin   	\N	unknown 	0	57	3	1	ws003.sales	\N	IN	-1	-1	\N	PC	MS-WINDOWS-2000	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	\N	S145	Sales	sales droid 3	\N	\N	\N	\N	\N	-1	-1
-1041847498	admin   	\N	unknown 	0	58	3	1	ws004.sales	\N	IN	-1	-1	\N	PC	MS-WINDOWS-2000	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	\N	S146	Sales	sales droid 4	\N	\N	\N	\N	\N	-1	-1
-1041847507	admin   	\N	unknown 	0	59	3	1	ws005.sales	\N	IN	-1	-1	\N	PC	MS-WINDOWS-2000	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	\N	S149	Sales	sales droid 5	\N	\N	\N	\N	\N	-1	-1
-1041847537	admin   	1041847547	admin   	0	60	3	1	dynamic01.sales	\N	IN	3	-1	\N	PC	DYNAMIC-IP	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	dynamic IP	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-1041847552	admin   	\N	unknown 	0	61	3	1	dynamic02.sales	\N	IN	3	-1	\N	PC	DYNAMIC-IP	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	dynamic IP	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-1041847556	admin   	\N	unknown 	0	62	3	1	dynamic03.sales	\N	IN	3	-1	\N	PC	DYNAMIC-IP	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	dynamic IP	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-1041847560	admin   	\N	unknown 	0	63	3	1	dynamic04.sales	\N	IN	3	-1	\N	PC	DYNAMIC-IP	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	dynamic IP	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-1041847564	admin   	\N	unknown 	0	64	3	1	dynamic05.sales	\N	IN	3	-1	\N	PC	DYNAMIC-IP	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	dynamic IP	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-1041847685	admin   	\N	unknown 	0	66	3	1	ws02.pr	\N	IN	-1	-1	\N	PC	MS-WINDOWS-98	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	\N	P366	PR	PR person 2	\N	\N	\N	\N	\N	-1	-1
-1041847693	admin   	\N	unknown 	0	67	3	1	ws03.pr	\N	IN	-1	-1	\N	PC	MS-WINDOWS-98	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	\N	P366	PR	PR person 3	\N	\N	\N	\N	\N	-1	-1
-1041847702	admin   	\N	unknown 	0	68	3	1	ws04.pr	\N	IN	-1	-1	\N	PC	MS-WINDOWS-98	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	\N	P366	PR	PR person 4	\N	\N	\N	\N	\N	-1	-1
-1041847734	admin   	1041847744	admin   	0	69	3	1	dynamic01.pr	\N	IN	4	-1	\N	PC	DYNAMIC-IP	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	dynamic IP	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-1041847749	admin   	\N	unknown 	0	70	3	1	dynamic02.pr	\N	IN	4	-1	\N	PC	DYNAMIC-IP	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	dynamic IP	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-1041847752	admin   	\N	unknown 	0	71	3	1	dynamic03.pr	\N	IN	4	-1	\N	PC	DYNAMIC-IP	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	dynamic IP	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-1041847756	admin   	\N	unknown 	0	72	3	1	dynamic04.pr	\N	IN	4	-1	\N	PC	DYNAMIC-IP	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	dynamic IP	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-1041847762	admin   	\N	unknown 	0	73	3	1	dynamic05.pr	\N	IN	4	-1	\N	PC	DYNAMIC-IP	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	dynamic IP	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-1041847766	admin   	\N	unknown 	0	74	3	1	dynamic06.pr	\N	IN	4	-1	\N	PC	DYNAMIC-IP	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	dynamic IP	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-1041847770	admin   	\N	unknown 	0	75	3	1	dynamic07.pr	\N	IN	4	-1	\N	PC	DYNAMIC-IP	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	dynamic IP	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-1041847774	admin   	\N	unknown 	0	76	3	1	dynamic08.pr	\N	IN	4	-1	\N	PC	DYNAMIC-IP	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	dynamic IP	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-1041847671	admin   	1041847801	admin   	0	65	3	1	ws01.pr	\N	IN	2	-1	\N	PC-PORTABLE	MS-WINDOWS-98	\N	-1	-1	.	.	0	f	0	456722339987	-1	\N	\N	\N	P366	PR	PR person 1	\N	\N	\N	\N	\N	-1	-1
-\N	unknown 	\N	unknown 	\N	8	3	1	mail2	\N	IN	-1	-1	\N	PC	UNIX-LINUX	\N	2	3	.	.	0	f	0	\N	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1
-1041847167	admin   	1041850171	admin   	0	40	3	1	ws01.research	\N	IN	2	-1	\N	PC-PORTABLE	UNIX-LINUX	\N	3	3	.	.	0	f	0	3456335F6E01	-1	\N	\N	\N	R231	Research	user 1	ACME PowerDesktop 66Ghz	34-345623-4	\N	SA123456	\N	-1	-1
+COPY hosts (cdate, cuser, mdate, muser, expiration, id, "zone", "type", "domain", ttl, "class", grp, alias, cname_txt, hinfo_hw, hinfo_sw, loc, wks, mx, rp_mbox, rp_txt, router, prn, flags, ether, ether_alias, dhcp_date, dhcp_info, info, "location", dept, huser, model, serial, misc, asset_id, "comment", vmps, dhcp_last, email) FROM stdin;
+\N	unknown 	\N	unknown 	\N	1	1	10	@	\N	IN	-1	-1	\N	\N	\N	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	zone record	-1	-1	\N
+\N	unknown 	\N	unknown 	\N	2	2	10	@	\N	IN	-1	-1	\N	\N	\N	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	zone record	-1	-1	\N
+\N	unknown 	\N	unknown 	\N	3	3	10	@	\N	IN	-1	-1	\N	\N	\N	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	zone record	-1	-1	\N
+\N	unknown 	\N	unknown 	\N	4	3	1	ns2	\N	IN	-1	-1	\N	SUN-ULTRA	UNIX-SOLARIS	\N	1	3	.	.	0	f	0	\N	-1	\N	\N	secondary DNS server	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+\N	unknown 	\N	unknown 	\N	13	3	1	server-3	\N	IN	-1	-1	\N	\N	\N	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+\N	unknown 	\N	unknown 	\N	17	3	1	server-1	\N	IN	-1	-1	\N	\N	\N	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+\N	unknown 	\N	unknown 	\N	18	3	1	ns1	\N	IN	-1	-1	\N	SUN-ULTRA	UNIX-SOLARIS	\N	1	3	.	.	0	f	0	\N	-1	\N	\N	primary DNS server	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+\N	unknown 	\N	unknown 	\N	21	3	1	mail1	\N	IN	-1	-1	\N	PC	UNIX-LINUX	\N	2	2	.	.	0	f	0	\N	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+\N	unknown 	\N	unknown 	\N	26	3	1	server-2	\N	IN	-1	-1	\N	\N	\N	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+\N	unknown 	\N	unknown 	\N	28	3	2	south	\N	IN	-1	-1	\N	\N	\N	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+\N	unknown 	\N	unknown 	\N	31	3	2	north	\N	IN	-1	-1	\N	\N	\N	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+1040592460	tjko    	\N	unknown 	\N	34	3	4	nfs	\N	IN	-1	26	\N	\N	\N	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+1040592460	tjko    	\N	unknown 	\N	35	3	4	www	\N	IN	-1	17	\N	\N	\N	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+1040592460	tjko    	\N	unknown 	\N	36	3	4	pop3	\N	IN	-1	13	\N	\N	\N	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+1040592460	tjko    	\N	unknown 	\N	37	3	4	imap	\N	IN	-1	13	\N	\N	\N	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+1040592460	tjko    	\N	unknown 	\N	38	3	4	smtp	\N	IN	-1	13	\N	\N	\N	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+\N	unknown 	\N	unknown 	\N	22	3	6	ns.south	\N	IN	-1	-1	\N	\N	\N	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+\N	unknown 	\N	unknown 	\N	32	3	6	ns.north	\N	IN	-1	-1	\N	\N	\N	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+\N	unknown 	\N	unknown 	\N	39	4	10	@	\N	IN	-1	-1	\N	\N	\N	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	zone record	-1	-1	\N
+\N	unknown 	1040595853	tjko    	\N	7	3	1	terminal2	\N	IN	1	-1	\N	\N	\N	\N	-1	-1	.	.	0	f	0	001020304002	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+\N	unknown 	1040595853	tjko    	\N	12	3	1	ws3	\N	IN	-1	-1	\N	\N	\N	\N	-1	-1	.	.	0	f	0	003040506002	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+\N	unknown 	1040595853	tjko    	\N	9	3	1	ws8	\N	IN	-1	-1	\N	\N	\N	\N	-1	-1	.	.	0	f	0	003040506007	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+\N	unknown 	1040595853	tjko    	\N	5	3	1	terminal1	\N	IN	1	-1	\N	\N	\N	\N	-1	-1	.	.	0	f	0	001020304001	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+\N	unknown 	1040595853	tjko    	\N	19	3	1	terminal5	\N	IN	1	-1	\N	\N	\N	\N	-1	-1	.	.	0	f	0	001020304005	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+\N	unknown 	1040595853	tjko    	\N	24	3	1	ws6	\N	IN	-1	-1	\N	\N	\N	\N	-1	-1	.	.	0	f	0	003040506005	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+\N	unknown 	1040595853	tjko    	\N	25	3	1	ws7	\N	IN	-1	-1	\N	\N	\N	\N	-1	-1	.	.	0	f	0	003040506006	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+\N	unknown 	1040595853	tjko    	\N	23	3	1	ws5	\N	IN	-1	-1	\N	\N	\N	\N	-1	-1	.	.	0	f	0	003040506004	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+\N	unknown 	1040595853	tjko    	\N	30	3	1	terminal3	\N	IN	1	-1	\N	\N	\N	\N	-1	-1	.	.	0	f	0	001020304003	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+\N	unknown 	1040595853	tjko    	\N	27	3	1	terminal4	\N	IN	1	-1	\N	\N	\N	\N	-1	-1	.	.	0	f	0	001020304004	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+\N	unknown 	1040595853	tjko    	\N	10	3	1	ws1	\N	IN	-1	-1	\N	\N	\N	\N	-1	-1	.	.	0	f	0	003040506000	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+\N	unknown 	1040595853	tjko    	\N	29	3	1	ws4	\N	IN	-1	-1	\N	\N	\N	\N	-1	-1	.	.	0	f	0	003040506003	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+\N	unknown 	1040595853	tjko    	\N	14	3	1	ws2	\N	IN	-1	-1	\N	\N	\N	\N	-1	-1	.	.	0	f	0	003040506001	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+\N	unknown 	1040595853	tjko    	\N	20	3	1	default-gw.net031	\N	IN	-1	-1	\N	\N	\N	\N	-1	-1	.	.	1	f	0	\N	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+\N	unknown 	1040595853	tjko    	\N	33	3	1	default-gw.net098	\N	IN	-1	-1	\N	\N	\N	\N	-1	-1	.	.	1	f	0	\N	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+\N	unknown 	1040595853	tjko    	\N	6	3	1	default-gw.net032	\N	IN	-1	-1	\N	\N	\N	\N	-1	-1	.	.	1	f	0	\N	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+\N	unknown 	1040595853	tjko    	\N	16	3	1	default-gw.net030	\N	IN	-1	-1	\N	\N	\N	\N	-1	-1	.	.	1	f	0	\N	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+\N	unknown 	1040595853	tjko    	\N	11	3	1	default-gw.net100	\N	IN	-1	-1	\N	\N	\N	\N	-1	-1	.	.	1	f	0	\N	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+\N	unknown 	1040595853	tjko    	\N	15	3	1	default-gw.net101	\N	IN	-1	-1	\N	\N	\N	\N	-1	-1	.	.	1	f	0	\N	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+1041847201	admin   	\N	unknown 	0	41	3	1	ws02.research	\N	IN	-1	-1	\N	PC	MS-WINDOWS-98	\N	-1	-1	.	.	0	f	0	2345673344FF	-1	\N	\N	\N	R232	Research	user 2	\N	\N	\N	\N	\N	-1	-1	\N
+1041847220	admin   	\N	unknown 	0	42	3	1	ws03.research	\N	IN	-1	-1	\N	PC	MS-WINDOWS-98	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	\N	R233	Research	user 3	\N	\N	\N	\N	\N	-1	-1	\N
+1041847233	admin   	\N	unknown 	0	43	3	1	ws04.research	\N	IN	-1	-1	\N	PC	MS-WINDOWS-2000	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	\N	R234	Research	user 4	\N	\N	\N	\N	\N	-1	-1	\N
+1041847279	admin   	\N	unknown 	0	44	3	1	ws05.research	\N	IN	2	-1	\N	PC-PORTABLE	UNIX-LINUX	\N	-1	-1	.	.	0	f	0	453466010203	-1	\N	\N	\N	R234	Research	user 4	\N	\N	\N	\N	\N	-1	-1	\N
+1041847339	admin   	1041847356	admin   	0	45	3	1	dynamic01.research	\N	IN	5	-1	\N	PC	DYNAMIC-IP	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	dynamic IP	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+1041847365	admin   	\N	unknown 	0	46	3	1	dynamic02.research	\N	IN	5	-1	\N	PC	DYNAMIC-IP	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	dynamic IP	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+1041847370	admin   	\N	unknown 	0	47	3	1	dynamic03.research	\N	IN	5	-1	\N	PC	DYNAMIC-IP	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	dynamic IP	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+1041847374	admin   	\N	unknown 	0	48	3	1	dynamic04.research	\N	IN	5	-1	\N	PC	DYNAMIC-IP	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	dynamic IP	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+1041847378	admin   	\N	unknown 	0	49	3	1	dynamic05.research	\N	IN	5	-1	\N	PC	DYNAMIC-IP	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	dynamic IP	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+1041847382	admin   	\N	unknown 	0	50	3	1	dynamic06.research	\N	IN	5	-1	\N	PC	DYNAMIC-IP	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	dynamic IP	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+1041847386	admin   	\N	unknown 	0	51	3	1	dynamic07.research	\N	IN	5	-1	\N	PC	DYNAMIC-IP	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	dynamic IP	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+1041847391	admin   	\N	unknown 	0	52	3	1	dynamic08.research	\N	IN	5	-1	\N	PC	DYNAMIC-IP	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	dynamic IP	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+1041847395	admin   	\N	unknown 	0	53	3	1	dynamic09.research	\N	IN	5	-1	\N	PC	DYNAMIC-IP	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	dynamic IP	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+1041847399	admin   	\N	unknown 	0	54	3	1	dynamic10.research	\N	IN	5	-1	\N	PC	DYNAMIC-IP	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	dynamic IP	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+1041847468	admin   	\N	unknown 	0	55	3	1	ws001.sales	\N	IN	-1	-1	\N	PC	MS-WINDOWS-2000	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	\N	S102	Sales	sales droid 1	\N	\N	\N	\N	\N	-1	-1	\N
+1041847479	admin   	\N	unknown 	0	56	3	1	ws002.sales	\N	IN	-1	-1	\N	PC	MS-WINDOWS-2000	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	\N	S134	Sales	sales droid 2	\N	\N	\N	\N	\N	-1	-1	\N
+1041847488	admin   	\N	unknown 	0	57	3	1	ws003.sales	\N	IN	-1	-1	\N	PC	MS-WINDOWS-2000	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	\N	S145	Sales	sales droid 3	\N	\N	\N	\N	\N	-1	-1	\N
+1041847498	admin   	\N	unknown 	0	58	3	1	ws004.sales	\N	IN	-1	-1	\N	PC	MS-WINDOWS-2000	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	\N	S146	Sales	sales droid 4	\N	\N	\N	\N	\N	-1	-1	\N
+1041847507	admin   	\N	unknown 	0	59	3	1	ws005.sales	\N	IN	-1	-1	\N	PC	MS-WINDOWS-2000	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	\N	S149	Sales	sales droid 5	\N	\N	\N	\N	\N	-1	-1	\N
+1041847537	admin   	1041847547	admin   	0	60	3	1	dynamic01.sales	\N	IN	3	-1	\N	PC	DYNAMIC-IP	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	dynamic IP	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+1041847552	admin   	\N	unknown 	0	61	3	1	dynamic02.sales	\N	IN	3	-1	\N	PC	DYNAMIC-IP	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	dynamic IP	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+1041847556	admin   	\N	unknown 	0	62	3	1	dynamic03.sales	\N	IN	3	-1	\N	PC	DYNAMIC-IP	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	dynamic IP	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+1041847560	admin   	\N	unknown 	0	63	3	1	dynamic04.sales	\N	IN	3	-1	\N	PC	DYNAMIC-IP	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	dynamic IP	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+1041847564	admin   	\N	unknown 	0	64	3	1	dynamic05.sales	\N	IN	3	-1	\N	PC	DYNAMIC-IP	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	dynamic IP	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+1041847685	admin   	\N	unknown 	0	66	3	1	ws02.pr	\N	IN	-1	-1	\N	PC	MS-WINDOWS-98	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	\N	P366	PR	PR person 2	\N	\N	\N	\N	\N	-1	-1	\N
+1041847693	admin   	\N	unknown 	0	67	3	1	ws03.pr	\N	IN	-1	-1	\N	PC	MS-WINDOWS-98	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	\N	P366	PR	PR person 3	\N	\N	\N	\N	\N	-1	-1	\N
+1041847702	admin   	\N	unknown 	0	68	3	1	ws04.pr	\N	IN	-1	-1	\N	PC	MS-WINDOWS-98	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	\N	P366	PR	PR person 4	\N	\N	\N	\N	\N	-1	-1	\N
+1041847734	admin   	1041847744	admin   	0	69	3	1	dynamic01.pr	\N	IN	4	-1	\N	PC	DYNAMIC-IP	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	dynamic IP	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+1041847749	admin   	\N	unknown 	0	70	3	1	dynamic02.pr	\N	IN	4	-1	\N	PC	DYNAMIC-IP	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	dynamic IP	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+1041847752	admin   	\N	unknown 	0	71	3	1	dynamic03.pr	\N	IN	4	-1	\N	PC	DYNAMIC-IP	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	dynamic IP	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+1041847756	admin   	\N	unknown 	0	72	3	1	dynamic04.pr	\N	IN	4	-1	\N	PC	DYNAMIC-IP	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	dynamic IP	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+1041847762	admin   	\N	unknown 	0	73	3	1	dynamic05.pr	\N	IN	4	-1	\N	PC	DYNAMIC-IP	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	dynamic IP	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+1041847766	admin   	\N	unknown 	0	74	3	1	dynamic06.pr	\N	IN	4	-1	\N	PC	DYNAMIC-IP	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	dynamic IP	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+1041847770	admin   	\N	unknown 	0	75	3	1	dynamic07.pr	\N	IN	4	-1	\N	PC	DYNAMIC-IP	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	dynamic IP	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+1041847774	admin   	\N	unknown 	0	76	3	1	dynamic08.pr	\N	IN	4	-1	\N	PC	DYNAMIC-IP	\N	-1	-1	.	.	0	f	0	\N	-1	\N	\N	dynamic IP	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+1041847671	admin   	1041847801	admin   	0	65	3	1	ws01.pr	\N	IN	2	-1	\N	PC-PORTABLE	MS-WINDOWS-98	\N	-1	-1	.	.	0	f	0	456722339987	-1	\N	\N	\N	P366	PR	PR person 1	\N	\N	\N	\N	\N	-1	-1	\N
+\N	unknown 	\N	unknown 	\N	8	3	1	mail2	\N	IN	-1	-1	\N	PC	UNIX-LINUX	\N	2	3	.	.	0	f	0	\N	-1	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	-1	-1	\N
+1041847167	admin   	1041850171	admin   	0	40	3	1	ws01.research	\N	IN	2	-1	\N	PC-PORTABLE	UNIX-LINUX	\N	3	3	.	.	0	f	0	3456335F6E01	-1	\N	\N	\N	R231	Research	user 1	ACME PowerDesktop 66Ghz	34-345623-4	\N	SA123456	\N	-1	-1	\N
 \.
 
 
 --
--- Data for TOC entry 140 (OID 78596)
+-- Data for TOC entry 176 (OID 601555)
 -- Name: groups; Type: TABLE DATA; Schema: public; Owner: tjko
 --
 
@@ -1168,41 +1239,41 @@ COPY groups (cdate, cuser, mdate, muser, expiration, id, server, name, "type", a
 
 
 --
--- Data for TOC entry 141 (OID 78610)
+-- Data for TOC entry 177 (OID 601568)
 -- Name: nets; Type: TABLE DATA; Schema: public; Owner: tjko
 --
 
-COPY nets (cdate, cuser, mdate, muser, expiration, id, server, netname, name, net, subnet, vlan, alevel, "type", ipv6, rp_mbox, rp_txt, no_dhcp, range_start, range_end, "comment") FROM stdin;
-1040595897	admin   	\N	unknown 	\N	8	1	corp-net	Main corporate network	10.10.0.0/16	f	-1	0	0	\N	.	.	f	\N	\N	\N
-1040595853	tjko    	1041846076	admin   	\N	7	1	servers-1-b	Servers (site b)	10.10.98.0/23	t	1	0	0	\N	.	.	f	\N	\N	\N
-1040595853	tjko    	1041846090	admin   	\N	1	1	servers-1-a	Servers (site a)	10.10.100.0/24	t	1	0	0	\N	.	.	f	\N	\N	\N
-1040595853	tjko    	1041846113	admin   	\N	2	1	servers-backup	Backup severs	10.10.101.0/24	t	2	0	0	\N	.	.	f	\N	\N	\N
-1040595853	tjko    	1041846164	admin   	\N	3	1	visitors	Visitors' laptops	10.10.120.0/25	t	3	0	0	\N	.	.	f	\N	\N	\N
-1041846462	admin   	\N	unknown 	\N	9	1	loopback	Router loopback	10.10.0.0/24	t	-1	0	0	\N	.	.	f	\N	\N	\N
-1040595853	tjko    	1041847009	admin   	\N	6	1	research-net	Research department	10.10.32.0/24	t	6	0	0	\N	.	.	f	10.10.32.15	10.10.32.254	\N
-1040595853	tjko    	1041847059	admin   	\N	5	1	sales-net	Sales department	10.10.31.0/24	t	4	0	0	\N	.	.	f	10.10.31.25	10.10.31.254	\N
-1040595853	tjko    	1041847078	admin   	\N	4	1	pr-net	Public Relations	10.10.30.0/24	t	5	0	0	\N	.	.	f	10.10.30.15	10.10.30.254	\N
+COPY nets (cdate, cuser, mdate, muser, expiration, id, server, netname, name, net, subnet, vlan, alevel, "type", ipv6, rp_mbox, rp_txt, no_dhcp, range_start, range_end, "comment", dummy) FROM stdin;
+1040595897	admin   	\N	unknown 	\N	8	1	corp-net	Main corporate network	10.10.0.0/16	f	-1	0	0	\N	.	.	f	\N	\N	\N	f
+1040595853	tjko    	1041846076	admin   	\N	7	1	servers-1-b	Servers (site b)	10.10.98.0/23	t	1	0	0	\N	.	.	f	\N	\N	\N	f
+1040595853	tjko    	1041846090	admin   	\N	1	1	servers-1-a	Servers (site a)	10.10.100.0/24	t	1	0	0	\N	.	.	f	\N	\N	\N	f
+1040595853	tjko    	1041846113	admin   	\N	2	1	servers-backup	Backup severs	10.10.101.0/24	t	2	0	0	\N	.	.	f	\N	\N	\N	f
+1040595853	tjko    	1041846164	admin   	\N	3	1	visitors	Visitors' laptops	10.10.120.0/25	t	3	0	0	\N	.	.	f	\N	\N	\N	f
+1041846462	admin   	\N	unknown 	\N	9	1	loopback	Router loopback	10.10.0.0/24	t	-1	0	0	\N	.	.	f	\N	\N	\N	f
+1040595853	tjko    	1041847009	admin   	\N	6	1	research-net	Research department	10.10.32.0/24	t	6	0	0	\N	.	.	f	10.10.32.15	10.10.32.254	\N	f
+1040595853	tjko    	1041847059	admin   	\N	5	1	sales-net	Sales department	10.10.31.0/24	t	4	0	0	\N	.	.	f	10.10.31.25	10.10.31.254	\N	f
+1040595853	tjko    	1041847078	admin   	\N	4	1	pr-net	Public Relations	10.10.30.0/24	t	5	0	0	\N	.	.	f	10.10.30.15	10.10.30.254	\N	f
 \.
 
 
 --
--- Data for TOC entry 142 (OID 78629)
+-- Data for TOC entry 178 (OID 601585)
 -- Name: cidr_entries; Type: TABLE DATA; Schema: public; Owner: tjko
 --
 
-COPY cidr_entries (id, "type", ref, ip, "comment") FROM stdin;
-1	1	1	10.10.100.10/32	\N
-2	1	1	10.10.101.10/32	\N
-3	1	1	10.10.102.10/32	\N
-7	2	4	127.0.0.1/32	\N
-4	6	3	10.10.100.11/32	\N
-5	6	3	10.10.101.11/32	\N
-6	6	3	10.10.102.11/32	\N
+COPY cidr_entries (id, "type", ref, ip, "comment", "mode", acl, tkey, op) FROM stdin;
+1	1	1	10.10.100.10/32	\N	0	-1	-1	0
+2	1	1	10.10.101.10/32	\N	0	-1	-1	0
+3	1	1	10.10.102.10/32	\N	0	-1	-1	0
+7	2	4	127.0.0.1/32	\N	0	-1	-1	0
+4	6	3	10.10.100.11/32	\N	0	-1	-1	0
+5	6	3	10.10.101.11/32	\N	0	-1	-1	0
+6	6	3	10.10.102.11/32	\N	0	-1	-1	0
 \.
 
 
 --
--- Data for TOC entry 143 (OID 78639)
+-- Data for TOC entry 179 (OID 601593)
 -- Name: dhcp_entries; Type: TABLE DATA; Schema: public; Owner: tjko
 --
 
@@ -1227,7 +1298,7 @@ COPY dhcp_entries (id, "type", ref, dhcp, "comment") FROM stdin;
 
 
 --
--- Data for TOC entry 144 (OID 78647)
+-- Data for TOC entry 180 (OID 601599)
 -- Name: ether_info; Type: TABLE DATA; Schema: public; Owner: tjko
 --
 
@@ -2158,7 +2229,7 @@ C00000	Western Digital (may be reversed 00 00 C0?)
 
 
 --
--- Data for TOC entry 145 (OID 78656)
+-- Data for TOC entry 181 (OID 601606)
 -- Name: mx_entries; Type: TABLE DATA; Schema: public; Owner: tjko
 --
 
@@ -2175,7 +2246,7 @@ COPY mx_entries (id, "type", ref, pri, mx, "comment") FROM stdin;
 
 
 --
--- Data for TOC entry 146 (OID 78667)
+-- Data for TOC entry 182 (OID 601615)
 -- Name: mx_templates; Type: TABLE DATA; Schema: public; Owner: tjko
 --
 
@@ -2187,7 +2258,7 @@ COPY mx_templates (cdate, cuser, mdate, muser, expiration, id, "zone", alevel, n
 
 
 --
--- Data for TOC entry 147 (OID 78680)
+-- Data for TOC entry 183 (OID 601626)
 -- Name: ns_entries; Type: TABLE DATA; Schema: public; Owner: tjko
 --
 
@@ -2208,7 +2279,7 @@ COPY ns_entries (id, "type", ref, ns, "comment") FROM stdin;
 
 
 --
--- Data for TOC entry 148 (OID 78690)
+-- Data for TOC entry 184 (OID 601634)
 -- Name: printer_classes; Type: TABLE DATA; Schema: public; Owner: tjko
 --
 
@@ -2217,7 +2288,7 @@ COPY printer_classes (cdate, cuser, mdate, muser, expiration, id, name, "comment
 
 
 --
--- Data for TOC entry 149 (OID 78703)
+-- Data for TOC entry 185 (OID 601645)
 -- Name: printer_entries; Type: TABLE DATA; Schema: public; Owner: tjko
 --
 
@@ -2226,7 +2297,7 @@ COPY printer_entries (id, "type", ref, printer, "comment") FROM stdin;
 
 
 --
--- Data for TOC entry 150 (OID 78713)
+-- Data for TOC entry 186 (OID 601653)
 -- Name: a_entries; Type: TABLE DATA; Schema: public; Owner: tjko
 --
 
@@ -2301,7 +2372,7 @@ COPY a_entries (id, host, ip, ipv6, "type", reverse, "forward", "comment") FROM 
 
 
 --
--- Data for TOC entry 151 (OID 78726)
+-- Data for TOC entry 187 (OID 601664)
 -- Name: txt_entries; Type: TABLE DATA; Schema: public; Owner: tjko
 --
 
@@ -2312,7 +2383,7 @@ COPY txt_entries (id, "type", ref, txt, "comment") FROM stdin;
 
 
 --
--- Data for TOC entry 152 (OID 78736)
+-- Data for TOC entry 188 (OID 601672)
 -- Name: srv_entries; Type: TABLE DATA; Schema: public; Owner: tjko
 --
 
@@ -2321,19 +2392,19 @@ COPY srv_entries (id, "type", ref, pri, weight, port, target, "comment") FROM st
 
 
 --
--- Data for TOC entry 153 (OID 78750)
+-- Data for TOC entry 189 (OID 601684)
 -- Name: users; Type: TABLE DATA; Schema: public; Owner: tjko
 --
 
-COPY users (cdate, cuser, mdate, muser, expiration, id, username, "password", name, email, superuser, server, "zone", last, last_pwd, last_from, search_opts, flags, "comment") FROM stdin;
+COPY users (cdate, cuser, mdate, muser, expiration, id, username, "password", name, email, superuser, server, "zone", "last", last_pwd, last_from, search_opts, flags, "comment") FROM stdin;
 1041848524	tjko    	\N	unknown 	0	2	user1	MD5:638486:a7dd645e50011a1e23ce1f5386af0954	Sales User	salesuser@sales.middle.earth	f	1	3	1041851048	0	127.0.0.1	\N	0	\N
-1040590632	tjko    	1040590661	tjko    	0	1	admin	MD5:362932:70abe12521b6333491aa6011a0d6de38	demodb administrator	\N	t	1	3	1041858745	0	127.0.0.1	\N	0	\N
 1041848567	tjko    	\N	unknown 	0	3	user2	MD5:508568:35c297b9760b4882a489ac218b35add2	Sales User 2	\N	f	1	3	1041862943	0	127.0.0.1	\N	0	\N
+1040590632	tjko    	1040590661	tjko    	0	1	admin	MD5:362932:70abe12521b6333491aa6011a0d6de38	demodb administrator	\N	t	1	3	1115963959	0	192.168.1.50	\N	0	\N
 \.
 
 
 --
--- Data for TOC entry 154 (OID 78770)
+-- Data for TOC entry 190 (OID 601701)
 -- Name: user_rights; Type: TABLE DATA; Schema: public; Owner: tjko
 --
 
@@ -2352,7 +2423,7 @@ COPY user_rights (id, "type", ref, rtype, rref, "rule") FROM stdin;
 
 
 --
--- Data for TOC entry 155 (OID 78777)
+-- Data for TOC entry 191 (OID 601706)
 -- Name: user_groups; Type: TABLE DATA; Schema: public; Owner: tjko
 --
 
@@ -2362,7 +2433,7 @@ COPY user_groups (id, name, "comment") FROM stdin;
 
 
 --
--- Data for TOC entry 156 (OID 78788)
+-- Data for TOC entry 192 (OID 601715)
 -- Name: wks_entries; Type: TABLE DATA; Schema: public; Owner: tjko
 --
 
@@ -2374,7 +2445,7 @@ COPY wks_entries (id, "type", ref, proto, services, "comment") FROM stdin;
 
 
 --
--- Data for TOC entry 157 (OID 78798)
+-- Data for TOC entry 193 (OID 601723)
 -- Name: wks_templates; Type: TABLE DATA; Schema: public; Owner: tjko
 --
 
@@ -2386,16 +2457,17 @@ COPY wks_templates (cdate, cuser, mdate, muser, expiration, id, server, alevel, 
 
 
 --
--- Data for TOC entry 158 (OID 78809)
+-- Data for TOC entry 194 (OID 601732)
 -- Name: utmp; Type: TABLE DATA; Schema: public; Owner: tjko
 --
 
-COPY utmp (cookie, uid, sid, uname, addr, superuser, auth, "mode", w, serverid, server, zoneid, "zone", login, last, searchopts, searchdomain, searchpattern) FROM stdin;
+COPY utmp (cookie, uid, sid, uname, addr, superuser, auth, "mode", w, serverid, server, zoneid, "zone", login, "last", searchopts, searchdomain, searchpattern) FROM stdin;
+5f1c9bc7bb0d8fa39614db4259cb45b8	-1	\N	\N	192.168.1.50/32	f	f	1	\N	-1	\N	-1	\N	0	0	\N	\N	\N
 \.
 
 
 --
--- Data for TOC entry 159 (OID 78824)
+-- Data for TOC entry 195 (OID 601745)
 -- Name: hinfo_templates; Type: TABLE DATA; Schema: public; Owner: tjko
 --
 
@@ -2443,7 +2515,7 @@ COPY hinfo_templates (cdate, cuser, mdate, muser, expiration, id, hinfo, "type",
 
 
 --
--- Data for TOC entry 160 (OID 78839)
+-- Data for TOC entry 196 (OID 601758)
 -- Name: arec_entries; Type: TABLE DATA; Schema: public; Owner: tjko
 --
 
@@ -2452,7 +2524,7 @@ COPY arec_entries (id, host, arec) FROM stdin;
 
 
 --
--- Data for TOC entry 161 (OID 78846)
+-- Data for TOC entry 197 (OID 601763)
 -- Name: root_servers; Type: TABLE DATA; Schema: public; Owner: tjko
 --
 
@@ -2487,7 +2559,7 @@ COPY root_servers (id, server, ttl, "domain", "type", value) FROM stdin;
 
 
 --
--- Data for TOC entry 162 (OID 78857)
+-- Data for TOC entry 198 (OID 601772)
 -- Name: history; Type: TABLE DATA; Schema: public; Owner: tjko
 --
 
@@ -2540,7 +2612,7 @@ COPY history (id, sid, uid, date, "type", ref, "action", info) FROM stdin;
 
 
 --
--- Data for TOC entry 163 (OID 78864)
+-- Data for TOC entry 199 (OID 601777)
 -- Name: lastlog; Type: TABLE DATA; Schema: public; Owner: tjko
 --
 
@@ -2558,11 +2630,12 @@ COPY lastlog (id, sid, uid, date, state, ldate, ip, host) FROM stdin;
 11	11	1	1041858745	2	1041858767	127.0.0.1	127.0.0.1                               
 12	12	3	1041858777	3	1041862934	127.0.0.1	127.0.0.1                               
 13	13	3	1041862943	2	1041862969	127.0.0.1	127.0.0.1                               
+14	14	1	1115963960	2	1115965074	192.168.1.50	192.168.1.50
 \.
 
 
 --
--- Data for TOC entry 164 (OID 78875)
+-- Data for TOC entry 200 (OID 601786)
 -- Name: news; Type: TABLE DATA; Schema: public; Owner: tjko
 --
 
@@ -2572,7 +2645,7 @@ COPY news (cdate, cuser, mdate, muser, expiration, id, server, info) FROM stdin;
 
 
 --
--- Data for TOC entry 165 (OID 78888)
+-- Data for TOC entry 201 (OID 601797)
 -- Name: vlans; Type: TABLE DATA; Schema: public; Owner: tjko
 --
 
@@ -2587,7 +2660,7 @@ COPY vlans (cdate, cuser, mdate, muser, expiration, id, server, name, descriptio
 
 
 --
--- Data for TOC entry 166 (OID 78901)
+-- Data for TOC entry 202 (OID 601808)
 -- Name: deleted_hosts; Type: TABLE DATA; Schema: public; Owner: tjko
 --
 
@@ -2596,7 +2669,7 @@ COPY deleted_hosts (cdate, cuser, mdate, muser, expiration, id, "zone", "type", 
 
 
 --
--- Data for TOC entry 167 (OID 80205)
+-- Data for TOC entry 203 (OID 601815)
 -- Name: vmps; Type: TABLE DATA; Schema: public; Owner: tjko
 --
 
@@ -2605,7 +2678,47 @@ COPY vmps (cdate, cuser, mdate, muser, expiration, id, server, name, description
 
 
 --
--- TOC entry 93 (OID 80185)
+-- Data for TOC entry 204 (OID 603202)
+-- Name: group_entries; Type: TABLE DATA; Schema: public; Owner: tjko
+--
+
+COPY group_entries (id, host, grp) FROM stdin;
+\.
+
+
+--
+-- Data for TOC entry 205 (OID 603209)
+-- Name: keys; Type: TABLE DATA; Schema: public; Owner: tjko
+--
+
+COPY keys (cdate, cuser, mdate, muser, expiration, id, "type", ref, name, keytype, nametype, protocol, algorithm, "mode", keysize, strength, publickey, secretkey, "comment") FROM stdin;
+\.
+
+
+--
+-- Data for TOC entry 206 (OID 603228)
+-- Name: acls; Type: TABLE DATA; Schema: public; Owner: tjko
+--
+
+COPY acls (cdate, cuser, mdate, muser, expiration, id, server, name, "type", "comment") FROM stdin;
+\N	unknown 	\N	unknown 	\N	1	-1	any	0	\N
+\N	unknown 	\N	unknown 	\N	2	-1	none	0	\N
+\N	unknown 	\N	unknown 	\N	3	-1	localhost	0	\N
+\N	unknown 	\N	unknown 	\N	4	-1	localnets	0	\N
+\.
+
+
+--
+-- Data for TOC entry 207 (OID 603248)
+-- Name: leases; Type: TABLE DATA; Schema: public; Owner: tjko
+--
+
+COPY leases (id, server, host, ip, ipv6, lstart, lend, mac, state, uid, hostname, info) FROM stdin;
+\.
+
+
+--
+-- TOC entry 104 (OID 603108)
 -- Name: servers_name_key; Type: INDEX; Schema: public; Owner: tjko
 --
 
@@ -2613,15 +2726,7 @@ CREATE UNIQUE INDEX servers_name_key ON servers USING btree (name);
 
 
 --
--- TOC entry 95 (OID 80186)
--- Name: zones_id_key; Type: INDEX; Schema: public; Owner: tjko
---
-
-CREATE UNIQUE INDEX zones_id_key ON zones USING btree (id);
-
-
---
--- TOC entry 99 (OID 80187)
+-- TOC entry 110 (OID 603110)
 -- Name: hostname_key; Type: INDEX; Schema: public; Owner: tjko
 --
 
@@ -2629,7 +2734,7 @@ CREATE UNIQUE INDEX hostname_key ON hosts USING btree ("domain", "zone");
 
 
 --
--- TOC entry 98 (OID 80188)
+-- TOC entry 109 (OID 603111)
 -- Name: ether_key; Type: INDEX; Schema: public; Owner: tjko
 --
 
@@ -2637,7 +2742,7 @@ CREATE UNIQUE INDEX ether_key ON hosts USING btree (ether, "zone");
 
 
 --
--- TOC entry 97 (OID 80189)
+-- TOC entry 108 (OID 603112)
 -- Name: asset_key; Type: INDEX; Schema: public; Owner: tjko
 --
 
@@ -2645,7 +2750,7 @@ CREATE UNIQUE INDEX asset_key ON hosts USING btree (asset_id, "zone");
 
 
 --
--- TOC entry 101 (OID 80190)
+-- TOC entry 112 (OID 603113)
 -- Name: groups_key; Type: INDEX; Schema: public; Owner: tjko
 --
 
@@ -2653,15 +2758,7 @@ CREATE UNIQUE INDEX groups_key ON groups USING btree (name, server);
 
 
 --
--- TOC entry 103 (OID 80191)
--- Name: nets_id_key; Type: INDEX; Schema: public; Owner: tjko
---
-
-CREATE UNIQUE INDEX nets_id_key ON nets USING btree (id);
-
-
---
--- TOC entry 111 (OID 80192)
+-- TOC entry 127 (OID 603115)
 -- Name: printer_classes_name_key; Type: INDEX; Schema: public; Owner: tjko
 --
 
@@ -2669,7 +2766,7 @@ CREATE UNIQUE INDEX printer_classes_name_key ON printer_classes USING btree (nam
 
 
 --
--- TOC entry 117 (OID 80193)
+-- TOC entry 137 (OID 603116)
 -- Name: username_key; Type: INDEX; Schema: public; Owner: tjko
 --
 
@@ -2677,7 +2774,7 @@ CREATE UNIQUE INDEX username_key ON users USING btree (username);
 
 
 --
--- TOC entry 120 (OID 80194)
+-- TOC entry 141 (OID 603117)
 -- Name: user_groups_name_key; Type: INDEX; Schema: public; Owner: tjko
 --
 
@@ -2685,7 +2782,7 @@ CREATE UNIQUE INDEX user_groups_name_key ON user_groups USING btree (name);
 
 
 --
--- TOC entry 125 (OID 80195)
+-- TOC entry 147 (OID 603118)
 -- Name: hinfo_templates_hinfo_key; Type: INDEX; Schema: public; Owner: tjko
 --
 
@@ -2693,24 +2790,160 @@ CREATE UNIQUE INDEX hinfo_templates_hinfo_key ON hinfo_templates USING btree (hi
 
 
 --
--- TOC entry 132 (OID 80196)
--- Name: vlans_id_key; Type: INDEX; Schema: public; Owner: tjko
+-- TOC entry 169 (OID 603257)
+-- Name: leases_mac_index; Type: INDEX; Schema: public; Owner: tjko
 --
 
-CREATE UNIQUE INDEX vlans_id_key ON vlans USING btree (id);
+CREATE INDEX leases_mac_index ON leases USING btree (mac);
 
 
 --
--- TOC entry 92 (OID 78499)
+-- TOC entry 168 (OID 603258)
+-- Name: leases_ip_index; Type: INDEX; Schema: public; Owner: tjko
+--
+
+CREATE INDEX leases_ip_index ON leases USING btree (ip);
+
+
+--
+-- TOC entry 167 (OID 603259)
+-- Name: leases_host_index; Type: INDEX; Schema: public; Owner: tjko
+--
+
+CREATE INDEX leases_host_index ON leases USING btree (host);
+
+
+--
+-- TOC entry 131 (OID 603264)
+-- Name: a_entries_ip_index; Type: INDEX; Schema: public; Owner: tjko
+--
+
+CREATE INDEX a_entries_ip_index ON a_entries USING btree (ip);
+
+
+--
+-- TOC entry 130 (OID 603265)
+-- Name: a_entries_host_index; Type: INDEX; Schema: public; Owner: tjko
+--
+
+CREATE INDEX a_entries_host_index ON a_entries USING btree (host);
+
+
+--
+-- TOC entry 149 (OID 603266)
+-- Name: arec_entries_host_index; Type: INDEX; Schema: public; Owner: tjko
+--
+
+CREATE INDEX arec_entries_host_index ON arec_entries USING btree (host);
+
+
+--
+-- TOC entry 118 (OID 603267)
+-- Name: cidr_entries_ref_index; Type: INDEX; Schema: public; Owner: tjko
+--
+
+CREATE INDEX cidr_entries_ref_index ON cidr_entries USING btree ("type", ref);
+
+
+--
+-- TOC entry 116 (OID 603268)
+-- Name: cidr_entries_ip_index; Type: INDEX; Schema: public; Owner: tjko
+--
+
+CREATE INDEX cidr_entries_ip_index ON cidr_entries USING btree (ip);
+
+
+--
+-- TOC entry 120 (OID 603269)
+-- Name: dhcp_entries_ref_index; Type: INDEX; Schema: public; Owner: tjko
+--
+
+CREATE INDEX dhcp_entries_ref_index ON dhcp_entries USING btree ("type", ref);
+
+
+--
+-- TOC entry 161 (OID 603270)
+-- Name: group_entries_host_index; Type: INDEX; Schema: public; Owner: tjko
+--
+
+CREATE INDEX group_entries_host_index ON group_entries USING btree (host);
+
+
+--
+-- TOC entry 153 (OID 603271)
+-- Name: history_sid_index; Type: INDEX; Schema: public; Owner: tjko
+--
+
+CREATE INDEX history_sid_index ON history USING btree (sid);
+
+
+--
+-- TOC entry 154 (OID 603272)
+-- Name: history_uid_index; Type: INDEX; Schema: public; Owner: tjko
+--
+
+CREATE INDEX history_uid_index ON history USING btree (uid);
+
+
+--
+-- TOC entry 123 (OID 603273)
+-- Name: mx_entries_ref_index; Type: INDEX; Schema: public; Owner: tjko
+--
+
+CREATE INDEX mx_entries_ref_index ON mx_entries USING btree ("type", ref);
+
+
+--
+-- TOC entry 126 (OID 603274)
+-- Name: ns_entries_ref_index; Type: INDEX; Schema: public; Owner: tjko
+--
+
+CREATE INDEX ns_entries_ref_index ON ns_entries USING btree ("type", ref);
+
+
+--
+-- TOC entry 136 (OID 603275)
+-- Name: srv_entries_ref_index; Type: INDEX; Schema: public; Owner: tjko
+--
+
+CREATE INDEX srv_entries_ref_index ON srv_entries USING btree ("type", ref);
+
+
+--
+-- TOC entry 134 (OID 603276)
+-- Name: txt_entries_ref_index; Type: INDEX; Schema: public; Owner: tjko
+--
+
+CREATE INDEX txt_entries_ref_index ON txt_entries USING btree ("type", ref);
+
+
+--
+-- TOC entry 140 (OID 603277)
+-- Name: user_rights_ref_index; Type: INDEX; Schema: public; Owner: tjko
+--
+
+CREATE INDEX user_rights_ref_index ON user_rights USING btree ("type", ref);
+
+
+--
+-- TOC entry 144 (OID 603278)
+-- Name: wks_entries_ref_index; Type: INDEX; Schema: public; Owner: tjko
+--
+
+CREATE INDEX wks_entries_ref_index ON wks_entries USING btree ("type", ref);
+
+
+--
+-- TOC entry 103 (OID 603120)
 -- Name: global_key; Type: CONSTRAINT; Schema: public; Owner: tjko
 --
 
 ALTER TABLE ONLY settings
-    ADD CONSTRAINT global_key PRIMARY KEY ("key");
+    ADD CONSTRAINT global_key PRIMARY KEY (setting);
 
 
 --
--- TOC entry 94 (OID 78542)
+-- TOC entry 105 (OID 603122)
 -- Name: servers_pkey; Type: CONSTRAINT; Schema: public; Owner: tjko
 --
 
@@ -2719,16 +2952,7 @@ ALTER TABLE ONLY servers
 
 
 --
--- TOC entry 96 (OID 78567)
--- Name: zones_key; Type: CONSTRAINT; Schema: public; Owner: tjko
---
-
-ALTER TABLE ONLY zones
-    ADD CONSTRAINT zones_key PRIMARY KEY (name, server);
-
-
---
--- TOC entry 100 (OID 78592)
+-- TOC entry 111 (OID 603126)
 -- Name: hosts_pkey; Type: CONSTRAINT; Schema: public; Owner: tjko
 --
 
@@ -2737,7 +2961,7 @@ ALTER TABLE ONLY hosts
 
 
 --
--- TOC entry 102 (OID 78606)
+-- TOC entry 113 (OID 603128)
 -- Name: groups_pkey; Type: CONSTRAINT; Schema: public; Owner: tjko
 --
 
@@ -2746,16 +2970,7 @@ ALTER TABLE ONLY groups
 
 
 --
--- TOC entry 104 (OID 78625)
--- Name: nets_key; Type: CONSTRAINT; Schema: public; Owner: tjko
---
-
-ALTER TABLE ONLY nets
-    ADD CONSTRAINT nets_key PRIMARY KEY (net, server);
-
-
---
--- TOC entry 105 (OID 78635)
+-- TOC entry 117 (OID 603132)
 -- Name: cidr_entries_pkey; Type: CONSTRAINT; Schema: public; Owner: tjko
 --
 
@@ -2764,7 +2979,7 @@ ALTER TABLE ONLY cidr_entries
 
 
 --
--- TOC entry 106 (OID 78645)
+-- TOC entry 119 (OID 603134)
 -- Name: dhcp_entries_pkey; Type: CONSTRAINT; Schema: public; Owner: tjko
 --
 
@@ -2773,7 +2988,7 @@ ALTER TABLE ONLY dhcp_entries
 
 
 --
--- TOC entry 107 (OID 78652)
+-- TOC entry 121 (OID 603136)
 -- Name: ether_info_pkey; Type: CONSTRAINT; Schema: public; Owner: tjko
 --
 
@@ -2782,7 +2997,7 @@ ALTER TABLE ONLY ether_info
 
 
 --
--- TOC entry 108 (OID 78663)
+-- TOC entry 122 (OID 603138)
 -- Name: mx_entries_pkey; Type: CONSTRAINT; Schema: public; Owner: tjko
 --
 
@@ -2791,7 +3006,7 @@ ALTER TABLE ONLY mx_entries
 
 
 --
--- TOC entry 109 (OID 78676)
+-- TOC entry 124 (OID 603140)
 -- Name: mx_templates_pkey; Type: CONSTRAINT; Schema: public; Owner: tjko
 --
 
@@ -2800,7 +3015,7 @@ ALTER TABLE ONLY mx_templates
 
 
 --
--- TOC entry 110 (OID 78686)
+-- TOC entry 125 (OID 603142)
 -- Name: ns_entries_pkey; Type: CONSTRAINT; Schema: public; Owner: tjko
 --
 
@@ -2809,7 +3024,7 @@ ALTER TABLE ONLY ns_entries
 
 
 --
--- TOC entry 112 (OID 78699)
+-- TOC entry 128 (OID 603144)
 -- Name: printer_classes_pkey; Type: CONSTRAINT; Schema: public; Owner: tjko
 --
 
@@ -2818,7 +3033,7 @@ ALTER TABLE ONLY printer_classes
 
 
 --
--- TOC entry 113 (OID 78709)
+-- TOC entry 129 (OID 603146)
 -- Name: printer_entries_pkey; Type: CONSTRAINT; Schema: public; Owner: tjko
 --
 
@@ -2827,7 +3042,7 @@ ALTER TABLE ONLY printer_entries
 
 
 --
--- TOC entry 114 (OID 78722)
+-- TOC entry 132 (OID 603148)
 -- Name: a_entries_pkey; Type: CONSTRAINT; Schema: public; Owner: tjko
 --
 
@@ -2836,7 +3051,7 @@ ALTER TABLE ONLY a_entries
 
 
 --
--- TOC entry 115 (OID 78732)
+-- TOC entry 133 (OID 603150)
 -- Name: txt_entries_pkey; Type: CONSTRAINT; Schema: public; Owner: tjko
 --
 
@@ -2845,7 +3060,7 @@ ALTER TABLE ONLY txt_entries
 
 
 --
--- TOC entry 116 (OID 78746)
+-- TOC entry 135 (OID 603152)
 -- Name: srv_entries_pkey; Type: CONSTRAINT; Schema: public; Owner: tjko
 --
 
@@ -2854,7 +3069,7 @@ ALTER TABLE ONLY srv_entries
 
 
 --
--- TOC entry 118 (OID 78766)
+-- TOC entry 138 (OID 603154)
 -- Name: users_pkey; Type: CONSTRAINT; Schema: public; Owner: tjko
 --
 
@@ -2863,7 +3078,7 @@ ALTER TABLE ONLY users
 
 
 --
--- TOC entry 119 (OID 78773)
+-- TOC entry 139 (OID 603156)
 -- Name: user_rights_pkey; Type: CONSTRAINT; Schema: public; Owner: tjko
 --
 
@@ -2872,7 +3087,7 @@ ALTER TABLE ONLY user_rights
 
 
 --
--- TOC entry 121 (OID 78784)
+-- TOC entry 142 (OID 603158)
 -- Name: user_groups_pkey; Type: CONSTRAINT; Schema: public; Owner: tjko
 --
 
@@ -2881,7 +3096,7 @@ ALTER TABLE ONLY user_groups
 
 
 --
--- TOC entry 122 (OID 78794)
+-- TOC entry 143 (OID 603160)
 -- Name: wks_entries_pkey; Type: CONSTRAINT; Schema: public; Owner: tjko
 --
 
@@ -2890,7 +3105,7 @@ ALTER TABLE ONLY wks_entries
 
 
 --
--- TOC entry 123 (OID 78807)
+-- TOC entry 145 (OID 603162)
 -- Name: wks_templates_pkey; Type: CONSTRAINT; Schema: public; Owner: tjko
 --
 
@@ -2899,7 +3114,7 @@ ALTER TABLE ONLY wks_templates
 
 
 --
--- TOC entry 124 (OID 78820)
+-- TOC entry 146 (OID 603164)
 -- Name: utmp_pkey; Type: CONSTRAINT; Schema: public; Owner: tjko
 --
 
@@ -2908,7 +3123,7 @@ ALTER TABLE ONLY utmp
 
 
 --
--- TOC entry 126 (OID 78835)
+-- TOC entry 148 (OID 603166)
 -- Name: hinfo_templates_pkey; Type: CONSTRAINT; Schema: public; Owner: tjko
 --
 
@@ -2917,7 +3132,7 @@ ALTER TABLE ONLY hinfo_templates
 
 
 --
--- TOC entry 127 (OID 78842)
+-- TOC entry 150 (OID 603168)
 -- Name: arec_entries_pkey; Type: CONSTRAINT; Schema: public; Owner: tjko
 --
 
@@ -2926,7 +3141,7 @@ ALTER TABLE ONLY arec_entries
 
 
 --
--- TOC entry 128 (OID 78853)
+-- TOC entry 151 (OID 603170)
 -- Name: root_servers_pkey; Type: CONSTRAINT; Schema: public; Owner: tjko
 --
 
@@ -2935,7 +3150,7 @@ ALTER TABLE ONLY root_servers
 
 
 --
--- TOC entry 129 (OID 78860)
+-- TOC entry 152 (OID 603172)
 -- Name: history_pkey; Type: CONSTRAINT; Schema: public; Owner: tjko
 --
 
@@ -2944,7 +3159,7 @@ ALTER TABLE ONLY history
 
 
 --
--- TOC entry 130 (OID 78871)
+-- TOC entry 155 (OID 603174)
 -- Name: lastlog_pkey; Type: CONSTRAINT; Schema: public; Owner: tjko
 --
 
@@ -2953,7 +3168,7 @@ ALTER TABLE ONLY lastlog
 
 
 --
--- TOC entry 131 (OID 78884)
+-- TOC entry 156 (OID 603176)
 -- Name: news_pkey; Type: CONSTRAINT; Schema: public; Owner: tjko
 --
 
@@ -2962,252 +3177,402 @@ ALTER TABLE ONLY news
 
 
 --
--- TOC entry 133 (OID 78897)
--- Name: vlans_key; Type: CONSTRAINT; Schema: public; Owner: tjko
---
-
-ALTER TABLE ONLY vlans
-    ADD CONSTRAINT vlans_key PRIMARY KEY (name, server);
-
-
---
--- TOC entry 134 (OID 80217)
+-- TOC entry 159 (OID 603182)
 -- Name: vmps_key; Type: CONSTRAINT; Schema: public; Owner: tjko
 --
 
 ALTER TABLE ONLY vmps
-    ADD CONSTRAINT vmps_key PRIMARY KEY (name, server);
+    ADD CONSTRAINT vmps_key UNIQUE (name, server);
 
 
 --
--- TOC entry 3 (OID 78501)
+-- TOC entry 160 (OID 603184)
+-- Name: vmps_pkey; Type: CONSTRAINT; Schema: public; Owner: tjko
+--
+
+ALTER TABLE ONLY vmps
+    ADD CONSTRAINT vmps_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 157 (OID 603186)
+-- Name: vlans_key; Type: CONSTRAINT; Schema: public; Owner: tjko
+--
+
+ALTER TABLE ONLY vlans
+    ADD CONSTRAINT vlans_key UNIQUE (name, server);
+
+
+--
+-- TOC entry 158 (OID 603188)
+-- Name: vlans_pkey; Type: CONSTRAINT; Schema: public; Owner: tjko
+--
+
+ALTER TABLE ONLY vlans
+    ADD CONSTRAINT vlans_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 114 (OID 603190)
+-- Name: nets_key; Type: CONSTRAINT; Schema: public; Owner: tjko
+--
+
+ALTER TABLE ONLY nets
+    ADD CONSTRAINT nets_key UNIQUE (net, server);
+
+
+--
+-- TOC entry 115 (OID 603192)
+-- Name: nets_pkey; Type: CONSTRAINT; Schema: public; Owner: tjko
+--
+
+ALTER TABLE ONLY nets
+    ADD CONSTRAINT nets_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 106 (OID 603194)
+-- Name: zones_key; Type: CONSTRAINT; Schema: public; Owner: tjko
+--
+
+ALTER TABLE ONLY zones
+    ADD CONSTRAINT zones_key UNIQUE (name, server);
+
+
+--
+-- TOC entry 107 (OID 603196)
+-- Name: zones_pkey; Type: CONSTRAINT; Schema: public; Owner: tjko
+--
+
+ALTER TABLE ONLY zones
+    ADD CONSTRAINT zones_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 162 (OID 603205)
+-- Name: group_entries_pkey; Type: CONSTRAINT; Schema: public; Owner: tjko
+--
+
+ALTER TABLE ONLY group_entries
+    ADD CONSTRAINT group_entries_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 164 (OID 603222)
+-- Name: keys_pkey; Type: CONSTRAINT; Schema: public; Owner: tjko
+--
+
+ALTER TABLE ONLY keys
+    ADD CONSTRAINT keys_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 163 (OID 603224)
+-- Name: keyname_key; Type: CONSTRAINT; Schema: public; Owner: tjko
+--
+
+ALTER TABLE ONLY keys
+    ADD CONSTRAINT keyname_key UNIQUE (name, ref, "type");
+
+
+--
+-- TOC entry 166 (OID 603238)
+-- Name: acls_pkey; Type: CONSTRAINT; Schema: public; Owner: tjko
+--
+
+ALTER TABLE ONLY acls
+    ADD CONSTRAINT acls_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 165 (OID 603240)
+-- Name: acls_key; Type: CONSTRAINT; Schema: public; Owner: tjko
+--
+
+ALTER TABLE ONLY acls
+    ADD CONSTRAINT acls_key UNIQUE (name, server);
+
+
+--
+-- TOC entry 170 (OID 603255)
+-- Name: leases_pkey; Type: CONSTRAINT; Schema: public; Owner: tjko
+--
+
+ALTER TABLE ONLY leases
+    ADD CONSTRAINT leases_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 6 (OID 601463)
 -- Name: servers_id_seq; Type: SEQUENCE SET; Schema: public; Owner: tjko
 --
 
-SELECT pg_catalog.setval ('servers_id_seq', 1, true);
+SELECT pg_catalog.setval('servers_id_seq', 1, true);
 
 
 --
--- TOC entry 5 (OID 78544)
+-- TOC entry 8 (OID 601504)
 -- Name: zones_id_seq; Type: SEQUENCE SET; Schema: public; Owner: tjko
 --
 
-SELECT pg_catalog.setval ('zones_id_seq', 4, true);
+SELECT pg_catalog.setval('zones_id_seq', 4, true);
 
 
 --
--- TOC entry 7 (OID 78569)
+-- TOC entry 10 (OID 601528)
 -- Name: hosts_id_seq; Type: SEQUENCE SET; Schema: public; Owner: tjko
 --
 
-SELECT pg_catalog.setval ('hosts_id_seq', 76, true);
+SELECT pg_catalog.setval('hosts_id_seq', 76, true);
 
 
 --
--- TOC entry 9 (OID 78594)
+-- TOC entry 12 (OID 601553)
 -- Name: groups_id_seq; Type: SEQUENCE SET; Schema: public; Owner: tjko
 --
 
-SELECT pg_catalog.setval ('groups_id_seq', 5, true);
+SELECT pg_catalog.setval('groups_id_seq', 5, true);
 
 
 --
--- TOC entry 11 (OID 78608)
+-- TOC entry 14 (OID 601566)
 -- Name: nets_id_seq; Type: SEQUENCE SET; Schema: public; Owner: tjko
 --
 
-SELECT pg_catalog.setval ('nets_id_seq', 9, true);
+SELECT pg_catalog.setval('nets_id_seq', 9, true);
 
 
 --
--- TOC entry 13 (OID 78627)
+-- TOC entry 16 (OID 601583)
 -- Name: cidr_entries_id_seq; Type: SEQUENCE SET; Schema: public; Owner: tjko
 --
 
-SELECT pg_catalog.setval ('cidr_entries_id_seq', 7, true);
+SELECT pg_catalog.setval('cidr_entries_id_seq', 7, true);
 
 
 --
--- TOC entry 15 (OID 78637)
+-- TOC entry 18 (OID 601591)
 -- Name: dhcp_entries_id_seq; Type: SEQUENCE SET; Schema: public; Owner: tjko
 --
 
-SELECT pg_catalog.setval ('dhcp_entries_id_seq', 16, true);
+SELECT pg_catalog.setval('dhcp_entries_id_seq', 16, true);
 
 
 --
--- TOC entry 17 (OID 78654)
+-- TOC entry 20 (OID 601604)
 -- Name: mx_entries_id_seq; Type: SEQUENCE SET; Schema: public; Owner: tjko
 --
 
-SELECT pg_catalog.setval ('mx_entries_id_seq', 9, true);
+SELECT pg_catalog.setval('mx_entries_id_seq', 9, true);
 
 
 --
--- TOC entry 19 (OID 78665)
+-- TOC entry 22 (OID 601613)
 -- Name: mx_templates_id_seq; Type: SEQUENCE SET; Schema: public; Owner: tjko
 --
 
-SELECT pg_catalog.setval ('mx_templates_id_seq', 4, true);
+SELECT pg_catalog.setval('mx_templates_id_seq', 4, true);
 
 
 --
--- TOC entry 21 (OID 78678)
+-- TOC entry 24 (OID 601624)
 -- Name: ns_entries_id_seq; Type: SEQUENCE SET; Schema: public; Owner: tjko
 --
 
-SELECT pg_catalog.setval ('ns_entries_id_seq', 12, true);
+SELECT pg_catalog.setval('ns_entries_id_seq', 12, true);
 
 
 --
--- TOC entry 23 (OID 78688)
+-- TOC entry 26 (OID 601632)
 -- Name: printer_classes_id_seq; Type: SEQUENCE SET; Schema: public; Owner: tjko
 --
 
-SELECT pg_catalog.setval ('printer_classes_id_seq', 1, false);
+SELECT pg_catalog.setval('printer_classes_id_seq', 1, false);
 
 
 --
--- TOC entry 25 (OID 78701)
+-- TOC entry 28 (OID 601643)
 -- Name: printer_entries_id_seq; Type: SEQUENCE SET; Schema: public; Owner: tjko
 --
 
-SELECT pg_catalog.setval ('printer_entries_id_seq', 1, false);
+SELECT pg_catalog.setval('printer_entries_id_seq', 1, false);
 
 
 --
--- TOC entry 27 (OID 78711)
+-- TOC entry 30 (OID 601651)
 -- Name: a_entries_id_seq; Type: SEQUENCE SET; Schema: public; Owner: tjko
 --
 
-SELECT pg_catalog.setval ('a_entries_id_seq', 66, true);
+SELECT pg_catalog.setval('a_entries_id_seq', 66, true);
 
 
 --
--- TOC entry 29 (OID 78724)
+-- TOC entry 32 (OID 601662)
 -- Name: txt_entries_id_seq; Type: SEQUENCE SET; Schema: public; Owner: tjko
 --
 
-SELECT pg_catalog.setval ('txt_entries_id_seq', 2, true);
+SELECT pg_catalog.setval('txt_entries_id_seq', 2, true);
 
 
 --
--- TOC entry 31 (OID 78734)
+-- TOC entry 34 (OID 601670)
 -- Name: srv_entries_id_seq; Type: SEQUENCE SET; Schema: public; Owner: tjko
 --
 
-SELECT pg_catalog.setval ('srv_entries_id_seq', 1, false);
+SELECT pg_catalog.setval('srv_entries_id_seq', 1, false);
 
 
 --
--- TOC entry 33 (OID 78748)
+-- TOC entry 36 (OID 601682)
 -- Name: users_id_seq; Type: SEQUENCE SET; Schema: public; Owner: tjko
 --
 
-SELECT pg_catalog.setval ('users_id_seq', 3, true);
+SELECT pg_catalog.setval('users_id_seq', 3, true);
 
 
 --
--- TOC entry 35 (OID 78768)
+-- TOC entry 38 (OID 601699)
 -- Name: user_rights_id_seq; Type: SEQUENCE SET; Schema: public; Owner: tjko
 --
 
-SELECT pg_catalog.setval ('user_rights_id_seq', 10, true);
+SELECT pg_catalog.setval('user_rights_id_seq', 10, true);
 
 
 --
--- TOC entry 37 (OID 78775)
+-- TOC entry 40 (OID 601704)
 -- Name: user_groups_id_seq; Type: SEQUENCE SET; Schema: public; Owner: tjko
 --
 
-SELECT pg_catalog.setval ('user_groups_id_seq', 1, true);
+SELECT pg_catalog.setval('user_groups_id_seq', 1, true);
 
 
 --
--- TOC entry 39 (OID 78786)
+-- TOC entry 42 (OID 601713)
 -- Name: wks_entries_id_seq; Type: SEQUENCE SET; Schema: public; Owner: tjko
 --
 
-SELECT pg_catalog.setval ('wks_entries_id_seq', 3, true);
+SELECT pg_catalog.setval('wks_entries_id_seq', 3, true);
 
 
 --
--- TOC entry 41 (OID 78796)
+-- TOC entry 44 (OID 601721)
 -- Name: wks_templates_id_seq; Type: SEQUENCE SET; Schema: public; Owner: tjko
 --
 
-SELECT pg_catalog.setval ('wks_templates_id_seq', 3, true);
+SELECT pg_catalog.setval('wks_templates_id_seq', 3, true);
 
 
 --
--- TOC entry 43 (OID 78822)
+-- TOC entry 46 (OID 601743)
 -- Name: hinfo_templates_id_seq; Type: SEQUENCE SET; Schema: public; Owner: tjko
 --
 
-SELECT pg_catalog.setval ('hinfo_templates_id_seq', 39, true);
+SELECT pg_catalog.setval('hinfo_templates_id_seq', 39, true);
 
 
 --
--- TOC entry 45 (OID 78837)
+-- TOC entry 48 (OID 601756)
 -- Name: arec_entries_id_seq; Type: SEQUENCE SET; Schema: public; Owner: tjko
 --
 
-SELECT pg_catalog.setval ('arec_entries_id_seq', 1, false);
+SELECT pg_catalog.setval('arec_entries_id_seq', 1, false);
 
 
 --
--- TOC entry 47 (OID 78844)
+-- TOC entry 50 (OID 601761)
 -- Name: root_servers_id_seq; Type: SEQUENCE SET; Schema: public; Owner: tjko
 --
 
-SELECT pg_catalog.setval ('root_servers_id_seq', 26, true);
+SELECT pg_catalog.setval('root_servers_id_seq', 26, true);
 
 
 --
--- TOC entry 49 (OID 78855)
+-- TOC entry 52 (OID 601770)
 -- Name: history_id_seq; Type: SEQUENCE SET; Schema: public; Owner: tjko
 --
 
-SELECT pg_catalog.setval ('history_id_seq', 44, true);
+SELECT pg_catalog.setval('history_id_seq', 44, true);
 
 
 --
--- TOC entry 51 (OID 78862)
+-- TOC entry 54 (OID 601775)
 -- Name: lastlog_id_seq; Type: SEQUENCE SET; Schema: public; Owner: tjko
 --
 
-SELECT pg_catalog.setval ('lastlog_id_seq', 13, true);
+SELECT pg_catalog.setval('lastlog_id_seq', 14, true);
 
 
 --
--- TOC entry 53 (OID 78873)
+-- TOC entry 56 (OID 601784)
 -- Name: news_id_seq; Type: SEQUENCE SET; Schema: public; Owner: tjko
 --
 
-SELECT pg_catalog.setval ('news_id_seq', 1, true);
+SELECT pg_catalog.setval('news_id_seq', 1, true);
 
 
 --
--- TOC entry 55 (OID 78886)
+-- TOC entry 58 (OID 601795)
 -- Name: vlans_id_seq; Type: SEQUENCE SET; Schema: public; Owner: tjko
 --
 
-SELECT pg_catalog.setval ('vlans_id_seq', 6, true);
+SELECT pg_catalog.setval('vlans_id_seq', 6, true);
 
 
 --
--- TOC entry 57 (OID 78899)
+-- TOC entry 60 (OID 601806)
 -- Name: sid_seq; Type: SEQUENCE SET; Schema: public; Owner: tjko
 --
 
-SELECT pg_catalog.setval ('sid_seq', 13, true);
+SELECT pg_catalog.setval('sid_seq', 14, true);
 
 
 --
--- TOC entry 91 (OID 80203)
+-- TOC entry 98 (OID 601813)
 -- Name: vmps_id_seq; Type: SEQUENCE SET; Schema: public; Owner: tjko
 --
 
-SELECT pg_catalog.setval ('vmps_id_seq', 1, false);
+SELECT pg_catalog.setval('vmps_id_seq', 1, false);
+
+
+--
+-- TOC entry 99 (OID 603200)
+-- Name: group_entries_id_seq; Type: SEQUENCE SET; Schema: public; Owner: tjko
+--
+
+SELECT pg_catalog.setval('group_entries_id_seq', 1, false);
+
+
+--
+-- TOC entry 100 (OID 603207)
+-- Name: keys_id_seq; Type: SEQUENCE SET; Schema: public; Owner: tjko
+--
+
+SELECT pg_catalog.setval('keys_id_seq', 1, false);
+
+
+--
+-- TOC entry 101 (OID 603226)
+-- Name: acls_id_seq; Type: SEQUENCE SET; Schema: public; Owner: tjko
+--
+
+SELECT pg_catalog.setval('acls_id_seq', 4, true);
+
+
+--
+-- TOC entry 102 (OID 603246)
+-- Name: leases_id_seq; Type: SEQUENCE SET; Schema: public; Owner: tjko
+--
+
+SELECT pg_catalog.setval('leases_id_seq', 1, false);
+
+
+SET SESSION AUTHORIZATION 'postgres';
+
+--
+-- TOC entry 3 (OID 2200)
+-- Name: SCHEMA public; Type: COMMENT; Schema: -; Owner: postgres
+--
+
+COMMENT ON SCHEMA public IS 'Standard public schema';
 
 
