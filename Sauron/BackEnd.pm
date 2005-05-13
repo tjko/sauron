@@ -166,7 +166,7 @@ sub fix_bools($$) {
 }
 
 sub sauron_db_version() {
-  return "1.2"; # required db format version for this backend
+  return "1.3"; # required db format version for this backend
 }
 
 sub set_muser($) {
