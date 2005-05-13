@@ -1,6 +1,9 @@
 $Id$
 
 0.7.2beta
+	- remove-hosts: new option --host by Otto Fuetterer
+	- modhosts: now Ethernet address can be uses as selection criteria
+	  by Otto Fuetterer
 	- sauron: initial tinydns (DJBDNS) support by Thomas Mangin
 	- CGI interface: host group added as search criteria
 	- CGI interface: added support for moving host to another zone
@@ -8,10 +11,11 @@ $Id$
 	  interface (new configuration variable ALEVEL_ACLS).
 	- new utility for managing (TSIG) keys: keygen
 	- database format changes (1.3):
-	    - new tables: acls, keys
+	    - new tables: acls, keys, leases
 	    - modified tables: zones, cidr_entries
 	    - conversion script now tries to fix possibly broken
 	      keys/indexs on tables: vmps,vlans,nets,zones
+	    - new indexes to various tables to speedup common queries
         - new utility dhcpd-lease-view for viewing dhcpd.leases file
           by Riku Meskanen
 	- sauron: slave server now inherits also "forward" zones patch

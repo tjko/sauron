@@ -1,4 +1,4 @@
-Sauron v.0.7.1 - DNS/DHCP Management System
+Sauron v.0.7.2 - DNS/DHCP Management System
 ==============
 
 NOTE! This is a development branch release (current stable branch is v0.6.x).
@@ -21,7 +21,7 @@ REQUIREMENTS
 		- Digest::HMAC module
 		- Digest::SHA1 module
 		- MIME::Base64
-	- PostgresSQL [7.3 or newer (may work fine with earlier 7.x versions)] 
+	- PostgresSQL [7.4 or newer (may work fine with earlier 7.x versions)] 
 	  (or add support to your favorite db yourself :)
 	- www-server (Apache or any other www-server with CGI support)
 

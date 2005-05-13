@@ -16,7 +16,7 @@ general:
 	  by zone....
 	- user_rights: should be possible to refer only a zone within
 	  a server (or all zones within server)
-	- allow moving of hosts between zones ("move")
+	- allow use of '*' wildcard in domain name
 
 
 import:
