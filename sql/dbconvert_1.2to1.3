@@ -97,6 +97,30 @@ INSERT INTO acls (server,name) VALUES(-1,'localhost');
 INSERT INTO acls (server,name) VALUES(-1,'localnets');
 
 
+/* leases table creation */
+
+CREATE TABLE leases (
+      id	   SERIAL PRIMARY KEY, /* unique ID */
+      server	   INT4 NOT NULL, /* ptr to servers table id
+					-->servers.id  */
+      host	   INT4 NOT NULL, /* optional ptr to hosts table id
+					-->hosts.id */
+      ip	   INET, /* IP number */
+      ipv6	   TEXT, /* reserved */
+      lstart	   INT4, /* lease start time */
+      lend         INT4, /* lease end time */
+      mac          CHAR(12), /* Ethernet address */
+      state	   INT4 DEFAULT 0, /* lease state */
+      uid	   TEXT, /* dhcp uid */
+      hostname     TEXT, /* dhcp hostname */
+      info	   TEXT  /* extra info */
+);
+
+CREATE INDEX leases_mac_index ON leases (mac);
+CREATE INDEX leases_ip_index ON leases (ip);
+CREATE INDEX leases_host_index ON leases (host);
+
+
 
 /* update cidr_entries table to accommodate ACL use */
 
@@ -123,7 +147,26 @@ ALTER TABLE zones ADD COLUMN transfer_source INET;
 /* DELETE FROM cidr_entries WHERE type=13; */
 
 
-/* UPDATE settings SET value='1.3' where setting='dbversion'; */
+/* add some indexes to speed up common queries */
+
+CREATE INDEX a_entries_ip_index ON a_entries (ip);
+CREATE INDEX a_entries_host_index ON a_entries (host);
+CREATE INDEX arec_entries_host_index ON arec_entries (host);
+CREATE INDEX cidr_entries_ref_index ON cidr_entries (type,ref);
+CREATE INDEX cidr_entries_ip_index ON cidr_entries (ip);
+CREATE INDEX dhcp_entries_ref_index ON dhcp_entries (type,ref);
+CREATE INDEX group_entries_host_index ON group_entries (host);
+CREATE INDEX history_sid_index ON history(sid);
+CREATE INDEX history_uid_index ON history(uid);
+CREATE INDEX mx_entries_ref_index ON mx_entries (type,ref);
+CREATE INDEX ns_entries_ref_index ON ns_entries (type,ref);
+CREATE INDEX srv_entries_ref_index ON srv_entries (type,ref);
+CREATE INDEX txt_entries_ref_index ON txt_entries (type,ref);
+CREATE INDEX user_rights_ref_index ON user_rights (type,ref);
+CREATE INDEX wks_entries_ref_index ON wks_entries (type,ref);
+
+
+UPDATE settings SET value='1.3' where setting='dbversion'; 
 
 /* eof */
 
