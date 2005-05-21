@@ -1,0 +1,134 @@
+$Id$
+
+
+Form declarations:
+
+A form that can be displayed and edited is declared using hash
+with following fields:
+
+%myform = (
+	# mandatory fields:
+	data=>[]  # this one contains array of hashes describing form fields
+
+	# following fields are optional and will override defaults if specified
+	bgcolor=>'#eeeebf',    # form background color
+	border=>'0',           # form border width
+	width=>'100%',         # form relative width
+        nwidth=>'30%',         # relative width of field names within form
+	heading_bg=>'#aaaaff'  # form headers background color
+)
+
+
+Form field definitions:
+
+Form fields are stored in array named 'data' under form hash.
+Each array field is described by hash that has following 'keys':
+
+Field types and required options:
+
+ftype
+		
+0     sub-heading field
+       name = field name
+
+1     'text' input field
+       name = field name
+       tag = key name for field data in data hash
+       type = input type (for input validation)
+       len = field length (displayed length)
+      
+2     array field
+       name = field name
+       tag = key name for field data in data hash
+       type = array of input types
+       fields = number of fields for each "row"
+       len = array of field lengths
+       
+3     "drop down" selection field
+        name = field name
+	tag = key name for field data in data hash
+	type = unused (should be set to 'enum')
+	enum = reference to hash defining drop down menu items and 
+               corresponding values
+	elist = list containing drop down menu items (optional, can be
+                used to define non-alphabetical sort order for drop-down)
+
+4     "Read only" text field
+        name = field name
+	tag = key name for field data in data hash
+
+5     Host IP address(es) field (special)
+        name = field name
+	tag = key name for field data in data hash
+	optional:
+	restricted_mode
+
+6     MX template selection field (special)
+        name, tag
+
+7     WKS template selection field (special)
+        name, tag
+
+8     AREC alias (special)
+
+9     "Read only" Link field
+       name
+       tag
+       <tag>_url = contains the URL
+
+10    Group selection field (special)
+
+11    Subgroup selection field (special)
+
+12    "AML" Address Match List field
+
+
+101   HINFO "combo" field (special
+
+
+
+
+Key definitions:
+
+name		field name (required for all)
+tag		key name that contains data for this field in data hash
+type		field value type (used to validate that user input is valid),
+		contains single value unless ftype=2 (array) then contains
+                list of types. Available types:
+		     fqdn  = FQDN (fully qualified domain name)
+		     domain = domain name
+		     zonename = zone name
+		     srvname = SRV record (domain) name
+		     path = path name
+		     ip = IP address/number
+		     cidr = CIDR
+		     email = email address
+		     mx = requires valid domain name or string '$DOMAIN'
+		     int = any integer value
+		     priority = any positive integer value
+		     port = any TCP/UDP port number [1..65534]
+		     bool = boolean
+		     printer_class = printer claas name
+		     hinfo = HINFO value
+		     texthandle = text handle
+		     expiration = expiration date specification
+				  (DD-MM-YYYY, +Nd, +Nm, or +Ny)
+		     daterange = date range:DDMMYYYY-DDMMYYYY or -DDMMYYYY  
+
+		     Following types are ignored (no validity check performed):
+		     text
+		     textarea  (create 'textarea' input field)
+		     passwd    (creates password input field)
+		     enum
+		     
+len = input field length (single value, except array for "array" fields)
+maxlen = maximum length for input data (singhe value or array of values)
+
+no_edit=>1   = field not displayed when editing form
+iff=>['fieldname','value'] = field displayed only if given field contains
+                             data matching to value (regexp)
+
+empty=>1  = allow empty input
+no_edit=>1 = do nod display field when editing form
+		
+		
