@@ -1,6 +1,6 @@
 $Id$
 
-0.7.2beta
+0.7.2
 	- remove-hosts: new option --host by Otto Fuetterer
 	- modhosts: now Ethernet address can be uses as selection criteria
 	  by Otto Fuetterer

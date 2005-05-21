@@ -21,6 +21,7 @@ REQUIREMENTS
 		- Digest::HMAC module
 		- Digest::SHA1 module
 		- MIME::Base64
+		- Crypt::RC5
 	- PostgresSQL [7.4 or newer (may work fine with earlier 7.x versions)] 
 	  (or add support to your favorite db yourself :)
 	- www-server (Apache or any other www-server with CGI support)
@@ -145,6 +146,10 @@ COMMANDS
  import-roots
    Utility for importing root server hints into Sauron. Sauron has
    global table and option for server specific root server lists.
+
+ keygen
+   Utility for generating TSIG keys and master key for protecting key for
+   Sauron database.
 
  last
    Unix 'last' command style utility for listing lastlog information
