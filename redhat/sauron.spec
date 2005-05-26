@@ -68,7 +68,7 @@ rm -rf $RPM_BUILD_ROOT
 %doc test
 %doc doc/manual.pdf
 %doc doc/tables.html
-%doc doc/manual
+# %doc doc/manual
 
 
 %changelog
