@@ -303,11 +303,15 @@ sub menu_handler {
       print h3("Cannot select zone '$zone'!"),p;
       goto select_zone;
     }
-    goto select_zone if (check_perms('zone','R'));
-    print h2("Selected zone: $zone"),p;
-    get_zone($zoneid,\%data);
+    my %state_save = %{$state};
     $state->{'zone'}=$zone;
     $state->{'zoneid'}=$zoneid;
+    if (check_perms('zone','R')) {
+      %{$state}=%state_save;
+      goto select_zone;
+    }
+    print h2("Selected zone: $zone"),p;
+    get_zone($zoneid,\%data);
     save_state($state->{cookie},$state);
 
     display_form(\%data,\%zone_form);
