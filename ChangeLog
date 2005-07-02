@@ -1,5 +1,8 @@
 $Id$
 
+0.7.3beta
+	- CGI interface: fix to zone selection bug (if SAURON_PRIVILEGE_MODE=1)
+	
 0.7.2
 	- remove-hosts: new option --host by Otto Fuetterer
 	- modhosts: now Ethernet address can be uses as selection criteria
