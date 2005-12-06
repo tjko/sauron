@@ -1797,6 +1797,7 @@ sub update_host($) {
 sub delete_host($) {
   my($id) = @_;
   my($res,%host);
+  my($dtime) = time;
 
   return -100 unless ($id > 0);
   return -101 if (get_host($id,\%host) < 0);
@@ -1840,7 +1841,8 @@ sub delete_host($) {
   if ($res < 0) { db_rollback(); return -9; }
 
   # ether_aliases
-  $res=db_exec("UPDATE hosts SET ether_alias=-1 WHERE ether_alias=$id;");
+  $res=db_exec("UPDATE hosts SET ether_alias=-1, expiration=$dtime ".
+	       "WHERE ether_alias=$id;");
   if ($res < 0) { db_rollback(); return -10; }
 
   # srv_entries
