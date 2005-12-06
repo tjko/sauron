@@ -21,10 +21,10 @@ load_config();
 
 ###################################################################
 
-GetOptions("help|h","verbose|v","debug|d","noupdate","year=s");
+GetOptions("help|h","verbose|v","debug|d","commit","year=s");
 
 if ($opt_help || @ARGV < 2) {
-  print "syntax: $0 [--help] [--verbose] [--year=<YYYY>]",
+  print "syntax: $0 [--help] [--verbose] [--commit] [--year=<YYYY>]",
         " <servername> <logfile>\n\n";
   print "" if ($opt_help);
   exit(0);
@@ -32,7 +32,7 @@ if ($opt_help || @ARGV < 2) {
 
 $opt_verbose = ($opt_verbose ? 1 : 0);
 $opt_debug = ($opt_debug ? 1 : 0);
-$opt_noupdate = ($opt_noupdate ? 1 : 0);
+$opt_commit = ($opt_commit ? 1 : 0);
 $servername=$ARGV[0];
 $file=$ARGV[1];
 $timenow=time();
@@ -211,8 +211,8 @@ unless ($mcount > 0) {
 }
 
 print "Updating dhcp_date for $mcount host records..." if ($opt_verbose);
-if ($opt_noupdate) {
-  print "\nNot updating records (--noupdate)\n";
+unless ($opt_commit) {
+  print "\nNot updating records (missing --commit)\n";
   exit(1);
 }
 
