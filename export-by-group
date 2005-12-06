@@ -1,0 +1,75 @@
+#!/usr/bin/perl -I/opt/sauron
+#
+# export-by-group  ... searches hosts by group
+#
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2004.
+# Modifications Riku Meskanen <mesrik@iki.fi> 2005.
+# $Id$
+#
+require 5;
+use Getopt::Long;
+use Time::Local;
+use Net::Netmask;
+use Sauron::DB;
+use Sauron::Util;
+use Sauron::BackEnd;
+use Sauron::Sauron;
+
+
+load_config();
+
+$user = (getpwuid($<))[0];
+$host = `hostname`;
+$host =~ s/\n//g;
+$time_now = localtime;
+$tnow = time();
+
+GetOptions("help|h","csv|c","verbose|v");
+
+if ($opt_help || @ARGV < 1) {
+    print "syntax: $0 [--help] <servername> domain-regex group-regex\n",
+    "\t--csv\t\tCSV output\n",
+    "\t--verbose\tmore verbose output\n";
+  print "\n" if ($opt_help);
+  exit(0);
+}
+
+$servername = shift;
+$domainre   = shift || '.';
+$groupre    = shift || '.';
+
+$sql = sprintf("SELECT a.ip,h.domain,z.name,g.name,g2.name " .
+	       "FROM a_entries a JOIN  hosts h ON h.id=a.host " .
+	       "JOIN zones z ON z.id=h.zone " .
+	       "LEFT JOIN group_entries ge ON h.id=ge.host " .
+	       "LEFT JOIN groups g on g.id=ge.grp " .
+	       "LEFT JOIN groups g2 on g2.id=h.grp " .
+	       "WHERE z.name ~ '%s' AND (g.name ~ '%s' OR g2.name ~ '%s') " .
+	       "ORDER BY z.name,h.domain;",$domainre,$groupre,$groupre);
+
+db_connect();
+
+$serverid=get_server_id($servername);
+fatal("cannot find server '$servername'") unless ($serverid > 0);
+
+print "# server: $servername\n# date: ".localtime(time())." by $user\n" .
+    "# sql: " . $sql . "\n\n"  if ($opt_verbose);
+
+db_query($sql,\@reply);
+
+for $i (0..$#reply) {
+  ($ip,$domain,$zone,$group,$maingroup) = @{$reply[$i]};
+  $group=$maingroup if ($maingroup =~ /$groupre/);
+  if ($opt_csv) {
+      printf "\"%s\",\"%s.%s\",\"%s\"\n",$ip,$domain,$zone,$group;
+  } else {
+      printf "%s %s.%s %s\n",$ip,$domain,$zone,$group;
+  }
+}
+
+
+exit 0;
+
+#################################
+
+# eof
