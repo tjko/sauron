@@ -28,7 +28,7 @@ sub local_date($) {
 $user = (getpwuid($<))[0];
 
 GetOptions("help|h","cidr=s","netname=s","name=s","norecord",
-	   "commit","verbose","treshold=s","edate=s");
+	   "commit","verbose","treshold=s","edate=s","skipname=s");
 
 if ($opt_help || @ARGV < 1) {
   print "syntax: $0 <server> [options]\n\n",
@@ -40,6 +40,7 @@ if ($opt_help || @ARGV < 1) {
     "\t--treshold=<days>\texpire hosts with no dhcp activity in\n",
     "\t\t\t\tlast <days> days (default: 90)\n",
     "\t--norecord\t\tonly expire hosts with no recorded dhcp activity\n",
+    "\t--skipname=<regexp>\t\tskips processing matching hosts\n",
     "\t--edate=<dd-mm-yyy>\tset hosts to expire on this date (default: now)\n",
     "\t--verbose\t\tdisplay more verbose output\n",
     "\n",
@@ -81,6 +82,9 @@ if ($opt_norecord) {
   $date = 0;
   print "Expiring hosts with no recorded dhcp activity\n" if ($opt_verbose);
 }
+
+$opt_skipname = '/' . $opt_skipname . '/' 
+    if ($opt_skipname and $opt_skipname !~ /^\/.+\/$/);
 
 if ($opt_edate) {
   fatal("invalid argument to --edate option")
@@ -181,6 +185,12 @@ for $i (0..$#q) {
   next if ($mdate > $date2); # ignore hosts modified recently
   next if ($expiration > 0 && $expiration <= $etime);
   next unless ($ddate <= $date);
+
+  if (grep { eval $opt_skipname } ($domain)) {
+      print "Skipping host w/  Name '$domain' matching $opt_skipname\n" 
+	  if ($opt_verbose and $opt_skipname); 
+      next;
+  }
 
   printf "%-25s %-15s %12s %10s %10s\n",
          $domain,$ip,$ether,
