@@ -251,7 +251,8 @@ if ($bind_conf) {
       print BINDFILE "\t// custom BIND options\n";
       for $j (1..$#{$server{custom_opts}}) {
 	($val=$server{custom_opts}[$j][1]) =~ s/\;\s*$//;
-	print BINDFILE "\t$val;\n";
+	$val .= ";" unless ($val =~ /[\;\{]\s*$/);
+	print BINDFILE "\t$val\n";
       }
       print BINDFILE "\n";
     }
