@@ -107,7 +107,8 @@ CONTRIB_FILES = contrib/additional-ether-codes.txt \
 		contrib/Ethernet.txt \
 		contrib/named.root \
 		contrib/htmldoc-sql \
-		contrib/kerberos-auth
+		contrib/kerberos-auth \
+		contrib/dhcpd-lease-view
 
 PLUGINS = sample
 
