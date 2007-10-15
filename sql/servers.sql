@@ -55,6 +55,8 @@ CREATE TABLE servers (
 	transfer_source INET,  /* transfer-source (optional) */
 	forward		CHAR(1) DEFAULT 'D', /* forward: D=default
 	                                        O=only, F=first */
+	named_include	TEXT, /* file to be included in named.conf as-is */
+	dhcpd_include	TEXT, /* file to be included in dhcpd.conf as-is */
 
 	/* check-names: D=default, W=warn, F=fail, I=ignore */
 	checknames_m	CHAR(1) DEFAULT 'D', /* check-names master */

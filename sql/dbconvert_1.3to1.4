@@ -1,0 +1,11 @@
+/* convert Sauron database format from 1.3 to 1.4beta */
+/* (this requires PostgreSQL v7.3 or later) */
+
+/* update servers table to accommodate include-file use */
+
+ALTER TABLE servers ADD COLUMN named_include text;
+ALTER TABLE servers ADD COLUMN dhcpd_include text;
+
+UPDATE settings SET value='1.3' where setting='dbversion'; 
+
+/* eof */
