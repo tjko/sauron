@@ -694,6 +694,8 @@ sub get_server($$) {
 		  "type=10 AND ref=$id ORDER BY id",$rec,'logging');
   get_array_field("txt_entries",3,"id,txt,comment","TXT,Comments",
 		  "type=11 AND ref=$id ORDER BY id",$rec,'custom_opts');
+  get_array_field("txt_entries",3,"id,txt,comment","TXT,Comments",
+		  "type=13 AND ref=$id ORDER BY id",$rec,'bind_globals');
 
   $rec->{dhcp_flags_ad}=($rec->{dhcp_flags} & 0x01 ? 1 : 0);
   $rec->{dhcp_flags_fo}=($rec->{dhcp_flags} & 0x02 ? 1 : 0);
@@ -778,6 +780,9 @@ sub update_server($) {
   # custom options (BIND)
   $r=update_array_field("txt_entries",3,"txt,comment,type,ref",
 			 'custom_opts',$rec,"11,$id");
+  # Globals (BIND)
+  $r=update_array_field("txt_entries",3,"txt,comment,type,ref",
+			 'bind_globals',$rec,"13,$id");
   if ($r < 0) { db_rollback(); return -21; }
 
   return db_commit();
@@ -830,6 +835,10 @@ sub add_server($) {
   # custom options
   $res = add_array_field('txt_entries','txt,comment','custom_opts',$rec,
 			 'type,ref',"11,$id");
+  # bind globals
+  $res = add_array_field('txt_entries','txt,comment','bind_globals',$rec,
+			 'type,ref',"13,$id");
+
   if ($res < 0) { db_rollback(); return -19; }
 
 

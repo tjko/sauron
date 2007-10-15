@@ -209,6 +209,18 @@ if ($bind_conf) {
   }
  
 
+
+  # bind globals
+  if (@{$server{bind_globals}} > 1) {
+      print BINDFILE "// Global BIND directives\n";
+      for $j (1..$#{$server{bind_globals}}) {
+	  ($val=$server{bind_globals}[$j][1]) =~ s/\;\s*$//;
+	  $val .= ";" unless ($val =~ /[\;\{]\s*$/);
+	  print BINDFILE "$val\n";
+      }
+      print BINDFILE "\n";
+  } 
+
   unless ($zones_only) {
     # key & acl section
     print_keys_acls($server{id});

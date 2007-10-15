@@ -105,6 +105,11 @@ my %server_form = (
   {ftype=>12, tag=>'blackhole', name=>'Blackhole',
    iff=>['named_flags_ac','0']},
 
+  {ftype=>0, name=>'BIND settings'},
+  {ftype=>2, tag=>'bind_globals', name=>'Global BIND settings',
+   type=>['text','text'], fields=>2, len=>[50,20], maxlen=>[100,20],
+   empty=>[0,1], elabels=>['BIND globals','comment']},
+
   {ftype=>0, name=>'BIND options' },
   {ftype=>3, tag=>'named_flags_hinfo', name=>'Do not generate HINFO records',
    type=>'enum', enum=>{0=>'No',1=>'Yes'}},
