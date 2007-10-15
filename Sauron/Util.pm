@@ -93,21 +93,40 @@ sub valid_domainname_check($$) {
     return 1;
   }
   else {
-    if ($dom =~ /([^a-z0-9\-\.])/) {
-      #warn("invalid character '$1' in domainname: '$domain'");
-      return 0;
-    }
+    if ($main::SAURON_DNSNAME_CHECK_MODE == 1) {
+      if ($dom =~ /([^a-z0-9\-\._])/) {
+        #warn("invalid character '$1' in domainname: '$domain'");
+        return 0;
+      }
 
-    unless ($dom =~ /^[a-z]/) {
-      #warn("domainname starts with invalid character: '$domain'");
-      return 0;
+      unless ($dom =~ /^[a-z_]/) {
+        #warn("domainname starts with invalid character: '$domain'");
+        return 0;
+      }
+    } else {
+      if ($dom =~ /([^a-z0-9\-\.])/) {
+        #warn("invalid character '$1' in domainname: '$domain'");
+        return 0;
+      }
+
+      unless ($dom =~ /^[a-z]/) {
+        #warn("domainname starts with invalid character: '$domain'");
+        return 0;
+      }
     }
   }
 
 
-  if ($dom =~ /([^a-z0-9])\./) {
-    #warn("invalid character '$1' before dot in domainname: '$domain'");
-    return 0;
+  if ($main::SAURON_DNSNAME_CHECK_MODE == 1) {
+    if ($dom =~ /([^a-z0-9_])\./) {
+      #warn("invalid character '$1' before dot in domainname: '$domain'");
+      return 0;
+    }
+  } else {
+    if ($dom =~ /([^a-z0-9])\./) {
+      #warn("invalid character '$1' before dot in domainname: '$domain'");
+      return 0;
+    }
   }
 
   return 1;

@@ -1,6 +1,6 @@
 # Sauron::Sauron.pm -- configuration file parsing and default settings
 #
-# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2003-2005.
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2003-2007.
 # $Id$
 #
 package Sauron::Sauron;
@@ -79,6 +79,7 @@ sub set_defaults() {
   $main::SAURON_KEY = '';
   $main::SAURON_DNSSEC_KEYGEN_PROG = '';
   $main::SAURON_DNSSEC_KEYGEN_ARGS = '';
+  $main::SAURON_DNSNAME_CHECK_MODE = 0;
 
   $main::SAURON_RHF{huser}    = 0; # User
   $main::SAURON_RHF{dept}     = 0; # Dept.
@@ -150,6 +151,7 @@ sub print_config() {
   print "SAURON_DNSSEC_KEYGEN_ARGS=",$main::SAURON_DNSSEC_KEYGEN_ARGS,"\n";
   print "SAURON_NO_REMOTE_ADDR_AUTH=",$main::SAURON_NO_REMOTE_ADDR_AUTH,"\n";
   print "SAURON_HINFO_MODE=",$main::SAURON_HINFO_MODE,"\n";
+  print "SAURON_DNSNAME_CHECK_MODE=",$main::SAURON_DNSNAME_CHECK_MODE,"\n";
   print "SAURON_PLUGINS='",$main::SAURON_PLUGINS,"'\n";
 
   print "ALEVEL_VLANS=",$main::ALEVEL_VLANS,"\n";

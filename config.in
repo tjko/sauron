@@ -87,6 +87,12 @@ $DB_PASSWORD = "bar";
 #
 # $SAURON_PWD_MODE = 1;
 
+# control how strict domain name validation rules to use:
+#	0 = allow only fully compliant names
+#       1 = ame as mode 1 except allow use of '_' character in names
+#
+# $SAURON_DNSNAME_CHECK_MODE = 0;
+
 # User authentication mode:
 #    0 = (default) Uses internal authentication, authenticates agains
 #        encrypted passwords stored in the database (or using external
