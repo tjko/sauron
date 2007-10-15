@@ -1,6 +1,9 @@
 $Id$
 
 0.7.3beta
+	- support to include files in generated named.conf and dhcpd.con
+	  by Riku Meskanen
+	- typo fixes
 	- update-dhcp-info: patch to add --commit option by Ken McKinlay
 	- new utility for exporting names/IPs of hosts beloging to groups
 	  that match given regular expression: export-by-group

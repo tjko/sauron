@@ -70,6 +70,12 @@ my %server_form = (
   {ftype=>1, tag=>'named_xfer', name=>'named-xfer path', type=>'text',
    len=>30, empty=>1},
 
+  {ftype=>0, name=>'Include files'},
+  {ftype=>1, tag=>'named_include', name=>'Include in named.conf',  type=>'text', len=>60,
+   empty=>1},
+  {ftype=>1, tag=>'dhcpd_include', name=>'Include in dhcpd.conf',  type=>'text', len=>60,
+   empty=>1},
+
   {ftype=>0, name=>'Server bindings'},
   {ftype=>3, tag=>'forward', name=>'Forward (mode)', type=>'enum',
    conv=>'U', enum=>{'D'=>'Default','O'=>'Only','F'=>'First'}},

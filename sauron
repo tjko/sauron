@@ -183,6 +183,32 @@ if ($bind_conf) {
     "// created by $user\@$host at $time_now\n//\n",
     "// server: $server{name} -- $server{comment}\n//\n\n";
 
+
+  # include stuff
+  if ($server{'named_include'} ne '') {
+      my $include_file;
+
+      $include_file = (($server{'named_include'} =~ /^\//) 
+	  ? $server{'named_include'} 
+          : $server{'directory'} . $server{'named_include'});
+
+      if ( -f $include_file) {
+	  print BINDFILE "//\n// included $include_file\n//\n\n";
+	  open(INCLUDE,"< $include_file") || 
+	      print BINDFILE "// ERROR: can't read include file " .
+	      $include_file . "\n\n";
+	  while (<INCLUDE>) {
+	      print BINDFILE;
+	  }
+	  close INCLUDE;
+	  print BINDFILE "\n// end of include \n\n";
+      } else {
+	  print BINDFILE "// WARNING: can't locate include file " .
+	      $include_file . "\n\n";
+      }
+  }
+ 
+
   unless ($zones_only) {
     # key & acl section
     print_keys_acls($server{id});
@@ -1340,6 +1366,31 @@ sub make_dhcp() {
 
   $serverid=$server{masterserver} if ($server{masterserver} > 0);
   goto print_dhcp_classes if ($opt_dhcpclass);
+
+  # include stuff
+  if ($server{'dhcpd_include'} ne '') {
+      my $include_file;
+
+      $include_file = (($server{'dhcpd_include'} =~ /^\//) 
+	  ? $server{'dhcpd_include'} 
+          : $server{'directory'} . $server{'dhcpd_include'});
+
+      if ( -f $include_file) {
+	  print DHCPFILE "#\n# included $include_file\n#\n\n";
+	  open(INCLUDE,"< $include_file") || 
+	      print DHCPFILE "# ERROR: can't read include file " .
+	      $include_file . "\n\n";
+	  while (<INCLUDE>) {
+	      print DHCPFILE;
+	  }
+	  close INCLUDE;
+	  print DHCPFILE "\n# end of include \n\n";
+      } else {
+	  print DHCPFILE "# WARNING: can't locate include file " .
+	      $include_file . "\n\n";
+      }
+  }
+ 
 
   # failover stuff
   if ($failover_mode) {
