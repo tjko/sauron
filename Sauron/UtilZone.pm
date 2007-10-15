@@ -184,7 +184,7 @@ sub process_zonefile($$$$) {
       push @{$rec->{A}}, $1;
     }
     elsif ($type eq 'SOA') {
-      fatal("$filename($.): dublicate SOA record: $fline")
+      fatal("$filename($.): duplicate SOA record: $fline")
 	if (length($rec->{SOA}) > 0);
       #print join(",",@line)."\n";
       fatal("$filename($.): invalid source-dname in SOA record: $fline")

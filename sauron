@@ -1659,7 +1659,7 @@ sub make_dhcp() {
 	      #$dhcp=db_decode_list_str($ghosts[$k][5]);
 	      $dhcpid=$ghosts[$k][5];
 	      if ($ethers{$ether}>0) {
-		error("dublicate interface $ip for $ether ($host)");
+		error("duplicate interface $ip for $ether ($host)");
 		next;
 	      }
 	      $ethers{$ether}++;
