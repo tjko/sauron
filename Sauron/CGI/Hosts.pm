@@ -6,6 +6,7 @@
 package Sauron::CGI::Hosts;
 require Exporter;
 use CGI qw/:standard *table -no_xhtml/;
+#use CGI qw/:cgi/; # enable when debugging with url() 
 use Sauron::DB;
 use Sauron::CGIutil;
 use Sauron::BackEnd;
@@ -357,6 +358,11 @@ my %new_alias_form = (
  ]
 );
 
+# starts from 1 because used directly as param('csv') value
+my %csv_timestamp=(1=>'Unix [epoch]',2=>'Standard [US]',
+                   3=>'Spreadsheet [Excel]',4=>'ISO 8601:2004',
+                   5=>'Email [RFC 822]');
+my @csv_timestamp_f=('epoch','us-std','excel','iso8601:2004','rfc822date');
 
 my %browse_page_size=(0=>'25',1=>'50',2=>'100',3=>'256',4=>'512',5=>'1000');
 my %browse_search_fields=(0=>'Ether',1=>'Info',2=>'User',3=>'Location',
@@ -1038,12 +1044,17 @@ sub menu_handler {
       alert2("No matching records found.");
       goto browse_hosts;
     }
+    
+    #print "\n",url(-path_info=>1,-query=>1),"\n";
 
     if (param('csv')) {
       printf print_csv(['Domain','Type','IP','Ether','User','Dept.',
 	                 'Location','Info','Hardware','Software',
 			 'Model','Serial','Misc','AssetID',
 			 'cdate','mdate','edate','dhcpdate'],1) . "\n";
+
+      my $csv_fmt = $csv_timestamp_f[param('csv') -1];
+
       for $i (0..$#q) {
 	$q[$i][5]=dhcpether($q[$i][5])
 	  unless (dhcpether($q[$i][5]) eq '00:00:00:00:00:00');
@@ -1051,9 +1062,15 @@ sub menu_handler {
 	                   $q[$i][5],$q[$i][7],$q[$i][8],$q[$i][9],
 			   $q[$i][6],$q[$i][16],$q[$i][17],
 			   $q[$i][18],$q[$i][19],$q[$i][20],$q[$i][21],
-			   $q[$i][12],$q[$i][13],$q[$i][14],$q[$i][15]
+			   utimefmt($q[$i][12],$csv_fmt),
+			   utimefmt($q[$i][13],$csv_fmt),
+			   utimefmt($q[$i][14],$csv_fmt),
+			   utimefmt($q[$i][15],$csv_fmt)
 			 ],1) . "\n";
       }
+
+      #print "\n",url(-path_info=>1,-query=>1),"\n";
+
       return;
     }
 
@@ -1170,21 +1187,41 @@ sub menu_handler {
 	      "$params\">next</A>";
     } else { print "next"; }
 
-    print "]</CENTER><BR>",
-          "<div align=right><font size=-2>",
-          "<a title=\"foo.csv\" href=\"$sorturl&csv=1\">",
-          "[Download results in CSV format]</a> &nbsp;</font></div>";
+#    print "]</CENTER><BR>",
+#          "<div align=right><font size=-2>",
+#          "<a title=\"foo.csv\" href=\"$sorturl&csv=1\">",
+#          "[Download results in CSV format]</a> &nbsp;</font></div>";
 
-    if ($main::SAURON_NMAP_PROG && param('bh_type') == 1 &&
+     print "]</CENTER><BR>\n";
+
+     print "<table width=100% border=0 cellspacing=5 cellpadding=5 align=top>" .
+	  "<tr><td width=50%>";
+
+     if ($main::SAURON_NMAP_PROG && param('bh_type') == 1 &&
 	!check_perms('level',$main::ALEVEL_NMAP,1)) {
 
+	 print startform(-method=>'POST',-action=>$selfurl),
+	       hidden('menu','hosts'),hidden('sub','browse'),
+	       hidden('bh_page',$page),
+	       hidden('lastsearch','1'),hidden('pingsweep','1');
+	 print submit(-name=>'foobar',-value=>'Ping Sweep');
+	 print end_form;
+      }
+
+      print "</td><td><div align=right>";
+
+      my $csv_timestamp_v=[sort keys %csv_timestamp];
       print startform(-method=>'POST',-action=>$selfurl),
 	    hidden('menu','hosts'),hidden('sub','browse'),
-	    hidden('bh_page',$page),
-	    hidden('lastsearch','1'),hidden('pingsweep','1');
-      print submit(-name=>'foobar',-value=>'Ping Sweep');
+            hidden('lastsearch','1'),
+            "CSV Timestamps&nbsp;",
+            popup_menu(-name=>'csv',-values=>$csv_timestamp_v,
+		       -labels=>\%csv_timestamp),
+            submit(-name=>'results.csv',-value=>'Download CSV');
+
       print end_form;
-    }
+
+      print "</div></td></tr></table>\n";
 
     return;
   }

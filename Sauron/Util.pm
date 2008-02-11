@@ -8,6 +8,7 @@ require Exporter;
 use Time::Local 'timelocal_nocheck';
 use Digest::MD5;
 use Net::Netmask;
+use POSIX qw(strftime);
 use strict;
 use vars qw($VERSION @ISA @EXPORT);
 
@@ -51,6 +52,7 @@ $VERSION = '$Id$ ';
 	     join_strings
 	     new_serial
 	     decode_daterange_str
+	     utimefmt
 	    );
 
 
@@ -806,6 +808,25 @@ sub decode_daterange_str($) {
   }
 
   return [$start,$end];
+}
+
+# convert time_t type epoch timestamp to more readable ...
+sub utimefmt($$) {
+    my ($utime,$fmt) = @_; 
+    my %utime_df=('epoch' => sub { shift @_ },
+		  'us-std'=> sub { scalar localtime(shift @_) },
+		  'excel' => sub { 
+		      strftime("%m/%d/%Y %H:%M",localtime(shift @_))
+		      },
+		  'iso8601:2004' => sub { 
+		      strftime("%FT%T%z",localtime(shift @_))
+		      },
+		  'rfc822date'=> sub { 
+		      strftime("%a, %d %b %Y %H:%M:%S %z",localtime(shift @_))
+		      }
+		  );
+
+    return (defined($utime_df{$fmt}) ? $utime_df{$fmt}($utime) : $utime);
 }
 
 1;
