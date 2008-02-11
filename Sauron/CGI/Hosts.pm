@@ -366,8 +366,8 @@ my %browse_search_fields=(0=>'Ether',1=>'Info',2=>'User',3=>'Location',
 my @browse_search_f=('ether','info','huser','location','dept','model',
 		  'serial','misc','asset_id');
 my %browse_search_datefields=(0=>'Last lease (DHCP)',1=>'Last seen (DHCP)',
-			      2=>'Creation',3=>'Modification');
-my @browse_search_df=('dhcp_date','dhcp_last','cdate','mdate');
+			      2=>'Creation',3=>'Modification',4=>'Expiration');
+my @browse_search_df=('dhcp_date','dhcp_last','cdate','mdate','expiration');
 
 my %browse_hosts_form=(
  data=>[
@@ -999,7 +999,7 @@ sub menu_handler {
 	}
 	elsif ($$dates[1] > 0) {
 	  $extrarule2.=" AND (a.$tmp <= $$dates[1] OR a.$tmp ISNULL) ";
-	}
+	} 
       }
       #print "extrarule2='$extrarule2'<br>";
     }

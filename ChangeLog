@@ -1,6 +1,7 @@
 $Id$
 
 0.7.3beta
+	- new Search Field: Expiration by Riku Meskanen
 	- fix import-roots update functionality by Riku Meskanen
 	- forward zone port capability added by Riku Meskanen (db-version 1.4)
 	- new config option: SAURON_DNSNAME_CHECK_MODE  allows now
