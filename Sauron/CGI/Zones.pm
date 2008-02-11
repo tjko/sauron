@@ -104,8 +104,8 @@ my %zone_form = (
    name=>'[Stealth] Servers to notify (also-notify)', type=>['ip','text'],
    fields=>2, len=>[40,15], empty=>[0,1], elabels=>['IP','comment'],
    iff=>['type','M']},
-  {ftype=>2, tag=>'forwarders',name=>'Forwarders', type=>['ip','text'],
-   fields=>2, len=>[40,15], empty=>[0,1], elabels=>['IP','comment'],
+  {ftype=>2, tag=>'forwarders',name=>'Forwarders', type=>['ip','int','text'],
+   fields=>3, len=>[34,6,15], empty=>[0,1,1], elabels=>['IP','Port','comment'],
    iff=>['type','F']},
 
   {ftype=>0, name=>'DHCP', iff=>['type','M']},

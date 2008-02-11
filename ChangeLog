@@ -1,6 +1,7 @@
 $Id$
 
 0.7.3beta
+	- forward zone port capability added by Riku Meskanen (db-version 1.4)
 	- new config option: SAURON_DNSNAME_CHECK_MODE  allows now
 	  less strict domain name checking (more AD compatible)
 	- new feature: custom DHCP global settings can now be definedo	

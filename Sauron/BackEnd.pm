@@ -166,7 +166,7 @@ sub fix_bools($$) {
 }
 
 sub sauron_db_version() {
-  return "1.3"; # required db format version for this backend
+  return "1.4"; # required db format version for this backend
 }
 
 sub set_muser($) {
@@ -1095,7 +1095,7 @@ sub get_zone($$) {
   get_aml_field($sid,5,$id,$rec,'allow_transfer');
   get_array_field("cidr_entries",3,"id,ip,comment","IP,Comments",
 		  "type=6 AND ref=$id ORDER BY ip",$rec,'also_notify');
-  get_array_field("cidr_entries",3,"id,ip,comment","IP,Comments",
+  get_array_field("cidr_entries",4,"id,ip,port,comment","IP,Port,Comments",
 		  "type=12 AND ref=$id ORDER BY ip",$rec,'forwarders');
   get_array_field("txt_entries",3,"id,txt,comment","ZoneEntry,Comments",
 		  "type=12 AND ref=$id ORDER BY id",$rec,'zentries');
@@ -1183,7 +1183,9 @@ sub update_zone($) {
 			'also_notify',$rec,"6,$id");
   if ($r < 0) { db_rollback(); return -20; }
   # forwarders
-  $r=update_array_field("cidr_entries",3,"ip,comment,type,ref",
+#  $r=update_array_field("cidr_entries",3,"ip,comment,type,ref",
+#			'forwarders',$rec,"12,$id");
+  $r=update_array_field("cidr_entries",4,"ip,port,comment,type,ref",
 			'forwarders',$rec,"12,$id");
   if ($r < 0) { db_rollback(); return -20; }
   # zentries

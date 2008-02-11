@@ -38,7 +38,8 @@ CREATE TABLE cidr_entries (
 					-->keys.id */
 	op	    INT4 DEFAULT 0, /* rule operand:
 					0 = none,
-					1 = NOT */ 
+					1 = NOT */
+	port	    INT,            /* port value, used by: forwarders */      
 	comment     TEXT
 );
 
