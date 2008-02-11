@@ -3,9 +3,9 @@
 
 /* update servers table to accommodate include-file use */
 
-ALTER TABLE servers ADD COLUMN named_include text;
-ALTER TABLE servers ADD COLUMN dhcpd_include text;
+ALTER TABLE servers DROP COLUMN named_include text;
+ALTER TABLE servers DROP COLUMN dhcpd_include text;
 
-UPDATE settings SET value='1.3' where setting='dbversion'; 
+/* UPDATE settings SET value='1.3' where setting='dbversion'; */
 
 /* eof */

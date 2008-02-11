@@ -6,8 +6,6 @@ $Id$
 	- new feature: custom DHCP global settings can now be definedo	
 	  by Riku Meskanen
 	- fix to ACL/key generation by Riku Meskanen
-	- support to include files in generated named.conf and dhcpd.con
-	  by Riku Meskanen
 	- typo fixes
 	- update-dhcp-info: patch to add --commit option by Ken McKinlay
 	- new utility for exporting names/IPs of hosts beloging to groups
