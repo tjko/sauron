@@ -55,10 +55,13 @@ db_begin();
 $acount=0;
 $ncount=0;
 
-unless ($opt_update) {
+if ($opt_update) {
+  print "Removing root servers from server: $servername\n" if ($opt_verbose);
   $res=db_exec("DELETE FROM root_servers WHERE server=$serverid;");
   fatal("cannot delete old root server records") if ($res < 0);
 }
+
+print "Inserting root servers to server: $servername\n" if ($opt_verbose);
 
 foreach $host (keys %zonedata) {
   $rec=$zonedata{$host};
