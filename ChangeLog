@@ -1,6 +1,8 @@
 $Id$
 
 0.7.3beta
+	- add User, Dept, Location, Email, HINFO fields and groups
+          to restricted host form
 	- new feature to select download CSV time format by Riku Meskanen
 	- new Search Field: Expiration by Riku Meskanen
 	- fix import-roots update functionality by Riku Meskanen
