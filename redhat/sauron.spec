@@ -1,6 +1,6 @@
 Summary: Sauron - DNS/DHCP management system
 Name: sauron
-Version: 0.7.2
+Version: 0.7.3
 Release: 1
 URL: http://sauron.jyu.fi/
 License: GPL
@@ -72,6 +72,9 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Thu Feb 28 2008 Timo Kokkone <tjko@iki.fi> - 0.7.3-1
+- version bumbed to 0.7.3
+
 * Sun May 15 2005 Timo Kokkone <tjko@iki.fi> - 0.7.2-1
 - version bumbed to 0.7.2
 
