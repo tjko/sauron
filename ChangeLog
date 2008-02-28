@@ -1,6 +1,7 @@
 $Id$
 
 0.7.3beta
+	- fix: Makefile.in add sql/dbconvert_1.3to1.4 as installable file
 	- add User, Dept, Location, Email, HINFO fields and groups
           to restricted host form
 	- new feature to select download CSV time format by Riku Meskanen

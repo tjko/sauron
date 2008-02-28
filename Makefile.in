@@ -85,7 +85,7 @@ SQL_TABLES =	sql/common.sql \
 SQL_MISC =      sql/DEFAULTS.sql sql/misc.sql sql/copy_tables.sql \
 		sql/drop_tables.sql sql/hinfo_hw.sql sql/hinfo_sw.sql \
 		sql/dbconvert_1.0to1.1 sql/dbconvert_1.1to1.2 \
-		sql/dbconvert_1.2to1.3
+		sql/dbconvert_1.2to1.3 sql/dbconvert_1.3to1.4
 
 
 PROGS = sauron addgroup adduser deluser delgroup modhosts \
