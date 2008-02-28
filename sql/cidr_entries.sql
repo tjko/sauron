@@ -22,7 +22,10 @@ CREATE TABLE cidr_entries (
 				      10=server (listen-on),      (cidronly)
 				      11=server (forwarders),     (iponly)
 				      12=zone (forwarders),       (iponly)
-				      13=reserved */
+				      13=server (bind-globals),   
+				      14=server (allow_query_cache), x
+				      15=server (allow_notify),      x
+				      */
         ref	    INT4 NOT NULL, /* ptr to table speciefied by type field
 					-->acls.id
 					-->servers.id

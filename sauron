@@ -251,7 +251,9 @@ if ($bind_conf) {
     $tmpserverid=($server{named_flags_ac} ? $server{masterserver} : $serverid);
     print_cidr_list('allow-transfer',1,$tmpserverid,"\t");
     print_cidr_list('allow-query',7,$tmpserverid,"\t");
+    print_cidr_list('allow-query-cache',14,$tmpserverid,"\t");
     print_cidr_list('allow-recursion',8,$tmpserverid,"\t");
+    print_cidr_list('allow-notify',15,$tmpserverid,"\t");
     print_cidr_list('blackhole',9,$tmpserverid,"\t");
 
     print_cidr_list("listen-on ".

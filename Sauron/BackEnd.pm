@@ -681,6 +681,7 @@ sub get_server($$) {
   get_aml_field($id,7,$id,$rec,'allow_query');
   get_aml_field($id,8,$id,$rec,'allow_recursion');
   get_aml_field($id,9,$id,$rec,'blackhole');
+
   get_array_field("cidr_entries",3,"id,ip,comment","IP,Comments",
 		  "type=10 AND ref=$id ORDER BY ip",$rec,'listen_on');
   get_array_field("cidr_entries",3,"id,ip,comment","IP,Comments",
@@ -695,6 +696,9 @@ sub get_server($$) {
 		  "type=11 AND ref=$id ORDER BY id",$rec,'custom_opts');
   get_array_field("txt_entries",3,"id,txt,comment","TXT,Comments",
 		  "type=13 AND ref=$id ORDER BY id",$rec,'bind_globals');
+
+  get_aml_field($id,14,$id,$rec,'allow_query_cache');
+  get_aml_field($id,15,$id,$rec,'allow_notify');
 
   $rec->{dhcp_flags_ad}=($rec->{dhcp_flags} & 0x01 ? 1 : 0);
   $rec->{dhcp_flags_fo}=($rec->{dhcp_flags} & 0x02 ? 1 : 0);
@@ -784,6 +788,14 @@ sub update_server($) {
 			 'bind_globals',$rec,"13,$id");
   if ($r < 0) { db_rollback(); return -21; }
 
+  # allow_query_cache
+  $r=update_aml_field(14,$id,$rec,'allow_query_cache');
+  if ($r < 0) { db_rollback(); return -22; }
+
+  # allow_notify
+  $r=update_aml_field(15,$id,$rec,'allow_notify');
+  if ($r < 0) { db_rollback(); return -23; }
+
   return db_commit();
 }
 
@@ -837,8 +849,15 @@ sub add_server($) {
   # bind globals
   $res = add_array_field('txt_entries','txt,comment','bind_globals',$rec,
 			 'type,ref',"13,$id");
-
   if ($res < 0) { db_rollback(); return -19; }
+
+  # allow_query_cache
+  $res = update_aml_field(14,$id,$rec,'allow_query_cache');
+  if ($res < 0) { db_rollback(); return -20; }
+
+  # allow_notify
+  $res = update_aml_field(15,$id,$rec,'allow_notify');
+  if ($res < 0) { db_rollback(); return -21; }
 
 
   return -100 if (db_commit() < 0);
@@ -1099,7 +1118,6 @@ sub get_zone($$) {
 		  "type=12 AND ref=$id ORDER BY ip",$rec,'forwarders');
   get_array_field("txt_entries",3,"id,txt,comment","ZoneEntry,Comments",
 		  "type=12 AND ref=$id ORDER BY id",$rec,'zentries');
-
 
   db_query("SELECT COUNT(h.id) FROM hosts h, zones z " .
 	   "WHERE z.id=$id AND h.zone=$id " .
@@ -1393,7 +1411,6 @@ sub add_zone($) {
   $res = add_array_field('txt_entries','txt,comment','zentries',$rec,
 			 'type,ref',"12,$id");
   if ($res < 0) { db_rollback(); return -8; }
-
 
   return -100 if (db_commit() < 0);
   return $id;
