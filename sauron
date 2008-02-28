@@ -196,8 +196,11 @@ if ($bind_conf) {
 
 
   unless ($zones_only) {
+    
     # key & acl section
-    print_keys_acls($server{id});
+    print_keys_acls($server{named_flags_ac} ? 
+		    $server{masterserver} : 
+		    $serverid);
 
     # options section
     print BINDFILE "options {\n";
