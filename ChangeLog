@@ -1,6 +1,10 @@
 $Id$
 
 0.7.3
+	- moduser (modgroup) change (and many small fixes) by Riku Meskanen,
+	  added capability to bind hostmask and delmask to a zone, fixed most 
+	  command line and interactive mode help and syntax differences, 
+	  added more consistency checks etc.
 	- added IPv6 records support to import-roots fulfilling recommendation
 	  to everybody add IPv6 root hints regardless site IPv6 current usage. 
 	  This change requires Net::IP module and brings in powerful IPv4 and

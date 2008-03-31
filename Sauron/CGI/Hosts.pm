@@ -646,6 +646,9 @@ sub menu_handler {
 	elsif (chk_perms(\%mystate,'zone','RW',1)) {
 	    alert1("Not authorized to move hosts to this zone");
 	}
+	elsif (chk_perms(\%mystate,'host',$host{domain},1)) {
+	   alert1("Not authorized to move host in target zone with that name");
+	}
 	elsif (get_zone($newzoneid,\%newzone) < 0) {
 	    alert1("Cannot get zone record (id=$newzoneid)");
 	}

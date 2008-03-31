@@ -319,6 +319,7 @@ sub menu_handler {
     }
 
     # net permissions
+    # FIXME:  output is not sorted properly raising order server:cidr
     foreach $s (keys %{$perms->{net}}) {
       undef @q; 
       db_query("SELECT s.name,n.net,n.range_start,n.range_end " .
@@ -330,8 +331,17 @@ sub menu_handler {
 
     # host permissions
     foreach $s (@{$perms->{hostname}}) {
-      print "<TR bgcolor=\"#dddddd\">",td("Hostname"),td("$s"),
-	     td("(hostname constraint)"),"</TR>";
+	if (@{$s}[0] != -1) {
+	    undef @q;
+	    db_query("SELECT z.name FROM zones z, servers s " .
+		     "WHERE z.server=s.id AND z.id=@{$s}[0];",\@q);
+	    $tmp="$q[0][0]:@{$s}[1]";
+	} else {
+	    $tmp="@{$s}[1]";
+	}
+	print "<TR bgcolor=\"#dddddd\">",
+	td("Hostmask"),td("$tmp"),td("(hostname constraint)"),
+	"</TR>";
     }
 
     # IP-mask permissions
@@ -341,8 +351,17 @@ sub menu_handler {
     }
     # Delete-mask permissions
     foreach $s (@{$perms->{delmask}}) {
-      print "<TR bgcolor=\"#dddddd\">",td("Del-mask"),td("$s"),
-	     td("(Delete host mask)"),"</TR>";
+	if (@{$s}[0] != -1) {
+	    undef @q;
+	    db_query("SELECT z.name FROM zones z, servers s " .
+		     "WHERE z.server=s.id AND z.id=@{$s}[0];",\@q);
+	    $tmp="$q[0][0]:@{$s}[1]";
+	} else {
+	    $tmp="@{$s}[1]";
+	}
+	print "<TR bgcolor=\"#dddddd\">",
+	td("Del-mask"),td("$tmp"),td("(Delete host mask)"),
+	"</TR>";
     }
     # Template-mask permissions
     foreach $s (@{$perms->{tmplmask}}) {

@@ -25,11 +25,11 @@ $SAURON_PWD_MODE = 0 unless (defined($SAURON_PWD_MODE));
 $user = (getpwuid($<))[0];
 $mdate = time;
 
-%addmodes=('group'=>0,'server'=>1,'zone'=>2,'net'=>3,'host'=>4,'ipmask'=>5,
+%addmodes=('group'=>0,'server'=>1,'zone'=>2,'net'=>3,'hostmask'=>4,'ipmask'=>5,
 	   'level'=>6,'elimit'=>7,'defdept'=>8,'tmplmask'=>9,
 	   'grpmask'=>10,'delmask'=>11,'rhf'=>12,'flag'=>13);
 
-%masktypes=(4=>'IP',9=>'Tempalate',10=>'Group',11=>'Delete');
+%masktypes=(4=>'Hostmask',9=>'Template',10=>'Group',11=>'Delete');
 
 ############################################
 
@@ -82,11 +82,16 @@ sub list_privs($$) {
       '(IP constraint)';
   }
 
-  db_query("SELECT a.rule,a.id  FROM user_rights a " .
+  db_query("SELECT a.rule,a.id,null FROM user_rights a " .
+	   "WHERE a.rtype=4 AND a.ref=$id AND a.type=$utype AND a.rref=-1" .
+	   "UNION ALL " .
+	   "SELECT a.rule,a.id,z.name FROM user_rights a " .
+	   "JOIN zones z ON a.rref=z.id " .
 	   "WHERE a.rtype=4 AND a.ref=$id AND a.type=$utype ORDER BY id",\@d);
   for $i (0..$#d) {
     $d[$i][0] =~ s/\s+$//;
-    printf "%-6s %-8s %-25s %s\n",$d[$i][1],"hostname",$d[$i][0],
+    printf "%-6s %-8s %-25s %s\n",$d[$i][1],"hostmask",
+      ($d[$i][2] ? $d[$i][2] .":" : "") . $d[$i][0] ,
       "(hostname constraint)";
   }
 
@@ -138,12 +143,17 @@ sub list_privs($$) {
       "(Group mask)";
   }
 
-  db_query("SELECT a.rule,a.id  FROM user_rights a " .
-	   "WHERE a.rtype=11 AND a.ref=$id AND a.type=$utype ORDER BY id",\@d);
+  db_query("SELECT a.rule,a.id,null FROM user_rights a " .
+          "WHERE a.rtype=11 AND a.ref=$id AND a.type=$utype AND a.rref=-1" .
+          "UNION ALL " .
+          "SELECT a.rule,a.id,z.name FROM user_rights a " .
+          "JOIN zones z ON a.rref=z.id " .
+          "WHERE a.rtype=11 AND a.ref=$id AND a.type=$utype ORDER BY id",\@d);
   for $i (0..$#d) {
     $d[$i][0] =~ s/\s+$//;
-    printf "%-6s %-8s %-25s %s\n",$d[$i][1],"DelMask",$d[$i][0],
-      "([Host] Delete mask)";
+    printf "%-6s %-8s %-25s %s\n",$d[$i][1],"Delmask",
+      ($d[$i][2] ? $d[$i][2] .":" : "") . $d[$i][0] ,
+      "(Host delete mask)";
   }
 
   db_query("SELECT a.rule,a.id,a.rref  FROM user_rights a " .
@@ -187,24 +197,31 @@ if ($opt_help || ($opt_user eq '' &&  $opt_list eq '')) {
        "   --unlock                              unlock account\n\n"
          unless ($modgroup);
 
+  # "groups in groups" not done yet ...
   print "   --list                                list all groups\n"
       if ($modgroup);
 
   print "                                         Priviliges\n",
-        "   --add                                 interactive add\n",
-	"   --add=\"group,<groupname>\"             add group membership\n",
-        "   --add=\"server,<servername>,<mode>\"    add server (mode=R|RW|RWX)\n",
+        "   --add                                 interactive add\n";
+  print	"   --add=\"group,<groupname>\"             add group membership\n" 
+      unless ($modgroup);
+
+  print "   --add=\"server,<servername>,<mode>\"    add server (mode=R|RW|RWX)\n",
         "   --add=\"zone,<servername>:<zonename>,<mode>\"\n",
         "                                         add zone (mode=R|RW|RWX)\n",
-        "   --add=\"net,<servername>:<net>,<mode>\" add net (mode=RW|RWX)\n",
-        "   --add=\"host,<reg exp>\"                add hostname mask\n",
+        "   --add=\"net,<servername>:<net>\"        add net (CIDR)\n",
+        "   --add=\"hostmask,<regex>\"              add global hostname mask\n",
+        "   --add=\"hostmask,<servername>:<zonename>,<regex>\"\n",
+        "                                         add zone-bound hostname mask\n",
         "   --add=\"ipmask,<ipmask>\"               add IP-mask\n",
         "   --add=\"level,<level>\"                 add priv.level\n",
         "   --add=\"elimit,<days>\"                 add expiration limit\n",
         "   --add=\"def_dept,<string>\"             add default dept for hosts\n",
-        "   --add=\"tmplmask,<mask>\"               add Template-mask\n",
-        "   --add=\"grpmask,<mask>\"                add Group-mask\n",
-        "   --add=\"delmask,<mask>\"                add (Host)Delete-mask\n",
+        "   --add=\"tmplmask,<regex>\"              add Template-mask\n",
+        "   --add=\"grpmask,<regex>\"               add Group-mask\n",
+        "   --add=\"delmask,<regex>\"               add global Host delete mask\n",
+        "   --add=\"delmask,<servername>:<zonename>,<regex>\"\n",
+        "                                         add zone-bound delete mask\n",
         "   --add=\"rhf,<field>=0|1\"               add RequiredHostField-setting\n",
 	"   --add=\"flag,<name>\"                   add Privilege flag:\n",
         "                                            CNAME,SCNAME,AREC,MX,DELEG,\n",
@@ -255,7 +272,6 @@ if ($opt_list) {
 }
 
 fatal("Invalid $fooname '$opt_user'!") unless ($opt_user =~ /^\S+$/);
-
 
 if ($modgroup) {
   undef @q;
@@ -436,7 +452,8 @@ if (defined $opt_add) {
   unless ($opt_add) {
   add_i:
     print "Record types:\t",
-      "0=group,1=server,2=zone,3=net,4=hostmask,5=IP-mask,6=priv.level\n",
+      "0=", ($modgroup ? "exit" : "group"),
+      ",1=server,2=zone,3=net,4=hostmask,5=IP-mask,6=priv.level\n",
       "\t\t7=elimit,8=defdept,9=Template-mask,10=Group-mask,11=Delete-mask\n",
       "\t\t12=ReqHostField,13=Flag\n",
       "Record type: ";
@@ -446,14 +463,15 @@ if (defined $opt_add) {
       goto add_i;
     }
     if ($type==0) {
-      print "Enter group name: ";
+      exit(0) if ($modgroup);
+      print "Enter Group name: ";
       chomp($tmp = <STDIN>);
       db_query("SELECT id,name FROM user_groups WHERE name='$tmp';",\@d);
       if (@d < 1) { print "cannot find group: $tmp\n"; goto add_i; }
       $ref=$d[0][0];
     }
     if ($type==1 || $type==2 || $type==3) {
-      print "Enter server name: ";
+      print "Enter Server name : ";
       chomp($tmp = <STDIN>);
       undef @d;
       db_query("SELECT id,name FROM servers WHERE name='$tmp';",\@d);
@@ -467,7 +485,7 @@ if (defined $opt_add) {
       }
     }
     if ($type==2){
-      print "Enter zone name: ";
+      print "Enter Zone name: ";
       chomp($tmp = <STDIN>);
       undef @d;
       db_query("SELECT id,name FROM zones " .
@@ -478,7 +496,7 @@ if (defined $opt_add) {
       $ref=$d[0][0];
     }
     elsif ($type==3) {
-      print "Enter net (CIDR): ";
+      print "Enter Net (CIDR): ";
       chomp($tmp = <STDIN>);
       unless (is_cidr($tmp)) { print "Invalid CIDR!"; goto add_i; }
       undef @d;
@@ -490,8 +508,32 @@ if (defined $opt_add) {
       unless ($mode) { print "invalid mode!\n"; goto add_i; }
       $ref=$d[0][0];
     }
-    elsif ($type==4 || $type==9 || $type==10 || $type==11) {
-      print "Enter $masktypes{$type} mask (regexp): ";
+    elsif ($type==4 || $type==11) {
+      print "Enter Server name (leave blank for any): ";
+      chomp($tmp = <STDIN>);
+      if ($tmp ne "") {
+	  undef @d;
+	  db_query("SELECT id,name FROM servers WHERE name='$tmp';",\@d);
+	  if (@d < 1) { print "cannot find server!\n"; goto add_i; }
+	  $serverid=$d[0][0];
+	  print "Enter Zone name: ";
+	  chomp($tmp = <STDIN>);
+	  undef @d;
+	  if ($tmp ne "") {
+	      db_query("SELECT id,name FROM zones " .
+		   "WHERE server=$serverid AND name='$tmp';",\@d);
+	      if (@d < 1) { print "cannot find zone!\n"; goto add_i; }
+	  }
+      } else {
+	  $d[0][0]=-1;
+      }
+      print "Enter $masktypes{$type} mask (regex): ";
+      chomp($tmp = <STDIN>);
+      $mode=$tmp;
+      $ref=$d[0][0];
+    }
+    elsif ($type==9 || $type==10) {
+      print "Enter $masktypes{$type} mask (regex): ";
       chomp($tmp = <STDIN>);
       $mode=$tmp;
       $ref=-1;
@@ -506,7 +548,7 @@ if (defined $opt_add) {
       $ref=-1;
     }
     elsif ($type==6) {
-      print "Enter privilege level (0-999): ";
+      print "Enter Privilege Level (0-999): ";
       chomp($tmp = <STDIN>);
       unless (($tmp =~ /^\d+$/) && ($tmp < 999)) {
 	  print "invalid level\n"; goto add_i;
@@ -515,7 +557,7 @@ if (defined $opt_add) {
       $ref=-1;
     }
     elsif ($type==7) {
-      print "Enter host expiration limit (0-n days): ";
+      print "Enter Host Expiration Limit (0-n days): ";
       chomp($tmp = <STDIN>);
       unless (($tmp =~ /^\d+$/) && ($tmp >= 0)) {
 	print "invalid expiration limit\n"; goto add_i;
@@ -524,7 +566,7 @@ if (defined $opt_add) {
       $ref=-1;
     }
     elsif ($type==8) {
-      print "Enter default department (string): ";
+      print "Enter Default Department (string): ";
       chomp($tmp = <STDIN>);
       $tmp =~ s/^\s+|\s+$//g;
       unless (length($tmp) >= 1) {
@@ -534,14 +576,15 @@ if (defined $opt_add) {
       $ref=-1;
     }
     elsif ($type==12) {
-      print "Enter field name (huser,dept,location,info,ether,asset_id,model,serial,misc): ";
+      print "Enter Field Name (huser,dept,location,info,ether," .
+	    "asset_id,model,serial,misc): ";
       chomp($tmp = <STDIN>);
       $tmp =~ s/\s+|\s+$//g;
       unless ($tmp =~ /^(huser|dept|location|info|ether|asset_id|model|serial|misc)$/) {
 	print "Invalid field name\n"; goto add_i;
       }
       $mode=$tmp;
-      print "Enter field mode (0=required,1=optional): ";
+      print "Enter Field Mode (0=required,1=optional): ";
       chomp($tmp = <STDIN>);
       unless ($tmp =~ /^(1|0)$/) {
 	print "Invalid mode\n"; goto add_i;
@@ -549,8 +592,8 @@ if (defined $opt_add) {
       $ref=$tmp;
     }
     elsif ($type==13) {
-      print "Enter privilege flag (cname,scname,arec,mx,deleg,dhcp,printer,srv," .
-            "reserv): ";
+      print "Enter Privilege Flag (cname,scname,arec,mx,deleg,dhcp," .
+	    "printer,srv,reserv): ";
       chomp($tmp = <STDIN>);
       $tmp =~ s/\s+|\s+$//g;
       $tmp=uc($tmp);
@@ -569,23 +612,26 @@ if (defined $opt_add) {
   }
 
   fatal("invalid parameter '$opt_add' for add option!")
-    unless ($opt_add =~ /^(group|server|zone|net|host|ipmask|level|elimit|defdept|tmplmask|grpmask|delmask|rhf|flag),([^,\s]+)(,(R|RW|RWX))?$/);
+    unless ($opt_add =~ /^(group|server|zone|net|hostmask|ipmask|level|elimit|defdept|tmplmask|grpmask|delmask|rhf|flag),([^,\s]+)(,(\S+))?$/);
   $type=$addmodes{$1};
   $tmp=$2;
   $mode=$4;
   if ($type==0) {
+    fatal("Nested groups not implemented!\n") if ($modgroup);
     undef @d;                                                                  
     db_query("SELECT id,name FROM user_groups WHERE name='$tmp';",\@d);        
     fatal("cannot find group '$tmp'") if (@d < 1);
     $ref=$d[0][0];          
   }
   if ($type==1) {
+    fatal("bad mode \"$mode\"!") unless ($mode =~ /^(R|RW|RWX)$/);
     undef @d;
     db_query("SELECT id FROM servers WHERE name='$tmp';",\@d);
     fatal("cannot find server '$tmp'") if (@d < 1);
     $ref=$d[0][0];
   }
   elsif ($type==2) {
+    fatal("bad mode \"$mode\"!") unless ($mode =~ /^(R|RW|RWX)$/);
     if ($tmp=~/^(\S+):(\S+)$/) {
       $tmp1=$1;
       $tmp2=$2;
@@ -601,6 +647,7 @@ if (defined $opt_add) {
     $ref=$d[0][0];
   }
   elsif ($type==3) {
+    fatal("bad mode \"$mode\"!") unless ($mode =~ /^$/);
     if ($tmp=~/^(\S+):(\S+)$/) {
       $tmp1=$1;
       $tmp2=$2;
@@ -614,8 +661,24 @@ if (defined $opt_add) {
 	     \@d);
     fatal("cannot find net '$tmp'") if (@d < 1);
     $ref=$d[0][0];
+    $mode="unused";
   }
-  elsif ($type==4 || $type==9 || $type==10 || $type==11) {
+  elsif ($type==4 || $type==11) {
+    $mode = $tmp if ($mode =~ /^$/);
+    fatal("bad mode \"$mode\"!") unless ($mode =~ /^\S+$/);
+    if ($tmp=~/^(\S+):(\S+)$/) {
+      $tmp1=$1;
+      $tmp2=$2;
+      $serverid=get_server_id($tmp1);
+      fatal("Cannot find server '$tmp1'") unless ($serverid > 0);
+      $zoneid=get_zone_id($tmp2,$serverid);
+      fatal("Cannot find zone '$tmp2'") unless ($zoneid > 0);
+      $ref=$zoneid;
+    } else {
+      $ref=-1;
+    }
+  } 
+  elsif ($type==9 || $type==10) {
     $mode=$tmp;
     $ref=-1;
   }
@@ -670,15 +733,18 @@ elsif (defined $opt_del) {
 
   $res=db_exec("DELETE FROM user_rights " .
 	       "WHERE type=$utype AND ref=$id AND id=$tmp;");
-  fatal("cannot delete record (id=$tmp) from user_rights!") if ($res <0);
-  print "User right record successfully deleted.\n";
+  fatal("cannot delete record (id=$tmp) from user_rights!") if ($res <1);
+  printf "%s rights record successfully deleted.\n",
+    ($modgroup) ? "Group" : "User";
   exit;
 }
 elsif ($opt_delall) {
   db_begin();
   $res=db_exec("DELETE FROM user_rights WHERE type=$utype AND ref=$id;");
-  fatal("cannot delete all users records!") if ($res <0);
+  fatal("cannot delete all users records!") if ($res <1);
   fatal("commit failed!") if (db_commit()<0);
+  printf "All %s rights records successfully deleted.\n",
+    ($modgroup) ? "group" : "user";
 }
 elsif ($opt_edit) {
   fatal("option not yet implemented");

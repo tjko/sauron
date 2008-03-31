@@ -1329,7 +1329,9 @@ sub delete_zone($) {
   if ($res < 0) { db_rollback(); return -50; }
 
 
-  $res=db_exec("DELETE FROM user_rights WHERE rtype=2 AND rref=$id");
+  print "<BR>Deleting User rights records...\n";
+  $res=db_exec("DELETE FROM user_rights WHERE (rtype=2 OR rtype=4 " .
+	       "OR rtype=9 OR rtype=10 OR rtype=11) AND rref=$id");
   if ($res < 0) { db_rollback(); return -100; }
 
   return db_commit();
@@ -3167,14 +3169,14 @@ sub get_permissions($$) {
     if ($type == 1) { $rec->{server}->{$ref}=$mode; }
     elsif ($type == 2) { $rec->{zone}->{$ref}=$mode; }
     elsif ($type == 3) { $rec->{net}->{$ref}=[$s,$e]; }
-    elsif ($type == 4) { push @{$rec->{hostname}}, $mode; }
+    elsif ($type == 4) { push @{$rec->{hostname}},[$ref,$mode]; }
     elsif ($type == 5) { push @{$rec->{ipmask}}, $mode; }
     elsif ($type == 6) { $rec->{alevel}=$mode if ($rec->{alevel} < $mode); }
     elsif ($type == 7) { $rec->{elimit}=$mode; }
     elsif ($type == 8) { $rec->{defdept}=$mode; }
     elsif ($type == 9) { push @{$rec->{tmplmask}}, $mode; }
     elsif ($type == 10) { push @{$rec->{grpmask}}, $mode; }
-    elsif ($type == 11) { push @{$rec->{delmask}}, $mode; }
+    elsif ($type == 11) { push @{$rec->{delmask}},[$ref,$mode]; }
     elsif ($type == 12) { $rec->{rhf}->{$mode}=$ref; }
     elsif ($type == 13) { $rec->{flags}->{$mode}=1; }
   }

@@ -50,7 +50,7 @@ our %host_types;
 
 sub chk_perms($$$$) {
   my($state,$type,$rule,$quiet) = @_;
-  my($i,$re,@n,$s,$e,$ip);
+  my($i,$re,@n,$s,$e,$ip,$zid);
 
   my %perms = %main::perms;
   $state = \%main::state unless ($state);
@@ -84,15 +84,19 @@ sub chk_perms($$$$) {
       return 0 if (@{$perms{hostname}} == 0);
 
       for $i (0..$#{$perms{hostname}}) {
-	$re=$perms{hostname}[$i];
+	$zid=$perms{hostname}[$i][0];
+	next if ($zid != -1 && $zid != $zoneid);
+	$re=$perms{hostname}[$i][1];	
 	return 0 if ($rule =~ /$re/);
       }
 
       if ($type eq 'delhost') {
-	for $i (0..$#{$perms{delmask}}) {
-	  $re=$perms{delmask}[$i];
-	  return 0 if ($rule =~ /$re/);
-	}
+       for $i (0..$#{$perms{delmask}}) {
+	   $zid=$perms{delmask}[$i][0];
+	   next if ($zid != -1 && $zid != $zoneid);
+	   $re=$perms{delmask}[$i][1];
+	   return 0 if ($rule =~ /$re/);
+       }
       }
     }
 
