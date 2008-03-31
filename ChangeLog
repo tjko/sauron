@@ -1,6 +1,10 @@
 $Id$
 
 0.7.3
+	- added IPv6 records support to import-roots fulfilling recommendation
+	  to everybody add IPv6 root hints regardless site IPv6 current usage. 
+	  This change requires Net::IP module and brings in powerful IPv4 and
+	  IPv6 manipulation utilities. Import-roots change by Riku Meskanen.
 	- add allow-query-cache and allow-notify option blocks by Riku Meskanen
 	- fix: slave to inherit keys & acls configs from master as defined
 	- fix: Makefile.in add sql/dbconvert_1.3to1.4 as installable file

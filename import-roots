@@ -79,6 +79,16 @@ foreach $host (keys %zonedata) {
       $acount++;
     }
   }
+  if (@{$rec->{AAAA}}) {
+    #print "AAAA: " . join(",",@{$rec->{AAAA}}) . "\n";
+    for $i (0..$#{$rec->{AAAA}}) {
+      $ip=$rec->{AAAA}[$i];
+      $res=db_exec("INSERT INTO root_servers (server,ttl,domain,type,value) " .
+		   " VALUES($serverid,$ttl,'$host','AAAA','$ip');");
+      fatal("cannot insert AAAA record") if ($res < 0);
+      $aaaacount++;
+    }
+  }
   if (@{$rec->{NS}}) {
     #print "NS: " . join(",",@{$rec->{NS}}) . "\n";
     for $i (0..$#{$rec->{NS}}) {
@@ -105,6 +115,7 @@ if ($ncount < 1) {
 die("commit failed") if (db_commit() < 0);
 
 print "$acount root server A records inserted\n";
+print "$aaaacount root server AAAA records inserted\n";
 print "$ncount root server NS records inserted\n";
 
 exit 0;

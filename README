@@ -16,6 +16,7 @@ REQUIREMENTS
 		- CGI module
 		- DBD::Pg (and DBI) module (or Pg module)
 		- Net::DNS module
+		- Net::IP module
 		- Net::Netmask module
 		- Digest::MD5 module
 		- Digest::HMAC module

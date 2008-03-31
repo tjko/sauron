@@ -7,6 +7,7 @@ package Sauron::UtilZone;
 require Exporter;
 use IO::File;
 use Net::DNS;
+use Net::IP qw(:PROC);
 use Sauron::Util;
 use strict;
 use vars qw($VERSION @ISA @EXPORT);
@@ -125,7 +126,7 @@ sub process_zonefile($$$$) {
 	unless ($class =~ /^(IN|CS|CH|HS)$/);
 
     # type
-    unless ($type =~ /^(SOA|A|PTR|CNAME|MX|NS|TXT|HINFO|WKS|MB|MG|MD|MF|MINFO|MR|AFSDB|ISDN|RP|RT|X25|PX|SRV)$/) {
+    unless ($type =~ /^(SOA|A|AAAA|PTR|CNAME|MX|NS|TXT|HINFO|WKS|MB|MG|MD|MF|MINFO|MR|AFSDB|ISDN|RP|RT|X25|PX|SRV)$/) {
       if ($ext_flag > 0) {
 	unless ($type =~ /^(DHCP|ALIAS|AREC|ROUTER|PRINTER|BOOTP|INFO|ETHER2?|GROUP|BOOTP|MUUTA[0-9]|TYPE|SERIAL|PCTCP)$/) {
 	  print STDERR "$filename($.): unsupported RR type '$type'\n";
@@ -143,6 +144,7 @@ sub process_zonefile($$$$) {
 	      CLASS => $class,
 	      SOA => '',
 	      A => [],
+	      AAAA => [],
 	      PTR => [],
 	      CNAME => '',
 	      MX => [],
@@ -182,6 +184,11 @@ sub process_zonefile($$$$) {
       fatal("$filename($.): invalid A record: $fline")
 	unless (/^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/);
       push @{$rec->{A}}, $1;
+    }
+    elsif ($type eq 'AAAA') {
+      fatal("$filename($.): invalid AAAA record: $fline")
+	unless (ip_is_ipv6($_));
+      push @{$rec->{AAAA}}, $_;
     }
     elsif ($type eq 'SOA') {
       fatal("$filename($.): duplicate SOA record: $fline")
