@@ -16,6 +16,7 @@ require Sauron::UtilDhcp;
 require Sauron::UtilZone;
 require CGI;
 require Net::DNS;
+require Net::IP;
 
 load_config();
 
@@ -49,6 +50,7 @@ if ($opt_versions) {
   print "Pg: ",$Pg::VERSION,"\n" if ($Pg::VERSION);
   print "DBI: ",$DBI::VERSION,"\n" if ($DBI::VERSION);
   print "Net::DNS: ",$Net::DNS::VERSION,"\n";
+  print "Net::IP: ",$Net::IP::VERSION,"\n";
   print "Net::Netmask: ",$Net::Netmask::VERSION,"\n\n";
 
   print "Sauron::Sauron: ",($Sauron::Sauron::VERSION =~ /,v\s+(\S+)\s/),"\n";
