@@ -279,15 +279,35 @@ sub menu_handler {
   elsif ($sub eq 'vlans') {
     browse_vlans:
       return if (check_perms('level',$main::ALEVEL_VLANS));
+
+      my $sortby;
+      my %sortopt  = (
+	'name'  => 'name,vlanno,description,comment',
+        'desc'  => 'description,name,comment,vlanno',
+        'comm'  => 'comment,description,name,vlanno',
+        'vlan'  => 'vlanno,name,description,comment'
+      );
+
+      if (defined($sortopt{param("sort")})) {
+	  $sortby = $sortopt{param("sort")};
+      } else {
+	  $sortby = $sortopt{'name'};
+      }
+      
       undef @q;
       db_query("SELECT id,name,vlanno,description,comment FROM vlans " .
-	       "WHERE server=$serverid ORDER BY name;",\@q);
+	       "WHERE server=$serverid ORDER BY $sortby;",\@q);
       print h3("VLANs");
       for $i (0..$#q) {
 	$q[$i][1]="<a href=\"$selfurl?menu=nets&vlan_id=$q[$i][0]\">".
 	          "$q[$i][1]</a>";
       }
-      display_list(['Name','VLAN No.','Description','Comments'],\@q,1);
+      display_list([
+	"<a href=\"$selfurl?menu=nets&sub=vlans\">Name</a>",
+	"<a href=\"$selfurl?menu=nets&sub=vlans&sort=vlan\">VLAN No.</a>",
+	"<a href=\"$selfurl?menu=nets&sub=vlans&sort=desc\">Description</a>",
+	"<a href=\"$selfurl?menu=nets&sub=vlans&sort=comm\">Comments</a>",
+	],\@q,1);
       print "<br>";
       return;
   }
