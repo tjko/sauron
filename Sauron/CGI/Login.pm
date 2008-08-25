@@ -320,13 +320,26 @@ sub menu_handler {
 
     # net permissions
     # FIXME:  output is not sorted properly raising order server:cidr
-    foreach $s (keys %{$perms->{net}}) {
-      undef @q; 
-      db_query("SELECT s.name,n.net,n.range_start,n.range_end " .
-	       "FROM servers s, nets n WHERE n.server=s.id AND n.id=$s;",\@q);
-      $tmp="$q[0][0]:$q[0][1]";
+    #foreach $s (keys %{$perms->{net}}) {
+    #  undef @q; 
+    #  db_query("SELECT s.name,n.net,n.range_start,n.range_end " .
+    #       "FROM servers s, nets n WHERE n.server=s.id AND n.id=$s;",\@q);
+    #  $tmp="$q[0][0]:$q[0][1]";
+    #  print "<TR bgcolor=\"#dddddd\">",td("Net"),td("$tmp"),
+    #     td($perms->{net}->{$s}[0]." - ".$perms->{net}->{$s}[1]),"</TR>";
+    #}
+
+    # net permissions
+    # Fixed better than previous, but still a bit hack
+    $s = join(',',(keys %{$perms->{net}})),"\n";    
+    undef @q;
+    db_query("SELECT s.name,n.net,n.range_start,n.range_end " .
+	     "FROM servers s, nets n WHERE n.server=s.id AND " .
+	     "n.id in ($s) ORDER BY name,net;",\@q);
+    for $s (0..$#q) {
+      $tmp="$q[$s][0]:$q[$s][1]";
       print "<TR bgcolor=\"#dddddd\">",td("Net"),td("$tmp"),
-	     td($perms->{net}->{$s}[0]." - ".$perms->{net}->{$s}[1]),"</TR>";
+	     td($q[$s][2]." - ".$q[$s][3]),"</TR>";
     }
 
     # host permissions

@@ -1,6 +1,7 @@
 $Id$
 
 0.7.3
+	- user permissions display printout fix by Riku Meskanen.
 	- new vlan form Description field length fix by Riku Meskanen.
 	- sort vlan display by columns patch by Riku Meskanen.
 	- patch recording host move zone to history by Riku Meskanen.
