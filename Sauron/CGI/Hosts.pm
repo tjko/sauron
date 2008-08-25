@@ -639,6 +639,7 @@ sub menu_handler {
 	my %newzone;
 	my $newzoneid = param('move_zone');
 	my %mystate = %main::state;
+
 	$mystate{zoneid}=$newzoneid;
 	if ($zoneid == $newzoneid) {
 	    alert1("Cannot move to same zone!")
@@ -654,6 +655,7 @@ sub menu_handler {
 	}
 	else {
 	    my $newzone = $newzone{name};
+
 	    if ($newzone =~ /^(.*)\.($zone)\.?$/) {
 		my $tmp = ".$1";
 		if ($host{domain} =~ /^($.)($tmp)$/) {
@@ -667,6 +669,10 @@ sub menu_handler {
 	    $host{mx}=-1;
 	    $res=update_host(\%host);
 	    unless ($res < 0 ) {
+		update_history($state->{uid},$state->{sid},1,
+			       "MOVE: $host_types{$host{type}} ",
+			       "domain: $host{domain} move: $zone --> " .
+			       "$newzone{name}",$host{id});
 		print h2("Host moved from $zone to $newzone{name}");
 		return;
 	    }

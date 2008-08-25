@@ -1,6 +1,7 @@
 $Id$
 
 0.7.3
+	- patch recording host move zone to history by Riku Meskanen.
 	- status script patch to report Net::IP version by Riku Meskanen.
 	- moduser (modgroup) change (and many small fixes) by Riku Meskanen,
 	  added capability to bind hostmask and delmask to a zone, fixed most 
