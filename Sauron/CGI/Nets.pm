@@ -139,7 +139,7 @@ my %new_vlan_form=(
   {ftype=>1, tag=>'vlanno', name=>'VLAN No.', type=>'priority',
    len=>5, empty=>1},
   {ftype=>1, tag=>'description', name=>'Description', type=>'text',
-   len=>40, empty=>1},
+   len=>60, empty=>1},
   {ftype=>1, tag=>'comment', name=>'Comments', type=>'text',
    len=>60, empty=>1}
  ]
