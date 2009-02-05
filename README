@@ -1,7 +1,11 @@
 Sauron v.0.7.3 - DNS/DHCP Management System
 ==============
 
-NOTE! This is a development branch release (current stable branch is v0.6.x).
+This is a development branch release (current stable branch is v0.6.x).
+However, based on reports from users current development branch releases
+should be more stable than the current "stable" branch :)
+
+
 DBI (DBD::Pg) is now the default database access method, but Pg can still
 be used by specifying --with-Pg option to configure script.
 
