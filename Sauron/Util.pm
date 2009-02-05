@@ -431,7 +431,7 @@ sub net_ip_list($) {
 sub remove_origin($$) {
   my($domain,$origin) = @_;
 
-  $domain="\L$domain";
+  $domain="\L$domain" unless ($domain eq "\$DOMAIN");
   $origin="\L$origin";
   $origin =~ s/\./\\\./g;
   #print "before: $domain $origin\n";
@@ -446,7 +446,7 @@ sub remove_origin($$) {
 sub add_origin($$) {
   my($domain,$origin) = @_;
 
-  $domain="\L$domain";
+  $domain="\L$domain" unless ($domain eq "\$DOMAIN");
   $origin="\L$origin";
   if ($domain eq '@') {  $domain=$origin; }
   elsif (! ($domain =~ /\.$/)) {
