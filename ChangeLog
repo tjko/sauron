@@ -1,6 +1,8 @@
 $Id$
 
 0.7.3
+	- fixed reserved and expired host not to be included in dhcp-pool by
+	  Riku Meskanen
 	- fix import-zone to handle SRV entries and update CGI interface
 	  to allow SRV, MX, CNAME and NS entries to be upto 63 characters
 	  by Frank Crawford.

@@ -1519,8 +1519,10 @@ sub make_dhcp() {
     undef @dips;
     db_query("SELECT g.id,a.ip,h.domain ".
 	     "FROM hosts h, a_entries a, groups g ".
-	     "WHERE a.host=h.id AND g.id=h.grp AND g.type=2 ".
-	     " AND g.server=$serverid ORDER BY a.ip,g.id",\@dips);
+	     "WHERE a.host=h.id AND g.id=h.grp AND g.type=2 AND h.type=1".
+	     " AND ( COALESCE(h.expiration,0) = 0 OR h.expiration > $time_now_ticks )".
+	     " AND g.server=$serverid ".
+             "ORDER BY a.ip,g.id",\@dips);
     $dpool_ip_count=@dips;
     print STDERR "Found $dpool_ip_count dynamic pool IPs\n" if ($opt_verbose);
 
