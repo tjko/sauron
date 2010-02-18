@@ -1,6 +1,9 @@
 $Id$
 
 0.7.3
+	- fix import-zone to handle SRV entries and update CGI interface
+	  to allow SRV, MX, CNAME and NS entries to be upto 63 characters
+	  by Frank Crawford.
         - fix to incorrect mapping of $DOMAIN to $domain by Scott Olson.  
 	- user permissions display printout fix by Riku Meskanen.
 	- new vlan form Description field length fix by Riku Meskanen.

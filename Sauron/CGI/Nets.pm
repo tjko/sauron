@@ -32,7 +32,7 @@ my %new_net_form=(
   {ftype=>4, tag=>'subnet', name=>'Type', type=>'enum',
    enum=>{t=>'Subnet',f=>'Net'}},
   {ftype=>4, tag=>'dummy', name=>'Virtual subnet', type=>'enum',
-   enum=>{t=>'Yes',f=>'No'},iff=>['subnet','t']},
+   enum=>{t=>'Yes',f=>'No'},iff=>['subnet','t',1]},
   {ftype=>1, tag=>'net', name=>'Net (CIDR)', type=>'cidr'},
   {ftype=>1, tag=>'comment', name=>'Comment', type=>'text',
    len=>60, empty=>1}
@@ -50,7 +50,7 @@ my %net_form=(
   {ftype=>4, tag=>'subnet', name=>'Type', type=>'enum',
    enum=>{t=>'Subnet',f=>'Net'}},
   {ftype=>3, tag=>'dummy', name=>'Virtual subnet', type=>'enum',
-   enum=>{t=>'Yes',f=>'No'},iff=>['subnet','t']},
+   enum=>{t=>'Yes',f=>'No'},iff=>['subnet','t',1]},
   {ftype=>1, tag=>'net', name=>'Net (CIDR)', type=>'cidr'},
   {ftype=>3, tag=>'vlan', name=>'VLAN', type=>'enum', conv=>'L',
    enum=>\%vlan_list_hash, elist=>\@vlan_list_lst, restricted=>1,
