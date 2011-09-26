@@ -1,4 +1,4 @@
-Sauron v.0.7.3 - DNS/DHCP Management System
+Sauron v.0.7.4 - DNS/DHCP Management System
 ==============
 
 This is a development branch release (current stable branch is v0.6.x).
@@ -31,9 +31,15 @@ REQUIREMENTS
 	  (or add support to your favorite db yourself :)
 	- www-server (Apache or any other www-server with CGI support)
 
+SOURCE
+	http://sourceforge.net/p/sauron-dns/code/
+
 DOWNLOAD
 	Sauron and related files are available from:
 	 WWW: http://sauron.jyu.fi/
+               or
+              http://sourceforge.net/projects/sauron-dns/files/ 
+
 	 FTP: ftp://ftp.jyu.fi/pub/sauron/
 
 
@@ -191,5 +197,5 @@ SUGGESTED READING
 
 
 --
-Timo <tjko@iki.fi>			        $Date$
+Timo <tjko@iki.fi>			        
 
