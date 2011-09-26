@@ -1,4 +1,5 @@
-$Id$
+0.7.4
+	[project moved to sourceforge and switched to use git instead of cvs]
 
 0.7.3
 	- fixed reserved and expired host not to be included in dhcp-pool by
