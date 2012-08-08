@@ -5,6 +5,8 @@
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>  2001,2003.
 # $Id$
 #
+# Also covers csv,cidr and selecting output level and dhcponly 
+#
 require 5;
 use Getopt::Long;
 use Time::Local;
@@ -21,17 +23,26 @@ $host = `hostname`;
 $host =~ s/\n//g;
 $time_now = localtime;
 
-GetOptions("help|h","verbose|v","all|a","comments");
+GetOptions("help|h", "cidr|ci","csv","comments|co",
+	   "dhcponly!","level=s","verbose");
 
 if ($opt_help || @ARGV < 1) {
-  print "syntax: $0 [--help] [--verbose] [--comments] [--all] <servername>\n";
+    print "syntax: $0 [--help] [OPTIONS] <servername>\n",
+    "\noptions:\n",
+    "\t--cidr    \t/nn after net address\n",
+    "\t--csv     \toutput csv-format\n",
+    "\t--comments\twith comment lines\n",
+    "\t--dhcponly\tinclude only dhcp enabled nets\n",
+    "\t--level=s \tlimit level to any of: s,-s,s-s,s-\n",
+    "\t--verbose \tprovide more info while operating\n\n";
   print "\n" if ($opt_help);
   exit(0);
 }
 
-$opt_verbose = ($opt_verbose ? 1 : 0);
+$opt_cidr = ($opt_cidr ? 1 : 0);
 $opt_comments = ($opt_comments ? 1 : 0);
-$opt_all = ($opt_all ? 1 : 0);
+$opt_dhcponly = ($opt_dhcponly ? 1 : 0);
+$opt_quiet = ($opt_quiet ? 1 : 0);
 $servername=shift;
 
 db_connect();
@@ -39,66 +50,102 @@ db_connect();
 $serverid=get_server_id($servername);
 fatal("cannot find server '$servername'") unless ($serverid > 0);
 
+# if dhcp then skip these nets
+if ($opt_dhcponly) {
+    $rule1=' AND  dummy=false AND no_dhcp=false AND subnet=true';
+}
 
-unless ($opt_all) {
-  $rule1=' AND no_dhcp=false ';
+if (defined($opt_level)) {
+    if ($opt_level =~ /^-?(\d{1,2})$/) {
+	$rule2=" AND alevel <= $1";
+    } elsif ($opt_level =~ /^(\d{1,2})-(\d{1,2})$/) {
+	$rule2=" AND alevel >= $1 AND alevel <= $2";
+    } elsif ($opt_level =~ /^(\d{1,2})-$/) {
+	$rule2=" AND alevel >= $1";
+    } else {
+	fatal("could not parse level");
+    }
 }
 
 undef @q;
 db_query("SELECT net,netname,comment,name " .
 	 "FROM nets " .
-	 "WHERE server=$serverid $rule1 " .
+	 "WHERE server=$serverid $rule1 $rule2" .
 	 "ORDER BY net",\@q);
 
 $found=@q;
 print STDERR "Found $found network(s)\n" if ($opt_verbose);
 
-print "# /etc/networks  -- automagically generated (by Sauron $VER)\n",
-      "#\n# server: $servername\n",
-      "# created by $user\@$host at $time_now\n#\n",
-      "# network-name                           network-number\n",
-      "# ------------                           --------------\n#\n";
-
-
-for $i (0..$#q) {
-  if ($q[$i][0] =~ /^127/) {
-    $loopback_found=1;
-    last;
-  }
-}
-
-unless ($loopback_found) {
-  $names{'loopback'}++;
-  printf "%-40s %-15s %s\n", 'loopback', '127', '';
-  print "#\n";
-}
-
-
-for $i (0..$#q) {
-  ($net=$q[$i][0]) =~ s/\/\d+\s*$//;
-  #$net =~ s/\.0//g;
-  ($name=$q[$i][1]) =~ s/\s+/_/g;
-
-  if ($name) {
-    $nname=substr($name,0,35);
-    if ($names{$nname}) {
-      print STDERR "network name collision: $name\n" if ($opt_verbose);
-      $names{$nname}++;
-      $nname.="-$names{$nname}";
+unless ($opt_csv) { 
+    unless ($opt_cidr) {
+	print "# /etc/networks  -- automagically generated (by Sauron $VER)\n",
+	"#\n# server: $servername\n",
+	"# created by $user\@$host at $time_now\n#\n",
+	"# network-name                           network-number\n",
+	"# ------------                           --------------\n#\n";
     } else {
-      $names{$nname}++;
+	print "# Generated (by Sauron $VER)\n",
+	"#\n# server: $servername\n",
+	"# created by $user\@$host at $time_now\n#\n",
+	"# network-name                           network-prefix\n",
+	"# ------------                           --------------\n#\n";
     }
-  } else {
-    $nname='#';
-  }
+} else {
+    print "\"Prefix\",\"Netname\",\"Comment\"\n";
+}
 
-  $comment = $q[$i][3] . ($q[$i][2] ? ", $q[$i][2]":"");
-  printf "# %s\n", $comment if ($opt_comments);
-  printf "%-40s %-15s\n", $nname, $net;
+# no dhcp on loopback, obviously
+unless ($opt_dhcponly) { 
+    for $i (0..$#q) {
+	if ($q[$i][0] =~ /^127/) {
+	    $loopback_found=1;
+	    last;
+	}
+    }
+
+    unless ($loopback_found) {
+	$names{'loopback'}++;
+	printf "%-40s %-15s %s\n", 'loopback', '127', '';
+	print "#\n";
+    }
+}
+
+for $i (0..$#q) {
+
+    if ($opt_cidr) {
+	($net=$q[$i][0]);
+    } else {
+	($net=$q[$i][0]) =~ s/\/\d+\s*$//;
+    } 
+    #$net =~ s/\.0//g;
+
+    ($name=$q[$i][1]) =~ s/\s+/_/g;
+
+    if ($name) {
+	$nname=substr($name,0,35);
+	if ($names{$nname}) {
+	    print STDERR "network name collision: $name\n" if ($opt_verbose);
+	    $names{$nname}++;
+	    $nname.="-$names{$nname}";
+	} else {
+	    $names{$nname}++;
+	}
+    } else {
+	$nname='#';
+    }
+
+    $comment = $q[$i][3] . ($q[$i][2] ? ", $q[$i][2]":"");
+
+    if ($opt_csv) {
+	printf "\"%s\",\"%s\",\"%s\"\n",$net,$nname,$comment;
+    } else {
+	printf "# %s\n", $comment if ($opt_comments);
+	printf "%-40s %-15s\n", $nname, $net;
+    }
 }
 
 
-print "#\n# eof\n";
+print "#\n# eof\n" unless ($opt_csv);
 
 exit 0;
 
