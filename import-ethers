@@ -1,10 +1,11 @@
-#!/usr/bin/perl -I/usr/local/sauron
+#!/usr/bin/perl -I/opt/sauron
 #
 # import-ethers  imports Ethernet card manufacturer codes&descriptions
 #                from text file (Ethernet.txt or IEEE's oui.txt)
 #
+# Copyright (c) Michal Kostenec <kostenec@civ.zcu.cz> 2013-2014.
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000-2004.
-# $Id$
+# $Id:$
 #
 require 5;
 use Getopt::Long;
@@ -44,8 +45,8 @@ for $i (0..$#q) { $oldethers{$q[$i][0]}=$q[$i][1]; }
 
 open(FILE,"$file") || fatal("cannot open input file '$file'");
 while (<FILE>) {
-  next unless /^([0-9A-F]{6})\s+(\S.*)$/ or
-              /^([0-9A-F]{2}-[0-9A-F]{2}-[0-9A-F]{2})\s+\(hex\)\s+(\S.*)$/;
+  next unless /^\s*([0-9A-F]{6})\s+(\S.*)$/ or
+              /^\s*([0-9A-F]{2}-[0-9A-F]{2}-[0-9A-F]{2})\s+\(hex\)\s+(\S.*)$/;
   $code=$1;
   $info=$2;
   next if ($info =~ /^\(base/);

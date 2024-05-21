@@ -1,6 +1,6 @@
 /* users table creation
  *
- * $Id$
+ * $Id:$
  */
 
 /** This table contains (user interface) user account information. **/
@@ -27,5 +27,5 @@ CREATE TABLE users (
 	comment		TEXT,
 
 	CONSTRAINT	username_key UNIQUE(username)
-) INHERITS(common_fields);
+) INHERITS(common_fields) WITH OIDS;
 

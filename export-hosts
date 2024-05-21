@@ -1,14 +1,15 @@
-#!/usr/bin/perl -I/usr/local/sauron
+#!/usr/bin/perl -I/opt/sauron
 #
-# export-hosts  generates list of IPs in use for given neworks
+# export-hosts  generates list of IPs in use for given networks
 #
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>  2004.
-# $Id$
+# Modifications and filtering  Riku Meskanen <mesrik@iki.fi>, 2006-2015.
+# $Id:$
 #
 require 5;
 use Getopt::Long;
 use Time::Local;
-use Net::Netmask;
+# use Net::Netmask;
 use Sauron::DB;
 use Sauron::Util;
 use Sauron::BackEnd;
@@ -22,10 +23,42 @@ sub qstr($) {
 
 sub match_zone($) {
     my($id)=@_;
-    
+
     return 1 unless (@zones > 0);
     for $i (0..$#zones) { return 1 if ($id == $zones[$i]); }
     return 0;
+}
+
+sub sql_array_str($$@) {
+    my ($ss,$tc,@arr) = (@_); # split string, type cast, array
+
+    # split @arr using $ss unless $ss empty
+    # and add array typecast unless $tc empty
+
+    (my $str = "ARRAY[E'" .
+        join("',E'",("$ss" ne "" ? map(split("$ss", $_),@arr) : @arr)) .
+	"']" . ($tc ne "" ? "::$tc\[]" : "")) =~ s=\\=\\\\=g;
+    return $str;
+}
+
+sub rtype($) {
+    my ($r) = (@_);
+    my %htype = (0   => 'misc',
+		 1   => 'host',
+		 2   => 'delegation',
+		 3   => 'mx entry',
+		 4   => 'alias (cname)',
+		 5   => 'printer',
+		 6   => 'glue record',
+		 7   => 'alias (arec)',
+		 8   => 'srv entry',
+		 9   => 'dhcp only',
+		 10  => 'zone',
+		 101 => 'reservation');
+
+    return $htype{$r} if (defined($htype{$r}));
+
+    return $r;
 }
 
 load_config();
@@ -37,18 +70,45 @@ $time_now = localtime;
 $tnow = time();
 $tmp_extension = ".tmp.$<.$$"; # generate extension for temp files
 
-GetOptions("help|h","verbose|v","group=s","colnames");
+my ($debug,@cidr,$group,$level,@name,@nocidr,$noheader,@noname,$privacy,$type,$verbose,$help);
 
-if ($opt_help || @ARGV < 1) {
+GetOptions('debug=i'   => \$debug,
+	   'cidr=s@'   => \@cidr,
+	   'dhcponly'  => \$dhcponly,
+	   'group=s'   => \$group,
+	   'subgroup=s'=> \$subgroup, # ** 2022-02-24 TVu
+	   'mac=s'     => \$mac,      # ** 2022-02-24 TVu
+	   'level=s'   => \$level,
+	   'name=s@'   => \@name,
+	   'nocidr=s@' => \@nocidr,
+	   'noheader'  => \$noheader,
+	   'noname=s@' => \@noname,
+	   'privacy'   => \$privacy,
+	   'type=s'    => \$type,
+	   'verbose|v' => \$verbose,
+	   'help|h'    => \$help);
+
+if ($help || @ARGV < 1) {
   print "syntax: $0 [--help] [OPTIONS] <servername> [[zonename] ...]\n",
         "\noptions:\n",
-	"\t--group=<regexp>\tlist only hosts beloning to matching group\n",
-        "\t--colnames\t\toutput column names on first line\n",
+        "\t--dhcponly\t\tinclude only dhcp enabled nets\n",
+        "\t--cidr=s[,...]\t\tlimited by cidr list\n",
+	"\t--group=<regexp>\tlist only hosts belonging to matching group\n",
+	"\t--subgroup=<regexp>\tlist only hosts belonging to matching subgroup\n", # ** 2022-02-24 TVu
+	"\t--mac=<regexp>\t\tlist only hosts with matching MAC address\n",         # ** 2022-02-24 TVu
+        "\t--level=s \t\tlimit level to any of: s,-s,s-s,s-\n",
+        "\t--name=<regexp>\t\tlist only hosts with matching name\n",
+        "\t--noname=<regexp>\texcludes hosts with matching name\n",
+        "\t--nocidr=s[,...]\texclude by cidr list\n",
+        "\t--noheader\t\tomit header\n",
+        "\t--privacy\t\tomit user name & email addresses\n",
+        "\t--type=s[,...]\t\tlimit by host type list\n",
 	"\t--verbose\t\tmore verbose output\n\n";
-  exit($opt_help ? 0 : 1);
+  exit($help ? 0 : 1);
 }
 
-$opt_verbose = ($opt_verbose ? 1 : 0);
+$verbose = ($verbose ? 1 : 0);
+$dhcponly = ($dhcponly ? 1 : 0);
 $servername=shift;
 
 db_connect();
@@ -56,52 +116,160 @@ db_connect();
 $serverid=get_server_id($servername);
 fatal("cannot find server '$servername'") unless ($serverid > 0);
 
-while (($zone=shift)) {  
+my $limit="";
+
+#
+# hosts only from dhcp enabled subnets
+#
+# if dhcp then skip these nets
+if ($dhcponly) {
+    $limit .= "AND a.ip << ANY " .
+	"(SELECT net FROM nets WHERE server=$serverid" .
+	" AND subnet=true AND dummy=false AND no_dhcp=false) ";
+}
+
+#
+# pick hosts only from subnets of specfied level(s)
+#
+if ($level) {
+
+    # base
+    $limit .= "AND a.ip << ANY " .
+	"(SELECT net FROM nets WHERE server=$serverid" .
+	" AND subnet=true AND dummy=false ";
+
+    # suffix
+    if ($level =~ /^-?(\d{1,2})$/) {
+	    $limit .= "AND alevel <= $1) ";
+    } elsif ($level =~ /^(\d{1,2})-(\d{1,2})$/) {
+	    $limit .= "AND alevel >= $1 AND alevel <= $2) ";
+    } elsif ($level =~ /^(\d{1,2})-$/) {
+	    $limit .= "AND alevel >= $1) ";
+    } else {
+        fatal("could not parse level");
+    }
+}
+
+#
+# limit hosts using name regexp
+#
+if (@name) {
+    $limit .= sprintf "AND h.domain ~ ANY (%s) ", sql_array_str('','',@name);
+}
+
+#
+# exclude hosts using noname regexp
+#
+if (@noname) {
+    $limit .= sprintf "AND h.domain !~ ANY (%s) ", sql_array_str('','',@noname);
+}
+
+#
+# limit using cidr list
+#
+if (@cidr) {
+    $limit .= sprintf "AND a.ip << ANY (%s) ",sql_array_str(',','cidr',@cidr);
+}
+
+#
+# exclude using cidr list
+#
+if (@nocidr) {
+    $limit .= sprintf "AND NOT a.ip << ANY (%s) ",sql_array_str(',','cidr',@nocidr);
+}
+
+#
+# limit using host type list
+#
+if ($type) {
+    $limit .= sprintf "AND h.type = ANY (%s) ", sql_array_str(',','int',($type));
+}
+
+# Note! If you want to list hosts in a particular group, whether it is the
+# base group for some, or a subgroup to others, do something like this:
+#
+# export-hosts nsx --group=snafu > snafu.csv
+# export-hosts nsx --subgroup=snafu --noheader >> snafu.csv
+
+#
+# limit using subgroup
+#
+my $from_subgroup = 'left join group_entries ge on h.id = ge.host ' . # ** 2022-02-24 TVu
+    'left join groups sg on ge.grp = sg.id';
+if ($subgroup) {
+    $from_subgroup .= " and sg.name ~ '$subgroup'";
+}
+
+#
+# limit using MAC address
+#
+if ($mac) { # ** 2022-02-24 TVu
+    $limit .= "and h.ether ~ '$mac' ";
+}
+
+while (($zone=shift)) {
     $zoneid=get_zone_id($zone,$serverid);
     fatal("cannot find zone: $zone") unless ($zoneid > 0);
-    push @zones, $zoneid; 
+    push @zones, $zoneid;
 }
 
 
 # fetch host records for this server...
 
-$sql = "SELECT h.id,h.zone,z.name,h.type,h.domain,a.ip,h.ttl,h.class,g.name," .
-       " h.alias, al.domain, al.zone, zal.name, h.cname_txt," . # 9-13
-       " h.hinfo_hw, h.hinfo_sw, wx.name, mx.name," . # 14-17
-       " h.router, h.ether, h.ether_alias, eal.ether," . # 18-21
-       " h.info, h.location," . # 22-23
-       " h.dept, h.huser, h.email, h.model, h.serial, h.misc," . # 24-29
-       " h.asset_id, h.comment " . # 30-31
+$sql = "SELECT h.id,h.zone,z.name,h.type,h.domain,a.ip,h.ttl,h.class," .  # 0-8
+       " g.name,h.alias, al.domain, al.zone, zal.name, h.cname_txt," .    # 9-13
+       " h.hinfo_hw, h.hinfo_sw, wx.name, mx.name," .                     # 14-17
+       " h.router, h.ether, h.ether_alias, eal.ether," .                  # 18-21
+       " h.info, h.location," .                                           # 22-23
+       " h.dept, h.huser, h.email, h.model, h.serial, h.misc," .          # 24-29
+       " h.asset_id, h.cdate, h.mdate, h.expiration, h.dhcp_date, " .     # 30-34
+       " h.duid, h.iaid, h.comment, sg.name " . # sg.name 2022-02-24 TVu  # 35-38
        "FROM zones z JOIN hosts h ON h.zone=z.id " .
        " LEFT JOIN a_entries a ON h.id=a.host " .
        " LEFT JOIN hosts al ON h.alias=al.id " .
        " LEFT JOIN hosts eal ON h.ether_alias=eal.id " .
        " LEFT JOIN zones zal ON al.zone=zal.id " .
-       " LEFT JOIN groups g ON h.grp=g.id " . 
+       " LEFT JOIN groups g ON h.grp=g.id " .
        " LEFT JOIN wks_templates wx ON h.wks=wx.id " .
        " LEFT JOIN mx_templates mx ON h.mx=mx.id " .
-       "WHERE z.server=$serverid " .
+       " $from_subgroup " . # ** 2022-02-24 TVu
+       "WHERE z.server=$serverid $limit " .
        "ORDER BY h.domain,a.ip ";
 
-print STDERR "Fetching host entries for server: $servername ...\n" 
-    if ($opt_verbose);
+if (defined($debug)) {
+    print $sql,"\n\n";
+    exit(1) if ($debug >= 9);
+}
+
+print STDERR "Fetching host entries for server: $servername ...\n"
+    if ($verbose);
 db_query($sql,\@q);
-print STDERR $#q . " host entries found for this server.\n" if ($opt_verbose);
+print STDERR $#q . " host entries found for this server.\n" if ($verbose);
+
+# Combine subgroups.
+for my $ind1 (1..$#q) { # ** 2022-02-24 TVu
+    if ($q[$ind1][0] eq $q[$ind1 - 1][0] && $q[$ind1][38]) {
+	$q[$ind1 - 1][38] .= ' ' . $q[$ind1][38];
+	splice(@q, $ind1, 1);
+    }
+}
 
 $lastid=-1;
 
-if ($opt_colnames) {
-    print "domain,type,ip,alias,ether,ttl,groupname,hinfo_hw,hinfo_sw," .
-	  "mx_template,router,id,info,location,department,user,email," .
-	  "serial,misc,asset_id,comment" .
-	  "\n";
+unless ($noheader) {
+    printf "\"%s\"\n", join('","',
+			    qw(Domain Rtype Address Alias MAC Ealias TTL Basegroup
+			       HINFO-HW HINFO-SW WKS MX-template Router-pri Host-ID
+			       Info Location Department User User-email Model Serial
+			       Misc Asset-ID Ctime Mtime Expiration Dhcp-date
+                               DUID IAID Comment Subgroups)); # ** Subgroups 2022-02-24 TVu
 }
 
 for $i (0..$#q) {
     @r=@{$q[$i]};
     next if ($lastid == $r[0]);
     next unless (match_zone($r[1]));
-    next if ($opt_group && $r[8] !~ /$opt_group/);
+    next if ($group && $r[8] !~ /$group/);
 
     $domain=$r[4];
     next if ($domain eq '@');
@@ -123,30 +291,48 @@ for $i (0..$#q) {
     if ($r[20] > 0) {
 	$ether="(".$r[21].")";
     }
-    print join(",", 
-	       $domain,$type,$ip,$alias,$ether,$etheralias,
-	       $r[6], # ttl
-	       qstr($r[8]), # group
-	       qstr($r[14]),qstr($r[15]), # hinfo hw & sw
-	       qstr($r[16]),qstr($r[17]), # mx templates
-	       $r[18], # router
-	       $r[0], # id
-	       qstr($r[22]),qstr($r[23]), # info, location
-	       qstr($r[24]),qstr($r[25]), # department, (h)user
-	       qstr($r[26]),qstr($r[27]), # email, model
-	       qstr($r[28]),qstr($r[29]), # serial, misc
-	       qstr($r[30]),qstr($r[31]), # asset_id, comment
-	       
+    print join(",",
+	       qstr($domain),      #1  hostname
+	       qstr(rtype($type)), #2  record type
+	       qstr($ip),          #3  address
+	       qstr($alias),       #4  alias
+	       qstr($ether),       #5  mac address
+	       qstr($etheralias),  #6  linked to hostname
+	       qstr($r[6]),        #7  ttl
+	       qstr($r[8]),        #8  basegroup
+	       qstr($r[14]),       #9  hinfo hw
+	       qstr($r[15]),       #10 hinfo sw
+	       qstr($r[16]),       #11 wks
+	       qstr($r[17]),       #12 mx templates
+	       qstr($r[18]),       #13 router priority
+	       qstr($r[0]),        #14 host id
+	       qstr($r[22]),       #15 info
+	       qstr($r[23]),       #16 location
+	       qstr($r[24]),       #17 department
+	       defined($privacy) ? "" : qstr($r[25]), #18 host user
+	       defined($privacy) ? "" : qstr($r[26]), #19 email
+	       qstr($r[27]),       #20 model
+	       qstr($r[28]),       #21 serial
+	       qstr($r[29]),       #22 misc
+	       qstr($r[30]),       #23 asset_id
+	       qstr($r[31]),       #24 ctime
+	       qstr($r[32]),       #25 mtime
+	       qstr($r[33]),       #26 expiration
+	       qstr($r[34]),       #26 dhcp_date
+	       qstr($r[35]),       #27 duid
+	       qstr($r[36]),       #28 iaid
+	       qstr($r[37]),       #29 comment
+	       qstr($r[38]),       #30 subgroups ** 2022-02-24 TVu
+
 	       ) . "\n";
-	       
+
 
     $lastid=$r[0];
     $counter++;
 }
 
-print STDERR "$counter host entries exported.\n" if ($opt_verbose);
+print STDERR "$counter host entries exported.\n" if ($verbose);
 
 exit 0;
 
 # eof
-

@@ -1,0 +1,1412 @@
+#!/usr/bin/perl -I/opt/sauron
+#
+# dbcheck - Sauron utility to check and fix consistency of database
+#
+# Copyright (c) Teppo Vuori <teppo.vuori@teppovuori.fi> 18.05.2016.
+# $Id:$
+#
+# ------------------------------------------------------------------------------
+use Getopt::Long;
+use Sauron::DB;
+use Sauron::BackEnd;
+use Sauron::Sauron;
+use Sauron::Util;
+use Pod::Usage;
+use File::Temp qw/ tempfile tempdir /;
+use Term::ReadLine;
+use strict;
+use warnings;
+
+load_config();
+
+# Local variables.
+my ($login_user, $sql, $err_count, $del_count, $keep_count, $ind1, $ind2, $tmp1, $file);
+my ($sid, $uid, @arr, %dbhash, @chks, %groups, $input, $inter, $rows, $more);
+my ($msg, @titles, %ids, $term, $expl);
+my $entire = "\nEntire transaction was rolled back - database was not changed";
+our ($opt_check, $opt_commit, $opt_groups, $opt_help,
+     $opt_man, $opt_user, $opt_verbose, $opt_yes);
+
+# Pointers to subroutines.
+# 3rd column is:
+# 1: Fix is 'mostly harmless' (can be done by default).
+# 2: Fix only if user specifies check group or 'all'
+#    (and gives permission or --yes).
+# 3: No fix available in this script - calls fix w/o asking even
+#    if --yes was not given (fix will just show a message).
+# 4th column is check group name.
+my @funcs = (
+    [ \&get_hosts_g,          \&fix_hosts_g,          1, 'hosts' ],
+    [ \&get_group_entries_h,  \&fix_group_entries_h,  1, 'hosts' ],
+    [ \&get_group_entries_g,  \&fix_group_entries_g,  1, 'hosts' ],
+    [ \&get_groups_h,         \&fix_groups_h,         2, 'hosts' ],
+
+    [ \&get_base_group_dhcp,  \&generic_nofix,        3, 'hosts' ], # ** 2021-??-??
+
+    [ \&get_int_stat_aliases, \&fix_int_stat_aliases, 2, 'aliases' ],
+    [ \&get_ext_stat_aliases, \&generic_nofix,        3, 'aliases' ],
+    [ \&get_cname_aliases,    \&fix_cname_aliases,    1, 'aliases' ],
+    [ \&get_arec_entries_a,   \&fix_arec_entries_a,   1, 'aliases' ],
+    [ \&get_arec_entries_h,   \&fix_arec_entries_h,   1, 'aliases' ],
+    [ \&get_arec_aliases,     \&fix_arec_aliases,     2, 'aliases' ],
+    [ \&get_a_entries_n,      \&fix_a_entries_n,      2, 'a_entries' ],
+    [ \&get_a_entries_h,      \&fix_a_entries_h,      1, 'a_entries' ],
+    [ \&get_user_rights_u,    \&fix_user_rights_u,    1, 'users' ],
+    [ \&get_user_rights_ug,   \&fix_user_rights_ug,   1, 'users' ],
+    [ \&get_user_groups_u,    \&fix_user_groups_u,    2, 'users' ],
+    [ \&get_user_groups_ur,   \&generic_nofix,        3, 'users' ],
+    [ \&get_user_rights_s,    \&fix_user_rights_s,    1, 'users' ],
+    [ \&get_user_rights_z,    \&fix_user_rights_z,    1, 'users' ],
+    [ \&get_user_rights_n,    \&fix_user_rights_n,    1, 'users' ],
+    );
+
+# ------------------------------------------------------------------------------
+# Get and check options.
+GetOptions("check:s", "commit", 'groups', "help", "man", "user=s", "verbose", 'yes') or exit;
+
+print "dbcheck - Sauron utility to check and fix the Sauron database.\n";
+
+# Show man or help if requested, or a brief help if
+# none of the required options was given. Exit.
+pod2usage(-verbose => 2, -exitval  => 0) if ($opt_man);
+pod2usage(-verbose => 1, -exitval  => 0) if ($opt_help);
+pod2usage(-verbose => 0, -exitval  => 0)
+    if (!defined $opt_check && !$opt_commit && !$opt_groups && !$opt_verbose && !$opt_yes || @ARGV);
+
+# Possible values of --check.
+if (defined $opt_check && $opt_check ne '' && $opt_check ne 'all') {
+    @chks = split(/,/, $opt_check);
+    for $ind1 (0..$#chks) {
+	($chks[$ind1] = lc($chks[$ind1])) =~ s/\s//g;;
+	$tmp1 = 0;
+	for $ind2 (0..$#funcs) {
+	    if ($chks[$ind1] eq $funcs[$ind2][3]) { $tmp1 = 1; last; }
+	}
+	if (!$tmp1) {
+	    print "Unknown value for --check: $chks[$ind1]\n";
+	    $opt_check = 'error';
+	    goto list_groups;
+	}
+    }
+    $opt_check = '#' . join('#', @chks) . '#';
+} elsif (!defined $opt_check || $opt_check eq '') {
+    $opt_check = 'default';
+}
+
+# Show names of check groups.
+list_groups:
+if ($opt_groups || $opt_check eq 'error') {
+    for $ind1 (0..$#funcs) {
+	$groups{$funcs[$ind1][3]} = 1;
+    }
+    print "Available check group names:\n" .
+	join(' ', sort keys %groups) . "\n";
+    exit;
+}
+
+# At this point $opt_check is one of 'all', 'default'
+# or a list of one or more check gropus.
+
+# Filename without path.
+($file = $0) =~ s=.*/([^/]+)=$1=;
+
+# Some options to canonical format.
+$opt_commit = $opt_commit ? 1 : 0;
+$opt_user = $opt_user ? $opt_user : '';
+$opt_verbose = $opt_verbose ? 1 : 0;
+$opt_yes = $opt_yes ? 1 : 0;
+
+# Connect to database.
+db_connect();
+db_begin();
+
+# Get login username (even if sudo is used).
+$login_user = getlogin();
+$login_user =~ s/_$//;
+if (!$login_user) {
+    fatal("Unable to get login username");
+}
+# Use --user if given, but record also login username.
+# If --user is not given, use login username.
+# Either --user or login username (other than root) must exist in the DB.
+undef %dbhash;
+if ($opt_user) {
+    $tmp1 = get_user($opt_user, \%dbhash);
+    if ($tmp1 < 0) {
+	fatal("Unknown --user '$opt_user', user must be defined in Sauron");
+    }
+} else {
+    $tmp1 = get_user($login_user, \%dbhash);
+    if ($tmp1 < 0 && $login_user ne 'root') {
+	fatal("Unknown login username '$login_user', user must be defined in Sauron");
+    }
+    $opt_user = $login_user;
+}
+$uid = $tmp1 < 0 ? -1 : $dbhash{id};
+
+# Create Sauron session id.
+$sid = new_sid();
+print "User name: $login_user" . ($opt_user ne $login_user ? "/$opt_user" : '') .
+    ", User id: $uid, Session id: $sid\n" if ($opt_verbose);
+
+print "Default checks will be done.\n" if ($opt_check eq 'default');
+
+print "No --commit -> no changes will be made to the database!\n" if (!$opt_commit);
+
+# Are we interactive?
+$inter = -t STDIN && -t STDOUT;
+# If so, get number of rows on treminal.
+$rows = 2e9; # Ridiculously large default => no paging.
+if ($inter) {
+    ($rows = `stty -a | grep ' rows '`) =~ s/.*rows\s+(\d+);.*/$1/;
+    chomp $rows;
+# Use default if result makes no sense.
+    if (!$rows || $rows !~ /^\d\d$/) { $rows = 24; }
+    $rows -= 8; # Margin.
+}
+
+# Which pager is used?
+$more = ($ENV{'PAGER'} && $ENV{'PAGER'} =~ /\b(more|less)\b/) ? $ENV{'PAGER'} : 'more';
+
+# Create ReadLine object.
+$term = Term::ReadLine->new('DBcheck Editor');
+
+# Disclaimer.
+if ($inter) {
+    print
+    "*****************************************************************************\n" .
+    "* This script has been written to act cautiously, but its function is to    *\n" .
+    "* delete and change rows in Sauron database, and the possibility of bugs    *\n" .
+    "* can not be ruled out. Do you agree that you have up-to-date backup of the *\n" .
+    "* database, and you have the capability to recover it in case this script   *\n" .
+    "* breaks something? If you do, type 'agree' at the prompt to continue.      *\n" .
+    "*****************************************************************************\n" .
+    "[agree/no]> ";
+    $input = lc(<STDIN>);
+    chomp $input;
+    if ($input !~ /^\s*agree\s*$/) { exit; }
+}
+
+# ------------------------------------------------------------------------------
+# Generic subroutines.
+
+# Cretae auxiliary hash to facilitate editing search results.
+sub create_edit_hash($$) {
+
+    my ($arr, $ids) = @_;
+    my ($ind1);
+
+    undef %{$ids};
+
+# 1 = Keep in table => Delete from database.
+# 2 = Delete from table => Keep in database.
+    for $ind1 (0 .. $#{$arr}) {
+	${$ids}{${$arr}[$ind1][0]} = 1;
+    }
+}
+
+# Print (to terminal) a list of titles and items passed as parameters.
+sub print_list($$$) {
+
+    my ($arr, $titles, $ids) = @_;
+    my $cols = $#{$titles};
+    my($ind1, $ind2, $tmp1, $ast, @widths, @tx, $fh, $fname);
+
+# Note! Only as many columns are printed as there are titles, thus,
+# you can have trailing hidden columns to pass values from 'get'
+# sub to 'fix' sub without showing them to the user.
+
+# Find widths of columns and which of them are text.
+    $ast = 0;
+    for $ind1 (0 .. $cols) {
+# Title.
+	$widths[$ind1] = length(${$titles}[$ind1]);
+# Data.
+	$tx[$ind1] = '';
+	for $ind2 (0 .. $#arr) {
+# Width.
+	    $tmp1 = length(${$arr}[$ind2][$ind1]);
+	    if ($tmp1 > $widths[$ind1]) { $widths[$ind1] = $tmp1; }
+	    if (${$arr}[$ind2][$ind1] !~ /^-?\d*\.?\d+$/) { $tx[$ind1] = '-'; }
+	    if (!$ind1 && ${$ids}{${$arr}[$ind2][0]} == 2) { $ast = 2 };
+	}
+    }
+
+# Write table to a file if it is too long for terminal
+# unless --yes was given.
+# Otherwise use STDOUT.
+    if ($#{$arr} > $rows && !$opt_yes) {
+	($fh, $fname) = tempfile(UNLINK => 1);
+    } else {
+	open($fh, '>-');
+    }
+
+# Print column titles.
+    print $fh "\n";
+    for $ind1 (0 .. $cols) {
+	print $fh '|' if ($ind1);
+	print $fh sprintf(" %-*s ", $widths[$ind1] + (!$ind1 ? $ast : 0), ${$titles}[$ind1]);
+    }
+    print $fh "\n";
+# Print separator line.
+    for $ind1 (0 .. $cols) {
+	print $fh '+' if ($ind1);
+	print $fh '-' x ($widths[$ind1] + (!$ind1 ? $ast : 0) + 2);
+    }
+    print $fh "\n";
+# Print data.
+    for $ind1 (0 .. $#{$arr}) {
+	for $ind2 (0 .. $cols) {
+	    print $fh '|' if ($ind2);
+	    $tmp1 = '';
+	    if ($ast && !$ind2) {
+		$tmp1 = ${$ids}{${$arr}[$ind1][0]} == 2 ? '* ' : '  ';
+	    }
+	    print $fh sprintf(" %s%$tx[$ind2]$widths[$ind2]s ", $tmp1, ${$arr}[$ind1][$ind2]);
+	}
+	print $fh "\n";
+    }
+    if ($inter && $ast) {
+	print $fh "Items marked with an asterisk will not be deleted / updated.\n";
+    }
+    print $fh "\n";
+
+# Close file and, if needed, output it to terminal with paging.
+    close $fh;
+    if ($#{$arr} > $rows && !$opt_yes) {
+	system("$more $fname");
+    }
+}
+
+# Edit list of items to delete / update.
+sub edit_list($$$$) {
+
+# Mark or unmark.
+    sub mark_unmark($$$) {
+
+	my ($ids, $vals, $set) = @_;
+	my (@arr, $ind1, $ind2);
+
+# Check that values in list are valid.
+	@arr = split(/,/, $vals);
+	for $ind1 (0..$#arr) {
+# Check syntax of each item.
+	    if ($arr[$ind1] !~ /^(\d+|\d+-|-\d+|\d+-\d+)$/) {
+		print "Invalid id value '$arr[$ind1]'\n";
+		return 0;
+	    }
+# Individual values must exist. Boundaries of intervals are not checked.
+	    if ($arr[$ind1] =~ /^\d+$/ && !${$ids}{$arr[$ind1]}) {
+		print "Id '$arr[$ind1]' not available\n";
+		return 0;
+	    }
+# Compare start and end of interval.
+	    if ($arr[$ind1] =~ /^(\d+)-(\d+)$/ && $1 > $2) {
+		print "Invalid interval '$arr[$ind1]'\n";
+		return 0;
+	    }
+	}
+
+# Mark or unmark.
+	for $ind1 (0..$#arr) {
+# Individual values can be set separately.
+	    if ($arr[$ind1] =~ /^\d+$/) {
+		${$ids}{$arr[$ind1]} = $set;
+	    } else {
+# For ranges, all ids are checked.
+		for $ind2 (keys %{$ids}) {
+		    if ($arr[$ind1] =~ /^(\d+)-$/ && $ind2 >= $1 ||
+			$arr[$ind1] =~ /^-(\d+)$/ && $ind2 <= $1 ||
+			$arr[$ind1] =~ /^(\d+)-(\d+)$/ && $ind2 >= $1 && $ind2 <= $2) {
+			${$ids}{$ind2} = $set;
+		    }
+		}
+	    }
+	}
+
+	return 1;
+    }
+
+    my ($arr, $titles, $ids, $expl) = @_;
+    my ($input, $comm, $ind1, $flag);
+
+# Read and execute commands. readLine allows command line editing and may,
+# depending on installed libraries, allow command history.
+     while (1) {
+	$comm = lc($term->readline('Type help or an edit command: '));
+	$comm =~ s/\s//g;
+	$flag = 0;
+	if ($comm) { $term->addhistory($comm); }
+# Exit.
+	if ($comm =~ /^exit?$/ || $comm =~ /^quit?$/ ) {
+	    return;
+# Help.
+	} elsif ($comm =~ /^help?$/) {
+	    print "Edit commands:\n" .
+		"mark <list>\tSet specified marks\n" .
+		"unmark <list>\tClear specified marks\n" .
+		"\t\tMarked items will not be deleted / updated\n" .
+		"invert\t\tReverse marks\n" .
+		"reset\t\tClear all marks (mark 1- sets all marks)\n" .
+		"show\t\tShow error list\n" .
+		"title\t\tShow title of error list\n" .
+		"exit\t\tQuit editor\n" .
+		"<list> is a comma-separated list of ids and/or\n" .
+		"id ranges, e.g. 200-249,320,-99,345,400-\n" .
+		"Id is the first column in each error list.\n" .
+		"Commands can be abbreviated to three letters.\n";
+# Invert.
+	} elsif ($comm =~ /^inv(e(rt?)?)?$/) {
+	    for $ind1 (keys %{$ids}) {
+		${$ids}{$ind1} = 3 - ${$ids}{$ind1}; # Change 1 <=> 2
+	    }
+	    $flag = 1;
+# Mark.
+	} elsif ($comm =~ /^mark?(.*)$/) {
+	    $flag = mark_unmark($ids, $1, 2);
+# Reset.
+	} elsif ($comm =~ /^res(et?)?$/) {
+	    create_edit_hash($arr, $ids);
+	    $flag = 1;
+# Show.
+	} elsif ($comm =~ /^show?$/) {
+	    print_list($arr, $titles, $ids);
+# Title.
+	} elsif ($comm =~ /^tit(le?)?$/) {
+	    print "\n$expl\n";
+# Unmark.
+	} elsif ($comm =~ /^unm(a(rk?)?)?(.*)$/) {
+	    $flag = mark_unmark($ids, $3, 1);
+# Unknown command.
+	} elsif ($comm) {
+	    print "Unknown command or missing parameters '$comm' - Use 'help'\n";
+	}
+# Show short list automatically after each succesful edit.
+	if ($flag && $#{$arr} <= $rows) { print_list($arr, $titles, $ids); }
+    }
+}
+
+# Most 'get' operations are so similar, that they can be handled by a single sub.
+sub generic_get($$) {
+
+    my ($sql, $arr) = @_;
+
+# Get data.
+    db_query($sql, $arr);
+    return 0 if (!@{$arr});
+
+    return $#{$arr} + 1;
+}
+
+# Process items not to delete / update by user choise.
+sub process_edit_hash($$) {
+
+    my ($arr, $ids) = @_;
+    my ($ind1, $count);
+
+# If user marked an item as a keeper, set its id to N.
+    for $ind1 (0 .. $#{$arr}) {
+	if (${$ids}{${$arr}[$ind1][0]} == 2) {
+	    ${$arr}[$ind1][0] = 'N';
+	    $count++;
+	}
+    }
+    return $count;
+}
+
+# A single sub is also good enough for most 'fix' operations.
+sub generic_fix($$$) {
+
+# Elements in array pointed to by $msg
+# 'Column' means zero-based column in 'two-dimensional' array pointed to by $arr
+# The same structure is used in generic_update
+# 0: Title of item being deleted (updated), e.g. 'AREC alias'
+# 1: Column of name, id or other identifier of item being deleted (updated), e.g. 1
+#    Also used to provide content for info field in history.
+# 2: Title of info field in history, e. g. 'FQDN'
+#    An empty string means that no history is recorded.
+#    In this case elements 3 and 4 can be anything.
+# 3: Column of item for which history is recorded, such as host id
+#    -1 if recorded as general history.
+# 4: Type of item for which history is recorded, e.g. 1 (hosts)
+# 5: Description of deleted (updated) items, e.g. 'orphan CNAME aliases'
+# Id of row that will be deleted (updated) is always in column 0.
+
+    my ($arr, $table, $msg) = @_;
+    my ($ind1, $sql, $res, $count);
+
+    for $ind1 (0 .. $#{$arr}) {
+# Skip items marked as keepers.
+	next if (${$arr}[$ind1][0] eq 'N');
+# Delete row.
+	$sql = "delete from $table where id = ${$arr}[$ind1][0];";
+	$res = db_exec($sql);
+	if ($res < 0) {
+	    db_rollback();
+	    fatal("Error $res while deleting ${$msg}[0] ${$arr}[$ind1][${$msg}[1]] from $table");
+	}
+# Update history, if appropriate.
+	if (${$msg}[2]) {
+	    $res = update_history($uid, $sid, ${$msg}[4], "DELETE: ${$msg}[0]",
+				  "${$msg}[2]: ${$arr}[$ind1][${$msg}[3]] (" .
+				  ($login_user ne $opt_user ? "$login_user/" : '') . "$file)",
+				  (${$msg}[3] == -1 ? 0 : ${$arr}[$ind1][${$msg}[3]]));
+	    if ($res < 0) {
+		db_rollback();
+		fatal("Failed to update history for ${$msg}[0] ${$arr}[$ind1][${$msg}[1]]" .
+		      "\n- Error code $res$entire");
+	    }
+	}
+	$count++;
+    }
+    if ($opt_commit) {
+	print 'Deleted ' . ($#{$arr} + 1) . " ${$msg}[5]\n";
+    } else {
+	print 'Would have deleted ' . ($#{$arr} + 1) . " ${$msg}[5]\n";
+    }
+    return $count;
+}
+
+# By choice, no automatic fix for some errors.
+sub generic_nofix($) {
+
+    print "These are not fixed automatically\n";
+    return 0;
+}
+
+# Update a column in a table to remove erroneous references.
+sub generic_update($$$) {
+
+# Elements in array pointed to by $table
+# 0: Name of table to update, e.g. 'users'
+# 1: Column of table to update, e.g. 'grp'
+# 2: New value for column, e.g. -1
+# 3: Name of column used to select rows to update, e.g. 'id'
+
+# Elements in array pointed to by $msg
+# are the same as in generic_fix
+
+    my ($arr, $table, $msg) = @_;
+    my ($ind1, $sql, $res, $count);
+
+    for $ind1 (0 .. $#{$arr}) {
+# Skip items marked as keepers.
+	next if (${$arr}[$ind1][0] eq 'N');
+# Update element.
+	$sql = "update ${$table}[0] set ${$table}[1] = '${$table}[2]' " .
+	    "where ${$table}[3] = ${$arr}[$ind1][0]";
+	$res = db_exec($sql);
+	if ($res < 0) {
+	    db_rollback();
+	    fatal("Error $res while updating ${$msg}[0] ${$arr}[$ind1][${$msg}[1]] from ${$table}[0]");
+	}
+# Update history, if appropriate.
+	if (${$msg}[2]) {
+	    $res = update_history($uid, $sid, ${$msg}[4], "UPDATE: ${$msg}[0]",
+				  "${$msg}[2]: ${$arr}[$ind1][${$msg}[3]] (" .
+				  ($login_user ne $opt_user ? "$login_user/" : '') . "$file)",
+				  (${$msg}[3] == -1 ? 0 : ${$arr}[$ind1][${$msg}[3]]));
+	    if ($res < 0) {
+		db_rollback();
+		fatal("Failed to update history for ${$msg}[0] ${$arr}[$ind1][${$msg}[1]]" .
+		      "\n- Error code $res$entire");
+	    }
+	}
+	$count++;
+    }
+    if ($opt_commit) {
+	print 'Updated ' . ($#{$arr} + 1) . " ${$msg}[5]\n";
+    } else {
+	print 'Would have updated ' . ($#{$arr} + 1) . " ${$msg}[5]\n";
+    }
+    return $count;
+}
+
+# ------------------------------------------------------------------------------
+# Get hosts in nonexistent groups.
+sub get_hosts_g($$$) {
+
+    my ($arr, $msg, $titles) = @_;
+
+    ${$msg} = 'hosts in nonexistent groups';
+    @{$titles} = ('Host Id', 'Host', 'Group Id');
+
+# Get hosts.
+    my $sql = "select h.id, h.domain || '.' || z.name, h.grp " .
+	"from hosts h, zones z " .
+	"where h.grp != -1 and " .
+	"h.zone = z.id and " .
+	"h.grp not in ( " .
+	"select id from groups) " .
+	"order by 2, 3;";
+    return generic_get($sql, $arr);
+}
+
+# Delete hosts' references to nonexistent groups.
+sub fix_hosts_g($) {
+
+    my ($arr) = @_;
+    my @table = ('hosts', 'grp', -1, 'id');
+    my @msg = ('Host', 2, 'Deleted reference to nonexistent group', 0, 1, 'references to nonexistent groups');
+
+# Update. Record history.
+    return generic_update($arr, \@table, \@msg);
+}
+
+# Get group_entries that point to nonexistent hosts.
+sub get_group_entries_h($$$) {
+
+    my ($arr, $msg, $titles) = @_;
+
+    ${$msg} = 'group_entries (subgroup memberships) referring to nonexistent hosts';
+    @{$titles} = ('Entry Id', 'Host Id', 'Group Id');
+
+# Get entries.
+    my $sql = "select id, host, grp " .
+	"from group_entries " .
+	"where host not in ( " .
+	"select id from hosts) " .
+	"order by 2, 3;";
+    return generic_get($sql, $arr);
+}
+
+# Delete group_entries without hosts.
+sub fix_group_entries_h($) {
+
+    my ($arr) = @_;
+    my @msg = ('Group entry', 0, '', 0, 0, 'group_entries without groups');
+
+# Delete. Record history.
+    return generic_fix($arr, 'group_entries', \@msg);
+}
+
+# Get group_entries that point to nonexistent groups.
+sub get_group_entries_g($$$) {
+
+    my ($arr, $msg, $titles) = @_;
+
+    ${$msg} = 'group_entries (subgroup memberships) referring to nonexistent groups';
+    @{$titles} = ('Entry Id', 'Host', 'Group Id');
+
+# Get entries.
+    my $sql = "select ge.id, h.domain || '.' || z.name, ge.grp, h.id " .
+	"from group_entries ge, hosts h, zones z " .
+	"where ge.host = h.id and " .
+	"h.zone = z.id and " .
+	"ge.grp not in ( " .
+	"select id from groups) " .
+	"order by 2, 3;";
+    return generic_get($sql, $arr);
+}
+
+# Delete group_entries without groups.
+sub fix_group_entries_g($) {
+
+    my ($arr) = @_;
+    my @msg = ('Group entry', 2, 'Group', 3, 1, 'group_entries without groups');
+
+# Delete. Record history.
+    return generic_fix($arr, 'group_entries', \@msg);
+}
+
+# Get groups that have no hosts.
+sub get_groups_h($$$) {
+
+    my ($arr, $msg, $titles) = @_;
+
+    ${$msg} = 'groups without hosts';
+    @{$titles} = ('Id', 'Name', 'Type', 'Server');
+
+# Get groups.
+    my $sql = "select g.id, g.name, g.type, s.name " .
+	"from groups g, servers s " .
+	"where g.server = s.id and g.id not in ( " .
+	"select grp from hosts " .
+	"union " .
+	"select grp from group_entries) " .
+	"order by 3, 2;";
+    return generic_get($sql, $arr);
+}
+
+# Delete groups that have no hosts.
+sub fix_groups_h($) {
+
+    my ($arr) = @_;
+    my @msg = ('Group', 1, 'Group', 0, 6, 'groups without hosts');
+
+# Delete. Record history.
+    return generic_fix($arr, 'groups', \@msg);
+}
+
+# Get hosts with base group of type DHCP class. # ** 2021-??-??
+sub get_base_group_dhcp($$$) {
+
+    my ($arr, $msg, $titles) = @_;
+
+    ${$msg} = 'hosts with base group of type DHCP class';
+    @{$titles} = ('Host Id', 'Host', 'Group Id', 'Group');
+
+# Get hosts. ** KESKEN !!!
+    my $sql = "select h.id, h.domain || '.' || z.name, g.id, g.name " .
+	"from hosts h, groups g, zones z " .
+	"where h.grp = g.id and " .
+	"g.type = 3 and " .
+	"h.zone = z.id " .
+	"order by 4, 2;";
+    return generic_get($sql, $arr);
+}
+
+# Fix hosts with base group of type DHCP class. # ** 2022-??-??
+sub fix_base_group_dhcp($) {
+
+    my ($arr) = @_;
+
+# Generic fix or update alone doesn't work here.
+
+# Plan: For each host
+# - Skip hosts marked as "don't fix"
+# - Insert line to group_entries so that group becomes subgroup of host
+# - Set column group in hosts to -1 to remove base group
+# - Update history
+
+# Better alternative plan
+# Add new sub generic_insert
+# Then this fix can be done by calling
+# - generic_insert to add subgroup memberships to group_entries
+# - generic_update to set base group in hosts to -1
+
+}
+
+# ------------------------------------------------------------------------------
+# Get static aliases pointing to unknown hosts that should be known
+# (i.e. where the end of fqdn pointed to matches one of the zones defined
+# in this server, but the corresponding host is not found in the database).
+sub get_int_stat_aliases($$$) {
+
+    my ($arr, $msg, $titles) = @_;
+
+    ${$msg} = "static aliases pointing to hosts with zone names which are\n" .
+	"defined in this database, but the hosts themselves can't be found",
+    @{$titles} = ('ID', 'FQDN of static alias', 'Points to', 'In zone');
+
+# Get aliases. For rows with identical fqdns, use the one with the longest zone name.
+    my $sql = "select distinct on (fqdn) " .
+	"h.id, h.domain || '.' || z1.name || '.' as fqdn, h.cname_txt, z2.name || '.' " .
+	"from hosts h, zones z1, zones z2 " .
+	"where h.type = 4 and " .
+	"h.alias = -1 and " .
+	"h.zone = z1.id and " .
+	"h.cname_txt ~ ('[.]' || z2.name || '[.]\$' ) and " .
+	"h.cname_txt not in ( " .
+	"select h.domain || '.' || z.name || '.' " .
+	"from hosts h, zones z " .
+	"where h.type = any( array[ 1, 4, 7, 101 ] ) and " .
+	"h.zone = z.id) " .
+	"order by 2, character_length(z2.name) desc;";
+    return generic_get($sql, $arr);
+}
+
+# Delete erroneous internal static aliases.
+sub fix_int_stat_aliases($) {
+
+    my ($arr) = @_;
+    my @msg = ('Static alias', 1, 'FQDN', -1, 1, 'orphan internal static aliases');
+
+# Delete. Record history.
+    return generic_fix($arr, 'hosts', \@msg);
+}
+
+# Get static aliases pointing to outside (or otherwise strange) hosts.
+# Compare to DNS.
+# Not deleted automatically even if not found by DNS.
+sub get_ext_stat_aliases($$$) {
+
+    use Net::DNS::Resolver;
+
+    my ($arr2, $msg, $titles) = @_;
+    my ($sql, $ind1, $ind2, $tmp1, @arr1, $res, $found);
+    my $dns = Net::DNS::Resolver->new();
+
+    ${$msg} = 'static aliases pointing to external hosts not found by DNS';
+    @{$titles} = ('ID', 'FQDN of static alias', 'Points to');
+
+# Get aliases.
+    $sql = "select h.id, h.domain || '.' || z.name || '.', h.cname_txt " .
+	"from hosts h, zones z " .
+	"where h.type = 4 and " .
+	"h.alias = -1 and " .
+	"h.zone = z.id and " .
+	"h.cname_txt !~ all ( " .
+	"select '[.]' || name || '[.]\$' from zones) " .
+	"order by 2";
+    undef @arr1;
+    db_query($sql, \@arr1);
+    return 0 if (!@arr1); # No external static aliases found.
+
+# Keep only hosts not found by DNS.
+    $ind2 = 0;
+    for $ind1 (0 .. $#arr1) {
+	$found = 0;
+# Check DNS.
+	$res = $dns->search($arr1[$ind1][1]);
+# Check result.
+	if ($res) {
+	    foreach $ind2 ($res->answer) {
+		if ($ind2->type =~ /A|AAAA/) {
+		    $found = 1;
+		    last;
+		}
+	    }
+	}
+# Store info for hosts not found. Can't use push.
+	if (!$found) { @{$arr2}[++$#{$arr2}] = $arr1[$ind1]; }
+    }
+    return 0 if (!@{$arr2}); # All external static aliases found by DNS.
+    return $#{$arr2} + 1;
+}
+
+# Get CNAME aliases pointing to nonexistent hosts.
+sub get_cname_aliases($$$) {
+
+    my ($arr, $msg, $titles) = @_;
+
+    ${$msg} = 'CNAME aliases pointing to nonexistent hosts';
+    @{$titles} = ('ID', 'FQDN of CNAME alias', 'Points to');
+
+# Get aliases.
+    my $sql = "select h.id, h.domain || '.' || z.name || '.', h.alias " .
+	"from hosts h, zones z " .
+	"where h.zone = z.id and " .
+	"h.type = 4 and " .
+	"h.alias != -1 and " .
+	"h.alias not in ( " .
+	"select id from hosts) " .
+	"order by 2;";
+    return generic_get($sql, $arr);
+}
+
+# Delete erroneous CNAME aliases.
+sub fix_cname_aliases($) {
+
+    my ($arr) = @_;
+    my @msg = ('CNAME alias', 1, 'FQDN', 2, 1, 'orphan CNAME aliases');
+
+# Delete. Record history.
+    return generic_fix($arr, 'hosts', \@msg);
+}
+
+# Get arec_entries pointing to nonexistent AREC aliases.
+sub get_arec_entries_a($$$) {
+
+    my ($arr, $msg, $titles) = @_;
+
+    ${$msg} = 'AREC entries pointing to nonexistent AREC aliases';
+    @{$titles} = ('ID', 'Points to');
+
+# Get aliases.
+    my $sql = "select id, host " .
+	"from arec_entries " .
+	"where host not in ( " .
+	"select id from hosts) " .
+	"order by 1;";
+    return generic_get($sql, $arr);
+}
+
+# Delete arec_entries pointing to nonexistent AREC aliases.
+sub fix_arec_entries_a($) {
+
+    my ($arr) = @_;
+    my @msg = ('AREC entry', 0, '', 0, 0, 'AREC entries pointing to nonexistent AREC aliases');
+
+# Delete.
+    return generic_fix($arr, 'arec_entries', \@msg);
+}
+
+# Get arec_entries pointing to nonexistent hosts.
+sub get_arec_entries_h($$$) {
+
+    my ($arr, $msg, $titles) = @_;
+
+    ${$msg} = 'AREC entries pointing to nonexistent hosts';
+    @{$titles} = ('ID', 'Points to');
+
+# Get aliases.
+    my $sql = "select id, arec " .
+	"from arec_entries " .
+	"where arec not in ( " .
+	"select id from hosts) " .
+	"order by 1;";
+    return generic_get($sql, $arr);
+}
+
+# Delete arec_entries pointing to nonexistent hosts
+sub fix_arec_entries_h($) {
+
+    my ($arr) = @_;
+    my @msg = ('AREC entry', 0, '', 0, 0, 'AREC entries pointing to nonexistent hosts');
+
+# Delete.
+    return generic_fix($arr, 'arec_entries', \@msg);
+}
+
+# Get AREC aliases not pointed to by arec_entries.
+sub get_arec_aliases($$$) {
+
+    my ($arr, $msg, $titles) = @_;
+
+    ${$msg} = 'AREC aliases not pointed to by arec_entries';
+    @{$titles} = ('ID', 'FQDN of AREC alias');
+
+# Get aliases.
+    my $sql = "select h.id, h.domain || '.' || z.name || '.' " .
+	"from hosts h, zones z " .
+	"where h.zone = z.id and " .
+	"h.type = 7 and " .
+	"h.id not in ( " .
+	"select host from arec_entries) " .
+	"order by 2;";
+    return generic_get($sql, $arr);
+}
+
+# Delete AREC aliases not pointed to by arec_entries.
+sub fix_arec_aliases($) {
+
+    my ($arr) = @_;
+    my @msg = ('AREC alias', 1, 'FQDN', -1, 1, 'orphan AREC aliases');
+
+# Delete. Record history.
+    return generic_fix($arr, 'hosts', \@msg);
+}
+
+# ------------------------------------------------------------------------------
+# Get a_entries that are part of a net but not of a subnet.
+sub get_a_entries_n($$$) {
+
+    my ($arr, $msg, $titles) = @_;
+    my (@ser_arr, @a_rec_arr, $sql, $ind1, $ind2, $tmp1);
+
+    ${$msg} = 'a_entries that are in a net but not in any subnet';
+    @{$titles} = ('ID', 'IP', 'Server', 'Zone', 'Host', 'ID');
+
+# The check must be done per server, so first we need a list of servers.
+    $sql = 'select id from servers order by name;';
+    undef @ser_arr;
+    db_query($sql, \@ser_arr);
+    return 0 if (!@ser_arr); # This should never happen.
+
+    for $ind1 (0 .. $#ser_arr) {
+# Check each server in turn.
+	$sql = "select a.id, a.ip, s.name, z.name, h.domain, h.id " .
+	    "from a_entries a, hosts h, servers s, zones z " .
+	    "where s.id = $ser_arr[$ind1][0] and " .
+	    "z.server = s.id and " .
+	    "h.zone = z.id and " .
+	    "a.host = h.id and " .
+	    "a.ip << any ( " .
+	    "select net from nets " . # Nets w/o subnets or virtual nets.
+	    "where subnet = false and " .
+	    "server = $ser_arr[$ind1][0] ) and " .
+	    "not a.ip << any ( " .
+	    "select net from nets " . # Subnets w/o virtual nets.
+	    "where subnet = true and " .
+	    "dummy = false and " .
+	    "server = $ser_arr[$ind1][0] ) " .
+	    "order by 2;";
+	undef @a_rec_arr;
+	db_query($sql, \@a_rec_arr);
+# Merge with previous results. Can't use push.
+	for $ind2 (0 .. $#a_rec_arr) {
+	    @{$arr}[++$#{$arr}] = $a_rec_arr[$ind2];
+	}
+    }
+    return 0 if (!@{$arr});
+    return $#{$arr} + 1;
+}
+
+# Delete a_entries that are part of a net but not of a subnet.
+sub fix_a_entries_n($) {
+
+    my ($arr) = @_;
+    my @msg = ('IP address', 1, 'IP', 5, 1, 'a_entries outside subnets');
+ 
+# Delete. Record history.
+    return generic_fix($arr, 'a_entries', \@msg);
+}
+
+# Get a_entries not associated with any host.
+sub get_a_entries_h($$$) {
+
+    my ($arr, $msg, $titles) = @_;
+
+    ${$msg} = 'a_entries not associated with any existing host';
+    @{$titles} = ('ID', 'IP', 'Host');
+
+# Get a_entries.
+    my $sql = "select id, ip, host " .
+	"from a_entries " .
+	"where host not in ( " .
+	"select id from hosts " .
+	"where type = any( array[ 1, 6, 9, 10, 101 ] )) " .
+	"order by 2;";
+    return generic_get($sql, $arr);
+}
+
+# Delete a_entries not associated with any host.
+sub fix_a_entries_h($) {
+
+    my ($arr) = @_;
+    my @msg = ('IP address', 1, 'IP', 2, 1, 'orphan a_entries');
+
+# Delete. Record history.
+    return generic_fix($arr, 'a_entries', \@msg);
+}
+
+# ------------------------------------------------------------------------------
+# Get user_rights given to nonexistent users.
+sub get_user_rights_u($$$) {
+
+    my ($arr, $msg, $titles) = @_;
+
+    ${$msg} = 'user_rights given to nonexistent users';
+    @{$titles} = ('Id');
+
+# Get user_rights.
+    my $sql = 'select id ' .
+	'from user_rights ' .
+	'where type = 2 and ' .
+	'ref not in ( ' .
+	'select id from users) ' .
+	'order by 1;';
+    return generic_get($sql, $arr);
+}
+
+# Delete user_rights given to nonexistent users.
+sub fix_user_rights_u($) {
+
+    my ($arr) = @_;
+    my @msg = ('User right', 0, '', 0, 0, 'user_rights given to nonexistent users');
+
+# Delete. Record history.
+    return generic_fix($arr, 'user_rights', \@msg);
+}
+
+# Get user_rights given to nonexistent user_groups.
+sub get_user_rights_ug($$$) {
+
+    my ($arr, $msg, $titles) = @_;
+
+    ${$msg} = 'user_rights given to nonexistent user_groups';
+    @{$titles} = ('Id');
+
+# Get user_rights.
+    my $sql = 'select id from user_rights ' .
+	'where type = 1 and ' .
+	'ref not in (' .
+	'select id from user_groups) ' .
+	'order by 1;';
+    return generic_get($sql, $arr);
+}
+
+# Delete user_rights given to nonexistent user groups.
+sub fix_user_rights_ug($) {
+
+    my ($arr) = @_;
+    my @msg = ('User right', 0, '', 0, 0, 'user_rights given to nonexistent user_groups');
+
+# Delete. Record history.
+    return generic_fix($arr, 'user_rights', \@msg);
+}
+
+# Get user_groups without users.
+sub get_user_groups_u($$$) {
+
+    my ($arr, $msg, $titles) = @_;
+
+    ${$msg} = 'user_groups without users';
+    @{$titles} = ('Id', 'Name', 'Comment');
+
+# Get user_groups.
+    my $sql = 'select id, name, comment ' .
+	'from user_groups ' .
+	'where id not in (' .
+	'select rref ' .
+	'from user_rights ' .
+	'where type = 2 and ' .
+	'rtype = 0) ' .
+	'order by 2;';
+    return generic_get($sql, $arr);
+}
+
+# Delete user_groups without users.
+sub fix_user_groups_u($) {
+
+    my ($arr) = @_;
+    my @msg = ('User group', 1, '', 0, 0, 'user_groups without users');
+
+# Delete. Record history.
+    return generic_fix($arr, 'user_groups', \@msg);
+}
+
+# Get user_groups without user_rights.
+sub get_user_groups_ur($$$) {
+
+    my ($arr, $msg, $titles) = @_;
+
+    ${$msg} = 'user_groups without user_rights';
+    @{$titles} = ('Id', 'Name', 'Comment');
+
+# Get user_groups.
+    my $sql = 'select id, name, comment ' .
+	'from user_groups ' .
+	'where id not in (' .
+	'select ref ' .
+	'from user_rights ' .
+	'where type = 1) ' .
+	'order by 1;';
+    return generic_get($sql, $arr);
+}
+
+# Get user_rights given for nonexistent servers.
+sub get_user_rights_s($$$) {
+
+    my ($arr, $msg, $titles) = @_;
+
+    ${$msg} = 'user_rights given for nonexistent servers';
+    @{$titles} = ('Id', 'User or Group', 'Server');
+
+# Get user_rights.
+    my $sql = 'select id, ref, rref ' .
+	'from user_rights ' .
+	'where rtype = 1 and ' .
+	'rref not in ( ' .
+	'select id from servers) ' .
+	'order by id;';
+    return generic_get($sql, $arr);
+}
+
+# Delete user_rights given for nonexistent servers.
+sub fix_user_rights_s($) {
+
+    my ($arr) = @_;
+    my @msg = ('User right', 0, '', 0, 0, 'user_rights given for nonexistent servers');
+
+# Delete. Record history.
+    return generic_fix($arr, 'user_rights', \@msg);
+}
+
+# Get user_rights given for nonexistent zones.
+sub get_user_rights_z($$$) {
+
+    my ($arr, $msg, $titles) = @_;
+
+    ${$msg} = 'user_rights given for nonexistent zones';
+    @{$titles} = ('Id', 'User or Group', 'Zone');
+
+# Get user_rights.
+    my $sql = 'select id, ref, rref ' .
+	'from user_rights ' .
+	'where rtype = 2 and ' .
+	'rref not in ( ' .
+	'select id from zones) ' .
+	'order by id;';
+    return generic_get($sql, $arr);
+}
+
+# Delete user_rights given for nonexistent zones.
+sub fix_user_rights_z($) {
+
+    my ($arr) = @_;
+    my @msg = ('User right', 0, '', 0, 0, 'user_rights given for nonexistent zones');
+
+# Delete. Record history.
+    return generic_fix($arr, 'user_rights', \@msg);
+}
+
+# Get user_rights given for nonexistent nets.
+sub get_user_rights_n($$$) {
+
+    my ($arr, $msg, $titles) = @_;
+
+    ${$msg} = 'user_rights given for nonexistent nets';
+    @{$titles} = ('Id', 'User or Group', 'Net');
+
+# Get user_rights.
+    my $sql = 'select id, ref, rref ' .
+	'from user_rights ' .
+	'where rtype = 3 and ' .
+	'rref not in ( ' .
+	'select id from nets) ' .
+	'order by id;';
+    return generic_get($sql, $arr);
+}
+
+# Delete user_rights given for nonexistent nets.
+sub fix_user_rights_n($) {
+
+    my ($arr) = @_;
+    my @msg = ('User right', 0, '', 0, 0, 'user_rights given for nonexistent nets');
+
+# Delete. Record history.
+    return generic_fix($arr, 'user_rights', \@msg);
+}
+
+# ------------------------------------------------------------------------------
+# virhe, yrittää poistaa käyttäjäryhmiä, joissa on jäseniä, sysadmin-ws **
+# ** - todennäköisesti korjattu
+# less (tai more) pitkille listoille
+# ** - tehty
+# kuvaus testistä myös listan loppuun
+# ** - lisätty
+# mahdollisuus poistaa rivejä luettelemalla listasta poistettavat tai jätettävät
+# ** - editointi
+# readline
+# ** - lisätty
+# ** --help tarkistettava
+
+# ** Aputaulukko editointia varten
+# ** Otsikko (aina)
+# ** Luettelo ja otsikko uudelleen (jos --verbose)
+# ** Mahdollisuus näyttää luettelo (jos ei korjausmahdollisuutta)
+# ** Korjauksen hyväksyminen tai hylkääminen tai
+# ** - luettelon näyttäminen (myös vaikka ei --verbose) tai
+# ** - luettelon editointi (poistettavat / jätettävät)
+# ** Korjaus, lasketaan korjatut ja muut
+
+# ------------------------------------------------------------------------------
+# Main program.
+
+# @arr is a "two-dimensional" array where the first column is the
+# ids of the erroneous rows that will be deleted or updated. Other
+# columns may be used to record history or in error messages, and
+# leading columns with titles are shown to the user (with --verbose).
+
+# Each "get" sub is called in turn as requested by user, and if
+# something was found (and the user gives permission or used --yes),
+# the list is passed to the corresponding "fix" sub.
+$err_count = $del_count = $keep_count = 0;
+for $ind1 (0 .. $#funcs) {
+    undef @arr;
+    if (($opt_check eq 'all' ||                                    # Check everything.
+	 index($opt_check, '#' . $funcs[$ind1][3] . '#') != -1 ||  # Only checks selected by user.
+	 $opt_check eq 'default' && $funcs[$ind1][2] == 1) &&      # Only 'mostly harmless' checks.
+	$funcs[$ind1][0]->(\@arr, \$msg, \@titles)) {              # Check. Returns # of rows.
+
+# Total number of errors found.
+	$err_count += @arr;
+
+# Explain what sort of errors were found (title)
+	$expl = "Found " . @arr . " $msg\n";
+	print "\n$expl\n";
+
+# Create hash for editing.
+	if ($opt_verbose || $inter && !$opt_yes) {
+	    create_edit_hash(\@arr, \%ids);
+	}
+
+# List of errors (shown without user explicitly asking).
+# Show title again.
+	if ($opt_verbose && (@arr <= $rows || !$inter)) {
+	    print_list(\@arr, \@titles, \%ids);
+	    print "Found " . @arr . " $msg\n";
+	}
+
+# If there is no automatic fix, say it and go to next test.
+	if ($funcs[$ind1][2] == 3) {
+# First, let user display list if in interactive mode and
+# --verbose was given but list was not shown automatically.
+	    if ($inter && $opt_verbose && @arr > $rows) {
+		print "Do you want to display the list (y/n)? ";
+		$input = lc(<STDIN>);
+		chomp $input;
+		if ($input eq 'y') {
+		    print_list(\@arr, \@titles, \%ids);
+		}
+	    }
+	    generic_nofix(1);
+	    next;
+	}
+
+# Ask user for confirmation if we are interactive,
+# --yes was not given and there is a fix.
+	if ($inter && !$opt_yes && $funcs[$ind1][2] != 3) {
+	    do {
+		print "s = show list, e = edit list\n";
+		print "Do you want to fix these errors (y/n)? ";
+		$input = lc(<STDIN>);
+		chomp $input;
+# Let the user show the list even w/o --verbose.
+		if ($input eq 's') {
+		    print_list(\@arr, \@titles, \%ids);
+		    print "\nFound " . @arr . " $msg\n";
+		}
+# Edit list.
+		if ($input eq 'e') {
+		    edit_list(\@arr, \@titles, \%ids, $expl);
+		    print "\nFound " . @arr . " $msg\n";
+		}
+	    } while ($input ne 'y' && $input ne 'n');
+	    next if ($input eq 'n'); # Don't fix.
+# Mark items not to delete / update.
+	    $keep_count += process_edit_hash(\@arr, \%ids);
+	}
+# Delete / update.
+	$del_count += $funcs[$ind1][1]->(\@arr);
+
+    }
+}
+
+# ** Ohjelman tila: inter, paging, nofix
+# ** Optiot: --yes --verbose
+# ** Käyttäjän valinnat: show, yes, no, edit
+
+# ------------------------------------------------------------------------------
+# Final report.
+print "\nA total of $err_count errors were found\n";
+if ($del_count) {
+    if ($opt_commit) {
+	print "A total of $del_count items were deleted or updated\n";
+    } else {
+	print "A total of $del_count items would have been deleted or updated\n";
+    }
+    if ($keep_count) {
+	print "$keep_count items not deleted or updated by user choice\n";
+    }
+} else {
+    print "No errors were fixed\n";
+}
+
+# Commit transaction only if that was requested.
+if ($opt_commit) {
+    if (!$del_count) {
+	db_rollback();
+	print "No changes to commit to the database!\n";
+    } elsif (($tmp1 = db_commit()) < 0) {
+	fatal("Cannot commit changes to database, error code $tmp1");
+    } else {
+	print "All changes were committed to the database!\n";
+    }
+} else {
+    db_rollback();
+    print "No --commit -> no changes were made to the database!\n";
+}
+
+exit;
+
+# ------------------------------------------------------------------------------
+
+__END__
+
+=head1 NAME
+
+dbcheck - Sauron utility to check and fix consistency of database.
+
+=head1 SYNOPSIS
+
+dbcheck [options]
+
+At least one of these is required: --check --commit --verbose --yes
+
+Use --help to see all options.
+
+Use --man to see all documentation.
+
+=head1 OPTIONS
+
+=over 20
+
+=item --check=<list-of-check-groups>
+
+Available checks and fixes are divided into groups, which are further divided
+into sets. You can carry out one or more check groups in a single run by
+specifying their names. You can also do all checks with --check=all. If you
+give no value, the script will perform only default check sets whose fixes
+should under no circumstances do any damage. In this case you can even omit
+--check if you use --commit, --verbose or --yes. Note that default check
+includes individual check sets from several groups.
+
+=item --commit
+
+Commits all fixes to the database. Without this the script checks and gives
+a report but does not fix anything. There is only a single commit at the end
+of the script. It is adviseable to use --verbose and not to use --yes when you
+use --commit, especially on the first few times.
+
+=item --groups
+
+Shows names of all available check groups. Groups and sets may easily be added.
+No checks are done, no matter what other options were given.
+
+=item --help
+
+Shows this information.
+
+=item --user=<username>
+
+Your login username. Used to write Sauron history. Must be known to Sauron.
+Used only if your detected login name is unusable for any reason. Detected
+login name will still be recorded in history, but in a diffenrent field.
+
+=item --verbose
+
+Lists errors that were found. Otherwise only summary information is shown.
+However, if the list of errors is too long for the screen (in interactive
+mode), you will be asked if you want to see the list, and if you do, paging
+will be done with 'more' (default) or 'less', depending on environment
+variable 'PAGER'. Also, when the script asks for confirmation, in addition
+to 'y' and 'n' you can answer 's' to show the list, even if you didn't use
+--verbose. If no errors are found, the script is quite terse even with
+--verbose. See also EDIT.
+
+=item --yes
+
+By default, the script asks permission before each set of fixes whether
+--commit was used or not. You can answer 'y' to all these questions by
+including --yes on the command line. Especially useful in batch runs. Note
+that --yes does not imply --commit or vice versa.
+
+=back
+
+=head1 EDIT
+
+When the script asks for confirmation to fix errors, you can answer 'e' to
+enter edit mode, where you can change the list of items that will be deleted
+/ updated. The editor has its own help (available in edit mode). You can give
+commands to mark items that will NOT be processed, and you can show the list
+to see the effect.
+
+In edit mode, command line can be edited like in shell, and if a suitable
+library (used via Term::ReadLine) has been installed, command history is
+also available.
+
+When you quit the editor, you will be asked if you want to fix errors, even
+if you have marked all lines, to give you a chance to return to editor, in
+case you notice that you still want to change something.
+
+=head1 EXAMPLES
+
+dbcheck --check=all --yes
+
+All checks. Summary report only. No changes to the database.
+
+dbcheck --check=hosts --verbose --commit
+
+Only checks related to hosts. Full report of errors. Confirmation asked after
+each check set, and if given, fixes will be done and committed to the database.
+
+dbcheck --commit --yes
+
+Safe default checks and fixes only. Summary report. Fixes committed to the
+database, no questions asked.
+
+=head1 AUTHORS
+
+Teppo Vuori <sauron@teppovuori.fi>
+
+=head1 COPYING
+
+This program is free softare. It can be distributed by the
+same license as other components of Sauron.
+
+=cut
+
+# eof :-)

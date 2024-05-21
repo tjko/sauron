@@ -1,0 +1,29 @@
+/* convert Sauron database format from 1.4beta to 1.5beta */
+/* (this requires PostgreSQL v7.3 or later) */
+
+ALTER TABLE hosts ADD COLUMN duid character varying(40);
+ALTER TABLE hosts ADD COLUMN iaid bigint;
+
+ALTER TABLE deleted_hosts ADD COLUMN duid character varying(40);
+ALTER TABLE leases ADD COLUMN duid character varying(40);
+ALTER TABLE zones ADD COLUMN transfer_source_v6 inet;
+
+ALTER TABLE servers ADD COLUMN df_port6 integer DEFAULT 520;
+ALTER TABLE servers ADD COLUMN df_max_delay6 integer DEFAULT 60;
+ALTER TABLE servers ADD COLUMN df_max_uupdates6 integer DEFAULT 10;
+ALTER TABLE servers ADD COLUMN df_mclt6 integer DEFAULT 3600;
+ALTER TABLE servers ADD COLUMN df_split6 integer DEFAULT 128;
+ALTER TABLE servers ADD COLUMN df_loadbalmax6 integer DEFAULT 3;
+ALTER TABLE servers ADD COLUMN dhcp_flags6 integer DEFAULT 0;
+ALTER TABLE servers ADD COLUMN listen_on_port_v6 text;
+ALTER TABLE servers ADD COLUMN transfer_source_v6 inet;
+ALTER TABLE servers ADD COLUMN query_src_ip_v6 text;
+ALTER TABLE servers ADD COLUMN query_src_port_v6 text;
+
+ALTER TABLE user_rights ALTER COLUMN rule TYPE character(80);
+
+CREATE UNIQUE INDEX duid_iaid_key ON hosts USING btree (zone, duid, (COALESCE(iaid, (0)::bigint)));
+
+UPDATE settings SET value='1.5' where setting='dbversion';
+
+/* eof */

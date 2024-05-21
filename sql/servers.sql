@@ -3,7 +3,7 @@
  * table to store server specific data 
  * (server can have multiple zones linked to it) 
  *
- * $Id$
+ * $Id:$
  */
 
 /** This table contains servers that are managed with this system.
@@ -77,9 +77,6 @@ CREATE TABLE servers (
 	minimum		INT4 DEFAULT 86400,   /* default SOA minimum 
 						(negative caching ttl) */
 
-	/* IPv6 */
-	ipv6		TEXT, /* reserved */
-
 	/* DHCP failover */
 	df_port		INT DEFAULT 519,      /* listen port */
 	df_max_delay	INT DEFAULT 60,	      /* max-response-delay */
@@ -87,6 +84,23 @@ CREATE TABLE servers (
 	df_mclt		INT DEFAULT 3600,     /* mlct */
 	df_split	INT DEFAULT 128,      /* split */
 	df_loadbalmax	INT DEFAULT 3,	      /* load balance max seconds */
+
+   /* DHCPv6 failover */
+	df_port6		INT DEFAULT 520,      /* listen port */
+	df_max_delay6	INT DEFAULT 60,	      /* max-response-delay */
+	df_max_uupdates6 INT DEFAULT 10,	      /* max-unacked-updates */
+	df_mclt6		INT DEFAULT 3600,     /* mlct */
+	df_split6	INT DEFAULT 128,      /* split */
+	df_loadbalmax6	INT DEFAULT 3,	      /* load balance max seconds */
+
+    dhcp_flags6     integer DEFAULT 0,  /* DHCP option flags:
+                                        0x01 = auto-generate domainnames
+                                        0x02 = enable failover protocol */
+
+    listen_on_port_v6 TEXT,             /* listen on port (optional) */
+    transfer_source_v6 INET,            /* transfer-source (optional) */
+    query_src_ip_v6 TEXT,               /* query source ip (optional) (ip | '*') */
+    query_src_port_v6 TEXT,             /* query source port (optional) (port | '*') */
 
 	/* defaults to use in zones */
 	hostname	TEXT,  /* primary servername for sibling zone SOAs */
@@ -97,6 +111,6 @@ CREATE TABLE servers (
 	comment		TEXT,
 	
 	CONSTRAINT	servers_name_key UNIQUE(name)
-) INHERITS(common_fields);
+) INHERITS(common_fields) WITH OIDS;
 
 

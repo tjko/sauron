@@ -1,7 +1,7 @@
 # Sauron::CGI::Templates.pm
 #
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>  2003.
-# $Id$
+# $Id:$
 #
 package Sauron::CGI::Templates;
 require Exporter;
@@ -14,7 +14,7 @@ use Sauron::CGI::Utils;
 use strict;
 use vars qw($VERSION @ISA @EXPORT);
 
-$VERSION = '$Id$ ';
+$VERSION = '$Id:$ ';
 
 @ISA = qw(Exporter); # Inherit from Exporter
 @EXPORT = qw(
@@ -25,13 +25,15 @@ $VERSION = '$Id$ ';
 my %mx_template_form=(
  data=>[
   {ftype=>0, name=>'MX template'},
-  {ftype=>1, tag=>'name', name=>'Name', type=>'text',len=>40, empty=>0},
+  {ftype=>1, tag=>'name', name=>'Name', type=>'text',len=>40, empty=>0,
+   whitesp=>'P'},
   {ftype=>4, tag=>'id', name=>'ID'},
   {ftype=>1, tag=>'alevel', name=>'Authorization level', type=>'priority', 
    len=>3, empty=>0},
-  {ftype=>1, tag=>'comment', name=>'Comment', type=>'text',len=>60, empty=>1},
-  {ftype=>2, tag=>'mx_l', name=>'Mail exchanges (MX)',
-   type=>['priority','mx','text'], fields=>3, len=>[5,30,20],
+  {ftype=>1, tag=>'comment', name=>'Comment', type=>'text',len=>60, empty=>1,
+   whitesp=>'P'},
+  {ftype=>2, tag=>'mx_l', name=>'Mail exchanges (MX)', whitesp=>['','','P'],
+   type=>['priority','mx','text'], fields=>3, len=>[5,45,30], maxlen=>[5,400,60],
    empty=>[0,0,1],elabels=>['Priority','MX','comment']},
   {ftype=>0, name=>'Record info', no_edit=>1},
   {ftype=>4, name=>'Record created', tag=>'cdate_str', no_edit=>1},
@@ -42,14 +44,16 @@ my %mx_template_form=(
 my %wks_template_form=(
  data=>[
   {ftype=>0, name=>'WKS template'},
-  {ftype=>1, tag=>'name', name=>'Name', type=>'text',len=>40, empty=>0},
+  {ftype=>1, tag=>'name', name=>'Name', type=>'text',len=>40, empty=>0,
+   whitesp=>'P'},
   {ftype=>4, tag=>'id', name=>'ID'},
   {ftype=>1, tag=>'alevel', name=>'Authorization level', type=>'priority', 
    len=>3, empty=>0},
-  {ftype=>1, tag=>'comment', name=>'Comment', type=>'text',len=>60, empty=>1},
+  {ftype=>1, tag=>'comment', name=>'Comment', type=>'text',len=>60, empty=>1,
+   whitesp=>'P'},
   {ftype=>2, tag=>'wks_l', name=>'WKS', 
    type=>['text','text','text'], fields=>3, len=>[10,30,10], empty=>[0,1,1], 
-   elabels=>['Protocol','Services','comment']},
+   elabels=>['Protocol','Services','comment'], whitesp=>['','P','P']},
   {ftype=>0, name=>'Record info', no_edit=>1},
   {ftype=>4, name=>'Record created', tag=>'cdate_str', no_edit=>1},
   {ftype=>4, name=>'Last modified', tag=>'mdate_str', no_edit=>1}
@@ -62,8 +66,9 @@ my %printer_class_form=(
   {ftype=>1, tag=>'name', name=>'Name', type=>'printer_class',len=>20,
    empty=>0},
   {ftype=>4, tag=>'id', name=>'ID'},
-  {ftype=>1, tag=>'comment', name=>'Comment', type=>'text',len=>60, empty=>1},
-  {ftype=>2, tag=>'printer_l', name=>'PRINTER', 
+  {ftype=>1, tag=>'comment', name=>'Comment', type=>'text',len=>60, empty=>1,
+   whitesp=>'P'},
+  {ftype=>2, tag=>'printer_l', name=>'PRINTER', whitesp=>['P','P'],
    type=>['text','text'], fields=>2, len=>[60,10], empty=>[0,1],
    elabels=>['Printer','comment']},
   {ftype=>0, name=>'Record info', no_edit=>1},
@@ -147,6 +152,10 @@ sub menu_handler {
     return;
   }
   return if (check_perms('server','R'));
+
+# Zone names are used when checking lengths of domain names,
+# unless they are FQDNs. TVu 2020-06-01
+  $mx_template_form{'zonename'} = $state->{zone};
 
   my $sub=param('sub');
   my $mx_id=param('mx_id');

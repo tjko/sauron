@@ -1,9 +1,9 @@
-#!/usr/bin/perl -I/usr/local/sauron
+#!/usr/bin/perl -I/opt/sauron
 #
-# deluser - utility to delete users
+# deluser - utility to anonymize / delete users
 #
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000-2003.
-# $Id$
+# $Id:$
 #
 require 5;
 use Getopt::Long;
@@ -18,29 +18,38 @@ load_config();
 
 my($id,$res,$i,$t,@q);
 
-GetOptions("user=s","help|h");
+GetOptions("user=s","help|h","delete");
 
 if ($opt_help) {
-  print "syntax: $0 [--help] [--user=<username>]\n";
+  print "syntax: $0 [--help] [--user=<username>] [--delete]\n";
+  print"By default, the user is anonymized.\n";
+  print "Use --delete to actually delete user record.\n";
   print "\n" if ($opt_help);
   exit(0);
 }
 
 db_connect();
 
-
 unless ($opt_user) {
-  print "Enter user to be deleted: ";
+  print "Enter user to be anonymized/deleted: ";
   chomp($opt_user = <STDIN>);
   $i=1;
 }
 fatal("Invalid username '$opt_user'!") unless ($opt_user =~ /^\S+$/);
 
-
-
 fatal("Cannot find user '$opt_user' from users table!")
 	  if (get_user($opt_user,\%user) < 0);
 $id=$user{id};
+
+$opt_delete = $opt_delete ? 1 : 0;
+
+fatal('User has already been anonymized!')
+    if (!$opt_delete && $user{'password'} eq 'LOCKED:REMOVED');
+
+fatal('Only expired and/or locked users can be anonymized or deleted!')
+    if ($user{'password'} !~ /^LOCKED:/ && (!$user{'expiration'} ||
+    $user{'expiration'} <= 0 || $user{'expiration'} > time));
+$user{'expiration'} = time unless ($user{'expiration'} > time);
 
 if ($i) { # ask confirmation only in interactive session...
   print "\t Username: $opt_user (id=$id)\n",
@@ -49,18 +58,18 @@ if ($i) { # ask confirmation only in interactive session...
 	"\t    email; $user{email}\n",
         "\t  comment: $user{comment}\n";
 
-  print "Delete this user [y/n]?";
+  print (($opt_delete ? "Delete" : "Anonymize") . " this user [y/n]? ");
   chomp ($t=<STDIN>);
   unless ($t eq 'y' || $t eq 'Y') {
-    print "User not deleted!\n";
+    print "User not anonymized/deleted!\n";
     exit(1);
   }
 }
 
-fatal("Cannot delete user from users table!") if (delete_user($id) < 0);
+fatal("Cannot anonymized/delete user from users table!")
+    if (delete_user($id, $opt_user, $opt_delete, $user{'expiration'}, time, getlogin()) < 0);
 
-
-print "User $opt_user deleted succesfully.\n";
+print "User $opt_user " . ($opt_delete ? "deleted" : "anonymized") . " succesfully.\n";
 exit(0);
 
 # eof

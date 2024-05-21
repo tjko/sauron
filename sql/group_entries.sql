@@ -1,6 +1,6 @@
 /* group_entries table creation
  *
- * $Id$
+ * $Id:$
  */
 
 /** subgroup memberships, pointers to group records, 
@@ -12,7 +12,7 @@ CREATE TABLE group_entries (
 					-->hostss.id */
       grp          INT4 NOT NULL  /* ptr to group (this host) belogs to
 					-->groups.id */
-);
+) WITH OIDS;
 
 CREATE INDEX group_entries_host_index ON group_entries (host);
 

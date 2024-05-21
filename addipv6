@@ -1,0 +1,718 @@
+#!/usr/bin/perl -I/opt/sauron
+#
+# addipv6 - Sauron utility to add IPv6 addresses to several hosts in one batch
+#
+# Copyright (c) Teppo Vuori <teppo.vuori@teppovuori.fi> 2013.
+# $Id:$
+#
+# ------------------------------------------------------------------------------
+require 5;
+use Getopt::Long;
+use Sauron::DB;
+use Sauron::Util;
+use Sauron::BackEnd;
+use Sauron::Sauron;
+use Pod::Usage;
+use strict;
+use warnings;
+
+load_config();
+
+# Local variables.
+my ($login_user, $sql, $del_count, $add_count, $ind1, $ind2, $tmp1, $tmp2, $tmp3, $skip);
+my ($server, $serverid, $zone, $zoneid, $netid, $cidr1, $cidr2, $lastcidr1, $counter, $key);
+my ($newnet, $sid, $uid, $hosttypes);
+my %policy = ( low => 0, high => 10, mac => 20, ipv4 => 30,
+    0 => 'low', 10 => 'high', 20 => 'mac', 30 => 'ipv4' );
+my $entire = "\nEntire transaction was rolled back - database was not changed";
+our ($opt_commit, $opt_forcedel, $opt_help, $opt_man, $opt_method, $opt_net,
+     $opt_policy, $opt_stop, $opt_user, $opt_verbose);
+my (@dbarr, %dbhash, %cidr1hash, %errornet);
+
+# ------------------------------------------------------------------------------
+# Get and check parameters and options.
+GetOptions("commit", "forcedel", "help", "man", "method=s", "net=s", "policy=s",
+	   "stop=s", "user=s", "verbose=n") or exit;
+
+# Some options to canonical format.
+$opt_commit = $opt_commit ? 1 : 0;
+$opt_method = $opt_method ? lc($opt_method) : 'keep';
+$opt_policy = $opt_policy ? lc($opt_policy) : '';
+$opt_stop = $opt_stop ? lc($opt_stop) : 0;
+$opt_user = $opt_user ? $opt_user : '';
+$opt_verbose = $opt_verbose ? $opt_verbose : 0;
+
+# Show help or man and exit if requested or the number of parameters
+# was wrong or an incorrect option value was given.
+if ($opt_man || $opt_verbose && $opt_verbose !~ /^[123]$/ ||
+    $opt_policy && $opt_policy !~ /^(low|high|mac|ipv4)$/ ||
+    $opt_method !~ /^(add|keep|repl|del)$/ ||
+    $opt_stop && $opt_stop !~ /^[hs]$/) {
+    pod2usage(-verbose => 2, -exitval  => 0);
+}
+pod2usage(-verbose => 1, -exitval  => 0) if ($opt_help);
+pod2usage(-verbose => 0, -exitval  => 0) if (@ARGV != 3);
+
+# Get parameters etc.
+$server = $ARGV[0];
+$zone = $ARGV[1];
+$cidr1 = $ARGV[2];
+$cidr2 = $opt_net ? $opt_net : '';
+
+# Parameter and option checks that don't need database.
+fatal("Invalid host selection criterion '$cidr1' - valid CIDR required")
+    unless (is_cidr($cidr1) && !is_ip($cidr1));
+fatal("Selection criterion can be an IPv6 CIDR only if --method=del, use --man")
+    if ($opt_method ne 'del' && cidr6ok($cidr1));
+fatal("Value of --net must be an IPv6 CIDR")
+    if ($cidr2 && (!cidr6ok($cidr2) || is_ip($cidr2)));
+fatal("--policy conflicts with --method=del, use --man")
+    if ($opt_policy && $opt_method eq 'del');
+fatal("--net conflicts with --method=del, use --man")
+    if ($cidr2 && $opt_method eq 'del');
+
+# Connect to database.
+db_connect();
+db_begin();
+
+# Check parameters etc. from database.
+$serverid = get_server_id($server);
+fatal("Cannot find server '$server'")
+    unless ($serverid > 0);
+$sql = "select id, coalesce(expiration, 0) from zones where server = $serverid and name = '$zone';";
+undef @dbarr;
+db_query($sql, \@dbarr);
+fatal("Cannot find zone '$zone'")
+    if ($#dbarr < 0);
+fatal ("Zone '$zone' has expired")
+    if ($dbarr[0][1] > 0 && $dbarr[0][1] < time);
+$zoneid = $dbarr[0][0];
+fatal("Cannot find net '$cidr1' - net must be defined in Sauron")
+    unless (get_net_by_cidr($serverid, $cidr1) > 0);
+if ($cidr2) {
+    $sql = "select ip_policy from nets where server = $serverid and net = '$cidr2';";
+    undef @dbarr;
+    db_query($sql, \@dbarr);
+    fatal("Cannot find net '$cidr2' - net must be defined in Sauron")
+	if ($#dbarr != 0);
+    $opt_policy = $opt_policy || $policy{$dbarr[0][0]};
+}
+
+# Get login username (even if sudo is used).
+$login_user = getlogin();
+$login_user =~ s/_$//;
+if (!$login_user) {
+    fatal("Unable to get login username");
+}
+# Use --user if given, but record also login username.
+# If --user is not given, use login username.
+# Either --user or login username (other than root) must exist in the DB.
+undef %dbhash;
+if ($opt_user) {
+    $tmp1 = get_user($opt_user, \%dbhash);
+    if ($tmp1 < 0) {
+	fatal("Unknown --user '$opt_user', user must be defined in Sauron, use --man");
+    }
+} else {
+    $tmp1 = get_user($login_user, \%dbhash);
+    if ($tmp1 < 0 && $login_user ne 'root') {
+	fatal("Unknown login username '$login_user', user must be defined in Sauron, " .
+	      "see --user (use --man)");
+    }
+    $opt_user = $login_user;
+}
+$uid = $tmp1 < 0 ? -1 : $dbhash{id};
+
+print "No --commit -> no changes will be made to the database\n" if (!$opt_commit);
+
+# ------------------------------------------------------------------------------
+# Find hosts and their IPs.
+$hosttypes = '^(1|7)$'; # ** ???
+# Find IPv4 addresses.
+$sql = "select h.id, h.domain, h.ether, host(a.ip), z.name, '', '', -1, '' " .
+    "from a_entries a, hosts h, zones z " .
+    "where a.ip << '$cidr1' " .
+    "and a.host = h.id " .
+    "and h.type::text ~ " . db_encode_str($hosttypes) . " " .
+    "and h.zone = $zoneid " .
+    "and h.zone = z.id " .
+    "and z.server = $serverid " .
+    "union " .
+# Find any existing IPv6 addresses.
+    "select h.id, h.domain, h.ether, '', z.name, host(a2.ip), '', -1, '' " .
+    "from a_entries a1, a_entries a2, hosts h, zones z " .
+    "where a1.ip << '$cidr1' " .
+    "and a1.host = h.id " .
+    "and h.type::text ~ " . db_encode_str($hosttypes) . " " .
+    "and h.zone = $zoneid " .
+    "and h.zone = z.id " .
+    "and z.server = $serverid " .
+    "and a2.host = h.id " .
+    "and a2.ip::text ~ ':' " .
+    "union " .
+# Find any IPv4 addresses when selection criterion was IPv6.
+    "select h.id, h.domain, h.ether, host(a2.ip), z.name, '', '', -1, '' " .
+    "from a_entries a1, a_entries a2, hosts h, zones z " .
+    "where a1.ip << '$cidr1' " .
+    "and '$cidr1' ~ ':' " .
+    "and a1.host = h.id " .
+    "and h.type::text ~ " . db_encode_str($hosttypes) . " " .
+    "and h.zone = $zoneid " .
+    "and h.zone = z.id " .
+    "and z.server = $serverid " .
+    "and a2.host = h.id " .
+    "and a2.ip::text ~ '.' " .
+    "union " .
+# Find current and conditionally target subnets of hosts.
+    "select h.id, h.domain, h.ether, '', z.name, '', n2.net::text, n2.ip_policy, n1.net::text " .
+    "from a_entries a, hosts h, zones z, nets n1 left outer join nets n2 " .
+    "on n1.vlan = n2.vlan and n2.vlan != -1 and n2.server = $serverid and n2.net::text ~ ':' " .
+    "where a.ip << '$cidr1' " .
+    "and a.host = h.id " .
+    "and h.type::text ~ " . db_encode_str($hosttypes) . " " .
+    "and h.zone = $zoneid " .
+    "and h.zone = z.id " .
+    "and z.server = $serverid " .
+    "and n1.net >> a.ip " .
+    "and n1.server = $serverid;";
+
+undef @dbarr;
+db_query($sql, \@dbarr);
+fatal("No hosts found") if ($#dbarr < 0);
+
+# Create host hash.
+undef %cidr1hash; $counter = 0;
+for $ind1 (0..$#dbarr) {
+    $key = join('.', reverse split(/\./, $dbarr[$ind1][1] . '.' . $dbarr[$ind1][4]));
+    if (!$cidr1hash{$key}) {
+	$cidr1hash{$key}{name} = $dbarr[$ind1][1] . '.' . $dbarr[$ind1][4];
+	$cidr1hash{$key}{id} = $dbarr[$ind1][0];
+	$cidr1hash{$key}{ether} = $dbarr[$ind1][2];
+	$counter++;
+    }
+    push(@{$cidr1hash{$key}{ipv4}}, $dbarr[$ind1][3]) if ($dbarr[$ind1][3] =~ /\./);
+    push(@{$cidr1hash{$key}{ipv6}}, $dbarr[$ind1][5]) if ($dbarr[$ind1][5]);
+    if ($dbarr[$ind1][8]) {
+	$cidr1hash{$key}{cidr1} = $dbarr[$ind1][8];
+	if ($dbarr[$ind1][6]) {
+	    push(@{$cidr1hash{$key}{cidr2}}, $dbarr[$ind1][6]);
+	    $cidr1hash{$key}{policy} = $dbarr[$ind1][7];
+	}
+    }
+}
+print "$counter hosts found\n";
+exit if (!$counter);
+
+# Create Sauron session id.
+$sid = new_sid();
+print "User name: $login_user" . ($opt_user ne $login_user ? "/$opt_user" : '') .
+    ", User id: $uid, Session id: $sid\n" if ($opt_verbose);
+
+# ------------------------------------------------------------------------------
+# Delete IPv6 addresses, if requested.
+$del_count = 0; $add_count = 0;
+if ($opt_method eq 'repl' or $opt_method eq 'del') {
+    for $ind1 (sort keys %cidr1hash) {
+# Skip hosts that hace no IPv4 address, unless --forcedel was given.
+	if ($cidr1hash{$ind1}{ipv6} && !$cidr1hash{$ind1}{ipv4} && !$opt_forcedel) {
+	    print "Host $cidr1hash{$ind1}{name} has no IPv4 address - IPv6 address(es) not deleted\n"
+		if ($opt_verbose == 3);
+	    next;
+	}
+	if ($#{$cidr1hash{$ind1}{ipv6}} >= 0) {
+	    for $ind2 (0..$#{$cidr1hash{$ind1}{ipv6}}) {
+# Delete address.
+		$sql = "delete from a_entries " .
+		    "where ip = '$cidr1hash{$ind1}{ipv6}[$ind2]' " .
+		    "and host = $cidr1hash{$ind1}{id};";
+		$tmp1 = db_exec($sql);
+		if ($tmp1 <= 0) {
+		    db_rollback();
+		    fatal("Error $tmp1 deleting IP address $cidr1hash{$ind1}{ipv6}[$ind2] " .
+			  "from host $cidr1hash{$ind1}{name}$entire");
+		} else {
+		    if ($opt_verbose >= 2) {
+			print "Deleted IP address $cidr1hash{$ind1}{ipv6}[$ind2] " .
+			    "from host $cidr1hash{$ind1}{name}\n";
+		    }
+# Record host modification.
+		    $sql = "update hosts set muser = '$opt_user', mdate = " . time . 
+			" where id = $cidr1hash{$ind1}{id};";
+		    $tmp3 = db_exec($sql);
+		    if ($tmp3 < 0) {
+			db_rollback();
+			fatal("Failed to mark host $cidr1hash{$ind1}{name} as modified (del)" .
+			      "\n- Error code $tmp3$entire");
+		    }
+# Update history.
+		    $tmp3 = update_history($uid, $sid, 1, "DELETE: IP from host",
+					   "ip: $cidr1hash{$ind1}{ipv6}[$ind2] (" .
+					   ($login_user ne $opt_user ? "$login_user/" : '') . 'batch)',
+					   $cidr1hash{$ind1}{id});
+		    if ($tmp3 < 0) {
+			db_rollback();
+			fatal("Failed to update history for host $cidr1hash{$ind1}{name} (del)" .
+			      "\n- Error code $tmp3$entire");
+		    }
+		}
+		$del_count++;
+	    }
+	} else {
+	    print "Host $cidr1hash{$ind1}{name} has no IPv6 address to delete\n" if ($opt_verbose == 3);
+	}
+    }
+    if ($opt_method eq 'del') { goto commit_or_rollback; }
+}
+
+# ------------------------------------------------------------------------------
+# Add IPv6 addresses.
+$lastcidr1 = 'null'; $skip = 0;
+host: for $ind1 (sort keys %cidr1hash) {
+
+# Given or deduced net to which host should be added.
+    $newnet = $cidr2 || ${$cidr1hash{$ind1}{cidr2}}[0];
+
+# These checks are only made for the first net or if the net has changed between hosts
+# or if no net was found for a host. Net level checks must precede host level checks!
+    if (!$cidr1hash{$ind1}{cidr1} || $cidr1hash{$ind1}{cidr1} ne $lastcidr1) { subnet: {
+
+# Report hosts that don't belong to any subnet.
+# These shouldn't exist, but you can't trust that.
+# Note that if this special case occurs, and --net was given, the script will
+# try to add an IPv6 address to the host, but may not succeed, and what happens
+# after this block is quite subtle (most importantly, the next two if blocks
+# are skipped). Be sure to understand the code if you intend to change it!
+# (All things considered, one goto statement would have made the code more
+# readable, and it would also have been easier to write.)
+	if (!$cidr1hash{$ind1}{cidr1}) {
+	    $tmp1 = "No IPv4 subnet was found for host $cidr1hash{$ind1}{name}";
+# Report recoverable error.
+	    if (!$opt_net) {
+		$tmp1 .= "\n- You didn't give --net and no IPv6 subnet can be deduced";
+		if ($opt_stop) {
+		    db_rollback();
+		    fatal($tmp1 . $entire);
+		}
+		print "$tmp1\n";
+		$skip = 1;
+		last subnet;
+	    }
+	    print "$tmp1\n";
+	} else {
+	    $lastcidr1 = $cidr1hash{$ind1}{cidr1};
+# Don't recheck a net that was already found to have an error.
+	    if ($errornet{$cidr1hash{$ind1}{cidr1}}) {
+		$skip = 1;
+		last subnet;
+	    }
+	}
+
+# Report recoverable error if --net was not given and no IPv6 net was found.
+	if (!$opt_net && !@{$cidr1hash{$ind1}{cidr2}}) {
+	    $tmp1 = "You didn't give --net and no IPv6 subnet was found for " .
+		"$cidr1hash{$ind1}{cidr1} based on VLAN settings";
+	    if ($opt_stop) {
+		db_rollback();
+		fatal($tmp1 . $entire);
+	    }
+	    print "$tmp1\n";
+	    $errornet{$cidr1hash{$ind1}{cidr1}} = 1;
+	    $skip = 1;
+	    last subnet;
+	}
+
+# Report recoverable error if --net was not given and several IPv6 nets share the same VLAN.
+	if (!$opt_net && $#{$cidr1hash{$ind1}{cidr2}} > 0) {
+	    $tmp1 = "You didn't give --net and ${$cidr1hash{$ind1}{cidr2}}[0] " .
+		"shares the same VLAN with another IPv6 subnet\n" .
+		"- each such subnet must be processed individually";
+	    if ($opt_stop) {
+		db_rollback();
+		fatal($tmp1 . $entire);
+	    }
+	    print "$tmp1\n";
+	    $errornet{$cidr1hash{$ind1}{cidr1}} = 1;
+	    $skip = 1;
+	    last subnet;
+	}
+
+# Report recoverable error if the IPv6 net to which the
+# host should be attached includes virtual nets.
+	$sql = "select count(*) from nets " .
+	    "where dummy = 't' and net << '$newnet';";
+	undef @dbarr;
+	db_query($sql, \@dbarr);
+	if ($dbarr[0][0] > 0) {
+	    if (!$errornet{$newnet}) {
+		$tmp1 = "$newnet includes virtual nets " .
+		    "- each such virtual net must be processed separately";
+		if ($opt_stop || $cidr2) {
+		    db_rollback();
+		    fatal($tmp1 . $entire);
+		}
+		print "$tmp1\n";
+		$errornet{$newnet} = 1;
+	    }
+	    $skip = 1;
+	    last subnet;
+	}
+
+# Subnet level checks ok, hosts in this subnet can be processed.
+	$skip = 0;
+
+    } }
+
+# If a recoverable subnet level error occurred, skip all remaining hosts in that
+# subnet. Also skip hosts that lie outside subnets unless --net was given.
+    if ($skip) {
+	print "Skipping host $cidr1hash{$ind1}{name} because of a subnet level error\n"
+	    if ($opt_verbose == 3);
+	next host;
+    }
+
+# Next host if --method is 'keep' and the host already has an IPv6 address.
+    if ($opt_method eq 'keep' && $#{$cidr1hash{$ind1}{ipv6}} >= 0) {
+	print "Host $cidr1hash{$ind1}{name} already has an IPv6 address\n" if ($opt_verbose == 3);
+	next host;
+    }
+
+# Next host if selection criterion gave multiple IPv4 addresses for the same host.
+    if ($#{$cidr1hash{$ind1}{ipv4}} > 0) {
+	$tmp1 = "Host $cidr1hash{$ind1}{name} has multiple IPv4 addresses and must be handled manually";
+# Report recoverable error.
+	if ($opt_stop eq 'h') {
+	    db_rollback();
+	    fatal($tmp1 . $entire);
+	}
+	print "$tmp1\n";
+	next host;
+    }
+
+# Create one new IPv6 address for the host.
+    $tmp1 = get_free_ip_by_net($serverid, $newnet, $cidr1hash{$ind1}{ether},
+			       ${$cidr1hash{$ind1}{ipv4}}[0], $opt_policy =~ /[a-z]/ ?
+			       $policy{$opt_policy} : $cidr1hash{$ind1}{policy});
+    $tmp2 = lc(substr($tmp1, 0, 1));
+    if (is_ip($tmp1)) {
+# Add the address.
+	$sql = "insert into a_entries (host, ip) values " .
+	    "($cidr1hash{$ind1}{id}, '$tmp1');";
+	$tmp3 = db_exec($sql);
+	if ($tmp3 <= 0) {
+	    db_rollback();
+	    fatal("Failed to add IPv6 for $cidr1hash{$ind1}{name}" .
+		  "\n- Error code $tmp3$entire");
+	} else {
+# Report to user.
+	    if ($opt_verbose) {
+		print "Added IP address $tmp1 to host $cidr1hash{$ind1}{name}\n";
+	    }
+# Record host modification.
+	    $sql = "update hosts set muser = '$opt_user', mdate = " . time . 
+		" where id = $cidr1hash{$ind1}{id};";
+	    $tmp3 = db_exec($sql);
+	    if ($tmp3 < 0) {
+		db_rollback();
+		fatal("Failed to mark host $cidr1hash{$ind1}{name} as modified (add)" .
+		      "\n- Error code $tmp3$entire");
+	    }
+# Update history.
+	    $tmp3 = update_history($uid, $sid, 1, "ADD: IP to host", "ip: $tmp1 (" .
+				   ($login_user ne $opt_user ? "$login_user/" : '') . 'batch)',
+				   $cidr1hash{$ind1}{id});
+	    if ($tmp3 < 0) {
+		db_rollback();
+		fatal("Failed to update history for host $cidr1hash{$ind1}{name} (add)" .
+		      "\n- Error code $tmp3$entire");
+	    }
+	    $add_count++;
+	}
+    } else {
+# Report recoverable error if IPv6 address can't be created.
+	$tmp3 = "Failed to create an IPv6 address for $cidr1hash{$ind1}{name}\n- " .
+	    substr($tmp1, 2);
+	if ($opt_stop eq 'h' || $opt_stop eq 's' && $tmp2 eq 's') {
+	    db_rollback();
+	    fatal($tmp3 . $entire);
+	}
+	print "$tmp3\n";
+# If this was a subnet level error, skip other hosts in this net.
+	if ($tmp2 eq 's') {
+	    $errornet{$cidr1hash{$ind1}{cidr1}} = 1;
+	    $skip = 1;
+	    next host;
+	}
+    }
+
+}
+
+# ------------------------------------------------------------------------------
+commit_or_rollback:
+print "$del_count IPv6 address(es) deleted\n"
+    if ($opt_method eq 'repl' or $opt_method eq 'del');
+print "$add_count IPv6 address(es) added\n"
+    if ($opt_method ne 'del');
+
+# Commit transaction only if that was requested.
+if ($opt_commit) {
+    if ($del_count + $add_count == 0) {
+	db_rollback();
+	print "No changes to commit to the database!\n";
+    } elsif (($tmp1 = db_commit()) < 0) {
+	fatal("Cannot commit changes to database, error code $tmp1");
+    } else {
+	print "All changes were committed to the database!\n";
+    }
+} else {
+    db_rollback();
+    print "No --commit - no changes were made to the database!\n";
+}
+
+exit;
+
+# ------------------------------------------------------------------------------
+
+__END__
+
+=head1 NAME
+
+addipv6 - Sauron utility to add IPv6 addresses to several hosts in one batch.
+
+=head1 SYNOPSIS
+
+addipv6 <server> <zone> <cidr> [options]
+
+Use --help for more information.
+
+Be sure to check --man before using this utility for the first time.
+
+=head1 ARGUMENTS
+
+=over 12
+
+=item <server>
+
+Name of DNS server.
+
+=item <zone>
+
+Name of DNS zone.
+
+=item <cidr>
+
+Selection criterion. Selects hosts to process (usually an IPv4 CIDR;
+can be an IPv6 CIDR if --method=del).
+
+=back
+
+=head1 OPTIONS
+
+=over 20
+
+=item --net=<cidr>
+
+IPv6 net into which hosts are added. Can be omitted
+if, based on VLAN settings, exactly one IPv6 subnet is
+possible for each host. Typically only needed to
+handle special cases (see DESCRIPTION).
+
+=item --commit
+
+Commit changes (w/o this database isn't changed).
+
+=item --man
+
+See more options and the rest of instructions.
+
+=back
+
+=head1 MORE OPTIONS
+
+=over 20
+
+=item --policy=<policy>
+
+low, high, mac, ipv4 - Overrides subnet policy. Default = subnet policy (which defaults to 'low').
+
+=over 8
+
+=item low
+
+Take lowest free address (in subnet's or virtual net's auto address range).
+
+=item high
+
+Take highest free address (ditto).
+
+=item mac
+
+New address is based on the host's MAC address (Ethernet adapter hardware
+address).
+
+=item ipv4
+
+New address is based on the host's IPv4 address, displayed in hexadecimal.
+
+=back
+
+=item --method=<method>
+
+add, keep, repl, del
+
+=over 8
+
+=item add
+
+Add addresses, if possible, regradless of existing addresses.
+
+=item keep
+
+Keep existing adrresses, add new ones where none exist, if possible (default).
+
+=item repl
+
+Delete any previous IPv6 addresses, add new ones where possible.
+
+=item del
+
+Delete IPv6 addresses without adding new ones (--net and --policy not used with this method).
+
+=back
+
+=item --forcedel
+
+By default, when you use --method=repl or del, IPv6 addresses are not deleted if the host has
+no IPv4 address, because then the host would no longer be part of any net, which could cause problems.
+However, this can be overriden with --forcedel (force delete). Even so, this utility MAY still be
+able to give the host a new IPv6 address, if it happens in the same run.
+
+=item --user=<username>
+
+By default your login username (without possible trailing underscore) is used to record history, however,
+you can override that by giving a different username with this option. Even so, your login username will
+also be recorded. Given username or, in its absence, login username must be defined in Sauron.
+
+=item --stop=<level>
+
+Stop at first recoverable error of given level. Default = stop only at unrecoverable errors.
+
+=over 4
+
+=item h
+
+Host or subnet level error.
+
+=item s
+
+Subnet level error.
+
+=back
+
+=item --verbose=<level>
+
+Verbose output, level is 1 to 3; 3 is most verbose. Default is (very) terse,
+but error messages are always shown.
+
+=back
+
+=head1 EXAMPLES
+
+addipv6 dnss1 zone1 192.168.37/24 --verbose=1 --commit
+
+Adds IPv6 addresses using subnet policy to hosts that don't yet have one,
+enumerates those hosts and commits changes to the database.
+
+addipv6 dnss1 zone2 192.168.42/24 --net=2001:bad:cafe::/64 --policy=mac --method=add
+
+Adds MAC based IPv6 addresses to hosts attaching the hosts to the given
+subnet, even if the hosts already have other IPv6 address (except if they
+already have MAC based addresses in the same subnet). Gives a report but
+doesn't commit the changes to the database.
+
+=head1 DESCRIPTION
+
+This utility adds IPv6 addresses to several hosts in a single operation. Use
+this when you already have an IPv4 network and you want to start using
+IPv6 addresses 
+
+Preliminary steps: Once you have obtained an IPv6 address range, create
+a new IPV6 net in Sauron. Then create an IPv6 network hierarchy of virtual
+nets and subnets that parallels your IPv4 hierarchy, attaching your IPv6
+subnets to the same VLANs where your IPv4 subnets are. With that done you
+are ready to use this utility.
+
+In the best-case scenario you can process almost your entire network or
+any virtual net or subnet with a single command, but there are two cases
+where this can't be done, that apply to entire subnets:
+
+=over 16
+
+=item Same VLAN
+
+If two or more IPv6 subnets share the same VLAN, the utility can't
+deduce which subnet it should add the hosts to.
+
+=item Virtual nets
+
+If, for administrational purposes, a subnet has been divided into
+virtual nets, the utility can't choose which one to use. You may be able
+to avoid this problem by not using such virtual nets in your IPv6
+hierarchy.
+
+=back
+
+The solution to both problems is the same: Process each such subnet or
+virtual net separately and use the --net option to tell the utility
+the net to which it should add the hosts. This doesn't prevent
+processing the rest of your net in larger blocks, and you can do these
+operations in any order that you find comfortable. However, starting
+with larger blocks has the advantage that error messages will indicate
+areas that need special attention. Of course you are also free to
+process each of your subnets separately.
+
+This utility only processes hosts of types 1 (host) and 7 (alias). You
+will have to give IPv6 addresses to other types of hosts individually. The
+same is true for hosts with multiple IPv4 addresses, when more than one
+address is found with the selection criterion.
+
+By default recoverable errors are reported, but the utility continues
+to process other hosts and subnets. If you also omit --commit, you will
+get a report of areas that need special attention without changing the
+database.
+
+If, when adding addresses, the utility finds hosts that are not part of any
+IPv4 subnet, these cases are reported. However, if you used --net, this is
+not an error, and the utility will try to add IPv6 addresses to these hosts.
+
+All changes to the database are done in a single transaction. If the
+script stops because of an error, or you didn't use --commit, the
+transaction is rolled back and the database remains unchanged.
+
+The following is shown with different parameters to --verbose:
+
+=over 4
+
+=item 1
+
+Username(s), userid and session id;
+added IPv6 addresses and corresponding host names.
+
+=item 2
+
+Everything shown with 1; plus deleted IPv6 addresses and
+corresponding host names (with --method=del or repl).
+
+=item 3
+
+Everything shown with 2; plus
+hosts that have no IPv6 addresses to delete, or these were not
+deleted because the host has no IPv4 address (with --method=del or repl);
+hosts that already have an IPv6 address (with --method=keep);
+hosts skipped because of recoverable subnet level errors. IOW:
+What wasn't done.
+
+=back
+
+=cut
+
+# eof :-)

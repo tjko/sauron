@@ -1,7 +1,8 @@
 # Sauron::CGIutil.pm  --  generic CGI stuff
 #
+# Copyright (c) Michal Kostenec <kostenec@civ.zcu.cz> 2013-2014.
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>  2001-2003,2005.
-# $Id$
+# $Id:$
 #
 package Sauron::CGIutil;
 require Exporter;
@@ -10,10 +11,13 @@ use Time::Local;
 use Sauron::DB;
 use Sauron::Util;
 use Sauron::BackEnd;
+use Net::IP qw(:PROC);
+# use Data::Dumper;
+
 use strict;
 use vars qw($VERSION @ISA @EXPORT);
 
-$VERSION = '$Id$ ';
+$VERSION = '$Id:$ ';
 
 @ISA = qw(Exporter); # Inherit from Exporter
 @EXPORT = qw(
@@ -41,6 +45,11 @@ my($CGI_UTIL_zoneid,$CGI_UTIL_zone);
 my($CGI_UTIL_serverid,$CGI_UTIL_server);
 
 my %aml_type_hash = (0=>'CIDR',1=>'ACL',2=>'Key');
+our $inetFamily4 = 0;
+our $inetFamily6 = 0;
+our $inetNet = undef;
+our $formduid = undef;
+our $zonename;
 
 sub cgi_util_set_zone($$) {
   my ($id,$name) = @_;
@@ -93,6 +102,19 @@ sub chr_check_field($$$) {
   return '';
 }
 
+# Length of host name as a FQDN must not exceed <limit> characters.
+# Returns error message or empty string.
+sub domainname_max_length($) { # TVu 2020-06-01
+    my ($host) = @_;
+    my $limit = 253;
+
+    return 0 if (!$zonename);
+    unless ($host =~ /\.$/) { $host .= ".$zonename"; }
+    my $len = length($host);
+    return $len <= $limit ? 0 : 'Domain name is too long by ' .
+	($len - $limit) . ' character' . ($len - $limit > 1 ? 's' : '');
+}
+
 #####################################################################
 # form_check_field($field,$value,$n)
 #
@@ -100,30 +122,42 @@ sub chr_check_field($$$) {
 #
 sub form_check_field($$$) {
   my($field,$value,$n) = @_;
-  my($type,$empty,$t,$tmp1,$tmp2);
+  my($type,$empty,$t,$tmp1,$tmp2,$linelen);
+
 
   if ($n > 0) {
     $empty=${$field->{empty}}[$n-1];
     $type=${$field->{type}}[$n-1];
+    $linelen=${$field->{linelen}}[$n-1];
   }
   else {
     $empty=$field->{empty};
     $type=$field->{type};
+    $linelen=$field->{linelen};
   }
 
-  unless ($empty == 1) {
-    return 'Empty field not allowed!' if ($value =~ /^\s*$/);
-  } else {
-    return '' if ($value =~ /^\s*$/);
+  if ($type ne 'duid') {
+      unless ($empty == 1) {
+        return 'Empty field not allowed!' if ($value =~ /^\s*$/);
+      } else {
+        return '' if ($value =~ /^\s*$/);
+      }
   }
-
 
   if ($type eq 'fqdn' || $type eq 'domain') {
+# Conditionally allow %{id} in domain name; this will be replaced later.
+# Length of id can't be known - assume up to millions of hosts. TVu 2020-06-01
+    my $tvalue = $value;
+    if ($field->{defhost}) { $tvalue =~ s/%\{id\}/1234567/; }
+# Check that domain name or fqdn is not too long. TVu 2020-06-01
+    $tmp1 = domainname_max_length($tvalue);
+    return $tmp1 if ($tmp1);
     if ($type eq 'domain') {
-      return 'valid domain name required!' unless (valid_domainname($value));
+	return 'Valid domain name required!' unless (valid_domainname($tvalue));
     } else {
-      return 'FQDN required!'
-	unless (valid_domainname($value) && $value=~/\.$/);
+	return 'FQDN required!'
+	    unless (valid_domainname($value) && $value=~/\.$/ ||
+		    $field->{'dot'} && $value eq '.'); # Allow a single dot to superuser. TVu 2020-08-11
     }
   } elsif ($type eq 'zonename') {
     return 'valid zone name required!'
@@ -134,9 +168,17 @@ sub form_check_field($$$) {
   } elsif ($type eq 'path') {
     return 'valid pathname required!'
       unless ($value =~ /^(|\S+\/)$/);
-  } elsif ($type eq 'ip') {
-    return 'valid IP number required!' unless 
-      ($value =~ /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/);
+  } elsif ($type =~ /ip[46]?/) {
+    my $ipversion = ip_get_version($value);
+     return 'IPv4 address required!' if $type eq 'ip4' and $ipversion == 6;
+     return 'IPv6 address required!' if $type eq 'ip6' and $ipversion == 4;
+
+      if ($inetNet eq 'MANUAL' || !$inetNet ) {
+        $inetFamily4 |= ($ipversion == 4 ? 1 : 0);
+        $inetFamily6 |= ($ipversion == 6 ? 1 : 0);
+      }
+
+    return 'valid IP address required!' unless is_cidr($value);
   } elsif ($type eq 'cidr') {
     return 'valid CIDR (IP) required!' unless (is_cidr($value));
   } elsif ($type eq 'text') {
@@ -153,6 +195,9 @@ sub form_check_field($$$) {
   } elsif ($type eq 'enum') {
     return '';
   } elsif ($type eq 'mx') {
+# Check that domain name is not too long. TVu 2020-06-01
+    $tmp1 = domainname_max_length($value);
+    return $tmp1 if ($tmp1);
     return 'valid domain or "$DOMAIN" required!'
       unless(($value eq '$DOMAIN') || valid_domainname($value));
   } elsif ($type eq 'int' || $type eq 'priority') {
@@ -161,13 +206,27 @@ sub form_check_field($$$) {
     if ($type eq 'priority') {
       return 'priority (0..n) required!' unless ($t >= 0);
     }
+    if (defined $field->{'limits'} && # TVu 2021-02-11
+	($value < ${$field->{'limits'}}[0] || $value > ${$field->{'limits'}}[1])) {
+	return 'Value outside limits ' .
+	    "(${$field->{'limits'}}[0] .. ${$field->{'limits'}}[1])";
+    }
   } elsif ($type eq 'port') {
     return 'port number required!' unless ($value > 0 && $value < 65535);
   } elsif ($type eq 'bool') {
     return 'boolean value required!' unless ($value =~ /^(t|f)$/);
   } elsif ($type eq 'mac') {
-    return 'Ethernet address required!'
-      unless ($value =~ /^([0-9A-F]{12})$/);
+    return 'MAC address required!' if ($value !~ /^([0-9A-Fa-f]{12})$/ and $inetFamily4);
+  } elsif ($type eq 'duid') {
+    $formduid = $value if $value !~ /^\s*$/;
+    return 'Empty field not allowed (if IPv6 address is entered)!'
+	if $value =~ /^\s*$/ and !$empty and ((!$inetFamily4 and !$inetFamily6) || $inetFamily6);
+    return 'Empty DUID required! (IPv6 address not set)' if $value !~ /^\s*$/ and $inetFamily4 and !$inetFamily6;
+    return 'Valid DUID required!' if ($value !~ /^([0-9A-Fa-f]{24,40})$/ and $inetFamily6 and !$empty);
+  } elsif ($type eq 'iaid') {
+    return 'Empty IAID required! (IPv6 address not set)' if $value !~ /^\s*$/ and !$inetFamily6;
+    return 'IAID can\'t be used without DUID' if $value !~ /^\s*$/ and $inetFamily6 and !$formduid;
+    return 'Valid IAID required!' if !(($value > 0) and ($value < (2**32))) and $inetFamily6;
   } elsif ($type eq 'printer_class') {
     return 'Valid printer class name required!'
       unless ($value =~ /^\@[a-zA-Z]+$/);
@@ -176,6 +235,28 @@ sub form_check_field($$$) {
       unless ($value =~ /^([A-Z0-9-\+\/]+)$/);
   } elsif ($type eq 'textarea') {
     return '';
+
+  } elsif ($type eq 'area') { # Textarea (check length of each line) 2020-07-30 TVu
+# Some sources say that line breaks in textarea depend on the client.
+      $value =~ s/\r(?=\n)//gms; # cr/nl => nl (for Windows client)
+      $value =~ s/\r/\n/gms; # cr => nl (for Mac client)
+      my @cust = split("\n", $value);
+      my $tx = '';
+      for my $ind1 (0..$#cust) {
+	  $tx .= length($cust[$ind1]) . " characters on line " . ($ind1 + 1) . ': "' .
+	      substr($cust[$ind1], 0, 30) . " ...\" &mdash; limit is $linelen<br>"
+	      if (length($cust[$ind1]) > $linelen);
+      }
+      return $tx;
+
+  } elsif ($type eq 'cust_entr') { # Textarea (check length) 12 Apr 2017 TVu
+      my @cust = @{$value};
+      my $tx = '';
+      for my $ind1 (0..$#cust) {
+	  $tx .= "<br>More than $field->{linelen} characters on line " . ($ind1 + 1)
+	      if (length($cust[$ind1]) > $field->{linelen});
+      }
+      return $tx;
   } elsif ($type eq 'texthandle') {
     return 'Valid handle string required!'
       unless ($value =~ /^[a-zA-Z0-9_\-\.]+$/);
@@ -226,8 +307,85 @@ sub form_check_form($$$) {
   my($formdata,$i,$j,$k,$type,$p,$p2,$tag,$list,$id,$ind,$f,$new,$tmp,$val,$e);
   my($rec);
 
+# If nothing else has been defined (attribute 'whitesp'), all whitespace except newlines
+# is removed. Other options: If attribute 'whitesp' (a string) contains (case sensitive,
+# processed in this order, any combination is allowed but not all of them make sense):
+# W: Non-space Whitespace charaters are not converted to spaces
+# A: All whitespace is retained (skips the rest; does not imply W)
+# L: Leading whitespace is removed
+# E: Embedded whitespace is removed
+# C: Embedded whitespace is Compressed into a single space
+# T: Trailing whitespace is removed
+# N: Normalization, same as CT
+# P: Pack, same as LCT (this is by far the most common option)
+# Example: CT changes all non-space whitespace into spaces (since there was no W),
+# compresses embedded consequtive spaces into a single space and removes trailing
+# spaces, but keeps leading spaces like this: "  foo\t  bar  " => "  foo bar"
+# Example: AW = make no changes (same as W alone but marginally faster)
+  sub remove_whitespace($$) {
+      my ($val, $whitesp) = @_;
+
+# Return original value if whitespace removal is not enabled.
+      if (!$main::SAURON_REMOVE_WHITESPACE) { return $val; }
+
+# Multi-line strings are processed one line at a time.
+# Seems that some things just don't work otherwise.
+      if ($val =~ /\n/) {
+	  my @arr = split(/\n/, $val);
+	  for my $ind1 (0..$#arr) {
+	      $arr[$ind1] = remove_whitespace($arr[$ind1], $whitesp);
+	  }
+	  return join("\n", @arr);
+      }
+
+      if (!$whitesp) {
+	  $val =~ s/\s+//g; # Remove all whitespace.
+      } else {
+	  if ($whitesp !~ /W/) {
+	      $val =~ s/\s/ /g; # Turn all non-space whitespace into spaces.
+	  }
+	  if ($whitesp !~ /A/) {
+	      if ($whitesp =~ /[LP]/) {
+		  $val =~ s/^\s+//g; # Remove leading whitespace.
+	      }
+	      if ($whitesp =~ /E/) {
+# **		  $val =~ s/(\S)\s+(\S)/$1$2/g; # Remove embedded whitespace.
+		  $val =~ s/(\S)\s+(?=\S)/$1/g; # Remove embedded whitespace.
+	      }
+	      if ($whitesp =~ /[CNP]/) {
+# **		  $val =~ s/(\S)\s+(\S)/$1 $2/g; # Compress embedded whitespace.
+		  $val =~ s/(\S)\s+(?=\S)/$1 /g; # Compress embedded whitespace.
+	      }
+	      if ($whitesp =~ /[TNP]/) {
+		  $val =~ s/\s+$//g; # Remove trailing whitespace.
+	      }
+	  }
+      }
+      return $val;
+  }
+
   $formdata=$form->{data};
+  $zonename = $form->{'zonename'} || ''; # TVu 2020-06-01
+
+# This is needed to allow wildcards when adding a CNAME alias. If %new_alias_form
+# and field type is CNAME alias, make the same setting as if the data had come
+# from the database (as it appears when editing a CNAME alias). TVu 2020-06-11
+  if ($form->{'new_alias'} and		# %new_alias_form
+      param($prefix . '_type') == 4) {	# CNAME alias.
+      $data->{'cname_alias'} = 1;
+  }
+
+# Make note if this is a Static alias. 2020-12-17 TVu
+    my @names = param(); # Names of parameters.
+    foreach my $var (@names) {
+	if ($var eq $prefix . '_static_alias') {
+	    $data->{'static_alias'} = 1;
+	    last;
+	}
+    }
+
   for $i (0..$#{$formdata}) {
+
     $rec=$$formdata[$i];
     $type=$rec->{ftype};
     $tag=$rec->{tag};
@@ -251,24 +409,53 @@ sub form_check_form($$$) {
     $val="\L$val" if ($rec->{conv} eq 'L');
     $val="\U$val" if ($rec->{conv} eq 'U');
 
+# Remove unnecessary whitespace from individual input fields.
+    if (!($type == 2 || $type==5 || $type==11 || $type==12 || $type == 13
+	  || ($type==8 && $rec->{arec}))) {
+	$val = remove_whitespace($val, $rec->{whitesp});
+	param($p, $val);
+    }
+
     #print "<br>check $p,$type";
 
-    if ($type == 1) {
-      if ($rec->{type} eq 'mac') {
+#   if ($type == 1) {
+    if ($type == 1 || $tag eq 'cname_txt' && $data->{'static_alias'}) { # 2020-12-17 TVu
+
+      if ($rec->{type} eq 'mac' or $rec->{type} eq 'duid' or $rec->{type} eq "iaid") {
 	$val="\U$val";
 	$val =~ s/[\s:\-\.]//g;
+
+    #IAID in HEX will be converted to DEC
+	$val = hex($val) if $rec->{type} eq "iaid" and ($val !~ /^\d+$/ and $val ne "");
       } elsif ($rec->{type} eq 'textarea') {
 	#$val =~ s/\r//g;
 	#$val =~ s/\n/\\n/g;
 	#print "textarea:<BR><PRE>",$val,"</PRE><BR>END.";
       }
+      if ($form->{defhost} && $rec->{type} eq 'domain') {
+	  $rec->{defhost} = 1;
+      }
+
+# Allow *. at the beginning of domain name when adding or editing Static or CNAME alias.
+# Remove *. for the duration of the format check. TVu 2020-06-11 2020-07-16
+      my $wild = 0;
+      if ($rec->{'tag'} eq 'domain' and $rec->{'type'} eq 'domain' and
+	  ($data->{'cname_alias'} or $data->{'static_alias'}) and
+	  $val =~ /^\*\./) {
+	  $val =~ s/^\*\.//;
+	  $wild = 1;
+      }
+
       #print "<br>check $p ",param($p);
       return 1 if (form_check_field($rec,$val,0) ne '');
+
+      $val = '*.' . $val if ($wild); # Restore value. TVu 2020-06-11
+
       if ($rec->{chr} == 1) {
 	return 1 if (chr_check_field($rec->{tag},$val,$form->{chr_group})
 		     ne '');
       }
-      #print p,"$p changed! '",$data->{$tag},"' '",param($p),"'\n" if ($data->{$tag} ne param($p));
+#     print p,"$p changed! '",$data->{$tag},"' '",param($p),"'\n" if ($data->{$tag} ne param($p));
       if ($rec->{type} eq 'expiration') {
         if ($val =~ /^\+(\d+)d/) {
 	  $val=time()+int($1 * 86400);
@@ -282,7 +469,6 @@ sub form_check_form($$$) {
 	  $val=0;
 	}
       }
-
       $data->{$tag}=$val;
     }
     elsif ($type == 101) {
@@ -291,7 +477,7 @@ sub form_check_form($$$) {
       return 101 if (form_check_field($rec,$tmp,0) ne '');
       $data->{$tag}=$tmp;
     }
-    elsif  ($type == 2 || $type==5 || $type==11 || $type==12 
+    elsif  ($type == 2 || $type==5 || $type==11 || $type==12
 	    || ($type==8 && $rec->{arec})) {
       $f=$rec->{fields};
       $f=1 if ($type==8 || $type==11);
@@ -304,11 +490,16 @@ sub form_check_form($$$) {
       $a=param($p."_count");
       $a=0 unless ($a > 0);
       for $j (1..$a) {
-	next if ($type==8 || $type==11);
+	next if ($type==8 || $type==11); # AREC aliases and subgroups need no format check or whitespace removal.
 	next if (param($p."_".$j."_del") eq 'on'); # skip if 'delete' checked
 	for $k (1..$f) {
-	  return 2
-	    if (form_check_field($rec,param($p."_".$j."_".$k),$k) ne '');
+# Remove unnecessary whitespace from indexed input fields.
+# **	    if ($rec->{rows}
+	    param($p."_".$j."_".$k,
+		  remove_whitespace(param($p."_".$j."_".$k),
+				    $rec->{'whitesp'}[$k-1] || ''));
+	    return 2
+		if (form_check_field($rec,param($p."_".$j."_".$k),$k) ne '');
 	}
       }
 
@@ -335,7 +526,7 @@ sub form_check_form($$$) {
 	    #print p,"$p2 add new record";
 	    $new=[];
 	    $$new[$f+1]=2;
-	    for $k (1..$f) { 
+	    for $k (1..$f) {
 	      $tmp=param($p2."_".$k);
 	      $tmp=($tmp eq 'on' ? 't':'f') if ($type==5 && $k>1);
 	      $$new[$k]=$tmp;
@@ -359,13 +550,39 @@ sub form_check_form($$$) {
       next if ($rec->{type} eq 'list');
       return 3 unless (${$rec->{enum}}{param($p)});
       $data->{$tag}=param($p);
+      if ($rec->{tag} eq 'net') {
+        $inetNet = param($p);
+        if ($inetNet ne 'MANUAL') {
+            $inetNet =~ s/\/(\d+){1,3}//g;
+            $inetFamily4 = (ip_get_version($inetNet) == 4 ? 1 : 0);
+            $inetFamily6 = (ip_get_version($inetNet) == 6 ? 1 : 0);
+        }
+      }
     }
     elsif ($type == 6 || $type == 7 || $type == 10) {
       return 6 unless (param($p) =~ /^-?\d+$/);
       $data->{$tag}=param($p);
     }
+    elsif ($type == 13) { # Textarea (check input) 12 Apr 2017 TVu
+# Some sources say that line breaks in textarea depend on the client.
+	$val =~ s/\r(?=\n)//gms; # cr/nl => nl (for Windows client)
+	$val =~ s/\r/\n/gms; # cr => nl (for Mac client)
+	my @val_arr = split(/\n/, $val);
+	my @val_arr2;
+	for my $ind1 (0..$#val_arr) {
+# Remove unnecessary whitespace from each line of textarea.
+	    $val_arr[$ind1] = remove_whitespace($val_arr[$ind1], $rec->{whitesp});
+	    @{$val_arr2[$ind1]} = (0, $val_arr[$ind1]);
+	}
+	@val_arr = split(/\n/, join("\n", @val_arr));
+	unshift(@val_arr2, "-\n-");
+	$data->{$tag} = \@val_arr2;
+	$data->{$tag . '_id'} = param($p . '_id');
+	param($p, join("\n", @val_arr));
+	param($p . '_id', param($p . '_id'));
+	return 13 if (form_check_field($rec, \@val_arr, 0));
+    }
   }
-
   return 0;
 }
 
@@ -380,22 +597,28 @@ sub form_magic($$$) {
   my($prefix,$data,$form) = @_;
   my($i,$j,$k,$n,$key,$rec,$a,$formdata,$h_bg,$e_str,$p1,$p2,$val,$e,$enum);
   my($values,$ip,$t,@lst,%lsth,%tmpl_rec,$maxlen,$len,@q,$tmp,$def_info,$id);
-  my($invalid_host,$unknown_host,%host,$tmpd,$tmpm,$tmpy);
+  my($invalid_host,$unknown_host,%host,$tmpd,$tmpm,$tmpy,$no_aster);
 
 
   form_get_defaults($form);
   $formdata=$form->{data};
+  $zonename = $form->{'zonename'} || ''; # TVu 2020-06-01
   $h_bg=$form->{heading_bg};
 
   # CGI_UTIL_ variables will go away eventually...temporary hack until then
-  my $serverid = ($form->{serverid} > 0 ? 
+  my $serverid = ($form->{serverid} > 0 ?
 		  $form->{serverid} : $CGI_UTIL_serverid);
-  my $zoneid = ($form->{zoneid} > 0 ? 
+  my $zoneid = ($form->{zoneid} > 0 ?
 		$form->{zoneid} : $CGI_UTIL_zoneid);
 
 
+    param($prefix . '_cname_alias', 1) if ($data->{'cname_alias'}); # 2020-12-17 TVu
+    param($prefix . '_static_alias', 1) if ($data->{'static_alias'}); # 2020-12-17 TVu
+    param($prefix . '_cname_txt', $data->{'cname_txt'}) if ($data->{'cname_txt'});
+
   # initialize fields
   unless (param($prefix . "_re_edit") eq '1' || ! $data) {
+
     for $i (0..$#{$formdata}) {
       $rec=$$formdata[$i];
       $val=$data->{$rec->{tag}};
@@ -408,7 +631,9 @@ sub form_magic($$$) {
 #      }
 
       if ($rec->{ftype} == 1 || $rec->{ftype} == 101) {
+
 	$val =~ s/\/32$// if ($rec->{type} eq 'ip');
+	$val =~ s/\/128$// if ($rec->{type} eq 'ip'); # For IPv6.
         if ($rec->{type} eq 'expiration') {
 	  if ($val > 0) {
 	    ($tmpd,$tmpm,$tmpy)=(localtime($val))[3,4,5];
@@ -420,7 +645,7 @@ sub form_magic($$$) {
 	}
 	param($p1,$val);
       }
-      elsif ($rec->{ftype} == 2 || $rec->{ftype} == 8 || 
+      elsif ($rec->{ftype} == 2 || $rec->{ftype} == 8 ||
 	     $rec->{ftype} == 11 || $rec->{ftype} == 12) {
 	$a=$data->{$rec->{tag}};
 	$rec->{fields}=6 if ($rec->{ftype}==12);
@@ -431,6 +656,7 @@ sub form_magic($$$) {
 	  for $k (1..$rec->{fields}) {
 	    $val=$$a[$j][$k];
 	    $val =~ s/\/32$// if ($rec->{type}[$k-1] eq 'ip');
+	    $val =~ s/\/128$// if ($rec->{type}[$k-1] eq 'ip');
 	    param($p1."_".$j."_".$k,$val);
 	  }
 	}
@@ -452,7 +678,7 @@ sub form_magic($$$) {
 	for $j (1..$#{$a}) {
 	  param($p1."_".$j."_id",$$a[$j][0]);
 	  $ip=$$a[$j][1];
-	  $ip =~ s/\/\d{1,2}$//g;
+	  $ip =~ s/\/\d{1,3}$//g;
 	  param($p1."_".$j."_1",$ip);
 	  $t=''; $t='on' if ($$a[$j][2] eq 't' || $$a[$j][2] == 1);
 	  param($p1."_".$j."_2",$t);
@@ -480,6 +706,7 @@ sub form_magic($$$) {
   print "BORDER=\"" . ($form->{border}>0?$form->{border}:0) . "\" ";
   print " cellspacing=\"1\" cellpadding=\"1\">\n";
 
+#  print Dumper(\%{$data});
 
   for $i (0..$#{$formdata}) {
     $rec=$$formdata[$i];
@@ -512,10 +739,16 @@ sub form_magic($$$) {
     if ($rec->{ftype} == 0) {
       print "<TH COLSPAN=2 ALIGN=\"left\" FGCOLOR=\"$rec->{ro_color}\"",
             "  BGCOLOR=\"$h_bg\">",$rec->{name},"</TH>\n";
-    } elsif ($rec->{ftype} == 1) {
+#   } elsif ($rec->{ftype} == 1) {
+    } elsif ($rec->{ftype} == 1 ||
+	     $rec->{tag} eq 'cname_txt' && $data->{'static_alias'}) { # 2020-12-17 TVu
       $maxlen=$rec->{len};
       $maxlen=$rec->{maxlen} if ($rec->{maxlen} > 0);
-      print td($rec->{name}),"<TD>";
+      if ($rec->{title}) { # Added if to handle titles. TVu 2020-11-03
+	  print "<TD TITLE='$rec->{title}'>$rec->{name}</TD><TD>";
+      } else {
+	  print td($rec->{name}),"<TD>";
+      }
       if ($rec->{type} eq 'passwd') {
 	print password_field(-name=>$p1,-size=>$rec->{len},
 			     -maxlength=>$maxlen,-value=>param($p1));
@@ -525,6 +758,9 @@ sub form_magic($$$) {
       } else {
 	print textfield(-name=>$p1,-size=>$rec->{len},-maxlength=>$maxlen,
 		    -value=>param($p1));
+	if ($data->{'static_alias'}) { # 2020-12-17 TVu
+	    print hidden(-name=>$prefix.'_static_alias',-value=>1);
+	}
       }
       if ($rec->{extrainfo}) {
 	print '<BR><FONT size=-2 color="blue">'.$rec->{extrainfo}.'</FONT>';
@@ -539,8 +775,32 @@ sub form_magic($$$) {
 	$def_info='empty' if ($def_info eq '');
 	print "<FONT size=-1 color=\"blue\"> ($def_info = default)</FONT>";
       }
+# Can search hosts in any zone the user has access to.
+      if ($rec->{anydomain}) {
+	  print checkbox(-label=>'Any zone', -name=>$p1."_anydom",
+			 -checked=>$$data{$p1."_anydom"}, -value=>'on');
+      }
+      if ($rec->{macnotify} && $data->{ip_policy} == 20) {
+	  print '(In the pre-selected subnet<br>' .
+	      'IPv6 address will be derived from MAC address, which you must give)';
+      }
+      if ($form->{defhost} && $rec->{type} eq 'domain') { # ****
+	  $rec->{defhost} = 1;
+      }
+
+#     print "<FONT size=-1 color=\"red\"><BR> " .
+#           form_check_field($rec,param($p1),0) . "</FONT>";
+
+# Allow *. at the beginning of domain name when editing CNAME and Static aliases.
+      $no_aster = param($p1); # 2020-09-01 TVu
+      $no_aster =~ s/^\*\.// if ($rec->{'tag'} eq 'domain' and
+				$rec->{'type'} eq 'domain' and
+				($data->{'cname_alias'} or
+				 $data->{'static_alias'}) and
+				$no_aster =~ /^\*\./);
       print "<FONT size=-1 color=\"red\"><BR> " .
-            form_check_field($rec,param($p1),0) . "</FONT>";
+	  form_check_field($rec, $no_aster, 0) . "</FONT>";
+
       if ($rec->{chr} == 1) {
 	print "<FONT size=-1 color=\"red\">" .
 	      chr_check_field($rec->{tag},param($p1),$form->{chr_group}) .
@@ -557,7 +817,7 @@ sub form_magic($$$) {
       $a=0 if (!$a || $a < 0);
       #if ($a > 50) { $a = 50; }
       print hidden(-name=>$p1."_count",-value=>$a);
-      for $k (1..$rec->{fields}) { 
+      for $k (1..$rec->{fields}) {
 	print "<TH><FONT size=-2>",${$rec->{elabels}}[$k-1],"</FONT></TH>";
       }
       print "</TR>";
@@ -568,8 +828,19 @@ sub form_magic($$$) {
 	  $n=$p2."_".$k;
 	  $maxlen=${$rec->{maxlen}}[$k-1];
 	  $maxlen=${$rec->{len}}[$k-1] unless ($maxlen > 0);
-	  print "<TD>",textfield(-name=>$n,-size=>${$rec->{len}}[$k-1],
-                                 -maxlength=>$maxlen,-value=>param($n));
+
+	  if (${$rec->{type}}[$k-1] eq 'area') { # 2020-07-30 TVu
+	      print "<TD>",textarea(-name=>$n,
+				    -rows => $rec->{rows},
+				    -columns => ${$rec->{len}}[$k-1],
+				    -value => param($n));
+	  } else {
+
+	      print "<TD>",textfield(-name=>$n,-size=>${$rec->{len}}[$k-1],
+				     -maxlength=>$maxlen,-value=>param($n));
+
+	  }
+
 	  print "<FONT size=-1 color=\"red\"><BR>",
                 form_check_field($rec,param($n),$k),"</FONT></TD>";
         }
@@ -584,13 +855,35 @@ sub form_magic($$$) {
 	$n=$prefix."_".$rec->{tag}."_".$j."_".$k;
 	$maxlen=${$rec->{maxlen}}[$k-1];
 	$maxlen=${$rec->{len}}[$k-1] unless ($maxlen > 0);
-	print td(textfield(-name=>$n,-size=>${$rec->{len}}[$k-1],
-		 -maxlength=>$maxlen,-value=>param($n)));
+
+	if (${$rec->{type}}[$k-1] eq 'area') { # 2020-07-30 TVu
+	    print td(textarea(-name=>$n,
+			      -rows => $rec->{rows},
+			      -columns => ${$rec->{len}}[$k-1],
+			      -value => param($n)));
+	} else {
+
+	    print td(textfield(-name=>$n,-size=>${$rec->{len}}[$k-1],
+			       -maxlength=>$maxlen,-value=>param($n)));
+
+	}
+
       }
       print td(submit(-name=>$prefix."_".$rec->{tag}."_add",-value=>'Add'));
-      print "</TR></TABLE></TD>\n";
+
+#     print "</TR></TABLE></TD>\n";
+
+      print "</TR></TABLE>\n"; # 2020-07-21 TVu
+      if ($rec->{extrainfo}) {
+	print '<FONT color="blue">'.$rec->{extrainfo}.'</FONT>';
+      }
+      print "</TD>\n";
+
     } elsif ($rec->{ftype} == 3) {
       if ($rec->{type} eq 'enum') {
+	  if ($rec->{ip_type_sensitive}) { # ****
+	      $rec->{enum} = ip_policy_names($data->{net});
+	  }
 	$enum=$rec->{enum};
 	if ($rec->{elist}) { $values=$rec->{elist}; }
 	else { $values=[sort keys %{$enum}]; }
@@ -602,13 +895,20 @@ sub form_magic($$$) {
 	  $values=[sort keys %{$enum}];
 	}
       }
+      my $selection = param($p1);
+      if ($rec->{preselectnet} && $selection eq 'MANUAL') {
+	  $selection = $data->{preselectnet};
+      }
       print td($rec->{name}),
 	    td(popup_menu(-name=>$p1,-values=>$values,
-	                  -default=>param($p1),-labels=>$enum));
+			  -override=>1,
+			  -default=>"$selection",
+			  -labels=>$enum));
     } elsif ($rec->{ftype} == 4) {
       $val=param($p1);
       $val=${$rec->{enum}}{$val}  if ($rec->{type} eq 'enum');
-      print td($rec->{name}),"<TD><FONT color=\"$form->{ro_color}\">",
+#     print td($rec->{name}),"<TD><FONT color=\"$form->{ro_color}\">",
+      print "<td title='$rec->{title}'>$rec->{name}</td>","<TD><FONT color=\"$form->{ro_color}\">",
 	    "$val</FONT></TD>", hidden($p1,param($p1));
     } elsif ($rec->{ftype} == 5) {
       $rec->{fields}=5;
@@ -633,10 +933,14 @@ sub form_magic($$$) {
 	print "<TR>",hidden(-name=>$p2."_id",-value=>param($p2."_id"));
 
 	$n=$p2."_1";
-	print "<TD>",textfield(-name=>$n,-size=>15,-value=>param($n));
+	if (!param($n) && param('subnetlist') && param('subnetlist') ne 'null') { # ****
+	    param($n, param('subnetlist'));
+	}
+	print "<TD>",textfield(-name=>$n,-size=>40,-value=>param($n));
         print "<FONT size=-1 color=\"red\"><BR>",
-              form_check_field($rec,param($n),1),"</FONT></TD>";
-
+              #Value to be deleted won't be checked.
+              (param($p2."_del") eq 'on' ? '' : form_check_field($rec,param($n),1)),"</FONT></TD>";
+              #form_check_field($rec,param($n),1),"</FONT></TD>";
 	if ($rec->{restricted_mode}) {
 	  $n=$p2."_3";
 	  print hidden(-name=>$n,-value=>param($n)),
@@ -647,7 +951,8 @@ sub form_magic($$$) {
 	}
 	else {
 	  $n=$p2."_3";
-	  print td(checkbox(-label=>' A',-name=>$n,-checked=>param($n)));
+	  print td(checkbox(-label=>' A',-name=>$n,-checked=>param($n))) if ip_is_ipv4(param($p2 . "_1"));
+	  print td(checkbox(-label=>' AAAA',-name=>$n,-checked=>param($n))) if ip_is_ipv6(param($p2 . "_1"));
 	  $n=$p2."_2";
 	  print td(checkbox(-label=>' PTR',-name=>$n,-checked=>param($n)));
 
@@ -660,9 +965,14 @@ sub form_magic($$$) {
       unless ($rec->{restricted_mode}) {
 	$j=$a+1;
 	$n=$prefix."_".$rec->{tag}."_".$j."_1";
-	print "<TR>",td(textfield(-name=>$n,-size=>15,-value=>param($n))),
-	      td(submit(-name=>$prefix."_".$rec->{tag}."_add",-value=>'Add')),
-	      "</TR>";
+	my $subnetlist = '';
+	if ($rec->{subnetlist}) { # ****
+	    $subnetlist = get_ip_sugg($data->{hostid}, $serverid, $data->{perms});
+	}
+	print "<TR>",td(textfield(-name=>$n,-size=>40,-value=>param($n))),
+	td(submit(-name=>$prefix."_".$rec->{tag}."_add",-value=>'Add')),
+	"<td colspan=2>$subnetlist</td>",
+	"</TR>";
       }
 
       print "</TABLE></TD>\n";
@@ -723,9 +1033,9 @@ sub form_magic($$$) {
       $j=$a+1;
       $n=$prefix."_".$rec->{tag}."_".$j."_2";
       print "<TR><TD>",textfield(-name=>$n,-size=>25,-value=>param($n));
-      print "<BR><FONT color=\"red\">Uknown host!</FONT>" 
+      print "<BR><FONT color=\"red\">Uknown host!</FONT>"
 	if ($unknown_host);
-      print "<BR><FONT color=\"red\">Invalid host!</FONT>" 
+      print "<BR><FONT color=\"red\">Invalid host!</FONT>"
 	if ($invalid_host);
       print "</TD>",
 	td(submit(-name=>$prefix."_".$rec->{tag}."_add",-value=>'Add'));
@@ -734,7 +1044,20 @@ sub form_magic($$$) {
     elsif ($rec->{ftype} == 9) {
       # do nothing...
     } elsif ($rec->{ftype} == 10) {
-      get_group_list($CGI_UTIL_serverid,\%lsth,\@lst,$form->{alevel});
+# This Czech-made limitation is incompatible with the way Sauron is used in
+# University of Jyväskylä. It must be possible to attach a host to groups of both
+# types 1 and 2 at the same time. Also, groups of all types 1-3 must appear in
+# Host Search now that this search also finds hosts based on their subgroups.
+# Any distinction between Group and Subgroups is purely historical. Properly,
+# the current concept of Group should be discarded and Subgroups should be
+# renamed Groups. 24 Jun 2015 TVu
+#     get_group_list($CGI_UTIL_serverid,\%lsth,\@lst,$form->{alevel},[1,2]);
+#     get_group_list($CGI_UTIL_serverid,\%lsth,\@lst,$form->{alevel},'');
+# This limitation had to be partly re-introduced, because DHCP client classes
+# only work as subgroups. ** 2021-11-29 TVu
+# Group types: 1 = Normal, 2 = Dynamic Address Pool, 3 = DHCP class, 103 = Custom DHCP class
+      get_group_list($CGI_UTIL_serverid,\%lsth,\@lst,$form->{alevel},
+		     $rec->{'no_dhcp'} ? [1,2] : '');
       get_group(param($p1),\%tmpl_rec);
       print td($rec->{name}),"<TD>",
 	    popup_menu(-name=>$p1,-values=>\@lst,
@@ -742,7 +1065,10 @@ sub form_magic($$$) {
             "</TD>";
     }
     elsif ($rec->{ftype} == 11) {
-      get_group_list($CGI_UTIL_serverid,\%lsth,\@lst,$form->{alevel});
+# This Czech-made limitation is incompatible with the way
+# Sauron is used in University of Jyväskylä. 24 Jun 2015 TVu
+#     get_group_list($CGI_UTIL_serverid,\%lsth,\@lst,$form->{alevel},[3]);
+      get_group_list($CGI_UTIL_serverid,\%lsth,\@lst,$form->{alevel},'');
       $a=(param($p1."_count") > 0 ? param($p1."_count") : 0);
 
       if (param($p1."_add")) {
@@ -791,20 +1117,20 @@ sub form_magic($$$) {
 	if (param($p1."_add") ne '') {
 	    my $addmode=param($p1."_add");
 	    my $b=$a+1;
-	    if ($addmode eq 'Add CIDR') { 
-		param($p1."_".$b."_1",0); 
+	    if ($addmode eq 'Add CIDR') {
+		param($p1."_".$b."_1",0);
 		param($p1."_".$b."_3",-1);
 		param($p1."_".$b."_4",-1);
 		$a=$a+1 if (param($p1."_".$b."_2") ne '');
 	    }
-	    elsif ($addmode eq 'Add ACL') { 
-		param($p1."_".$b."_1",1); 	
+	    elsif ($addmode eq 'Add ACL') {
+		param($p1."_".$b."_1",1);
 		param($p1."_".$b."_2",'');
 		param($p1."_".$b."_4",-1);
 		$a=$a+1 if (param($p1."_".$b."_3") > 0);
-	    } 
-	    else { 
-		param($p1."_".$b."_1",2); 
+	    }
+	    else {
+		param($p1."_".$b."_1",2);
 		param($p1."_".$b."_2",'');
 		param($p1."_".$b."_3",-1);
 		$a=$a+1 if (param($p1."_".$b."_4") > 0);
@@ -829,7 +1155,7 @@ sub form_magic($$$) {
 				-values=>[0,1],-labels=>{0=>' ',1=>'NOT'})),
 	          "<TD>";
 	    if ($aml_mode == 0) {
-		print textfield(-name=>$p2."_2",-size=>18,-maxlength=>18,
+		print textfield(-name=>$p2."_2",-size=>43,-maxlength=>43,
 				-value=>$aml_cidr),
 		      hidden(-name=>$p2."_3",$aml_acl),
   		      hidden(-name=>$p2."_4",$aml_key);
@@ -863,7 +1189,7 @@ sub form_magic($$$) {
 	      "<TD rowspan=3 bgcolor=\"#efefef\">",
 	      popup_menu(-name=>$p2."_5",-default=>'0',
 			    -values=>[0,1],-labels=>{0=>' ',1=>'NOT'}),"</TD>",
-	      "<TD>",textfield(-name=>$p2."_2",-size=>18,-maxlength=>18,
+	      "<TD>",textfield(-name=>$p2."_2",-size=>43,-maxlength=>43,
 			   -value=>''),
 	      "</TD><TD rowspan=3 bgcolor=\"#efefef\">",
 	      textfield(-name=>$p2."_6",-size=>25,-maxlength=>80,
@@ -877,8 +1203,28 @@ sub form_magic($$$) {
 	      popup_menu(-name=>$p2."_4",-default=>-1,
 			 -values=>\@aml_key_l,-labels=>\%aml_key_h),"</TD>",
 	      td(submit(-name=>$p1."_add",-value=>'Add KEY')),"</TR>";
-	
+
 	print "</TABLE></TD>";
+    }
+    elsif ($rec->{ftype} == 13) { # Textarea (edit) 12 Apr 2017 TVu
+      print td($rec->{name});
+      my (@id, @tx);
+      for $j (1..$#{$data->{$rec->{tag}}}) {
+	  push (@id, ${$data->{$rec->{tag}}}[$j][0]);
+	  push (@tx, '; ' . ${$data->{$rec->{tag}}}[$j][2])
+	      if (${$data->{$rec->{tag}}}[$j][2]); # Prserve comments.
+	  push (@tx, ${$data->{$rec->{tag}}}[$j][1]);
+      }
+      @tx = split(/\n/, join("\n", @tx));
+      if (param($p1 . '_id')) { @id = split(/,/, param($p1 . '_id')); }
+      print '<TD bgcolor="#e0e0e0">' .
+	  hidden(-name=>$p1 . '_id', -value=>join(',', @id)) .
+	  "<TEXTAREA NAME='$p1' ROWS=$rec->{rows} COLS=$rec->{cols}>" .
+	  join("\n", @tx) . '</TEXTAREA>';
+	  print "<FONT size=-1 color=\"red\">",
+                form_check_field($rec, \@tx, 0),"</FONT></TD>";
+      param($p1 . '_id', join(",", @id));
+      param($p1, join("\n", @tx));
     }
     elsif ($rec->{ftype} == 101) {
       undef @q; undef @lst; undef %lsth;
@@ -897,7 +1243,7 @@ sub form_magic($$$) {
 	unshift @lst,'';
 	$lsth{''}='<none>';
       }
-      param($p1."_l",$lst[0]) 
+      param($p1."_l",$lst[0])
 	if (param($p1) eq '' && ($lst[0] ne '') && (not param($p1."_l")));
 
       if ($lsth{param($p1)} && (param($p1) ne '')) {
@@ -976,7 +1322,9 @@ sub display_form($$) {
     $val=${$rec->{enum}}{$val}  if ($rec->{type} eq 'enum');
     $val=localtime($val) if ($rec->{type} eq 'localtime');
     $val=gmtime($val) if ($rec->{type} eq 'gmtime');
-
+    if ($rec->{tag} eq 'type' && $data->{type} == 4) {
+	$val = ($data->{static_alias} || $data->{alias} == -1 ? 'Static ' : 'CNAME ') . $val;
+    }
 
     print "<TR ".($form->{bgcolor}?" bgcolor=\"$form->{bgcolor}\" ":'').">\n";
 
@@ -987,6 +1335,8 @@ sub display_form($$) {
       next if ($rec->{no_empty} && $val eq '');
 
       $val =~ s/\/32$// if ($rec->{type} eq 'ip');
+      $val =~ s/\/128$// if ($rec->{type} eq 'ip');
+      $val = $val . sprintf(" (0x%0" . $rec->{extrahex} . "x)", $val) if ($rec->{extrahex} and $val ne "");
       if ($rec->{type} eq 'expiration') {
 	unless ($val > 0) {
 	  $val = '<FONT color="blue">NO expiration date set</FONT>';
@@ -1002,7 +1352,8 @@ sub display_form($$) {
 	  $val="<FONT color=\"blue\">$rec->{definfo}[1]</FONT>";
 	}
       }
-
+# If there is an URL, show it as a link, when requested. TVu
+      if ($rec->{anchor}) { $val = url2link($val); }
       $val='&nbsp;' if ($val eq '');
       print "<TD WIDTH=\"",$form->{nwidth},"\">",$rec->{name},"</TD><TD>",
             "$val</TD>";
@@ -1012,7 +1363,7 @@ sub display_form($$) {
       print td($rec->{name}),
 	    "<TD><TABLE width=\"100%\" bgcolor=\"#e0e0e0\">",
             "<TR bgcolor=\"#efefef\">";
-      for $k (1..$rec->{fields}) { 
+      for $k (1..$rec->{fields}) {
 	print "<TH><FONT size=-2>&nbsp;",$$a[0][$k-1],"&nbsp;</FONT></TH>";
       }
       print "</TR>";
@@ -1021,6 +1372,11 @@ sub display_form($$) {
 	for $k (1..$rec->{fields}) {
 	  $val=$$a[$j][$k];
 	  $val =~ s/\/32$// if ($rec->{type}[$k-1] eq 'ip');
+	  $val =~ s/\/128$// if ($rec->{type}[$k-1] eq 'ip');
+# Leading spaces on each line are processed before replacing newline characters.
+	  $val =~ s/^( +)/'&nbsp;' x (length($1) * 2)/gem # 2020-07-30 TVu
+	      if ($rec->{type}[$k-1] eq 'area');
+	  $val =~ s/\n/<br>/g if ($rec->{type}[$k-1] eq 'area'); # 2020-07-30 TVu
 	  $val='&nbsp;' if ($val eq '');
 	  print td($val);
 	}
@@ -1029,11 +1385,15 @@ sub display_form($$) {
       if (@{$a} < 2) { print "<TR><TD>&nbsp;</TD></TR>"; }
       print "</TABLE></TD>";
     } elsif ($rec->{ftype} == 3) {
+	  if ($rec->{ip_type_sensitive}) { # ****
+	      $rec->{enum} = ip_policy_names($data->{net});
+	      $val = $rec->{enum}->{$data->{ip_policy}};
+	  }
       print "<TD WIDTH=\"",$form->{nwidth},"\">",$rec->{name},"</TD><TD>",
             "$val</TD>";
     } elsif ($rec->{ftype} == 4) {
       $val='&nbsp;' if ($val eq '');
-      print "<TD WIDTH=\"",$form->{nwidth},"\">",$rec->{name},"</TD><TD>",
+      print "<TD WIDTH=\"",$form->{nwidth},"\" TITLE=\"",$rec->{title},"\">",$rec->{name},"</TD><TD>",
             "<FONT color=\"$form->{ro_color}\">$val</FONT></TD>";
     } elsif ($rec->{ftype} == 5) {
       print td($rec->{name}),"<TD><TABLE>";
@@ -1041,17 +1401,18 @@ sub display_form($$) {
       for $j (1..$#{$a}) {
 	#$com=$$a[$j][4];
 	$ip=$$a[$j][1];
-	$ip=~ s/\/\d{1,2}$//g;
+	$ip=~ s/\/\d{1,3}$//g;
 	$ipinfo='';
 	$ipinfo.=' (no reverse)' if ($$a[$j][2] ne 't' && $$a[$j][2] != 1);
-	$ipinfo.=' (no A record)' if ($$a[$j][3] ne 't' && $$a[$j][3] != 1);
+	$ipinfo.=' (no A record)' if ($$a[$j][3] ne 't' && $$a[$j][3] != 1 and ip_is_ipv4($ip));
+	$ipinfo.=' (no AAAA record)' if ($$a[$j][3] ne 't' && $$a[$j][3] != 1 and ip_is_ipv6($ip));
 	print Tr(td($ip),td($ipinfo));
       }
       print "</TABLE></TD>";
     } elsif (($rec->{ftype} == 6) || ($rec->{ftype} ==7) ||
 	     ($rec->{ftype} == 10)) {
       print td($rec->{name});
-      if ($val > 0) { 
+      if ($val > 0) {
 	print "<TD>";
 	print_mx_template($data->{mx_rec}) if ($rec->{ftype}==6);
 	print_wks_template($data->{wks_rec}) if ($rec->{ftype}==7);
@@ -1067,14 +1428,27 @@ sub display_form($$) {
       #for $k (1..$rec->{fields}) { print "<TH>",$$a[0][$k-1],"</TH>";  }
       for $j (1..$#{$a}) {
 	$k=' ';
-	$k=' (AREC)' if ($$a[$j][3] eq '7');
+	$k='&nbsp;(CNAME)' if ($$a[$j][3] eq '4' && $$a[$j][4] == 1);
+	$k='&nbsp;(Static)' if ($$a[$j][3] eq '4' && $$a[$j][4] == -1);
+	$k='&nbsp;(AREC)' if ($$a[$j][3] eq '7');
 	print "<TR>",td("<a href=\"$url$$a[$j][1]\">".$$a[$j][2]."</a> "),
 	          td($k),"</TR>";
       }
       print "</TABLE></TD>";
     } elsif ($rec->{ftype} == 9) {
-      $url=$form->{$rec->{tag}."_url"}.$data->{$rec->{idtag}};
-      print td($rec->{name}),td("<a href=\"$url\">$val</a>");
+
+#     $url=$form->{$rec->{tag}."_url"}.$data->{$rec->{idtag}};
+#     print td($rec->{name}),td("<a href=\"$url\">$val</a>");
+
+# Create link only if it points to something internal. 2020-09-02 TVu
+      print td($rec->{name});
+      if ($data->{$rec->{idtag}} =~ /^\d+$/) {
+	  $url=$form->{$rec->{tag}."_url"}.$data->{$rec->{idtag}};
+	  print td("<a href=\"$url\">$val</a>");
+      } else {
+	  print td($val);
+      }
+
     } elsif ($rec->{ftype} == 11) {
       $a=$data->{$rec->{tag}};
       print td($rec->{name}),"<TD>";
@@ -1107,6 +1481,18 @@ sub display_form($$) {
 
 	if (@{$a} < 2) { print "<TR><TD>&nbsp;</TD></TR>"; }
 	print "</TABLE></TD>";
+    } elsif ($rec->{ftype} == 13) { # Textarea (show) 12 Apr 2017 TVu
+      $a = $data->{$rec->{tag}};
+      print td($rec->{name});
+      my @tx;
+      for $j (1..$#{$a}) {
+	  push (@tx, '; ' . $$a[$j][2]) if ($$a[$j][2]); # Prserve comments.
+	  push (@tx, $$a[$j][1]);
+      }
+      $a = join("\n", @tx);
+      $a =~ s/\n/<br>\n/g;
+      $a =~ s/^(\s+)/'&nbsp;' x (length($1) * 2)/emg; # Prserve indentation.
+      print "<TD bgcolor='#e0e0e0'>$a</TD>";
     } else {
       error("internal error (display_form)");
     }
@@ -1172,7 +1558,7 @@ sub display_dialog($$$$$) {
   for $i (0..$#f) { print hidden($f[$i]); }
   form_magic('DIALOG',$data,$form);
   print submit(-name=>'dialog_ok',-value=>'OK'),
-        submit(-name=>'dialog_cancel',-value=>'Cancel'), 
+        submit(-name=>'dialog_cancel',-value=>'Cancel'),
 	end_form();
   return 0;
 }

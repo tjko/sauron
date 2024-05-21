@@ -1,14 +1,15 @@
-#!/usr/bin/perl -I/usr/local/sauron
+#!/usr/bin/perl -I/opt/sauron
 #
 # browser.cgi
-# $Id$
+# $Id:$
 #
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>, 2001-2005.
 # All Rights Reserved.
 #
 use CGI qw/:standard *table -no_xhtml/;
 use CGI::Carp 'fatalsToBrowser'; # debug stuff
-use Net::Netmask;
+# use Net::Netmask;
+use NetAddr::IP; # For IPv6.
 use Sauron::DB;
 use Sauron::Util;
 use Sauron::BackEnd;
@@ -26,10 +27,12 @@ $debug_mode = 0;
 load_browser_config();
 
 
-%host_types=(0=>'Any type',1=>'Host',2=>'Delegation',3=>'Plain MX',
-	     4=>'Alias',5=>'Printer',6=>'Glue record',7=>'AREC Alias',
-	     8=>'SRV record',9=>'DHCP only',10=>'Zone',
-	     101=>'Host reservation');
+#%host_types=(0=>'Any type',1=>'Host',2=>'Delegation',3=>'Plain MX',
+#	     4=>'Alias',5=>'Printer',6=>'Glue record',7=>'AREC Alias',
+#	     8=>'SRV record',9=>'DHCP only',10=>'Zone',
+#	     101=>'Host reservation');
+
+%host_types = get_host_types();
 
 %host_form = (
  data=>[
@@ -61,7 +64,7 @@ load_browser_config();
    empty=>1, iff=>['type','1']},
   {ftype=>1, tag=>'hinfo_sw', name=>'Software (HINFO)', type=>'hinfo', len=>20,
    empty=>1, iff=>['type','1']},
-  {ftype=>1, tag=>'ether', name=>'Ethernet address (MAC)', type=>'mac',len=>12,
+  {ftype=>1, tag=>'ether', name=>'MAC address', type=>'mac',len=>12,
    iff=>['type','1'], empty=>1},
   {ftype=>4, tag=>'card_info', name=>'Card manufacturer', iff=>['type','1']},
   {ftype=>1, tag=>'ether_alias_info', name=>'Ethernet alias', no_empty=>1,
@@ -179,7 +182,7 @@ print "<TABLE width=\"100%\" cellpadding=3 cellspacing=0 border=0 ",
 
 @search_types=('Host (regexp)',
 	       'IP (or CIDR)',
-	       'Ethernet address',
+	       'MAC address',
 	       'Info (regexp)');
 
 if (param('reset')) {
@@ -268,7 +271,7 @@ sub do_search() {
     $mask =~ s/(\s|:)//g;
     #print "mask='$mask'";
     unless ($mask =~ /^(\^)?([0-9A-F]+)(\$)?$/) {
-      alert1("Invalid Ethernet address");
+      alert1("Invalid MAC address");
       return;
     }
     $mask =~ s/[^A-Z0-9\^\$]//g;
@@ -353,11 +356,13 @@ sub do_search() {
 
   # get list of networks to hide...
   db_query("SELECT id,net,type FROM nets WHERE type > 0",\@nlist);
-  my $blocktable = {};
+# my $blocktable = {};
+  my $blocktable = []; # For IPv6.
   for $i (0..$#nlist) {
     next unless ($nlist[$i][2] & 0x01);
-    $tmp = new Net::Netmask($nlist[$i][1]);
-    $tmp->storeNetblock($blocktable);
+#   $tmp = new Net::Netmask($nlist[$i][1]);
+#   $tmp->storeNetblock($blocktable);
+    push @$blocktable, new NetAddr::IP($nlist[$i][1]); # For IPv6.
   }
 
   for $i (0..($count-1)) {
@@ -367,11 +372,13 @@ sub do_search() {
     if ($type == 1 || $type == 9) {
       $ip=$q[$i][3];
       $ip =~ s/\/32//;
+      $ip =~ s/\/128//; # For IPv6.
       $ether=($q[$i][5] ? "<PRE>$q[$i][5]</PRE>" : '&nbsp;');
       $info='';
 
       # check if host ip falls within a net with private flag on
-      if (findNetblock($ip,$blocktable)) {
+#     if (findNetblock($ip,$blocktable)) {
+      if (is_in_netblock($ip,$blocktable)) { # For IPv6.
 	#print "PRIVATE: $ip $name<br>";
 	next if ($BROWSER_HIDE_PRIVATE || $info_search);
 	$info.=$q[$i][7] unless ($BROWSER_HIDE_FIELDS =~ /huser/);

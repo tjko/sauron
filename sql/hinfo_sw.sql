@@ -1,7 +1,7 @@
 /**************************************************************************
  * hinfo_sw.sql  -- default HINFO software template entries
  *
- * $Id$
+ * $Id:$
  */
 
 INSERT INTO hinfo_templates (hinfo,type,pri) VALUES('MS-WINDOWS-98',1,1);

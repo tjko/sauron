@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+
+# convert Sauron database format from 1.6 to 1.7
+# (this requires PostgreSQL v8.4 or later)
+
+# Add PL/pgsql programming language to the database.
+/opt/sauron/sql/install_plpgsql.pl
+
+# Add PL/pgsql functions that fetch unallocated subnets.
+psql -U postgres sauron -f /opt/sauron/sql/unallocated_subnets.sql
+
+psql -U postgres sauron -c "UPDATE settings SET value='1.7' where setting='dbversion';"
+
+# eof

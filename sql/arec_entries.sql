@@ -1,6 +1,6 @@
 /* arec_entries table creation
  *
- * $Id$
+ * $Id:$
  */
 
 /** pointers to A record aliased hosts, linked to a host record. **/
@@ -11,7 +11,7 @@ CREATE TABLE arec_entries (
 					-->hosts.id */
       arec         INT4 NOT NULL  /* ptr to aliased host id 
 					-->hosts.id */
-);
+) WITH OIDS;
 
 CREATE INDEX arec_entries_host_index ON arec_entries (host);
 

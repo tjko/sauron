@@ -1,9 +1,10 @@
-#!/usr/bin/perl -I/usr/local/sauron
+#!/usr/bin/perl -I/opt/sauron
 #
 # status -- utlity to query/modify system status
 #
+# Copyright (c) Michal Kostenec <kostenec@civ.zcu.cz> 2013-2014.
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>  2001-2003.
-# $Id$
+# $Id:$
 #
 require 5;
 use Getopt::Long;
@@ -51,7 +52,9 @@ if ($opt_versions) {
   print "DBI: ",$DBI::VERSION,"\n" if ($DBI::VERSION);
   print "Net::DNS: ",$Net::DNS::VERSION,"\n";
   print "Net::IP: ",$Net::IP::VERSION,"\n";
-  print "Net::Netmask: ",$Net::Netmask::VERSION,"\n\n";
+# print "Net::Netmask: ",$Net::Netmask::VERSION,"\n";
+  print "NetAddr::IP: ",$NetAddr::IP::VERSION,"\n"  if ($NetAddr::IP::VERSION); # For IPv6.
+  print "\n";
 
   print "Sauron::Sauron: ",($Sauron::Sauron::VERSION =~ /,v\s+(\S+)\s/),"\n";
   print "Sauron::BackEnd: ",($Sauron::BackEnd::VERSION =~ /,v\s+(\S+)\s/),"\n";
@@ -169,7 +172,8 @@ if (defined $opt_pending) {
   print "Server record modified.\n" if ($modifiedserver && not $opt_quiet);
   $totalcount+=1 if ($modifiedserver);
 
-  $zones=get_zone_list($serverid,'M','');
+  # get zones w/o expired ones
+  $zones=get_zone_list($serverid,'M','',1);
   for $i (0..$#{$zones}) {
     $zoneid=$$zones[$i][1];
 
@@ -268,11 +272,13 @@ $timeout=$USER_TIMEOUT;
 get_who_list(\@who,$timeout);
 
 if (@who > 0) {
-  printf("%-8s %-22s %-15s %-6s %s\n",'USER','NAME','FROM','IDLE','LOGIN')
+# printf("%-8s %-22s %-39s %-6s %s\n",'USER','NAME','FROM','IDLE','LOGIN')
+  printf("%-8s %-22s %-39s %-8s %s\n",'USER','NAME','FROM','IDLE','LOGIN') # ** 2020-10-06 TVu
     unless ($opt_quiet);
 
   for $i(0..$#who) {
-    printf("%-8s %-22s %-15s %-6s %s\n",
+#   printf("%-8s %-22s %-39s %-6s %s\n",
+    printf("%-8s %-22s %-39s %-8s %s\n", # ** 2020-10-06 TVu
 	   $who[$i][0],$who[$i][1],$who[$i][2],$who[$i][3],$who[$i][4]);
   }
 } else {

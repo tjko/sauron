@@ -1,9 +1,9 @@
-#!/usr/bin/perl -I/usr/local/sauron
+#!/usr/bin/perl -I/opt/sauron
 #
 # delgroup - utility to delete user groups
 #
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>  2003.
-# $Id$
+# $Id:$
 #
 require 5;
 use Getopt::Long;
@@ -43,6 +43,8 @@ $newid=-1;
 if ($opt_newgroup) {
   fatal("Cannot find user group '$opt_newgroup'!")
     unless (($newid=get_user_group_id($opt_newgroup)) > 0);
+} else {
+    $opt_newgroup = 'X';
 }
 
 fatal("cannot specify group being deleted with --newgroup option!")
@@ -65,7 +67,8 @@ if ($i) { # ask confirmation only in interactive session...
   }
 }
 
-fatal("Cannot delete group!".db_lasterrormsg()) if (delete_user_group($id,$newid) < 0);
+fatal("Cannot delete group!".db_lasterrormsg())
+    if (delete_user_group($id,$newid,$opt_group,$opt_newgroup,-1,-1) < 0);
 
 print "Group $opt_group deleted succesfully.\n";
 exit(0);

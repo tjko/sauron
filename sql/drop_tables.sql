@@ -1,6 +1,6 @@
 /* drop_tables.sql
  *
- * $Id$
+ * $Id:$
  */
 
 DROP TABLE a_entries;

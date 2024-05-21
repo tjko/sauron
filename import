@@ -1,18 +1,21 @@
-#!/usr/bin/perl -I/usr/local/sauron
+#!/usr/bin/perl -I/opt/sauron
 #
 # import - imports BIND configuration/databases
 #
+# Copyright (c) Michal Kostenec <kostenec@civ.zcu.cz> 2013-2014.
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000-2003.
-# $Id$
+# $Id:$
 #
 require 5;
-use Net::Netmask;
+# use Net::Netmask;
+use NetAddr::IP; # For IPv6.
 use Getopt::Long;
 use Sauron::DB;
 use Sauron::Util;
 use Sauron::UtilZone;
 use Sauron::BackEnd;
 use Sauron::Sauron;
+use Net::IP qw(:PROC);
 
 load_config();
 
@@ -24,6 +27,175 @@ load_config();
 ##############################
 
 GetOptions("help|h","orphans=s","notransaction","verbose|v","dir=s");
+%GLOBAL_ACL = ('any' => 1, 'none' => 2, 'localhost' => 3, 'localnets' => 4);
+
+sub get_array_entries($$$$) {
+    my ($section, $ref, $acls, $allowacl) = @_;
+    #Because update_array_field function iterates from 1 (not 0) :-/
+    my @ret = [0];
+    my $notop = 0;
+
+    foreach my $entry (@{$ref}) {
+        $notop = ($entry =~ /^\!/ ? 1 : 0);
+        $entry =~ s/^\!//;
+        if (is_cidr($entry)) {
+            push @ret, [ undef, '0', $entry, '-1', '-1', $notop, '', 2 ] if $allowacl;
+            #Simple IP section = (w/o ACL)
+            push @ret, [ '0', $entry, '' ] if not $allowacl;
+            print "$section=$entry\n" if ($opt_verbose);
+        }
+        elsif ($allowacl) {
+            if($acls->{$entry}) {
+                push @ret, [ undef, '1', '', $acls->{$entry}, '-1', $notop, '', 2 ];
+                print "$section=$entry\n" if ($opt_verbose);
+            }
+            else {
+                print "Ignoring '$section' value '$entry' (must be valid IP or ACL value)\n" if ($opt_verbose);
+            }
+        }
+        else {
+            print "Ignoring '$section' value '$entry' (must be valid IP value)\n" if ($opt_verbose);
+        }
+    }
+
+    return @ret;
+}
+
+sub get_array_txt_entries($$$) {
+    my ($section, $src, $separator) = @_;
+    my @ret = [0];
+
+    foreach my $entry (split("$separator", $src)) {
+        push @ret, [ undef, $entry . $separator, '', 2 ];
+        print "$section=$entry\n" if ($opt_verbose);
+    }
+
+    return @ret;
+}
+
+
+sub create_acl($$$$$) {
+    my ($serverid, $user, $name, $acls, $entries) = @_;
+    my %data;
+    $data{name} = $name;
+    $data{cuser} = $user;
+    $data{server} = $serverid;
+    $data{acl} = [];
+    push @{$data{acl}}, ['aml', $serverid];
+
+    @acl_data = get_array_entries("acl/$name", $entries, $acls, 1);
+    push @{$data{acl}}, @acl_data;
+
+    my $res = add_acl(\%data);
+    return $res;
+}
+
+sub get_value($$$) {
+    my ($line, $name, $val) = @_;
+    my $re = qr/^$name\s+\"(.*?)\"\s*;/;
+    if($line =~ /$re/) {
+        $$val = $1;
+        print "$name=$$val\n" if ($opt_verbose);
+        return 1;
+    }
+
+    return 0;
+}
+
+sub get_enum_value($$$$) {
+    my ($line, $name, $val, $rules) = @_;
+    if($line =~ qr/^$name\s+(.*?)\s*;/) {
+        $$val = $1;
+        if($$val =~ qr/$rules/) {
+            $valinfo = $$val;
+            $$val = substr(uc($$val), 0, 1);
+            print "$name=$$val\n" if ($opt_verbose);
+        }
+        else {
+            print "Ignoring '$name' value '$valinfo' (must be '$rules')\n" if ($opt_verbose);
+        }
+        return 1;
+    }
+
+    return 0;
+}
+
+sub get_ip_value($$$$) {
+    my ($line, $name, $val, $ver) = @_;
+    if($line =~ qr/$name\s+(.*?)\s*;/) {
+        $$val = $1;
+        if(ip_get_version($$val) == $ver) {
+            print "$name=$$val\n" if ($opt_verbose);
+        }
+        else {
+            print "Ignoring '$name' value '$$val' (must be valid IPv4 address)\n" if ($opt_verbose and $ver == 4);
+            print "Ignoring '$name' value '$$val' (must be valid IPv6 address)\n" if ($opt_verbose and $ver == 6);
+        }
+        return 1;
+    }
+
+    return 0;
+}
+
+
+sub parseNamed {
+    my($namedf, $NAMEDCONF) = @_;
+
+    my $NAMEDFILE;
+    open($NAMEDFILE,"$namedf") || fatal("cannot open named.conf ($namedf)");
+
+    $buf='';
+
+    while (<$NAMEDFILE>) {
+      chomp;
+      s/(\/\/|\#).*$//; # eat one-line comments
+      s/\/\*.*\*\///g;  # eat one-line comments
+      next if (/^\s*$/);
+
+      # handle multi-line comments
+      if (/^(.*?)\/\*/) {
+        #print "comment begin '$1'\n";
+        $l = $1;
+        while(<$NAMEDFILE>) {
+          chomp;
+          #print "comment end: '$_'\n";
+          if (/^.*?\*\/(.*)$/) {
+        $_ = $l . $1;
+        last;
+          }
+        }
+      }
+
+      if(/\s*include\s+\"(.*)\"/) {
+         $file = $1;
+         $file = $opt_dir . $file if $file !~ /^.*\//;
+         parseNamed($file, $NAMEDCONF);
+         next;
+      }
+
+      s/\s+/\ /g; # eat extra whitespaces
+      s/(^\s+|\s+$)//g;
+
+      s/{\s*/{\n/g;
+      s/;\s*/;\n/g;
+      $buf.=$_; $partial='';
+      @p=split(/\n/,$buf);
+      foreach $tmp (@p) {
+        $tmp =~ s/(^\s+|\s+$)//g;
+        $tmp =~ s/\s+\;/\;/g;
+        if ($tmp =~ /[\{\;]\s*$/) {
+          #print "'$tmp'\n";
+          push @$NAMEDCONF, $tmp;
+        } else {
+          $partial=$tmp;
+        }
+      }
+      $buf=$partial;
+    }
+    push @$NAMEDCONF, $partial if ($partial);
+    close($NAMEDFILE);
+
+}
 
 if ($opt_help || @ARGV < 2) {
     print "syntax: $0 [options] <servername> <named.conf file>\n";
@@ -45,7 +217,10 @@ $user = (getpwuid($<))[0];
 $cdate = time;
 %zonedata = {};
 
-$LOOPBACK_NET='127.0.0.0/24' unless ($LOOPBACK_NET);
+# $LOOPBACK_NET='127.0.0.0/24' unless ($LOOPBACK_NET);
+# Should that /24 be /8?
+$LOOPBACK_NET_IPv4 = '127.0.0.0/24' unless ($LOOPBACK_NET_IPv4); # For IPv4.
+$LOOPBACK_NET_IPv6 = '::1/128' unless ($LOOPBACK_NET_IPv6); # For IPv6.
 $LOOPBACK_ZONE='localhost.' unless ($LOOPBACK_ZONE);
 
 db_connect();
@@ -53,7 +228,7 @@ set_muser($user);
 
 fatal("cannot open named.conf ($namedf)") unless (-r $namedf);
 
-if ($namedf =~ /(^.*\/)/) { 
+if ($namedf =~ /(^.*\/)/) {
     $dir=$1;
 } else {
     $dir="./";
@@ -70,103 +245,232 @@ if ($opt_verbose) {
 ############################################
 # parse named.conf
 
-open(NAMEDCONF,"$namedf") || fatal("cannot open named.conf ($namedf)");
-$buf='';
+my @NAMED;
+parseNamed($namedf, \@NAMED);
 
-while (<NAMEDCONF>) {
-  chomp;
-  s/(\/\/|\#).*$//; # eat one-line comments
-  s/\/\*.*\*\///g;  # eat one-line comments
-  next if (/^\s*$/);
+my %acls;
+my @listen_on;
+my @listen_on_v6;
+my @allow_query;
+my @allow_query_cache;
+my @allow_transfer;
+my @allow_recursion;
+my @allow_notify;
+my @blackhole;
+my @forwarders;
 
-  # handle multi-line comments
-  if (/^(.*?)\/\*/) {
-    #print "comment begin '$1'\n";
-    $l = $1;
-    while(<NAMEDCONF>) {
-      chomp;
-      #print "comment end: '$_'\n";
-      if (/^.*?\*\/(.*)$/) {
-	$_ = $l . $1;
-	last;
-      }
-    }
-  }
+my $directory;
+my $options_global;
+my $options_custom;
+my $options_logging;
 
-  s/\s+/\ /g; # eat extra whitespaces
-  s/(^\s+|\s+$)//g;
 
-  s/{\s*/{\n/g;
-  s/;\s*/;\n/g;
-  $buf.=$_; $partial='';
-  @p=split(/\n/,$buf);
-  foreach $tmp (@p) {
-    $tmp =~ s/(^\s+|\s+$)//g;
-    $tmp =~ s/\s+\;/\;/g;
-    if ($tmp =~ /[\{\;]\s*$/) {
-      #print "'$tmp'\n";
-      push @NAMEDCONF, $tmp;
-    } else {
-      $partial=$tmp;
-    }
-  }
-  $buf=$partial;
-}
-push @NAMEDCONF, $partial if ($partial);
-close(NAMEDCONF);
-
-push @allow_transfer, [];
-
-foreach $line (@NAMEDCONF) {
+#foreach $line (@NAMEDCONF) {
+foreach $line (@NAMED) {
   $_ = $line;
   s/\s+/\ /g;
   next if (/^\s*$/);
 
-  if ( /^\s*([A-Za-z\-\_]+)\s*{(.*$)/ ) {
-    #print "begin '$1'\n";
-    push @block,$1;
-    next;
+  $cur = $block[$#block];
+  $prev = "";
+  $prev = $block[$#block -1] if ($#block > 0);
+
+  #Global options in config root
+  if (!@block and $line !~ /^\s*(acl|key|options|logging|zone)/) {
+        $options_global .= $line;
+        next;
+  }
+
+  #Copy all 1:1 in logging section, hard with subsection :(
+  if ($cur =~ /^logging/) {
+        push (@block_logging, $1) if ( /^\s*([A-Za-z\-\_]+.*)\s+{(.*$)/);
+        if ( /(^.*?)};/) {
+            if(@block_logging > 0) {
+                pop @block_logging;
+            }
+            else {
+                print "end '$block[$#block]'\n" if $opt_verbose;
+                pop @block;
+                next;
+            }
+        }
+
+        $options_logging .= $line;
+        print "logging: $line\n" if ($opt_verbose);
+        next;
   }
 
   if ( /^\s*zone\s+\"(.*?)\"(\s+(in|hs|hesiod|chaos))?\s*{/ ) {
-    #print "begin 'zone $1'\n";
+    print "begin 'zone $1'\n" if $opt_verbose;
     push @block, "zone $1";
     push @zones, $1;
     next;
   }
 
+  if ( /^\s*acl\s+(.*?)\s*{/ ) {
+    print "begin 'acl $1'\n" if $opt_verbose;
+    push @block, "acl $1";
+    $acls{$1} = [];
+    next;
+  }
+
+  if ( /^\s*listen-on port\s+(\d+?)\s*{/ ) {
+    print "begin 'listen-on port $1'\n" if $opt_verbose;
+    push @block, "listen-on port";
+    $listen_on_port = $1;
+    next;
+  }
+
+  if ( /^\s*listen-on-v6 port\s+(\d+?)\s*{/ ) {
+    print "begin 'listen-on-v6 port $1'\n" if $opt_verbose;
+    push @block, "listen-on-v6 port";
+    $listen_on_v6_port = $1;
+    next;
+  }
+
+
+  if ( /^\s*([A-Za-z\-\_]+.*)\s+{(.*$)/ ) {
+    print "begin '$1'\n" if $opt_verbose;
+    push @block,$1;
+    next;
+  }
+
   if ( /(^.*?)};/ ) {
-    #print "end '$block[$#block]'\n";
+    print "end '$block[$#block]'\n" if $opt_verbose;
     pop @block;
     next;
   }
 
-  $cur = $block[$#block];
-  $prev = "";
-  $prev = $block[$#block -1] if ($#block > 0);		
-
   $line = $_;
-  $line =~ s/(^\s+|;\s*$)//g;			
-		
+  $line =~ s/(^\s+|;\s*$)//g;
+  print "LINE: $line\n" if $opt_verbose;
+
+
   if ($cur =~ "options")  {
-    if ( /directory\s+\"(.*?)\"\s*;/ ) {
-      $directory=$1; 
-      print "directory=$directory\n" if ($opt_verbose);
-      next;
+
+    next if get_value($_, 'directory', \$directory);
+    next if get_value($_, 'version', \$version);
+    next if get_value($_, "pid-file" , \$pid_file);
+    next if get_value($_, "dump-file", \$dump_file);
+    next if get_value($_, "statistics-file", \$statistics_file);
+    next if get_value($_, "memstatistics-file", \$memstatistics_file);
+    next if get_value($_, "named-xfer", \$named_xfer);
+
+    next if get_enum_value($_, 'recursion'      ,\$recursion      ,'yes|no');
+    next if get_enum_value($_, 'notify'         ,\$notify         ,'yes|no');
+    next if get_enum_value($_, 'auth-nxdomain'  ,\$auth_nxdomain  ,'yes|no');
+    next if get_enum_value($_, 'dialup'         ,\$dialup         ,'yes|no');
+    next if get_enum_value($_, 'multiple-cnames',\$multiple_cnames,'yes|no');
+    next if get_enum_value($_, 'rfc2308-type1'  ,\$rfc2308_type1  ,'yes|no');
+    next if get_enum_value($_, 'check-names master'  ,\$check_names_master  ,'ignore|warn|fail');
+    next if get_enum_value($_, 'check-names slave'   ,\$check_names_slave   ,'ignore|warn|fail');
+    next if get_enum_value($_, 'check-names response',\$check_names_response,'ignore|warn|fail');
+    next if get_enum_value($_, 'forward', \$forward, 'first|only');
+
+    next if get_ip_value($_, 'transfer-source', \$transfer_source, 4);
+    next if get_ip_value($_, 'transfer-source-v6', \$transfer_source_v6, 6);
+
+
+    if (/query-source address\s+(.*?)\s+port\s+(.*?)\s*;/) {
+        $query_source_address = $1;
+        $query_source_port = $2;
+        $validip = is_ip($query_source_address);
+        $validport = 0;
+
+        if($query_source_port =~ /\d+/) {
+            $validport = 1 if ($query_source_port > 0 && $query_source_port <= 65535);
+        }
+
+        if($validip and $validport) {
+            print "query-source address=$query_source_address port $query_source_port\n" if ($opt_verbose);
+        }
+        else {
+            print "Ignoring 'query-source' value '$query_source_address' (must be valid IPv4 address)\n"
+		if ($opt_verbose and !$validip);
+            print "Ignoring 'query-source' value '$query_source_port' (must be valid port)\n"
+		if ($opt_verbose and !$validport);
+            $query_source_address = undef;
+            $query_source_port    = undef;
+        }
+        next;
     }
-    if ( /version\s+\"(.*?)\"\s*;/ ) {
-      $version=$1;
-      print "version=$version\n" if ($opt_verbose);
-      next;
+
+    if (/query-source-v6 address\s+(.*?)\s+port\s+(.*?)\s*;/) {
+        $query_source_address6 = $1;
+        $query_source_port6 = $2;
+        $validip = is_ip6($query_source_address6);
+        $validport = 0;
+
+        if($query_source_port6 =~ /\d+/) {
+            $validport = 1 if ($query_source_port6 > 0 && $query_source_port6 <= 65535);
+        }
+
+        if($validip and $validport) {
+            print "query-source-v6 address=$query_source_address6 port $query_source_port6\n" if ($opt_verbose);
+        }
+        else {
+            print "Ignoring 'query-source-v6' value '$query_source_address6' (must be valid IPv6 address)\n"
+		if ($opt_verbose and !$validip);
+            print "Ignoring 'query-source-v6' value '$query_source_port6' (must be valid port)\n"
+		if ($opt_verbose and !$validport);
+            $query_source_address6 = undef;
+            $query_source_port6    = undef;
+        }
+        next;
     }
-  }
+
+
+        $options_custom .= $_;
+    print "options-custom: :$line\n" if ($opt_verbose);
+    next;
+
+   }
    if ($prev =~ "options") {
-       if ($cur =~ "allow-transfer" && is_cidr($line) ) {
-	   $ip=$line;
-	   #print "allow transfer ip=$ip\n" if ($opt_verbose);
-	   push @allow_transfer, [0,$ip,''];
-	   next;
-       }
+
+        if ($cur =~ "listen-on port") {
+            push @listen_on, $line;
+            next;
+        }
+
+        if ($cur =~ "listen-on-v6 port") {
+            push @listen_on_v6, $line;
+            next;
+        }
+
+        if ($cur =~ /^allow-query$/) {
+            push @allow_query, $line;
+            next;
+        }
+
+        if ($cur =~ /^allow-query-cache$/) {
+            push @allow_query_cache, $line;
+            next;
+        }
+
+        if ($cur =~ "allow-transfer") {
+            push @allow_transfer, $line;
+            next;
+        }
+
+        if ($cur =~ "allow-recursion") {
+            push @allow_recursion, $line;
+            next;
+        }
+
+        if ($cur =~ "allow-notify") {
+            push @allow_notify, $line;
+            next;
+        }
+
+        if ($cur =~ "blackhole") {
+            push @blackhole, $line;
+            next;
+        }
+
+        if ($cur =~ "forwarders") {
+            push @forwarders, $line;
+            next;
+        }
    }
 
    if ($cur =~ /^zone (.*)$/) {
@@ -192,46 +496,86 @@ foreach $line (@NAMEDCONF) {
 	   $notify{$curzone} = ("\L$1" eq 'no' ? 'no' : 'yes');
 	   next;
        }
-   }
-   if ($prev =~ /^zone\s+(.*)$/) {
-       $curzone=$1;
-       if ($cur =~ "masters" && is_cidr($line) ) {
-           $ip=$line;
-	   #print "master ($curzone) ip=$ip\n";
-	   $ref = $masters{$curzone};
-	   unless ($ref) {
-	     $masters{$curzone}=[];
-	     $ref = $masters{$curzone};
-	   }
-	   push @{$ref}, [0,$ip,''];
+       if ( /transfer-source\s+(.*?)\s*;/ ) {
+	   #print "transfer-source=$1\n";
+	   $transfersource{$curzone} = $1;
 	   next;
        }
-       if ($cur =~ "allow-update" && is_cidr($line) ) {
-	   $ip=$line;
-	   #print "allow-update ($curzone) ip=$ip\n";
-	   $ref = $allowupdate{$curzone};
-	   unless ($ref) {
-	     $allowupdate{$curzone}=[];
-	     $ref = $allowupdate{$curzone};
-	   }
-	   push @{$ref}, [0,$ip,''];
-	   next;
-       }
-       if ($cur =~ "also-notify" && is_cidr($line) ) {
-	   $ip=$line;
-	   #print "also-notify ($curzone) ip=$ip\n";
-	   $ref = $alsonotify{$curzone};
-	   unless ($ref) {
-	     $alsonotify{$curzone}=[];
-	     $ref = $alsonotify{$curzone};
-	   }
-	   push @{$ref}, [0,$ip,''];
+       if ( /transfer-source-v6\s+(.*?)\s*;/ ) {
+	   #print "transfer-source-v6=$1\n";
+	   $transfersourcev6{$curzone} = $1;
 	   next;
        }
    }
 
-    print "UNPROCESSED line ($cur): $_\n";
+   if ($cur =~ /^acl (.*)$/) {
+       push @{$acls{$1}}, $line;
+       next;
+   }
+
+   if ($prev =~ /^zone\s+(.*)$/) {
+       $curzone=$1;
+       if ($cur =~ "masters" && is_cidr($line) ) {
+           $ip=$line;
+           #print "master ($curzone) ip=$ip\n";
+           $ref = $masters{$curzone};
+           unless ($ref) {
+             $masters{$curzone}=[];
+             $ref = $masters{$curzone};
+           }
+           push @{$ref}, [0,$ip,''];
+           next;
+       }
+
+       if ($cur =~ "allow-update") {
+           print "allow-update ($curzone) line=$line\n" if $opt_verbose;
+           $ref = $allowupdate{$curzone};
+           unless ($ref) {
+             $allowupdate{$curzone}=[];
+             $ref = $allowupdate{$curzone};
+           }
+           push @{$ref}, $line;
+           next;
+       }
+
+      if ($cur =~ "allow-transfer") {
+           print "allow-transfer ($curzone) line=$line\n" if $opt_verbose;
+           $ref = $allowtransfer{$curzone};
+           unless ($ref) {
+             $allowtransfer{$curzone}=[];
+             $ref = $allowtransfer{$curzone};
+           }
+           push @{$ref}, $line;
+           next;
+       }
+
+       if ($cur =~ "also-notify") {
+           print "also-notify ($curzone) line=$line\n" if $opt_verbose;
+           $ref = $alsonotify{$curzone};
+           unless ($ref) {
+             $alsonotify{$curzone}=[];
+             $ref = $alsonotify{$curzone};
+           }
+           push @{$ref}, $line;
+           next;
+       }
+
+       if ($cur =~ "allow-query") {
+           print "allow-query ($curzone) line=$line\n" if $opt_verbose;
+           $ref = $allowquery{$curzone};
+           unless ($ref) {
+             $allowquery{$curzone}=[];
+             $ref = $allowquery{$curzone};
+           }
+           push @{$ref}, $line;
+           next;
+       }
+   }
+
+
+   print "UNPROCESSED line ($cur): $_\n" if $opt_verbose;
 }
+
 
 $c = @zones;
 
@@ -253,6 +597,8 @@ unless ($opt_notransaction) {
 ##################################
 # create server record
 
+push @tmp_forwarders,       get_array_entries($zone, \@forwarders,      \%GLOBAL_ACL, 0);
+
 $named_ca = 'named.ca' unless ($named_ca);
 $serverid = add_server({
 			name=>$servername,
@@ -260,8 +606,31 @@ $serverid = add_server({
 			named_ca=>$named_ca,
 			directory=>$directory,
 			version=>$version,
-			allow_transfer=>\@allow_transfer
-		       });
+            pid_file => $pid_file,
+            dump_file => $dump_file,
+            stats_file => $statistics_file,
+            memstats_file => $memstatistics_file,
+            named_xfer => $named_xfer,
+            recursion => $recursion,
+            nnotify => $notify,
+            authnxdomain => $auth_nxdomain,
+            dialup => $dialup,
+            multiple_cnames => $multiple_cnames,
+            rfc2308_type1 => $rfc2308_type1,
+            checknames_m => $check_names_master,
+            checknames_s => $check_names_slave,
+            checknames_r => $check_names_response,
+            forward => $forward,
+            transfer_source => $transfer_source,
+            transfer_source_v6 => $transfer_source_v6,
+            query_src_ip => $query_source_address,
+            query_src_port => $query_source_port,
+            query_src_ip_v6 => $query_source_address6,
+            query_src_port_v6 => $query_source_port6,
+            forwarders =>\@tmp_forwarders,
+		    });
+            #   transfer-source
+#   transfer-source-v6
 
 fatal("Cannot create server record '$servername' ($serverid)")
 			       if ($serverid < 0);
@@ -269,23 +638,72 @@ print "server id=$serverid\n" if ($opt_verbose);
 
 
 #########################################
+# create acls
+
+foreach my $acl (reverse keys %acls) {
+    my $aclid = create_acl($serverid, $user, $acl, \%GLOBAL_ACL, $acls{$acl});
+    $GLOBAL_ACL{$acl} = $aclid if $aclid > 0;
+}
+
+#########################################
+# update server
+
+push @tmp_allow_query,      get_array_entries($zone, \@allow_query,     \%GLOBAL_ACL, 1);
+push @tmp_allow_query_cache,get_array_entries($zone, \@allow_query_cache,\%GLOBAL_ACL, 1);
+push @tmp_allow_transfer,   get_array_entries($zone, \@allow_transfer,  \%GLOBAL_ACL, 1);
+push @tmp_allow_recursion,  get_array_entries($zone, \@allow_recursion, \%GLOBAL_ACL, 1);
+push @tmp_allow_notify,     get_array_entries($zone, \@allow_notify,    \%GLOBAL_ACL, 1);
+push @tmp_blackhole,        get_array_entries($zone, \@blackhole,       \%GLOBAL_ACL, 1);
+push @tmp_listen_on,        get_array_entries($zone, \@listen_on,       \%GLOBAL_ACL, 1);
+push @tmp_listen_on_v6,     get_array_entries($zone, \@listen_on_v6,    \%GLOBAL_ACL, 1);
+
+my @options_custom = get_array_txt_entries("custom-options", $options_custom, ";");
+my @options_global = get_array_txt_entries("global-options", $options_global, ";");
+my @options_logging = get_array_txt_entries("logging-options", $options_logging, "};");
+
+$update_ret = update_server({
+            id => $serverid,
+            allow_query =>\@tmp_allow_query,
+            allow_query_cache =>\@tmp_allow_query_cache,
+            allow_transfer =>\@tmp_allow_transfer,
+            allow_recursion =>\@tmp_allow_recursion,
+            allow_notify =>\@tmp_allow_notify,
+            blackhole =>\@tmp_blackhole,
+            listen_on_port => $listen_on_port,
+            listen_on => \@tmp_listen_on,
+            listen_on_port_v6 => $listen_on_v6_port,
+            listen_on_v6 => \@tmp_listen_on_v6,
+            logging => \@options_logging,
+            custom_opts => \@options_custom,
+            bind_globals => \@options_global,
+            });
+
+fatal("Cannot update server record '$servername' ($serverid)")
+			       if ($update_ret < 0);
+print "server updated id=$serverid\n" if ($opt_verbose);
+
+
+#########################################
 # create zones
 
-$loopback = new Net::Netmask($LOOPBACK_NET);
-$loopback_reverse=($loopback->inaddr())[0];
+# $loopback = new Net::Netmask($LOOPBACK_NET);
+# $loopback_reverse=($loopback->inaddr())[0];
+$loopback_reverse_ipv4 = NetAddr::IP($LOOPBACK_NET_IPv4); # For IPv4.
+$loopback_reverse_ipv6 = NetAddr::IP($LOOPBACK_NET_IPv6); # For IPv6.
 
 # make sure in-adrr.arpa (reverse) zones are processed first
 # (so we can use this information when adding hosts to decide
 #  wheter hosts' A records should have PTR records or not)
 for $i (0..$#zones) {
-  push @zones2, $zones[$i] if ($zones[$i] =~ /\.in-addr\.arpa/);
+  push @zones2, $zones[$i] if ($zones[$i] =~ /\.in-addr\.arpa|\.ip6.arpa/);
 }
 for $i (0..$#zones) {
-  push @zones2, $zones[$i] unless ($zones[$i] =~ /\.in-addr\.arpa/);
+  push @zones2, $zones[$i] unless ($zones[$i] =~ /\.in-addr\.arpa|\.ip6.arpa/);
 }
 @zones=@zones2;
 
 
+my %zonesid;
 ########################
 # process zones
 for ($i=0; $i <= $#zones; $i+=1) {
@@ -294,11 +712,16 @@ for ($i=0; $i <= $#zones; $i+=1) {
   $zone =~ s/\.$//g;
   if ($zone =~ /\.$/) { $origin=$zone; } else { $origin = $zone . '.'; }
   $rev='false';
-  $rev='true' if ($zone =~ /\.in-addr\.arpa/);
+  $rev='true' if ($zone =~ /\.in-addr\.arpa|\.ip6\.arpa/);
 
   print "zone: '$zone' ";
+  print "REVERSE ZONE! $zone\n" if ($rev eq 'true');
 
-  if ($zone =~ /$LOOPBACK_ZONE|$loopback_reverse/) {
+# if ($zone =~ /$LOOPBACK_ZONE|$loopback_reverse/) {
+  $revzone = $rev == 'true' ? NetAddr::IP(arpa2cidr($zone)) : ''; # For IPv6.
+  if ($zone =~ /$LOOPBACK_ZONE/ || $revzone ne '' &&
+      ($revzone->within($loopback_reverse_ipv4) ||
+       ($revzone->within($loopback_reverse_ipv6)))) { # For IPv6.
     $loopback = 'true';
     print "loopback ";
   } else {
@@ -325,13 +748,35 @@ for ($i=0; $i <= $#zones; $i+=1) {
   $tmphash{name}=$zone;
   $tmphash{chknames}=$check_names;
   $tmphash{nnotify}=$nnotify;
-  $tmphash{also_notify}=$alsonotify{$zones[$i]} if ($alsonotify{$zones[$i]});
-  $tmphash{masters}=$masters{$zones[$i]}  if ($masters{$zones[$i]});
-  $tmphash{allow_update}=$allowupdate{$zones[$i]}
-    if ($allowupdate{$zones[$i]});
+  $tmphash{masters}=$masters{$zones[$i]} if ($masters{$zones[$i]});
+  $tmphash{transfer_source}=$transfersource{$zones[$i]} if ($transfersource{$zones[$i]});
+  $tmphash{transfer_source_v6}=$transfersourcev6{$zones[$i]} if ($transfersourcev6{$zones[$i]});
+
+   if($alsonotify{$zones[$i]}) {
+    push @{$tmphash{also_notify}}, get_array_entries($zone, $alsonotify{$zones[$i]}, \%GLOBAL_ACL, 0);
+  }
+
+  if($allowupdate{$zones[$i]}) {
+    push @{$tmphash{allow_update}}, get_array_entries($zone, $allowupdate{$zones[$i]}, \%GLOBAL_ACL, 1);
+
+  }
+
+  if($allowquery{$zones[$i]}) {
+    push @{$tmphash{allow_query}}, get_array_entries($zone, $allowquery{$zones[$i]}, \%GLOBAL_ACL, 1);
+  }
+
+  if($allowtransfer{$zones[$i]}) {
+    push @{$tmphash{allow_transfer}}, get_array_entries($zone, $allowtransfer{$zones[$i]}, \%GLOBAL_ACL, 1);
+  }
+
 
   if (($zoneid = add_zone(\%tmphash)) < 0) {
-    print "zone allready exists! skipping\n";
+    if($zoneid == -200) {
+        print "bad zone name! skipping ($zoneid)\n";
+    }
+    else {
+        print "zone already exists! skipping ($zoneid)\n";
+    }
     next;
   }
   print " (id=$zoneid) ";
@@ -347,8 +792,12 @@ for ($i=0; $i <= $#zones; $i+=1) {
   fatal("cannot get zone record ($zone)") if (get_zone($zoneid,\%zone) < 0);
 
 
+  #Due inserting PTR w/o A or AAAA records
+  $zonesid{$zone} = $zoneid if ($rev eq 'false');
+
   $zonenamemask.='|' if ($zonenamemask);
   $zonenamemask.=$zone if ($rev eq 'false');
+
 
   #handle master zones
   undef %zonedata;
@@ -358,7 +807,11 @@ for ($i=0; $i <= $#zones; $i+=1) {
 
   process_zonefile($files{$zones[$i]},$zone,\%zonedata,0);
   print " found " . keys(%zonedata) . " domainames in zone\n";
+
+
+
   $rec = $zonedata{$origin};
+
   fatal("No SOA record found in zone $zone! ($origin)")
     unless ($rec && $rec->{SOA});
 
@@ -399,7 +852,6 @@ for ($i=0; $i <= $#zones; $i+=1) {
   $res = update_zone(\%tmphash);
   fatal("Cannot update zone record '$zone'") if ($res < 0);
 
-
   if ($rev eq 'true') {
     #handle reverse zone
 
@@ -411,7 +863,8 @@ for ($i=0; $i <= $#zones; $i+=1) {
 
       if (@{$rec->{PTR}} > 0) {
 	$ip = arpa2cidr($host2 . "." . $origin);
-	next unless ($ip =~ s/\/32$//);
+	next unless ($ip =~ s/\/32$|\/128$//);
+	$ip = ip_compress_address($ip, ip_get_version ($ip));
 	$ipworld{$ip}=[] unless ($ipworld{$ip});
 	for $j (0..$#{$rec->{PTR}}) {
 	  push @{$ipworld{$ip}}, $rec->{PTR}->[$j];
@@ -432,7 +885,6 @@ for ($i=0; $i <= $#zones; $i+=1) {
     print "\n";
     next;
   }
-
 
   # handle normal zone
 
@@ -523,13 +975,15 @@ for ($i=0; $i <= $#zones; $i+=1) {
     }
 
     $hosttype=0; # misc / unknown entry type
-    $hosttype=1 if (@{$rec->{A}} > 0); # host
+    #$hosttype=1 if (@{$rec->{A}} > 0); # host
+    $hosttype=1 if (@{$rec->{A}} > 0 || @{$rec->{AAAA}} > 0); # host
     $hosttype=2 if ($nslist ne '' && $host2 ne '@'); # delegated subdomains
-    $hosttype=3 if ($nslist eq '' && @{$rec->{A}} < 1 && @{$rec->{MX}} > 0);
+    #$hosttype=3 if ($nslist eq '' && @{$rec->{A}} < 1 && @{$rec->{MX}} > 0);
+    $hosttype=3 if ($nslist eq '' && @{$rec->{A}} < 1 && @{$rec->{AAAA}} < 1 && @{$rec->{MX}} > 0);
     $hosttype=8 if (@{$rec->{SRV}} > 0);
 
     if ($hosttype == 2) {
-      if ($host =~ /in-addr\.arpa/) {
+      if ($host =~ /(in-addr|ip6)\.arpa/) {
 	print STDERR "\nIGNORING reverse delegation $host in zone $zone \n",
                      " (reverse mapping stuff should be in in-arpa zone)\n";
 	delete $zonedata{$host};
@@ -601,15 +1055,34 @@ for ($i=0; $i <= $#zones; $i+=1) {
     if (db_insert('srv_entries','type,ref,pri,weight,port,target',\@ilist)<0);
 
 
+
+  # insert NAPTR records to custom zone entries
+
+    my @nlist;
+    foreach $host (keys %zonedata) {
+        $rec = $zonedata{$host};
+        next unless (@{$rec->{NAPTR}} > 0);
+
+        foreach my $naptr (@{$rec->{NAPTR}}) {
+            my $record = "$host\t\t\tIN\tNAPTR\t" . $naptr;
+            push @nlist, [12, $zoneid, $record];
+        }
+    }
+
+   fatal("cannot insert txt_entries (NAPTR records)!")
+    if (db_insert('txt_entries','type,ref,txt',\@nlist)<0);
+
   # insert alias (CNAME) records
 
   print STDERR "-";
   undef @ilist;
+
   foreach $host (keys %zonedata) {
     $rec = $zonedata{$host};
     next unless ($rec->{CNAME});
 
     $rec2 = $zonedata{$rec->{CNAME}};
+
     unless ($rec2) {
       #warn("cannot find aliased host $host --> $rec->{CNAME}\n");
       $cname2=$rec->{CNAME};
@@ -623,29 +1096,29 @@ for ($i=0; $i <= $#zones; $i+=1) {
     push @ilist, [$cdate,$user,$zoneid,4,$host2,$class,$alias,$cname2];
     delete $zonedata{$host};
   }
+
   fatal("cannot insert CNAME records")
     if (db_insert('hosts','cdate,cuser,zone,type,domain,class,alias,cname_txt',
 		  \@ilist) < 0);
 
 
-
-  # add A records in a_entries
-
+  # add A and AAAA records in a_entries
   print STDERR "+";
   undef @ilist;
   foreach $host (keys %zonedata) {
     $rec = $zonedata{$host};
-    $reverse='true';
+    #$reverse='true';
+    $reverse='false';
     $hostid=($host eq $origin ? $zonehostid : $rec->{ID});
 
-    if (@{$rec->{A}} < 1) {
-      warn("unexpected host without A records found '$host'")
+    if (@{$rec->{A}} < 1 and @{$rec->{AAAA}} < 1) {
+      warn("unexpected host without A or AAAA records found '$host'")
 	if (@{$rec->{NS}} < 1  &&  @{$rec->{MX}} < 1 && @{$rec->{SRV}} < 1);
       next;
     }
 
     unless ($hostid > 0) {
-      warn("no id found in hash for host $host (while adding A records)!") ;
+      warn("no id found in hash for host $host (while adding A and AAAA records)!") ;
       next;
     }
 
@@ -655,16 +1128,67 @@ for ($i=0; $i <= $#zones; $i+=1) {
       if (@{$ipworld{$ip}} > 0) { # check if PTR is needed
 	$reverse='false';
 	for $l (0..$#{$ipworld{$ip}}) {
-	  $reverse='true' if ($host eq $ipworld{$ip}->[$l]);
+        if ($host eq $ipworld{$ip}->[$l]) {
+	        $reverse='true';
+            delete $ipworld{$ip}->[$l];
+        }
 	}
       }
+
       push @ilist, [$hostid,$ip,$reverse,'true'];
     }
 
-  }
-  fatal("cannot insert A records")
-    if (db_insert('a_entries','host,ip,reverse,forward',\@ilist) < 0);
 
+    $reverse = 'false';
+    for $k (0..$#{$rec->{AAAA}}) {
+      $ip=$rec->{AAAA}[$k];
+      if (@{$ipworld{$ip}} > 0) { # check if PTR is needed
+   	$reverse='false';
+	for $l (0..$#{$ipworld{$ip}}) {
+        if ($host eq $ipworld{$ip}->[$l]) {
+	        $reverse='true';
+            delete $ipworld{$ip}->[$l];
+	    }
+    }
+      }
+
+      push @ilist, [$hostid,$ip,$reverse,'true'];
+    }
+
+
+  }
+
+  # I'll wait with the insertion, because you might need hostid of existing record
+  #fatal("cannot insert A or AAAA records")
+  #  if (db_insert('a_entries','host,ip,reverse,forward',\@ilist) < 0);
+
+  # add PTR withnout A or AAAA entry
+    foreach $ip (keys %ipworld) {
+        for $j (0..$#{$ipworld{$ip}}) {
+            $host = lc($ipworld{$ip}->[$j]);
+            #Longest match fist
+            foreach my $re (reverse sort {length($a) <=> length($b)} keys %zonesid)
+            {
+                if ($host =~ /($re\.?)$/) {
+                    $hostid = ($zonedata{$host} ? $zonedata{$host}->{ID} : 0);
+                    if($hostid) {
+                        push @ilist, [$hostid,$ip, 'true','false'];
+                    }
+                    else {
+                        $res=add_host({zone=>$zonesid{$re},type=>1,domain=>remove_origin($host, $1),ip=>[[0,$ip,'true','false']]});
+                        fatal("cannot add host record for ($host)") if ($res < 0);
+                        $zonedata{$host}->{ID} = $res;
+                    }
+                    delete $ipworld{$ip}->[$j];
+                    next;
+                }
+            }
+        }
+    }
+
+  #Late insert
+   fatal("cannot insert A or AAAA records")
+    if (db_insert('a_entries','host,ip,reverse,forward',\@ilist) < 0);
 
 
   # add NS & TXT entries to ns_entries & txt_entries tables accordingly
@@ -742,8 +1266,5 @@ unless ($opt_notransaction) {
 #print STDERR "Vacuuming...";
 #db_vacuum();
 print STDERR "\n";
-
-
-exit(0);
-
+print "Import successfully completed!\n";
 # eof

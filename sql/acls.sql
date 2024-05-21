@@ -1,6 +1,6 @@
 /* ACLs table creation
  *
- * $Id$
+ * $Id:$
  */
 
 /** ACLs (access control lists) definitions. ACLs can contain
@@ -16,5 +16,6 @@ CREATE TABLE acls (
        comment	    TEXT,
 
        CONSTRAINT   acls_key UNIQUE(name,server)
-) INHERITS(common_fields);
+) INHERITS(common_fields)
+WITH OIDS;
 

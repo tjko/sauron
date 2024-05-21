@@ -4,7 +4,7 @@
  * can describe host,subdomain delegation,plain mx entry,alias (cname),
  * printer, or glue records (for delegations). 
  *
- * $Id$
+ * $Id:$
  */
 
 /** This table contains host entries for a zone. **/
@@ -72,8 +72,13 @@ CREATE TABLE hosts (
 			       
        comment	   TEXT,       /* comment */
 
+       duid       character varying(40),    /*DUID*/
+       iaid       bigint,      /*IAID*/
+
+
        CONSTRAINT  hostname_key UNIQUE (domain,zone),
        CONSTRAINT  ether_key UNIQUE(ether,zone),
        CONSTRAINT  asset_key UNIQUE(asset_id,zone)
-) INHERITS(common_fields);
+) INHERITS(common_fields) WITH OIDS;
 
+CREATE UNIQUE INDEX duid_iaid_key ON hosts USING btree (zone, duid, (COALESCE(iaid, (0)::bigint)));

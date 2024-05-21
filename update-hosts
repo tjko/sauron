@@ -1,9 +1,10 @@
-#!/usr/bin/perl -I/usr/local/sauron
+#!/usr/bin/perl -I/opt/sauron
 #
 # update-hosts -- updates hosts from data in CSV format file
 #
+# Copyright (c) Michal Kostenec <kostenec@civ.zcu.cz> 2013-2014.
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>  2003.
-# $Id$
+# $Id:$
 #
 use Getopt::Long;
 use Sauron::DB;
@@ -29,6 +30,16 @@ sub fix_ether($) {
   return $mac;
 }
 
+sub fix_duid($) {
+    my($duid) = @_;
+
+    $duid =~ s/\s+//g;
+    $duid =~ s/\-//g;
+    $duid =~ s/://g;
+
+    return uc($duid);
+}
+
 sub get_host_id_by_ip($$$) {
   my($serverid,$zoneid,$ip) = @_;
   my(@q,$rule,$sql);
@@ -38,6 +49,7 @@ sub get_host_id_by_ip($$$) {
   return -3 unless (is_cidr($ip));
 
   $ip =~ s/\/32$//;
+  $ip =~ s/\/128$//;
   if ($zoneid > 0) {
     $rule = " h.zone=$zoneid ";
   } else {
@@ -52,7 +64,7 @@ sub get_host_id_by_ip($$$) {
 }
 
 
-GetOptions("help|h","ether=s","ip=s","domain=s","hinfo=s","info=s",
+GetOptions("help|h","ether=s","ip=s","duid=s","iaid=s","domain=s","hinfo=s","info=s",
 	   "dept=s","room=s","user=s","commit","origin=s","verbose",
 	   "commit","filter=s","setdept=s","setgrp=s","setmx=s");
 
@@ -62,6 +74,8 @@ if ($opt_help || @ARGV < 2) {
 	"\t--domain=<n>\t\tcolumn # for domain names\n",
 	"\t--ip=<n>\t\tcolumn # for IP addresses\n",
 	"\t--ether=<n>\t\tcolumn # for Ethernet addresses\n",
+	"\t--duid=<n>\t\tcolumn # for DUID\n",
+	"\t--iaid=<n>\t\tcolumn # for IAID\n",
 	"\t--hinfo=<n>\t\tcolumn # for HINFO\n",
 	"\t--dept=<n>\t\tcolumn # for Department info\n",
 	"\t--room=<n>\t\tcolumn # for Location info\n",
@@ -75,6 +89,7 @@ if ($opt_help || @ARGV < 2) {
 	"\t--setmx=<mxtemplate>\tdefault MX-template for hosts\n",
 
         "\t\t\t\tto the regular expression\n",
+    "\t--commit\t\tcommit changes (w/o this no changes are made)\n",
 	"\n";
   exit(($opt_help ? 0 : 1));
 }
@@ -135,6 +150,19 @@ if ($opt_ether) {
   fatal("cannot use same column twice: $fields{$opt_ether}")
     if ($fields{$opt_ether});
   $fields{$opt_ether}="ether";
+}
+
+if ($opt_duid) {
+  fatal("invalid parameter for --duid") unless ($opt_duid =~ /^\d+$/);
+  fatal("cannot use same column twice: $fields{$opt_duid}")
+    if ($fields{$opt_duid});
+  $fields{$opt_duid}="duid";
+}
+if ($opt_iaid) {
+  fatal("invalid parameter for --iaid") unless ($opt_iaid =~ /^\d+$/);
+  fatal("cannot use same column twice: $fields{$opt_iaid}")
+    if ($fields{$opt_iaid});
+  $fields{$opt_iaid}="iaid";
 }
 
 if ($opt_domain) {
@@ -208,12 +236,14 @@ while(<FILE>) {
   else { $domain = remove_origin($domain,$origin); }
 
   $ip='';
+  $ip6 = undef;
   if ($opt_ip) {
-    $ip=$l[$opt_ip-1];
-    unless (is_cidr($ip)) {
+    $ip=trim($l[$opt_ip-1]);
+    if (!is_cidr($ip)) {
       error("$filename($.): invalid ip: $ip");
       next;
     }
+    $ip6 = is_ip6($ip);
   }
 
   $ether='';
@@ -231,6 +261,50 @@ while(<FILE>) {
       } else {
 	$etherhash{$ether}=$.;
       }
+    }
+  }
+
+  $iaid = '';
+  if ($opt_iaid) {
+    $iaid0=$l[$opt_iaid-1];
+    if($ip6) {
+        unless ($iaid = is_iaid($iaid0)) {
+          error("$filename($.): invalid iaid: $iaid0");
+          $iaid = '';
+        }
+    }
+    else {
+        error("$filename($.): ignoring iaid (IPv4 procesed): $iaid0");
+    }
+
+  }
+
+  $duid = '';
+  if ($opt_duid) {
+    $duid = fix_duid($l[$opt_duid-1]);
+    if($ip6) {
+        unless ($duid =~ /^[0-9A-F]{24,40}$/) {
+          error("$filename($.): invalid duid: $duid");
+          $duid = '';
+          error("$filename($.): ignoring iaid: $iaid") if $iaid ne '';
+          $iaid = '';
+        }
+        else {
+            if ($duidhash{$duid} && ($duidiaid{$duid} eq $iaid)) {
+                error("$filename($.): duplicate DUID + IAID: $duid + " . sprintf("%x",$iaid) . " (see line $duidhash{$duid})") if $iaid ne '';
+                error("$filename($.): duplicate DUID + IAID: $duid + empty IAID " . "(see line $duidhash{$duid})") if $iaid eq '';
+                $duid='';
+                $iaid='';
+            }
+            else {
+                $duidhash{$duid} = $.;
+                $duidiaid{$duid} = $iaid;
+            }
+        }
+    }
+    else {
+        error("$filename($.): ignoring DUID (IPv4 procesed): $duid");
+        $duid = '';
     }
   }
 
@@ -261,9 +335,9 @@ while(<FILE>) {
   $info='';
   if ($opt_info) { $info=$l[$opt_info-1]; }
 
-  print "$filename($.): domain=$domain,ip=$ip $ether,$hinfo[0],$hinfo[1],$user,$dept,$room,$info\n"; #    if ($opt_verbose);
+  print "$filename($.): domain=$domain,ip=$ip $ether $duid $iaid,$hinfo[0],$hinfo[1],$user,$dept,$room,$info\n"; #    if ($opt_verbose);
 
-  push @data,[$domain,$ip,$ether,$hinfo[0],$hinfo[1],$user,$dept,$room,$info];
+  push @data,[$domain,$ip,$ether,$hinfo[0],$hinfo[1],$user,$dept,$room,$info,$duid,$iaid];
 }
 
 close(FILE);
@@ -308,8 +382,14 @@ for $i (0..$#data) {
   $h{dept}=$data[$i][6] if ($data[$i][6]);
   $h{location}=$data[$i][7] if ($data[$i][7]);
   $h{info}=$data[$i][8] if ($data[$i][8]);
+  $h{duid}=$data[$i][9] if ($data[$i][9]);
+  $h{iaid}=$data[$i][10] if ($data[$i][10]);
 
-  print "Updating record " .($h{domain}?'UPDATENAME':' '). " id=$id ($data[$i][0]/$data[$i][1],$data[$i][2])...\n";
+  if($h{duid}) {
+    print "Updating record " .($h{domain}?'UPDATENAME':' '). " id=$id ($data[$i][0]/$data[$i][1],$data[$i][2],$data[$i][9],($data[$i][10]))...\n";
+  } else {
+    print "Updating record " .($h{domain}?'UPDATENAME':' '). " id=$id ($data[$i][0]/$data[$i][1],$data[$i][2])...\n";
+  }
   $r = update_host(\%h);
   fatal("failed to update host: id=$id ($r): ".db_lasterrormsg()) if ($r < 0);
 }

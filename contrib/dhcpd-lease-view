@@ -1,15 +1,16 @@
-#!/usr/bin/perl -w
+#!/usr/bin/env perl
 #
-# $Id$
+# $Id:$
 #
 # A dhcpd.leases file viewing utility -- mesrik@cc.jyu.fi
 #
 use strict;
+use warnings;
 use Getopt::Long;
 use POSIX qw(strftime);
 use Pod::Usage;
-my (%hash,$i,$j,$block,$ac,$now,%counter);
-my (%attribute,@attributes,@sort_order,@print_columns,@line,@flen);
+my (%hash,$i,$j,$block,$foblock,$ac,$now,%counter);
+my (%attribute,@attributes,@sort_order,@print_columns,@line,@flen,$lookup);
 my ($all, $debug, $help, $inactive, $noheader, $man, $match, $sep);
 my ($stdio, $verbose,$version,$vers);
 my $keys  = 'ip,hardware,starts,ends'; # default sort keys
@@ -20,7 +21,7 @@ sub normalise($);
 $debug = 0;
 
 $0 =~ s/.*\///o; # weed the path
-$version = '$Id$';
+$version = '$Id:$';
 
 $now = strftime "%Y/%m/%d %H:%M:%S", gmtime;
 %counter = ();
@@ -64,17 +65,25 @@ $ac = 0;
 # read input file(s)
 while (<>) {
     chomp;
-    next if (/^\s*(#|$)/);
-    if (/^lease\s+(\d+\.\d+\.\d+\.\d+)\s+\{/) { # enter IPv4 addr block
+    next if (/^\s*(#|$)/); # skip comments and blank lines
+
+    if (/^failover\s+peer\s+\"(\S+)\"\s+state\s+\{/) {
+	$foblock = 1;
+    } elsif (/^lease\s+(\d+\.\d+\.\d+\.\d+)\s+\{/) { # enter IPv4 addr block
 	$block = 1;
 	$ac++;
-	die "$0: internal failure, \$hash{\$ac} already defined" 
+	die "$0: internal failure, \$hash{\$ac} already defined"
 	    if (defined($hash{$ac}));
 	$hash{$ac} = {};
 	$hash{$ac}->{'ip'} =  pack("C4",split(/\./,$1));
     } elsif (/^\s*\}/) {                        # exit block
-	undef $block;
-    } elsif (defined($ac) and defined($block) and /^\s+(.*);/) { # process block 
+	if (defined($foblock)) {
+	    undef $foblock;
+	} elsif (defined($block)) {
+	    undef $block;
+	}
+	next;
+    } elsif (defined($ac) and defined($block) and /^\s+(.*);/) { # process block
 	if ($1 =~ /^(starts|ends|tstp|tsfp)\s+(\d+\s+([[:alnum:]\/:\s]+)|never)/) {
 	    ($hash{$ac}->{$1} = $2 ) =~ s/^\d+\s+//;
 	} elsif ($1 =~ /^(hardware)\s+(\S+)\s+([[:xdigit:]:]+)/) {
@@ -90,7 +99,7 @@ while (<>) {
 
 # study attributes and values max lengths
 (@attributes = %attribute) = ();
-foreach $i (keys %hash) {    
+foreach $i (keys %hash) {
     foreach $j (keys %{$hash{$i}}) {
 	# add attribute if it does not yet exist
 	unless (defined($attribute{$j})) {
@@ -113,7 +122,7 @@ foreach $i (keys %hash) {
 }
 
 if ($all) {
-    # this is very blunt solution, but I'm 
+    # this is very blunt solution, but I'm
     # far too lazy to fix it for now :)
     @print_columns = sort @attributes;
 }
@@ -143,14 +152,16 @@ unless ($noheader) {
 }
 
 # initialise
-foreach $i qw(active match match+active abandoned) {
+foreach $i (qw/active match match+active abandoned/) {
     $counter{$i} = 0;
 }
 
-my $lookup = $match || '/./';
+$lookup = $match || '/./';
 
 # report body
 foreach $ac (sort sortfunc keys %hash) {
+
+    next unless ($hash{$ac}->{'ends'});
     $i = ($hash{$ac}->{'ends'} gt $now);
     next unless ($i or $inactive);
 
@@ -169,7 +180,7 @@ foreach $ac (sort sortfunc keys %hash) {
     # build a array of printable columns
     @line = @flen = ();
     foreach $j (@print_columns) {
-	if (defined($hash{$ac}->{$j})) { 
+	if (defined($hash{$ac}->{$j})) {
 	    if ($j =~ /^ip$/) {
 		print "pushing element: $hash{$ac}->{$j}, length $attribute{$j}]\n" if ($debug >4);
 		push(@line,join('.',unpack('C4',$hash{$ac}->{$j})));
@@ -215,13 +226,13 @@ if ($debug > 2) {
     # list counters
     printf "debug: %s\n",join(' ', keys(%counter));
 
-    # traverse and print content of mac counters    
+    # traverse and print content of mac counters
     foreach $i (keys %{$counter{'hardware'}}) {
 	printf "debug: %s -> %d\n",$i,$counter{'hardware'}->{$i};
     }
     # print macs
-    printf "debug: %s\n", join(' ', keys %{$counter{'hardware'}}); 
- 
+    printf "debug: %s\n", join(' ', keys %{$counter{'hardware'}});
+
     # number of keys
     printf "debug: %d macs", scalar keys %{$counter{'hardware'}},"\n";
 }
@@ -238,7 +249,7 @@ unless ($noheader) {
 	printf "%10d matching leases\n",$counter{'match'};
 	printf "%10d matching and active leases\n",$counter{'match+active'};
     }
-    
+
     printf "%10d abandoned leases\n",$counter{'abandoned'};
     printf "%10d total leases\n",$ac;
     print "\n";
@@ -255,7 +266,7 @@ sub sortfunc($$) {
 	printf ("debug: key=%s\n",$i) if ($debug > 5 );
         if (defined($hash{$a}->{$i}) and defined($hash{$b}->{$i})) {
 	    $cmp = $hash{$a}->{$i} cmp $hash{$b}->{$i};
-	    printf ("debug: cmp=%d %s\n",$cmp,$i) if ($debug > 5); 
+	    printf ("debug: cmp=%d %s\n",$cmp,$i) if ($debug > 5);
 	    return $cmp if ($cmp);
 	}
     }
@@ -266,7 +277,7 @@ sub sortfunc($$) {
 # split and normalise key string to array
 sub normalise($) {
     my ($str) = (@_);
-    my (@array); 
+    my (@array);
 
     for (@array = split(',',lc($str))) {
 	s/^mac$/hardware/;
@@ -274,7 +285,7 @@ sub normalise($) {
 	s/^begin(|s)$/starts/;
 	s/^start(|s)$/starts/;
 	s/^stop(|s)$/ends/;
-	s/^end(|s)$/ends/; 
+	s/^end(|s)$/ends/;
     };
 
     return @array;
@@ -317,7 +328,7 @@ Prints the manual page and exits.
 
 =item B<-all>
 
-Selects and prints all columns in sorted order. 
+Selects and prints all columns in sorted order.
 Also overrides -columns.
 
 =item B<-columns=columnlist>
@@ -381,8 +392,8 @@ generate a compact report of that.
 
 =head1 CAVEATS
 
-The program needs to read a full file(s) before it is able to process 
-and produce meaningfull report, thus there is very little use even 
+The program needs to read a full file(s) before it is able to process
+and produce meaningfull report, thus there is very little use even
 trying combining it with "tail -f".
 
 =head1 AUTHORS

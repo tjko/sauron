@@ -1,7 +1,8 @@
 # Sauron::CGI::Groups.pm
 #
+# Copyright (c) Michal Kostenec <kostenec@civ.zcu.cz> 2013-2014.
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>  2003.
-# $Id$
+# $Id:$
 #
 package Sauron::CGI::Groups;
 require Exporter;
@@ -14,7 +15,7 @@ use Sauron::CGI::Utils;
 use strict;
 use vars qw($VERSION @ISA @EXPORT);
 
-$VERSION = '$Id$ ';
+$VERSION = '$Id:$ ';
 
 @ISA = qw(Exporter); # Inherit from Exporter
 @EXPORT = qw(
@@ -38,8 +39,12 @@ my %group_form=(
    enum=>\%vmps_list_hash, elist=>\@vmps_list_lst, restricted=>0},
   {ftype=>1, tag=>'alevel', name=>'Authorization level', type=>'priority',
    len=>3, empty=>0},
-  {ftype=>1, tag=>'comment', name=>'Comment', type=>'text', len=>60, empty=>1},
-  {ftype=>2, tag=>'dhcp', name=>'DHCP entries', 
+  {ftype=>1, tag=>'comment', name=>'Comment', type=>'text', len=>60,
+   empty=>1, whitesp=>'P'},
+  {ftype=>2, tag=>'dhcp', name=>'DHCP entries', whitesp=>['N','P'],
+   type=>['text','text'], fields=>2, maxlen=>[200,20],
+   len=>[50,20], empty=>[0,1], elabels=>['DHCP','comment']},
+  {ftype=>2, tag=>'dhcp6', name=>'DHCPv6 entries', whitesp=>['N','P'],
    type=>['text','text'], fields=>2, maxlen=>[200,20],
    len=>[50,20], empty=>[0,1], elabels=>['DHCP','comment']},
   {ftype=>2, tag=>'printer', name=>'PRINTER entries',
@@ -146,30 +151,77 @@ sub menu_handler {
     elsif (param('grp_confirm')) {
       $new_id=param('grp_new');
       if ($new_id eq $id) {
-	print h2("Cannot change host records to point the group " .
+	print h2("Cannot change host records to point to the group " .
 		 "being deleted!");
 	goto show_group_record;
       }
-      $new_id=-1 unless ($new_id > 0);
-      if (db_exec("UPDATE hosts SET grp=$new_id WHERE grp=$id;") < 0) {
-	print h2('Cannot update records pointing to this group!');
+      $new_id = -1 unless ($new_id > 0);
+
+# Transaction added. TVu 28.10.2015
+      db_begin();
+# Update hosts, moving them to a new group or not.
+      if (db_exec("UPDATE hosts SET grp = $new_id WHERE grp = $id;") < 0) {
+	print h2('Cannot update hosts pointing to this group!');
+	db_rollback();
 	return;
       }
-      if (delete_group($id) < 0) {
-	print "<FONT color=\"red\">",h1("Group delete failed!"),
+# Update or delete also group_entries (subgroups). TVu 28.10.2015
+# Update may create two kinds of duplicates, which are deleted next.
+      if ($new_id > 0) {
+	  if (db_exec("UPDATE group_entries SET grp = $new_id WHERE grp = $id;") < 0) {
+	      print h2('Cannot update group_entries (subgroups) pointing to this group!');
+	      db_rollback();
+	      return;
+	  }
+      } else {
+	  if (db_exec("delete from group_entries WHERE grp = $id or grp = -1;") < 0) {
+	      print h2('Cannot delete group_entries (subgroups) pointing to this group!');
+	      db_rollback();
+	      return;
+	  }
+      }
+# Delete (all) duplicates from group_entries. TVu 28.10.2015
+# https://wiki.postgresql.org/wiki/Deleting_duplicates
+      if (db_exec('DELETE FROM group_entries WHERE id IN (SELECT id ' .
+		  'FROM (SELECT id, ROW_NUMBER() OVER (partition BY host, grp ORDER BY id) AS rnum ' .
+		  'FROM group_entries) t WHERE t.rnum > 1);') < 0) {
+	print h2('Error removing duplicates (1)!');
+	db_rollback();
+	return;
+      }
+# Delete also (all) group_entries rows which duplicate groups. TVu 28.10.2015
+      if (db_exec('delete from group_entries where id in ' .
+		  '(select ge.id from group_entries ge, hosts h ' .
+		  'where h.grp = ge.grp and h.id = ge.host);') < 0) {
+	print h2('Error removing duplicates (2)!');
+	db_rollback();
+	return;
+      }
+      db_ignore_begin_and_commit(1);
+      my $del_err;
+      if (($del_err = delete_group($id)) < 0) {
+	print "<FONT color=\"red\">",h1("Group delete failed! $del_err"),
 	        "</FONT>";
+	db_ignore_begin_and_commit(0);
+	db_rollback();
 	return;
       }
+      db_ignore_begin_and_commit(0);
+      db_commit();
+
       print h2("Group successfully deleted.");
       return;
     }
 
     undef @q;
-    db_query("SELECT COUNT(id) FROM hosts WHERE grp=$id;",\@q);
+#   db_query("SELECT COUNT(id) FROM hosts WHERE grp=$id;",\@q);
+# Show also hosts that have this group as subgroup. TVu 28.10.2015
+    db_query("select count(*) from (select h.id from hosts h where h.grp = $id union " .
+	     "select h.id from hosts h, group_entries ge where ge.grp = $id and ge.host = h.id) c;",\@q);
     print p,"$q[0][0] host records use this group.",
 	      startform(-method=>'GET',-action=>$selfurl);
     if ($q[0][0] > 0) {
-      get_group_list($serverid,\%lsth,\@lst,$perms->{alevel});
+      get_group_list($serverid,\%lsth,\@lst,$perms->{alevel},undef);
       print p,"Change those host records to point to: ",
 	        popup_menu(-name=>'grp_new',-values=>\@lst,
 			   -default=>-1,-labels=>\%lsth);

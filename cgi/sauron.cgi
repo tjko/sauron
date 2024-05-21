@@ -1,20 +1,22 @@
-#!/usr/bin/perl -I/usr/local/sauron
+#!/usr/bin/perl -I/opt/sauron
 #
 # sauron.cgi
-# $Id$
+# $Id:$
 # [åäö~]
+# Copyright (c) Michal Kostenec <kostenec@civ.zcu.cz> 2013-2014.
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>, 2000-2005.
 # All Rights Reserved.
 #
 use CGI qw/:standard *table -no_xhtml/;
 use CGI::Carp 'fatalsToBrowser'; # debug stuff
-use Net::Netmask;
+# use Net::Netmask;
 use Sauron::DB;
 use Sauron::Util;
 use Sauron::BackEnd;
 use Sauron::CGIutil;
 use Sauron::CGI::Utils;
 use Sauron::Sauron;
+use Data::Dumper;
 #use strict;
 
 $CGI::DISABLE_UPLOADS = 1; # no uploads
@@ -25,10 +27,9 @@ $0 = $PG_NAME;
 
 load_config();
 
-$SAURON_CGI_VER = ' $Revision$ $Date$ ';
+$SAURON_CGI_VER = ' $Revision: 1.204 $ $Date: 2005/01/27 09:24:44 $ ';
 $debug_mode = $SAURON_DEBUG_MODE;
 #$|=1;
-
 
 @menulist = (
 	  ['Hosts','menu=hosts',0],
@@ -37,7 +38,7 @@ $debug_mode = $SAURON_DEBUG_MODE;
 	  ['Templates','menu=templates',0],
 	  ['Groups','menu=groups',0],
 	  ['ACLs','menu=acls',0],
-	  ['Servers','menu=servers',0],
+	  ['Servers','menu=servers&sub=select',0],
 	  ['Login','menu=login',0],
 	  ['About','menu=about',0],
 	 );
@@ -55,6 +56,8 @@ $debug_mode = $SAURON_DEBUG_MODE;
 
 %menuhooks = ();
 
+# $menuhooks{'login'}->{'Groups'} = ['Users', "$PROG_DIR/plugins/Users.pm"];
+
 %menuhash =(
 	    'servers'=>[
 			['Show Current',''],
@@ -65,7 +68,7 @@ $debug_mode = $SAURON_DEBUG_MODE;
 			['Edit','sub=edit']
 		       ],
 	    'zones'=>[
-		      ['Show Current',''],
+		      ['Show Current','sub=Current'],
 		      ['Show pending','sub=pending'],
 		      [],
 		      ['Select','sub=select'],
@@ -81,6 +84,7 @@ $debug_mode = $SAURON_DEBUG_MODE;
 		     ['Networks',''],
 		     ['&nbsp; + Subnets','list=sub'],
 		     ['&nbsp; + All','list=all'],
+		     ['&nbsp; + Free','list=free', $ALEVEL_SHOW_UNALLOCATED_CIDRS || 'root'],
 		     [],
 		     ['Add net','sub=addnet'],
 		     ['Add subnet','sub=addsub'],
@@ -121,11 +125,11 @@ $debug_mode = $SAURON_DEBUG_MODE;
 		      [],
 		      ['Add host','sub=add&type=1'],
 		      [],
-		      ['Add alias','sub=add&type=4'],
+		      ['Add alias','sub=add&type=4', 'scname'], # scname 2020-09-08 TVu
 		      [],
 		      ['Add MX entry','sub=add&type=3'],
-		      ['Add delegation','sub=add&type=2'],
-		      ['Add glue rec.','sub=add&type=6'],
+		      ['Add delegation','sub=add&type=2', 'root'], # root 2021-03-01 TVu
+		      ['Add glue rec.','sub=add&type=6', 'root'], # root 2021-03-01 TVu
 		      ['Add DHCP entry','sub=add&type=9'],
 		      ['Add printer','sub=add&type=5'],
 		      ['Add SRV rec.','sub=add&type=8'],
@@ -149,6 +153,7 @@ $debug_mode = $SAURON_DEBUG_MODE;
 		      [],
 		      ['Lastlog','sub=lastlog','root'],
 		      ['Session Info','sub=session','root'],
+		      ['History Search','sub=history', $ALEVEL_HISTORY_SEARCH || 'root'],
 		      ['Add news msg','sub=addmotd','root']
 		     ],
 	    'about'=>[
@@ -161,7 +166,7 @@ $debug_mode = $SAURON_DEBUG_MODE;
 sub about_menu();
 sub login_form($$);
 sub login_auth();
-sub logout();
+sub logout($); # **** 2020-09-16 TVu
 sub top_menu($);
 sub left_menu($);
 sub frame_set();
@@ -270,7 +275,7 @@ init_plugins($SAURON_PLUGINS);
 
 if ($pathinfo ne '') {
   $frame_mode=1 if ($pathinfo =~ /^\/frame/);
-  logout() if ($pathinfo eq '/logout');
+  logout(1) if ($pathinfo eq '/logout'); # **** 2020-09-16 TVu
   frame_set() if ($pathinfo eq '/frames');
   frame_set2() if ($pathinfo eq '/frames2');
   frame_1() if ($pathinfo eq '/frame1');
@@ -296,6 +301,7 @@ unless ($state{superuser} eq 'yes') {
 
 
 
+
 ########################################################################
 
 if (param('csv')) {
@@ -313,7 +319,7 @@ if (param('csv')) {
     $refresh=meta({-http_equiv=>'Refresh',-content=>'1800'})
       if (($state{superuser} eq 'yes') && (param('menu') eq 'login') &&
 	  (param('sub') eq 'who'));
-    print start_html(-title=>"Sauron ($SERVER_ID)",-BGCOLOR=>$bgcolor,
+    print start_html(-charset=>$SAURON_CHARSET,-title=>"Sauron ($SERVER_ID)",-BGCOLOR=>$bgcolor,
 		     -meta=>{keywords=>'Sauron DNS DHCP tool'},
 		     -head=>$refresh);
   }
@@ -345,10 +351,14 @@ elsif ($menuref=$menus{$menu}) {
   my $module = $menuref;
 
   # check if we should call a plugin instead of default menu handler module
+#  print "$menuref<BR>";
+#  print param('sub') . '<BR>';
+#  print Dumper(\%menuhooks) . '<br>';
   if (($hook = $menuhooks{$menu}->{param('sub')})) {
     #print h2("HOOK: $$hook[0] ($$hook[1])");
     $module="\"$$hook[1]\"";
     $menuref="Sauron::Plugins::$$hook[0]";
+#   print "$menuref<BR>";
   }
 
   # load module containing menu handler
@@ -360,6 +370,7 @@ elsif ($menuref=$menus{$menu}) {
     $state{selfurl}=$selfurl;
     # call menu_hanlder() routine in the module
     $menuref .= '::menu_handler(\%state,\%perms)';
+#   print "$menuref<BR>";
     eval "$menuref;";
     if ($@) {
       alert2("Call failed: $menuref");
@@ -432,20 +443,36 @@ sub about_menu() {
         "<IMG src=\"$SAURON_ICON_PATH/logo_large.png\" border=\"0\" ",
 	"  alt=\"Sauron\">",
         "</a><BR>Version $VER<BR>(CGI $SAURON_CGI_VER)<P>",
-        "a free DNS & DHCP management system<p>",
-        "<hr noshade width=\"40%\"><b>Author:</b>",
+        "A Free DNS & DHCP Management System<p>",
+
+       "<hr noshade width=\"50%\"><b>Original Author:</b>",
         "<br>Timo Kokkonen <i>&lt;tjko\@iki.fi&gt;</i>",
-        "<hr width=\"30%\"><b>Logo Design:</b>",
-        "<br>Teemu Lähteenmäki <i>&lt;tola\@iki.fi&gt;</i>",
-        "<hr noshade width=\"40%\"><p>",
+
+        "<hr width=\"40%\"><b>Further Development by:</b>",
+        "<br>Michal Kostenec <i>&lt;kostenec\@civ.zcu.cz&gt;</i>",
+        "<br>Ales Padrta <i>&lt;apadrta\@civ.zcu.cz&gt;</i>",
+        "<br>(IPv6 Support)</i>",
+        "<br>Riku Meskanen <i>&lt;mesrik\@iki.fi&gt;</i>",
+        "<br>Teppo Vuori <i>&lt;sauron\@teppovuori.fi&gt;</i>",
+        "<br>(Additional Features)</i>",
+
+        "<br><br><b>With Support from:</b>",
+        "<br>Tapani Tarvainen <i>&lt;sauron\@tapanitarvainen.fi&gt;</i>",
+
+        "<hr width=\"40%\"><b>Logo Design by:</b>",
+        "<br>Teemu L&auml;hteenm&auml;ki <i>&lt;tola\@iki.fi&gt;</i>",
+
+        "<hr noshade width=\"50%\"><p>",
 	"</CENTER><BR><BR>";
+
   }
 }
 
 #####################################################################
 
 
-sub logout() {
+sub logout($) { # **** 2020-09-16 TVu
+  my($full)=@_; # **** 2020-09-16 TVu
   my($c,$um,$host);
 
   $host='localhost???';
@@ -460,17 +487,34 @@ sub logout() {
 	    -path=>$script_path,
 	    -secure=>($SAURON_SECURE_COOKIES ? 1 :0));
   remove_state($scookie);
-  print header(-charset=>$SAURON_CHARSET,-target=>'_top',-cookie=>$c),
-        start_html(-title=>"Sauron Logout",-BGCOLOR=>'white'),
-        "<CENTER><TABLE width=\"50%\" cellspacing=0 border=0>",
+
+# print header(-charset=>$SAURON_CHARSET,-target=>'_top',-cookie=>$c),
+#       start_html(-title=>"Sauron Logout",-BGCOLOR=>'white'),
+#       "<CENTER><TABLE width=\"50%\" cellspacing=0 border=0>",
+#       "<TR bgcolor=\"#002d5f\">",
+#       "<TD><FONT color=\"white\"> &nbsp; Sauron",
+#       "</FONT></TD><TD align=\"right\"><FONT color=\"white\">",
+#       "$host &nbsp;</FONT></TD></FONT>",
+#       "<TR><TD colspan=2 bgcolor=\"#efefff\"><CENTER>",
+#       h2("You have been logged out."),p
+#       a({-href=>script_name},"Click to enter login screen again."),
+#       "</CENTER></TD></TR></CENTER>",,end_html();
+
+# Headers etc. not needed if user is logged out because web interface is blocked.
+  if ($full) { # **** 2020-09-16 TVu
+      print header(-charset=>$SAURON_CHARSET,-target=>'_top',-cookie=>$c),
+            start_html(-title=>"Sauron Logout",-BGCOLOR=>'white'),
+  }
+  print "<CENTER><TABLE width=\"50%\" cellspacing=0 border=0>",
         "<TR bgcolor=\"#002d5f\">",
         "<TD><FONT color=\"white\"> &nbsp; Sauron",
         "</FONT></TD><TD align=\"right\"><FONT color=\"white\">",
         "$host &nbsp;</FONT></TD></FONT>",
-        "<TR><TD colspan=2 bgcolor=\"#efefff\"><CENTER>", 
+        "<TR><TD colspan=2 bgcolor=\"#efefff\"><CENTER>",
         h2("You have been logged out."),p
         a({-href=>script_name},"Click to enter login screen again."),
 	"</CENTER></TD></TR></CENTER>",,end_html();
+
   exit;
 }
 
@@ -490,9 +534,10 @@ sub login_form($$) {
 	"<TR><TD colspan=2 bgcolor=\"#efefff\">";
 
   print start_form(-target=>'_top'),"<BR><CENTER>",h2($msg),p,"<TABLE>",
-        Tr,td("Login:"),td(textfield(-name=>'login_name',-maxlength=>'8')),
+        Tr,td("Login:"),td(textfield(-id=>"login",-name=>'login_name',-maxlength=>'8')),
         Tr,td("Password:"),
-                   td(password_field(-name=>'login_pwd',-maxlength=>'30')),
+#                  td(password_field(-name=>'login_pwd',-maxlength=>'30')),
+                   td(password_field(-name=>'login_pwd', -size=>40)), # 2020-10-19 TVu
               "</TABLE>",
         hidden(-name=>'login',-default=>'yes'),
         submit(-name=>'submit',-value=>'Login'),
@@ -502,7 +547,9 @@ sub login_form($$) {
   # save arguments (allows linking to "pages" in Sauron)
   foreach $arg (param()) { print hidden($arg,param($arg)); }
 
-  print end_form,end_html();
+  print end_form,
+  "\n<script type='text/JavaScript'>document.getElementById('login').focus();</script>",
+  end_html();
 
   $state{'mode'}='1';
   $state{'auth'}='no';
@@ -600,9 +647,17 @@ sub login_auth() {
 	      "<td valign=\"bottom\" align=\"right\">",
 	      "<font color=\"white\">$SERVER_ID &nbsp; </font></td>",
 	      "</TR><TR><TD colspan=3><CENTER>\n";
+
+# Is login allowed to superusers only?
+	if ($SAURON_TEMP_LOCK && $state{'superuser'} ne 'yes') { # **** 2020-09-16 TVu
+	    print '<br><h1>Sorry, Sauron is temporarily closed</h1></center></td></table>';
+	    logout(0);
+	}
+
 	print h1("Login ok!"),p,"<TABLE><TR><TD>",
 	      startform(-method=>'POST',-action=>$s_url),$arg_str,
-	      submit(-name=>'submit',-value=>'No Frames'),end_form,
+	      submit(-name=>'submit',-value=>'No Frames',
+		     autofocus=>'true'),end_form, # Autofocus 2020-06-16 TVu
 	      "</TD><TD> ",
 	      startform(-method=>'POST',-action=>"$s_url/frames"),$arg_str,
 	      submit(-name=>'submit',-value=>'Frames'),end_form,
@@ -626,7 +681,7 @@ sub login_auth() {
 	    $msg=$newslist[$i][3];
 	    #$msg =~ s/\n/<BR>/g;
 	    $date=localtime($newslist[$i][0]);
-	    print 
+	    print
 	      Tr(td($msg . "<FONT size=-1><I>" .
                   "<BR> &nbsp; &nbsp; -- $newslist[$i][1] $date </I></FONT>"));
 	  }
@@ -649,7 +704,7 @@ sub login_auth() {
       }
     }
     if ($login_debug) {
-	print LOGIN_DEBUG $login_time,": ", $u, "\n", 
+	print LOGIN_DEBUG $login_time,": ", $u, "\n",
 	map { "\t$_ => $user{$_}\n" } keys %user;
     }
   }
@@ -696,7 +751,7 @@ sub top_menu($) {
   }
 
   for $i (0..$#menulist) {
-    print 
+    print
 	"<A HREF=\"$s_url?$menulist[$i][1]\"><FONT size=-1 color=\"#ffffff\">",
 	"$menulist[$i][0]</FONT></A>";
     print " | " if ($i < $#menulist);
@@ -708,7 +763,21 @@ sub top_menu($) {
     printf "%s &nbsp; &nbsp; %d.%d.%d %02d:%02d ",
            $SERVER_ID,$mday,$mon+1,$year+1900,$hour,$min;
   }
+
+# Warn users if web interface will soon be closed.
+  if ($SAURON_TEMP_LOCK == 1 && $state{'superuser'} ne 'yes') { # **** 2020-09-16 TVu
+      print '</td><tr><td colspan=3><center><font color="#ffffff"><h3>Please log ' .
+	  'out from Sauron &ndash; maintenance break imminent!</h3></font></center>';
+  }
+
   print "</FONT></TD></TR></TABLE>";
+
+# Terminate session if not superuser and only superusers allowed.
+  if ($SAURON_TEMP_LOCK == 2 && $state{'superuser'} ne 'yes') { # **** 2020-09-16 TVu
+      print '<center><br><font color="#ffffff"><h1>' .
+	  'Sorry, Sauron is temporarily closed</h1></font></center>';
+      logout(0);
+  }
 }
 
 
@@ -741,6 +810,9 @@ sub left_menu($) {
       next if ($$l[$i][2] =~ /(^|\|)root/ && $state{superuser} ne 'yes');
       next if ($$l[$i][2] =~ /(^|\|)noframes/ && $frame_mode);
       next if ($$l[$i][2] =~ /(^|\|)frames/ && not $frame_mode);
+      next if ($$l[$i][2] =~ /(^|\|)scname/ && check_perms('flags','SCNAME',1)); # 2020-09-08 TVu
+# Show / hide menuitem based on auth level.
+      next if ($$l[$i][2] =~ /(^|\|)(\d{1,3})$/ && check_perms('level', $2, 1));
       $name=$$l[$i][0];
       $ref=$$l[$i][1];
       $u="$url";
@@ -840,7 +912,6 @@ sub frame_2() {
   exit 0;
 }
 
-
 sub init_plugins($) {
   my($plugins) = @_;
 
@@ -851,20 +922,27 @@ sub init_plugins($) {
     $file="$PROG_DIR/plugins/$plugs[$i].conf";
     $file2="$PROG_DIR/plugins/$plugs[$i].pm";
     if (-r $file) {
+      $ALEVEL = 0; # Default required authorization level to use plugin.
       $ret = do "$file";
       if ($@) {
 	logmsg("notice","parse error in plugin info: $file");
       } elsif (not $ret) {
 	logmsg("notice", "failed to process plugin info: $file");
       }
-
+# Check authorization level of user and plugin. TVu
+      next unless (!check_perms('level', $ALEVEL, 1));
       # add commands defined by plugin into appropriate menu...
       for $j (0..$#{$MENUDATA}) {
 	push @{$menuhash{$MENU}}, [$$MENUDATA[$j][0],$$MENUDATA[$j][1]];
 
 	# add hook for command (if necessary)...
-	if ($$MENUDATA[$j][2]) {
-	  $menuhooks{$MENU}->{$$MENUDATA[$j][2]}=[$NAME,$file2];
+#	if ($$MENUDATA[$j][2]) {
+#	  $menuhooks{$MENU}->{$$MENUDATA[$j][2]}=[$NAME,$file2];
+
+# Add hooks for all 'sub's (it is necessary).
+	for my $ind1 (2..$#{$$MENUDATA[$j]}) { # TVu 2021-04-21
+	  $menuhooks{$MENU}->{$$MENUDATA[$j][$ind1]}=[$NAME,$file2];
+
 	}
       }
     }
@@ -873,4 +951,3 @@ sub init_plugins($) {
 }
 
 # eof
-

@@ -1,9 +1,10 @@
-#!/usr/bin/perl -I/usr/local/sauron
+#!/usr/bin/perl -I/opt/sauron
 #
 # moduser - utility to modify user/group rights
 #
+# Copyright (c) Michal Kostenec <kostenec@civ.zcu.cz> 2013-2014.
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000-2004.
-# $Id$
+# $Id:$
 #
 require 5;
 use Time::Local;
@@ -27,7 +28,7 @@ $mdate = time;
 
 %addmodes=('group'=>0,'server'=>1,'zone'=>2,'net'=>3,'hostmask'=>4,'ipmask'=>5,
 	   'level'=>6,'elimit'=>7,'defdept'=>8,'tmplmask'=>9,
-	   'grpmask'=>10,'delmask'=>11,'rhf'=>12,'flag'=>13);
+	   'grpmask'=>10,'delmask'=>11,'rhf'=>12,'flag'=>13,'defhost'=>14);
 
 %masktypes=(4=>'Hostmask',9=>'Template',10=>'Group',11=>'Delete');
 
@@ -60,7 +61,7 @@ sub list_privs($$) {
 	   "ORDER BY b.name",\@d);
   for $i (0..$#d) {
     $d[$i][0] =~ s/\s+$//;
-    printf "%-6s %-8s %-25s %s\n",$d[$i][2],"server",$d[$i][1],$d[$i][0];
+    printf "%-6s %-8s %-44s %s\n",$d[$i][2],"server",$d[$i][1],$d[$i][0];
   }
 
   db_query("SELECT a.rule,c.name||':'||b.name,a.id " .
@@ -69,7 +70,7 @@ sub list_privs($$) {
 	   " a.ref=$id AND a.type=$utype ORDER BY b.name",\@d);
   for $i (0..$#d) {
     $d[$i][0] =~ s/\s+$//;
-    printf "%-6s %-8s %-25s %s\n",$d[$i][2],"zone",$d[$i][1],$d[$i][0];
+    printf "%-6s %-8s %-44s %s\n",$d[$i][2],"zone",$d[$i][1],$d[$i][0];
   }
 
   db_query("SELECT a.rule,b.net,a.id,c.name " .
@@ -78,7 +79,7 @@ sub list_privs($$) {
            "  AND a.ref=$id AND a.type=$utype ORDER BY b.net",\@d);
   for $i (0..$#d) {
     $d[$i][0] =~ s/\s+$//;
-    printf "%-6s %-8s %-25s %s\n",$d[$i][2],"net",$d[$i][3].':'.$d[$i][1],
+    printf "%-6s %-8s %-44s %s\n",$d[$i][2],"net",$d[$i][3].':'.$d[$i][1],
       '(IP constraint)';
   }
 
@@ -90,7 +91,7 @@ sub list_privs($$) {
 	   "WHERE a.rtype=4 AND a.ref=$id AND a.type=$utype ORDER BY id",\@d);
   for $i (0..$#d) {
     $d[$i][0] =~ s/\s+$//;
-    printf "%-6s %-8s %-25s %s\n",$d[$i][1],"hostmask",
+    printf "%-6s %-8s %-44s %s\n",$d[$i][1],"hostmask",
       ($d[$i][2] ? $d[$i][2] .":" : "") . $d[$i][0] ,
       "(hostname constraint)";
   }
@@ -99,7 +100,7 @@ sub list_privs($$) {
 	   "WHERE a.rtype=5 AND a.ref=$id AND a.type=$utype ORDER BY id",\@d);
   for $i (0..$#d) {
     $d[$i][0] =~ s/\s+$//;
-    printf "%-6s %-8s %-25s %s\n",$d[$i][1],"IP-mask",$d[$i][0],
+    printf "%-6s %-8s %-44s %s\n",$d[$i][1],"IP-mask",$d[$i][0],
       "(IP constraint)";
   }
 
@@ -107,7 +108,7 @@ sub list_privs($$) {
 	   "WHERE a.rtype=6 AND a.ref=$id AND a.type=$utype ORDER BY id",\@d);
   for $i (0..$#d) {
     $d[$i][0] =~ s/\s+$//;
-    printf "%-6s %-8s %-25s %s\n",$d[$i][1],"Level",$d[$i][0],
+    printf "%-6s %-8s %-44s %s\n",$d[$i][1],"Level",$d[$i][0],
       "(privilege level)";
   }
 
@@ -115,7 +116,7 @@ sub list_privs($$) {
 	   "WHERE a.rtype=7 AND a.ref=$id AND a.type=$utype ORDER BY id",\@d);
   for $i (0..$#d) {
     $d[$i][0] =~ s/\s+$//;
-    printf "%-6s %-8s %-25s %s\n",$d[$i][1],"ELimit",$d[$i][0],
+    printf "%-6s %-8s %-44s %s\n",$d[$i][1],"ELimit",$d[$i][0],
       "(expiration limit)";
   }
 
@@ -123,15 +124,23 @@ sub list_privs($$) {
 	   "WHERE a.rtype=8 AND a.ref=$id AND a.type=$utype ORDER BY id",\@d);
   for $i (0..$#d) {
     $d[$i][0] =~ s/\s+$//;
-    printf "%-6s %-8s %-25s %s\n",$d[$i][1],"DefDept",$d[$i][0],
+    printf "%-6s %-8s %-44s %s\n",$d[$i][1],"DefDept",$d[$i][0],
       "(default department string)";
+  }
+
+  db_query("SELECT a.rule,a.id  FROM user_rights a " .
+	   "WHERE a.rtype=14 AND a.ref=$id AND a.type=$utype ORDER BY id",\@d);
+  for $i (0..$#d) {
+    $d[$i][0] =~ s/\s+$//;
+    printf "%-6s %-8s %-44s %s\n",$d[$i][1],"DefHost",$d[$i][0],
+      "(default hostname template)";
   }
 
   db_query("SELECT a.rule,a.id  FROM user_rights a " .
 	   "WHERE a.rtype=9 AND a.ref=$id AND a.type=$utype ORDER BY id",\@d);
   for $i (0..$#d) {
     $d[$i][0] =~ s/\s+$//;
-    printf "%-6s %-8s %-25s %s\n",$d[$i][1],"TmplMask",$d[$i][0],
+    printf "%-6s %-8s %-44s %s\n",$d[$i][1],"TmplMask",$d[$i][0],
       "(Template mask)";
   }
 
@@ -139,7 +148,7 @@ sub list_privs($$) {
 	   "WHERE a.rtype=10 AND a.ref=$id AND a.type=$utype ORDER BY id",\@d);
   for $i (0..$#d) {
     $d[$i][0] =~ s/\s+$//;
-    printf "%-6s %-8s %-25s %s\n",$d[$i][1],"GrpMask",$d[$i][0],
+    printf "%-6s %-8s %-44s %s\n",$d[$i][1],"GrpMask",$d[$i][0],
       "(Group mask)";
   }
 
@@ -151,7 +160,7 @@ sub list_privs($$) {
           "WHERE a.rtype=11 AND a.ref=$id AND a.type=$utype ORDER BY id",\@d);
   for $i (0..$#d) {
     $d[$i][0] =~ s/\s+$//;
-    printf "%-6s %-8s %-25s %s\n",$d[$i][1],"Delmask",
+    printf "%-6s %-8s %-44s %s\n",$d[$i][1],"Delmask",
       ($d[$i][2] ? $d[$i][2] .":" : "") . $d[$i][0] ,
       "(Host delete mask)";
   }
@@ -160,7 +169,7 @@ sub list_privs($$) {
 	   "WHERE a.rtype=12 AND a.ref=$id AND a.type=$utype ORDER BY id",\@d);
   for $i (0..$#d) {
     $d[$i][0] =~ s/\s+$//;
-    printf "%-6s %-8s %-25s %s\n",$d[$i][1],"RHF",$d[$i][0],
+    printf "%-6s %-8s %-44s %s\n",$d[$i][1],"RHF",$d[$i][0],
       ($d[$i][2] ? 'optional' : 'required');
   }
 
@@ -168,64 +177,78 @@ sub list_privs($$) {
 	   "WHERE a.rtype=13 AND a.ref=$id AND a.type=$utype ORDER BY id",\@d);
   for $i (0..$#d) {
     $d[$i][0] =~ s/\s+$//;
-    printf "%-6s %-8s %-25s %s\n",$d[$i][1],"Flag",$d[$i][0],
+    printf "%-6s %-8s %-44s %s\n",$d[$i][1],"Flag",$d[$i][0],
            '(privilege flag)';
   }
 }
 
 ##############################################
 
-GetOptions("help|h","list!","add:s","delall!","del=s","passwd:s",
+GetOptions("help|h","list:s","add:s","delall!","del=s","passwd:s",
 	   "name=s","superuser=s","lock!","unlock!","edit!",
-	   "email=s","comment=s","expiration=s");
+	   "email=s","comment=s","expiration=s",
+	   "set=s", # Set added 2017-11-14 TVu
+	   "username=s"); # Username added 2019-02-04 TVu
 
 $opt_user=$ARGV[0];
 
-if ($opt_help || ($opt_user eq '' &&  $opt_list eq '')) {
+# if ($opt_help || ($opt_user eq '' &&  $opt_list eq '')) {
+if ($opt_help || ($opt_user eq '' && !defined $opt_list)) {
   print "syntax: $0 <$fooname> [options]\n\n";
   print " Option descriptions: \n";
 
-  print "   --name=\"user name\"                    full user name\n",
+  print
+       "   --username=<username>                 change username\n",
+       "   --name=\"user name\"                    full user name\n",
        "   --email=<address>                     set user's email address\n",
        "   --comment=<text>                      set user comments\n",
        "   --expiration=<DD-MM-YYYY> | NONE      set account expiration\n",
        "   --superuser=<yes|no>                  toggle superuser flag\n",
        "   --passwd                              set password (interactive)\n",
        "   --passwd=<password>                   set password\n",
-       "   --list                                list all $fooname\n",
+       "   --set=zone,<servername>,<zonename>    set default server & zone\n",
+       "   --list                                list all ${fooname}s\n",
        "   --lock                                lock account\n",
        "   --unlock                              unlock account\n\n"
          unless ($modgroup);
 
   # "groups in groups" not done yet ...
-  print "   --list                                list all groups\n"
+  print "   --list                                list all groups\n",
+        "   --list=\"members,<groupname>\"          list users in a group\n\n"
       if ($modgroup);
 
-  print "                                         Priviliges\n",
+  print "   --name=<name>                         rename group\n",
+        "   --comment='comment'                   change group comment\n\n"
+      if ($modgroup);
+
+  print "                                         Privileges\n",
         "   --add                                 interactive add\n";
-  print	"   --add=\"group,<groupname>\"             add group membership\n" 
+  print	"   --add=\"group,<groupname>\"             add group membership\n"
       unless ($modgroup);
 
   print "   --add=\"server,<servername>,<mode>\"    add server (mode=R|RW|RWX)\n",
-        "   --add=\"zone,<servername>:<zonename>,<mode>\"\n",
+        "   --add=\"zone,<servername>+<zonename>,<mode>\"\n",
         "                                         add zone (mode=R|RW|RWX)\n",
-        "   --add=\"net,<servername>:<net>\"        add net (CIDR)\n",
+        "   --add=\"net,<servername>+<net>\"        add net (CIDR)\n",
         "   --add=\"hostmask,<regex>\"              add global hostname mask\n",
-        "   --add=\"hostmask,<servername>:<zonename>,<regex>\"\n",
+        "   --add=\"hostmask,<servername>+<zonename>,<regex>\"\n",
         "                                         add zone-bound hostname mask\n",
         "   --add=\"ipmask,<ipmask>\"               add IP-mask\n",
         "   --add=\"level,<level>\"                 add priv.level\n",
         "   --add=\"elimit,<days>\"                 add expiration limit\n",
-        "   --add=\"def_dept,<string>\"             add default dept for hosts\n",
+        "   --add=\"defdept,<string>\"             add default dept for hosts\n",
+        "   --add=\"defhost,<template>\"            add default name for new hosts\n",
+        "                                         use %{id} to include host id in host name\n",
+        "                                         e.g. h%{id}.exam -> h12045.exam\n",
         "   --add=\"tmplmask,<regex>\"              add Template-mask\n",
         "   --add=\"grpmask,<regex>\"               add Group-mask\n",
         "   --add=\"delmask,<regex>\"               add global Host delete mask\n",
-        "   --add=\"delmask,<servername>:<zonename>,<regex>\"\n",
+        "   --add=\"delmask,<servername>+<zonename>,<regex>\"\n",
         "                                         add zone-bound delete mask\n",
-        "   --add=\"rhf,<field>=0|1\"               add RequiredHostField-setting\n",
+        "   --add=\"rhf,<field>=0|1\"               add RequiredHostField setting\n",
 	"   --add=\"flag,<name>\"                   add Privilege flag:\n",
         "                                            CNAME,SCNAME,AREC,MX,DELEG,\n",
-        "                                            DHCP,PRINTER,SRV,RESERV\n",
+        "                                            DHCP,PRINTER,SRV,RESERV,TTL\n",
         "   --del=<id>                            delete rule by id\n",
         "   --delall                              delete all rules\n",
         "\n";
@@ -240,20 +263,48 @@ $opt_edit = ($opt_edit ? 1 : 0);
 db_connect();
 db_debug(0);
 
-if ($opt_list) {
+if (defined $opt_list) {
   if ($modgroup) {
-    print "Name                                     Comments\n";
-    print "---------------------------------------- ----------------------\n";
-    undef @q;
-    db_query("SELECT id,name,comment FROM user_groups ORDER BY name;",\@q);
-    for $i (0..$#q) {
-      printf "%-40s %-20s\n", $q[$i][1],$q[$i][2];
-    }
+      if ($opt_list ne '') {
+	  if ($opt_list =~ /^members?,(\S+)$/) { # Added "?" 2018-12-03 TVu
+	      $sql = "select u.username, u.name, u.email, u.id, to_char(u.expiration::abstime,'YYYY-MM-DD') " .
+		  "from user_groups ug, user_rights ur, users u " .
+		  "where ug.name = '$1' and ug.id = ur.rref and ur.rtype = 0 " .
+		  "and ur.type = 2 and ur.ref = u.id order by u.username;";
+	      undef @q;
+	      db_query($sql, \@q);
+	      print "Members of user group $1\n\n";
+# Name is in the last column to avoid alignment problems caused by multi-byte Unicode characters.
+	      print "Login    Email                     Flags  Expiration Name                     \n";
+	      print "-------- ------------------------- ------ ---------- -------------------------\n";
+	      for $i (0..$#q) {
+		  $q[$i][4] =~ s/1970-01-01//; # 2018-12-03 TVu
+		  printf "%-8s %-25s %-6s %10s %-25s\n", $q[$i][0], substr($q[$i][2], 0, 25),
+#		  ($q[$i][3] =~ /^(t|1)$/ ? 'Yes' : '', substr($q[$i][1], 0, 25));
+		  get_user_status($q[$i][3]), $q[$i][4], substr($q[$i][1], 0, 25);
+	      }
+	  } else {
+	      fatal("Bad parameters for --list");
+	  }
+	  exit 0;
+      }
+      print "Name                                     Comments\n";
+      print "---------------------------------------- ----------------------\n";
+      undef @q;
+      db_query("SELECT id,name,comment FROM user_groups ORDER BY name;",\@q);
+      for $i (0..$#q) {
+	  printf "%-40s %-20s\n", $q[$i][1],$q[$i][2];
+      }
   }
   else {
-    print 
-     "Login      Group      Name                      Email                  Superusr\n",
-     "---------- ---------- ------------------------- ---------------------- --------\n";
+      if ($opt_list ne '') { # ****
+	  print "No parameters allowed for --list\n";
+	  exit 0;
+      }
+# Name is in the last column to avoid alignment problems caused by multi-byte Unicode characters.
+    print
+     "Login    Group        Email                     Flags  Name\n",
+     "-------- ------------ ------------------------- ------ -------------------------\n";
     undef @q;
     db_query("SELECT id,username,name,superuser,comment,email FROM users ".
 	     "ORDER BY username;",\@q);
@@ -261,10 +312,11 @@ if ($opt_list) {
       db_query("SELECT g.name FROM user_groups g, user_rights r " .
                "WHERE g.id=r.rref AND r.rtype=0 AND r.type=2 AND " .
 	       " r.ref=$q[$i][0] ORDER BY g.id",\@qq);
-      $group=substr($qq[0][0],0,10);
-      printf "%-10s %-10s %-25s %-25s %-5s\n", 
-              $q[$i][1],$group,substr($q[$i][2],0,25),
-	      substr($q[$i][5],0,25),($q[$i][3] =~ /^(t|1)$/ ? 'Yes' : '');
+      $group=substr($qq[0][0],0,12);
+      printf "%-8s %-12s %-25s %-6s %-25s\n",
+      $q[$i][1],$group, substr($q[$i][5],0,25),
+#     ($q[$i][3] =~ /^(t|1)$/ ? 'Yes' : ''), substr($q[$i][2],0,25);
+      get_user_status($q[$i][0]), substr($q[$i][2],0,25);
     }
   }
 
@@ -277,15 +329,40 @@ if ($modgroup) {
   undef @q;
   db_query("SELECT id,comment FROM user_groups " .
 	   "WHERE name='$opt_user';",\@q);
-  fatal("Cannot find usergroup '$opt_user' from user_groups table!") 
+  fatal("Cannot find usergroup '$opt_user' from user_groups table!")
     if (@q < 1);
 
   $id=$q[0][0];
   $utype=1;
 
   print "\n Groupname: $opt_user (id=$id)\n",
-        "   Comment: $q[0][1]\n\n";
+        "   Comment: $q[0][1]\n";
 
+# Change name. 2017-03-20 TVu
+  db_begin() if ($opt_name || $opt_comment); # if 2018-12-03 TVu
+  if ($opt_name) {
+      fatal("Invalid groupname '$opt_name'!")
+	  unless ($opt_name =~ /^[a-z0-9_\-]+$/);
+      $res = db_exec("UPDATE user_groups SET name = '$opt_name' " .
+		     "WHERE id = $id;");
+      fatal("Cannot update user group name!") if ($res < 0);
+      print "User group name successfully changed to $opt_name.\n";
+# record history.
+      $res = update_history(-1, -1, 6,            # No UID. No SID. 6 = User group changes.
+			    'UPDATE: User group', # Action.
+			    "Name changed from $opt_user to $opt_name (login: " . getlogin(). ')', # Info
+			    $id);                 # Ref.
+      if ($res) { fatal("Cannot update group history: $res"); }
+  }
+# Change comment. 2017-03-20 TVu
+  if ($opt_comment) {
+    $res = db_exec("UPDATE user_groups SET comment = '$opt_comment' " .
+		   "WHERE id = $id;");
+    fatal("Cannot update user group comment!") if ($res < 0);
+    print "User group comment successfully changed to $opt_comment.\n";
+  }
+  fatal("Commit failed!") if (($opt_name || $opt_comment) && db_commit() < 0);
+  print "\n";
 } else {
   undef @q;
   db_query("SELECT id,name,superuser,comment,password FROM users " .
@@ -295,6 +372,16 @@ if ($modgroup) {
   $id=$q[0][0];
   $pwd=$q[0][4];
   $utype=2;
+
+  if ($opt_username) { # 2019-02-04 TVu
+      fatal("Invalid username '$opt_username'!")
+	  unless ($opt_username =~ /^[a-z0-9]{1,8}$/);
+      $res = db_exec("UPDATE users SET username = '$opt_username' " .
+		     "WHERE id = $id;");
+      fatal("Cannot update user's username!") if ($res < 0);
+      print "User's username successfully changed to $opt_username.\n";
+      $opt_user = $opt_username;
+  }
 
   if ($opt_name) {
     $res=db_exec("UPDATE users SET name='$opt_name', " .
@@ -358,6 +445,25 @@ if ($modgroup) {
     print "User password successfully updated.\n";
   }
 
+  if ($opt_set) {
+      $opt_set =~ /^([^,]+),.+/;
+      if ($1 eq 'zone') {
+	  $opt_set =~ /^zone,([^,]+),(.+)$/;
+	  fatal("Invalid arguments for option --set=zone") if (!$2);
+	  $sid = get_server_id($1);
+	  fatal("Cannot find server '$1'") unless ($sid > 0);
+	  $zid = get_zone_id($2, $sid);
+	  fatal("Cannot find zone '$2' in server '$1'") unless ($zid > 0);
+	  $res = db_exec("update users set server = $sid, zone = $zid, " .
+			 "muser = '$user', mdate = '$mdate' " .
+			 "where id = $id;");
+	  fatal("Cannot update default server and zone!") if ($res < 0);
+	  print "Default server and zone successfully updated.\n";
+      } else {
+	  fatal("Invalid arguments for option --set");
+      }
+  }
+
   if ($opt_lock) {
     if ($pwd =~ /^LOCKED/) {  fatal("account already locked!"); }
     $pwd="LOCKED:$pwd";
@@ -380,7 +486,7 @@ if ($modgroup) {
   undef @q;
   db_query("SELECT u.id,u.name,u.superuser,u.comment,u.password,-1, " .
 	   " u.cdate,u.cuser,u.mdate,u.muser,u.expiration,u.email, ".
-	   " u.last_from,u.last,u.last_pwd " .
+	   " u.last_from,u.last,u.last_pwd, u.server, u.zone " .
 	   "FROM users u " .
 	   "WHERE u.username='$opt_user';",\@q);
   fatal("Cannot find user '$opt_user' from users table!") if (@q < 1);
@@ -401,6 +507,20 @@ if ($modgroup) {
   $email=$q[0][11];
   $last_from=($q[0][13] > 0 ? localtime($q[0][13])." from $q[0][12]" : '');
 
+# Default server & zone 2017-11-15 TVu
+  $sid = $q[0][15];
+  $zid = $q[0][16];
+  undef @res;
+  if ($sid != -1) {
+      db_query("select name from servers where id = $sid;", \@res);
+  }
+  $ser_name = $res[0][0] || '';
+  undef @res;
+  if ($sid != -1 && $zid != 1) {
+      db_query("select name from zones where server = $sid and id = $zid;", \@res);
+  }
+  $zon_name = $res[0][0] || '';
+
   db_query("SELECT g.id,g.name,r.id FROM user_groups g, user_rights r " .
 	   "WHERE g.id=r.rref AND r.rtype=0 AND r.type=2 AND " .
 	   " r.ref=$id ORDER BY g.id",\@groups);
@@ -414,6 +534,8 @@ if ($modgroup) {
         "           longname: $longname\n",
         "              email: $email\n",
         "               info: $comment\n",
+        "     default server: $ser_name\n",
+        "       default zone: $zon_name\n",
 	"             groups: $groupnames\n",
         "          superuser: " ,($q[0][2] =~ /^(t|1)$/ ? 'Yes':'No'), "\n",
 	"      passwd status: $status\n",
@@ -430,16 +552,16 @@ if ($modgroup) {
 
 unless (defined $opt_add || defined $opt_del || defined $opt_delall) {
   print
-    "ID     Type     Ref.                      Mode\n",
-    "------ -------- ------------------------- --------------------------------\n";
+    "ID     Type     Ref.                                         Mode\n",
+    "------ -------- -------------------------------------------- ---------------------------\n";
 
-  print "[User priviliges]\n" if ($utype == 2);
+  print "[User privileges]\n" if ($utype == 2);
   list_privs($id,$utype);
   print "\n";
 
   if ($utype == 2) {
     for $i (0..$#groups) {
-      printf "%-6d [Group (%s) priviliges]\n", $groups[$i][2],$groups[$i][1];
+      printf "%-6d [Group (%s) privileges]\n", $groups[$i][2],$groups[$i][1];
       list_privs($groups[$i][0],1);
     }
   }
@@ -450,15 +572,17 @@ unless (defined $opt_add || defined $opt_del || defined $opt_delall) {
 
 if (defined $opt_add) {
   unless ($opt_add) {
-  add_i:
+    db_begin();
+add_i:
     print "Record types:\t",
       "0=", ($modgroup ? "exit" : "group"),
       ",1=server,2=zone,3=net,4=hostmask,5=IP-mask,6=priv.level\n",
       "\t\t7=elimit,8=defdept,9=Template-mask,10=Group-mask,11=Delete-mask\n",
-      "\t\t12=ReqHostField,13=Flag\n",
+      "\t\t12=ReqHostField,13=Flag,14=defhost\n",
       "Record type: ";
     chomp($type = <STDIN>);
-    unless ($type ne '' && $type >= 0 && $type <=13) {
+    exit(0) if ($type == -1); # TVu 2018-10-09
+    unless ($type ne '' && $type >= 0 && $type <=14) {
       print "invalid type!\n";
       goto add_i;
     }
@@ -469,6 +593,11 @@ if (defined $opt_add) {
       db_query("SELECT id,name FROM user_groups WHERE name='$tmp';",\@d);
       if (@d < 1) { print "cannot find group: $tmp\n"; goto add_i; }
       $ref=$d[0][0];
+      $res = update_history(-1, -1, 5,            # No UID. No SID. 5 = User changes.
+		     'ADD: User to group', # Action.
+		     "Username: $opt_user, Group: $d[0][1] (login: " . getlogin(). ')', # Info
+		     $id);                 # Ref.
+      if ($res) { fatal("Cannot update user history: $res"); }
     }
     if ($type==1 || $type==2 || $type==3) {
       print "Enter Server name : ";
@@ -539,7 +668,7 @@ if (defined $opt_add) {
       $ref=-1;
     }
     elsif ($type==5) {
-      print "Enter IP mask (eg 192.162.1-2.*, 192.162.1-2.10-254): ";
+      print "Enter IP mask (eg 192.162.1-2.*, 192.162.1-2.10-254, 2001:db8:aa-ff:1428:a*c:57ab:*): ";
       chomp($tmp = <STDIN>);
       unless (check_ipmask($tmp,'')==1) {
 	  print "invalid IP-mask!\n"; goto add_i;
@@ -550,7 +679,7 @@ if (defined $opt_add) {
     elsif ($type==6) {
       print "Enter Privilege Level (0-999): ";
       chomp($tmp = <STDIN>);
-      unless (($tmp =~ /^\d+$/) && ($tmp < 999)) {
+      unless (($tmp =~ /^\d+$/) && ($tmp <= 999)) {
 	  print "invalid level\n"; goto add_i;
       }
       $mode=$tmp;
@@ -576,11 +705,11 @@ if (defined $opt_add) {
       $ref=-1;
     }
     elsif ($type==12) {
-      print "Enter Field Name (huser,dept,location,info,ether," .
+      print "Enter Field Name (huser,dept,location,info,ether,duid," .
 	    "asset_id,model,serial,misc): ";
       chomp($tmp = <STDIN>);
       $tmp =~ s/\s+|\s+$//g;
-      unless ($tmp =~ /^(huser|dept|location|info|ether|asset_id|model|serial|misc)$/) {
+      unless ($tmp =~ /^(huser|dept|location|info|ether|duid|asset_id|model|serial|misc)$/) {
 	print "Invalid field name\n"; goto add_i;
       }
       $mode=$tmp;
@@ -593,13 +722,21 @@ if (defined $opt_add) {
     }
     elsif ($type==13) {
       print "Enter Privilege Flag (cname,scname,arec,mx,deleg,dhcp," .
-	    "printer,srv,reserv): ";
+	    "printer,srv,reserv,ttl): ";
       chomp($tmp = <STDIN>);
       $tmp =~ s/\s+|\s+$//g;
       $tmp=uc($tmp);
-      unless ($tmp =~ /^(CNAME|SCNAME|AREC|MX|DELEG|GLUE|DHCP|PRINTER|SRV|RESERV)$/) {
+      unless ($tmp =~ /^(CNAME|SCNAME|AREC|MX|DELEG|GLUE|DHCP|PRINTER|SRV|RESERV|TTL)$/) {
 	print "Invalid flag name\n"; goto add_i;
       }
+      $mode=$tmp;
+      $ref=-1;
+    }
+    elsif ($type==14) {
+      print "Enter template for new hosts: ";
+      chomp($tmp = <STDIN>);
+      $tmp =~ s/\s+//g;
+      $tmp=lc($tmp);
       $mode=$tmp;
       $ref=-1;
     }
@@ -608,20 +745,27 @@ if (defined $opt_add) {
     $res=db_exec("INSERT INTO user_rights (type,ref,rtype,rref,rule) " .
 		 "VALUES($utype,$id,$type,$ref,$mode);");
     fatal("cannot insert record to user_rights table!") if ($res < 0);
+    fatal("commit failed!") if (db_commit()<0);
     exit;
   }
 
   fatal("invalid parameter '$opt_add' for add option!")
-    unless ($opt_add =~ /^(group|server|zone|net|hostmask|ipmask|level|elimit|defdept|tmplmask|grpmask|delmask|rhf|flag),([^,\s]+)(,(\S+))?$/);
+    unless ($opt_add =~ /^(group|server|zone|net|hostmask|ipmask|level|elimit|defdept|defhost|tmplmask|grpmask|delmask|rhf|flag),([^,\s]+)(,(\S+))?$/);
   $type=$addmodes{$1};
   $tmp=$2;
   $mode=$4;
+  db_begin();
   if ($type==0) {
     fatal("Nested groups not implemented!\n") if ($modgroup);
-    undef @d;                                                                  
-    db_query("SELECT id,name FROM user_groups WHERE name='$tmp';",\@d);        
+    undef @d;
+    db_query("SELECT id,name FROM user_groups WHERE name='$tmp';",\@d);
     fatal("cannot find group '$tmp'") if (@d < 1);
-    $ref=$d[0][0];          
+    $ref=$d[0][0];
+    $res = update_history(-1, -1, 5,            # No UID. No SID. 5 = User changes.
+			  'ADD: User to group', # Action.
+			  "Username: $opt_user, Group: $d[0][1] (login: " . getlogin(). ')', # Info
+			  $id);                 # Ref.
+    if ($res) { fatal("Cannot update user history: $res"); }
   }
   if ($type==1) {
     fatal("bad mode \"$mode\"!") unless ($mode =~ /^(R|RW|RWX)$/);
@@ -632,7 +776,7 @@ if (defined $opt_add) {
   }
   elsif ($type==2) {
     fatal("bad mode \"$mode\"!") unless ($mode =~ /^(R|RW|RWX)$/);
-    if ($tmp=~/^(\S+):(\S+)$/) {
+    if ($tmp=~/^(\S+)\+(\S+)$/) {
       $tmp1=$1;
       $tmp2=$2;
       $serverid=get_server_id($tmp1);
@@ -648,7 +792,7 @@ if (defined $opt_add) {
   }
   elsif ($type==3) {
     fatal("bad mode \"$mode\"!") unless ($mode =~ /^$/);
-    if ($tmp=~/^(\S+):(\S+)$/) {
+    if ($tmp=~/^(\S+)\+(\S+)$/) {
       $tmp1=$1;
       $tmp2=$2;
       $serverid=get_server_id($tmp1);
@@ -666,7 +810,7 @@ if (defined $opt_add) {
   elsif ($type==4 || $type==11) {
     $mode = $tmp if ($mode =~ /^$/);
     fatal("bad mode \"$mode\"!") unless ($mode =~ /^\S+$/);
-    if ($tmp=~/^(\S+):(\S+)$/) {
+    if ($tmp=~/^(\S+)\+(\S+)$/) {
       $tmp1=$1;
       $tmp2=$2;
       $serverid=get_server_id($tmp1);
@@ -677,7 +821,7 @@ if (defined $opt_add) {
     } else {
       $ref=-1;
     }
-  } 
+  }
   elsif ($type==9 || $type==10) {
     $mode=$tmp;
     $ref=-1;
@@ -689,7 +833,7 @@ if (defined $opt_add) {
   }
   elsif ($type==6) {
     fatal("invalid level '$tmp'!")
-	unless (($tmp =~ /^\d+$/) && ($tmp < 999));
+	unless (($tmp =~ /^\d+$/) && ($tmp <= 999));
     $mode=$tmp;
     $ref=-1;
   }
@@ -715,8 +859,14 @@ if (defined $opt_add) {
     $tmp =~ s/^\s+|\s+$//g;
     $tmp = uc($tmp);
     fatal("invalid field and/or mode '$tmp'")
-      unless ($tmp =~ /^(CNAME|SCNAME|AREC|MX|DELEG|GLUE|DHCP|PRINTER|SRV|RESERV)$/);
+      unless ($tmp =~ /^(CNAME|SCNAME|AREC|MX|DELEG|GLUE|DHCP|PRINTER|SRV|RESERV|TTL)$/);
     $mode=$1;
+    $ref=-1;
+  }
+  elsif ($type==14) {
+    $tmp =~ s/\s//g;
+    fatal("invalid default host '$tmp'") unless ($tmp =~ /%\{id\}/);
+    $mode=$tmp;
     $ref=-1;
   }
 
@@ -724,27 +874,72 @@ if (defined $opt_add) {
   $res=db_exec("INSERT INTO user_rights (type,ref,rtype,rref,rule) " .
 	       "VALUES($utype,$id,$type,$ref,$mode);");
   fatal("cannot insert record to user_rights table!") if ($res < 0);
+  fatal("commit failed!") if (db_commit()<0);
   print "Record successfully inserted.\n";
 }
 elsif (defined $opt_del) {
   fatal("invalid parameter to del option!")
     unless ($opt_del =~ /^(\d+)$/);
   $tmp=$1;
-
+  db_begin();
+# Get name of user group if we are removing user from group
+# (we can't know if we are doing that except by making this check).
+# This must be done before group membership is removed!
+  my @q;
+  if (!$modgroup) {
+      $sql = "select ug.name " .
+	  "from user_groups ug, user_rights ur " .
+	  "where ur.type = 2 and " .
+	  "ur.ref = $id and " .
+	  "ur.rtype = 0 and " .
+	  "ur.id = $tmp and " .
+	  "ug.id = ur.rref;";
+      db_query($sql, \@q);
+  }
   $res=db_exec("DELETE FROM user_rights " .
 	       "WHERE type=$utype AND ref=$id AND id=$tmp;");
   fatal("cannot delete record (id=$tmp) from user_rights!") if ($res <1);
   printf "%s rights record successfully deleted.\n",
     ($modgroup) ? "Group" : "User";
+# Write history if group name was found.
+  if ($q[0][0]) {
+      $res = update_history(-1, -1, 5,                 # No UID. No SID. 5 = User changes.
+			    'REMOVE: User from group', # Action.
+			    "Username: $opt_user, Group: $q[0][0] (login: " . getlogin(). ')', # Info
+			    $id);                      # Ref.
+      if ($res) { fatal("Cannot update user history: $res"); }
+  }
+  fatal("commit failed!") if (db_commit()<0);
   exit;
 }
 elsif ($opt_delall) {
   db_begin();
+# Get name of user group if we are removing user from group
+# (we can't know if we are doing that except by making this check).
+# This must be done before group membership is removed!
+  my @q;
+  if (!$modgroup) {
+      $sql = "select ug.name " .
+	  "from user_groups ug, user_rights ur " .
+	  "where ur.type = 2 and " .
+	  "ur.ref = $id and " .
+	  "ur.rtype = 0 and " .
+	  "ug.id = ur.rref;";
+      db_query($sql, \@q);
+  }
   $res=db_exec("DELETE FROM user_rights WHERE type=$utype AND ref=$id;");
   fatal("cannot delete all users records!") if ($res <1);
-  fatal("commit failed!") if (db_commit()<0);
   printf "All %s rights records successfully deleted.\n",
     ($modgroup) ? "group" : "user";
+# Write history if group names were found.
+  for my $ind1 (0..$#q) {
+      $res = update_history(-1, -1, 5,                 # No UID. No SID. 5 = User changes.
+			    'REMOVE: User from group', # Action.
+			    "Username: $opt_user, Group: $q[$ind1][0] (login: " . getlogin(). ')', # Info
+			    $id);                      # Ref.
+      if ($res) { fatal("Cannot update user history: $res"); }
+  }
+  fatal("commit failed!") if (db_commit()<0);
 }
 elsif ($opt_edit) {
   fatal("option not yet implemented");

@@ -1,7 +1,8 @@
 # Sauron::UtilZone.pm - BIND zone file reading/parsing routines
 #
+# Copyright (c) Michal Kostenec <kostenec@civ.zcu.cz> 2013-2014.
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000,2002.
-# $Id$
+# $Id:$
 #
 package Sauron::UtilZone;
 require Exporter;
@@ -12,7 +13,7 @@ use Sauron::Util;
 use strict;
 use vars qw($VERSION @ISA @EXPORT);
 
-$VERSION = '$Id$ ';
+$VERSION = '$Id:$ ';
 
 @ISA = qw(Exporter); # Inherit from Exporter
 @EXPORT = qw(
@@ -121,12 +122,12 @@ sub process_zonefile($$$$) {
       if (! valid_domainname($domain) && $ext_flag < 0);
 
     # class
-	
+
     fatal("$filename($.):Invalid or missing RR class\n")
 	unless ($class =~ /^(IN|CS|CH|HS)$/);
 
     # type
-    unless ($type =~ /^(SOA|A|AAAA|PTR|CNAME|MX|NS|TXT|HINFO|WKS|MB|MG|MD|MF|MINFO|MR|AFSDB|ISDN|RP|RT|X25|PX|SRV)$/) {
+    unless ($type =~ /^(SOA|A|AAAA|PTR|CNAME|MX|NS|TXT|HINFO|WKS|MB|MG|MD|MF|MINFO|MR|AFSDB|ISDN|RP|RT|X25|PX|SRV|NAPTR)$/) {
       if ($ext_flag > 0) {
 	unless ($type =~ /^(DHCP|ALIAS|AREC|ROUTER|PRINTER|BOOTP|INFO|ETHER2?|GROUP|BOOTP|MUUTA[0-9]|TYPE|SERIAL|PCTCP)$/) {
 	  print STDERR "$filename($.): unsupported RR type '$type'\n";
@@ -155,6 +156,8 @@ sub process_zonefile($$$$) {
 
 	      RP => [],
 	      SRV => [],
+
+          NAPTR => [],
 
 	      SERIAL => '',
 	      TYPE => '',
@@ -188,7 +191,7 @@ sub process_zonefile($$$$) {
     elsif ($type eq 'AAAA') {
       fatal("$filename($.): invalid AAAA record: $fline")
 	unless (ip_is_ipv6($_));
-      push @{$rec->{AAAA}}, $_;
+      push @{$rec->{AAAA}}, ip_compress_address(lc($_), 6);
     }
     elsif ($type eq 'SOA') {
       fatal("$filename($.): duplicate SOA record: $fline")
@@ -208,7 +211,7 @@ sub process_zonefile($$$$) {
       $rec->{SOA} = join(" ",@line);
     }
     elsif ($type eq 'PTR') {
-      push @{$rec->{PTR}}, $line[0];
+      push @{$rec->{PTR}}, lc($line[0]);
     }
     elsif ($type eq 'CNAME') {
       $rec->{CNAME} = add_origin($line[0],$origin);
@@ -255,6 +258,11 @@ sub process_zonefile($$$$) {
       s/\\\"/\"/g;
       push @{$rec->{TXT}}, $_;
     }
+    elsif ($type eq 'NAPTR') {
+      #print "NAPTR '$_'\n";
+      push @{$rec->{NAPTR}}, $_;
+    }
+
     #
     # Otto's (jyu.fi's) extensions for automagic generation of DHCP/BOOTP/etc
     # configs
@@ -282,7 +290,7 @@ sub process_zonefile($$$$) {
       $rec->{SERIAL} = $_;
     }
     elsif ($type eq 'ETHER') {
-      fatal("$filename($.): invalid ethernet address for $domain\n")
+      fatal("$filename($.): invalid MAC address for $domain\n")
 	unless (/^([0-9a-f]{12})$/i);
       $rec->{ETHER} = "\U$1";
     }

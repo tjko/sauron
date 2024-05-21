@@ -1,9 +1,9 @@
-#!/usr/bin/perl -I/usr/local/sauron
+#!/usr/bin/perl -I/opt/sauron
 #
 # import-jyu - imports nonstandard records from .hosts files
 #
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000.
-# $Id$
+# $Id:$
 #
 # fileformat (similar to BIND Master File format):
 # {<domain>|@|<blank>} [<ignored (ttl)>] [<ignored (class)] <type> <rdata>
@@ -21,7 +21,8 @@
 #       MUUTA[0-9]      <other information about machine>
 #
 require 5;
-use Net::Netmask;
+# use Net::Netmask;
+use NetAddr::IP; # For IPv6.
 use Getopt::Std;
 use Sauron::DB;
 use Sauron::Util;
@@ -190,10 +191,16 @@ foreach $net (keys %rhash) {
   $rec=$rhash{$net};
   $rec2=$zonedata{$rec->{NAME}};
 
-  $nm = new Net::Netmask($net,$rec->{MASK});
-  $n = $nm->desc();
-  $range1 = $nm->nth(1);
-  $range2 = $nm->nth(-2);
+#  $nm = new Net::Netmask($net,$rec->{MASK});
+#  $n = $nm->desc();
+#  $range1 = $nm->nth(1);
+#  $range2 = $nm->nth(-2);
+
+# For IPv6.
+  $nm = new NetAddr::IP($net,$rec->{MASK});
+  $n = $nm->cidr();
+  $range1 = $nm->first()->addr();
+  $range2 = $nm->last()->addr();
 
   undef @q;
   foreach $rtmp (@{$rec2->{DHCP}}) {
