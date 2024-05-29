@@ -3,7 +3,7 @@
 # export-hosts  generates list of IPs in use for given networks
 #
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>  2004.
-# Modifications and filtering  Riku Meskanen <mesrik@iki.fi>, 2006-2015.
+# Modifications and filtering  Riku Meskanen <mesrik@iki.fi>, 2006-2024.
 # $Id:$
 #
 require 5;
@@ -14,6 +14,7 @@ use Sauron::DB;
 use Sauron::Util;
 use Sauron::BackEnd;
 use Sauron::Sauron;
+use Data::Dumper;
 
 sub qstr($) {
     my($str)=@_;
@@ -254,6 +255,12 @@ for my $ind1 (1..$#q) { # ** 2022-02-24 TVu
     }
 }
 
+# need to see sql reply
+if (defined($debug) and $debug == 8) {
+    print  Dumper(@q);
+    exit(1);
+}
+
 $lastid=-1;
 
 unless ($noheader) {
@@ -267,17 +274,25 @@ unless ($noheader) {
 
 for $i (0..$#q) {
     @r=@{$q[$i]};
-    next if ($lastid == $r[0]);
+
+    #
+    # NB: $lastid used to check if multiple lines
+    #     are exported for a single host entry or
+    #     not.
+    #     Using --verbose exports all entries which
+    #     makes each row HOST-ID multivalue and not
+    #     unique value per exported line.
+    #
+    next if ($verbose == 0 && $lastid == $r[0]);
     next unless (match_zone($r[1]));
     next if ($group && $r[8] !~ /$group/);
-
     $domain=$r[4];
     next if ($domain eq '@');
 
     $domain.=".".$r[2] unless ($domain =~ /\.$/);
     $type=$r[3];
     $ip=$r[5];
-    if ($type == 4 || $type == 7) {
+    if ($type == 4 || $type == 7) { # if cname or arec
 	if ($r[9] > 0) {
 	    $alias=$r[10];
 	    $alias.= ".".$r[12] unless ($alias =~ /\.$/);
