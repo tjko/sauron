@@ -25,7 +25,10 @@ $CONF_FILE_PATH = '/usr/local/etc/sauron';
 	     print_browser_config
 	    );
 
-
+# A hack adapted from following page, mesrik - 2024
+# - https://stackoverflow.com/questions/627661/how-can-i-output-utf-8-from-perl
+binmode(STDOUT, ":utf8");          #treat as if it is UTF-8
+binmode(STDIN, ":encoding(utf8)"); #actually check if it is UTF-8
 
 sub sauron_version() {
   return "0.8.4 (beta 1)"; # current Sauron version
