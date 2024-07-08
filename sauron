@@ -1506,7 +1506,7 @@ sub print_cidr_list($$$$$) {
            ",a.name,k.name " .
 	   "FROM cidr_entries c LEFT JOIN acls a ON c.acl=a.id " .
 	   " LEFT JOIN keys k ON c.tkey=k.id " .
-	   "WHERE c.type=$type AND c.ref=$ref $family" .
+	   "WHERE c.type=$type AND c.ref=$ref $family " .
 	   "ORDER BY c.id;",\@q);
 
     error(db_errormsg()) if (db_errormsg());
@@ -2050,7 +2050,7 @@ print DHCPFILE "\n";
 	   " AND (coalesce(z.expiration, 0) <= 0 OR coalesce(z.expiration, 0) > " .
 	   " extract(epoch from now())) " . # Exclude expired zones.
 	   "AND h.ether NOTNULL AND z.server=$serverid " .
-	   "AND h.grp<0 AND family(a.ip) = 4" .
+	   "AND h.grp<0 AND family(a.ip) = 4 " .
 	   "ORDER BY a.ip;",\@ghosts);
   if (@ghosts > 0 ) {
     for $j (0 .. $#nets) {
