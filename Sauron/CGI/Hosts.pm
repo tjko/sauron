@@ -6,7 +6,7 @@
 #
 package Sauron::CGI::Hosts;
 require Exporter;
-use CGI qw/:standard *table -no_xhtml/;
+use CGI qw/:standard *table -utf8/;
 #use CGI qw/:cgi/; # enable when debugging with url()
 use Sauron::DB;
 use Sauron::CGIutil;

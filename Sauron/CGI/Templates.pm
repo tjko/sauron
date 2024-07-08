@@ -5,7 +5,7 @@
 #
 package Sauron::CGI::Templates;
 require Exporter;
-use CGI qw/:standard *table -no_xhtml/;
+use CGI qw/:standard *table -utf8/;
 use Sauron::DB;
 use Sauron::CGIutil;
 use Sauron::BackEnd;

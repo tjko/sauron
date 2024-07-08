@@ -6,7 +6,7 @@
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>, 2001-2005.
 # All Rights Reserved.
 #
-use CGI qw/:standard *table -no_xhtml/;
+use CGI qw/:standard *table -utf8/;
 use CGI::Carp 'fatalsToBrowser'; # debug stuff
 # use Net::Netmask;
 use NetAddr::IP; # For IPv6.

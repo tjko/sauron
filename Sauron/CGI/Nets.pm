@@ -6,7 +6,7 @@
 #
 package Sauron::CGI::Nets;
 require Exporter;
-use CGI qw/:standard *table -no_xhtml/;
+use CGI qw/:standard *table -utf8/;
 use Sauron::Util;
 use Sauron::DB;
 use Sauron::CGIutil;
