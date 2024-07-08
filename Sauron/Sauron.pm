@@ -7,12 +7,12 @@
 package Sauron::Sauron;
 require Exporter;
 use Sauron::Util;
-use MIME::Base64 qw(decode_base64); 
+use MIME::Base64 qw(decode_base64);
 use strict;
 use vars qw($VERSION $CONF_FILE_PATH @ISA @EXPORT);
 
 $VERSION = '$Id:$ ';
-$CONF_FILE_PATH = '/usr/local/etc/sauron';
+$CONF_FILE_PATH = '__CONF_FILE_PATH__';
 
 
 @ISA = qw(Exporter); # Inherit from Exporter
@@ -124,7 +124,7 @@ sub print_config() {
   print "DB_PASSWORD=",$main::DB_PASSWORD,"\n";
   print "SERVER_ID=",$main::SERVER_ID,"\n";
 
-  print "SAURON_KEY=".($main::SAURON_KEY ? 
+  print "SAURON_KEY=".($main::SAURON_KEY ?
 		       "<".(length($main::SAURON_KEY)*8)." bit key defined>" :
 		       "<undefined>")."\n";
   print "SAURON_DEBUG_MODE=",$main::SAURON_DEBUG_MODE,"\n";
@@ -184,7 +184,7 @@ sub load_config_file($$) {
   my($cfile,$modemask)=@_;
   my($file,$ret);
 
-  fatal("internal error in load_config_file(): file not specified") 
+  fatal("internal error in load_config_file(): file not specified")
       unless ($cfile);
   $modemask=0 unless ($modemask);
 
@@ -209,7 +209,7 @@ sub load_config_file($$) {
   }
 
   fatal("cannot read configuration file: $file") unless (-r $file);
-  
+
   my $filemode = (stat($file))[2];
   fatal("unsafe file permissions for: $file") if ($filemode & $modemask);
 
