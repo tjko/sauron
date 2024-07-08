@@ -1,6 +1,6 @@
 #########################################################################
-# $Id$ 
-# 
+# $Id$
+#
 # Makefile for sauron
 #
 Version = 0.7.3
@@ -45,7 +45,7 @@ RUNSQL = $(srcdir)/runsql
 
 SGMLTOOLS = /usr/bin/sgmltools
 
-CC        = @CC@ 
+CC        = @CC@
 XCPPFLAGS = @CPPFLAGS@
 CFLAGS    = @CFLAGS@ $(XCPPFLAGS) $(DEFS)
 LDFLAGS   = @LDFLAGS@
@@ -116,14 +116,14 @@ CGIFILES = cgi/sauron.cgi cgi/browser.cgi
 LOGOFILES = icons/logo.png icons/logo_large.png
 MISCFILES = COPYING COPYRIGHT
 
-DIRNAME = $(shell basename `pwd`) 
+DIRNAME = $(shell basename `pwd`)
 DISTNAME  = $(PKGNAME)-$(Version)
 BACKUPNAME = $(PKGNAME)-`date +%b%d`
 
-BINARIES = 
-OBJS = 
+BINARIES =
+OBJS =
 
-.c.o:	
+.c.o:
 	$(CC) $(CFLAGS) $(OPTIONS) -c -o $*.o $<
 
 
@@ -133,13 +133,13 @@ all:	docs
 #	@echo "All done"
 
 #parse-hosts-rows:  parse-hosts-rows.c
-#	$(CC) $(CFLAGS) -o parse-hosts-rows parse-hosts-rows.c $(LDFLAGS) $(LIBS) 
+#	$(CC) $(CFLAGS) -o parse-hosts-rows parse-hosts-rows.c $(LDFLAGS) $(LIBS)
 
 
 #strip:
 #	for i in $(PKGNAME) ; do [ -x $$i ] && $(STRIP) $$i ; done
 
-check:	
+check:
 	@echo "Checking modules..."
 	@for f in $(MODULES); do \
 		$(PERL) -w -c $$f; \
@@ -159,7 +159,7 @@ drop_tables:
 	$(RUNSQL) -v -n sql/drop_tables.sql
 	@echo "Database cleaned..."
 
-make_tables: 
+make_tables:
 	@echo "Creating tables..."
 	./createtables
 
@@ -172,7 +172,7 @@ init_tables:
 	$(RUNSQL) contrib/hinfo_hw.sql
 	$(RUNSQL) contrib/hinfo_sw.sql
 
-docs:	
+docs:
 	@echo "Generating docs..."
 	cd $(srcdir)
 	$(srcdir)/contrib/htmldoc-sql --title "Sauron: SQL table descriptions" $(SQL_TABLES) > doc/tables.html
@@ -281,7 +281,7 @@ install.man:
 
 
 # a tradition !
-love:	
+love:
 	@echo "Not War - Eh?"
 # eof
 
