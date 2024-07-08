@@ -655,11 +655,11 @@ sub login_auth() {
 	}
 
 	print h1("Login ok!"),p,"<TABLE><TR><TD>",
-	      startform(-method=>'POST',-action=>$s_url),$arg_str,
+	      start_form(-method=>'POST',-action=>$s_url),$arg_str,
 	      submit(-name=>'submit',-value=>'No Frames',
 		     autofocus=>'true'),end_form, # Autofocus 2020-06-16 TVu
 	      "</TD><TD> ",
-	      startform(-method=>'POST',-action=>"$s_url/frames"),$arg_str,
+	      start_form(-method=>'POST',-action=>"$s_url/frames"),$arg_str,
 	      submit(-name=>'submit',-value=>'Frames'),end_form,
 	      "</TD></TR></TABLE>";
 

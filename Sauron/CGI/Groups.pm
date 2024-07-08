@@ -219,7 +219,7 @@ sub menu_handler {
     db_query("select count(*) from (select h.id from hosts h where h.grp = $id union " .
 	     "select h.id from hosts h, group_entries ge where ge.grp = $id and ge.host = h.id) c;",\@q);
     print p,"$q[0][0] host records use this group.",
-	      startform(-method=>'GET',-action=>$selfurl);
+	      start_form(-method=>'GET',-action=>$selfurl);
     if ($q[0][0] > 0) {
       get_group_list($serverid,\%lsth,\@lst,$perms->{alevel},undef);
       print p,"Change those host records to point to: ",
@@ -241,7 +241,7 @@ sub menu_handler {
       return;
     }
     display_form(\%group,\%group_form);
-    print p,startform(-method=>'GET',-action=>$selfurl),
+    print p,start_form(-method=>'GET',-action=>$selfurl),
           hidden('menu','groups');
     print submit(-name=>'sub',-value=>'Edit'), "  ",
           submit(-name=>'sub',-value=>'Delete')

@@ -275,7 +275,7 @@ sub menu_handler {
       }
     }
     print h2("Change password:"),p,
-          startform(-method=>'POST',-action=>$selfurl),
+          start_form(-method=>'POST',-action=>$selfurl),
           hidden('menu','login'),hidden('sub','passwd');
     form_magic('passwd',\%h,\%change_passwd_form);
     print submit(-name=>'passwd_submit',-value=>'Change password')," ",
@@ -359,7 +359,7 @@ sub menu_handler {
       if (param('session_dec_submit')) { $session_id--; }
       param('session_sid', $session_id);
     }
-    print startform(-method=>'POST',-action=>$selfurl),
+    print start_form(-method=>'POST',-action=>$selfurl),
           hidden('menu','login'),hidden('sub','session');
     form_magic('session',\%h,\%session_id_form);
     print submit(-name=>'session_submit',-value=>'Select');
@@ -393,7 +393,7 @@ sub menu_handler {
     }
   }
   elsif ($sub eq 'history') {
-    print startform(-method=>'POST',-action=>$selfurl),
+    print start_form(-method=>'POST',-action=>$selfurl),
           hidden('menu','login'),hidden('sub','history');
     form_magic('history',\%h,\%history_form);
     print submit(-name=>'history_submit',-value=>'Search') . "\n";
@@ -540,21 +540,21 @@ sub menu_handler {
 	my $par_menu = param('menu');
 	my $par_sub = param('sub');
 	print "\n<table><tr><td>";
-	print startform(-method=>'GET', -action=>$selfurl);
+	print start_form(-method=>'GET', -action=>$selfurl);
 	param('menu', 'login'); print hidden('menu', 'login');
 	param('sub', 'Edit-user'); print hidden('sub', 'Edit-user');
 	print hidden('user_id', param('user_id'));
 	print submit(-name=>'foobar', -value=>'Edit');
 	print end_form,"\n";
 	print "</td>\n<td>";
-	print startform(-method=>'GET', -action=>$selfurl);
+	print start_form(-method=>'GET', -action=>$selfurl);
 	param('menu', 'login'); print hidden('menu', 'login');
 	param('sub', 'Copy-user'); print hidden('sub', 'Copy-user');
 	print hidden('user_id', param('user_id'));
 	print submit(-name=>'foobar', -value=>'Copy');
 	print end_form,"\n";
 	print "</td>\n<td>";
-	print startform(-method=>'GET', -action=>$selfurl);
+	print start_form(-method=>'GET', -action=>$selfurl);
 	param('menu', 'login'); print hidden('menu', 'login');
 	param('sub', 'Anonymize-user'); print hidden('sub', 'Anonymize-user');
 	print hidden('user_id', param('user_id'));

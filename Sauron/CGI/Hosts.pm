@@ -839,7 +839,7 @@ sub menu_handler {
 	  param('menu', 'hosts');
 	  param('sub', 'browse');
 	  param('bh_net', $net_cidr);
-	  print startform(-method=>'GET', -action=>$selfurl),
+	  print start_form(-method=>'GET', -action=>$selfurl),
 	  hidden('menu', 'hosts'), hidden('sub', 'browse'),
 	  hidden('bh_net', $net_cidr);
 	  print submit(-name=>'foobar', -value=>'Browse This Subnet');
@@ -849,7 +849,7 @@ sub menu_handler {
 
 	  param('menu', 'nets');
 	  param('net_id', $net_id);
-	  print startform(-method=>'GET', -action=>$selfurl),
+	  print start_form(-method=>'GET', -action=>$selfurl),
 	  hidden('menu', 'nets'), hidden('net_id', $net_id);
 	  print submit(-name=>'foobar', -value=>'Go to This Subnet');
 	  print end_form,"\n";
@@ -859,7 +859,7 @@ sub menu_handler {
 	  param('menu', 'nets');
 	  param('sub', 'Net Info');
 	  param('net_id', $net_id);
-	  print startform(-method=>'GET', -action=>$selfurl),
+	  print start_form(-method=>'GET', -action=>$selfurl),
 	  hidden('menu', 'nets'), hidden('sub', 'Net Info'),
 	  hidden('net_id', $net_id);
 	  print submit(-name=>'foobar', -value=>'Go to Net Info');
@@ -874,7 +874,7 @@ sub menu_handler {
 	  $host{alias} > 0 && $host{alias_d}) {
 	  param('menu', 'hosts');
 	  param('h_id', $host{alias});
-	  print startform(-method=>'GET', -action=>$selfurl),
+	  print start_form(-method=>'GET', -action=>$selfurl),
 	  hidden('menu', 'hosts'), hidden('h_id', $host{alias});
 	  print submit(-name=>'foobar', -value=>"Go to $host{alias_d}", autofocus=>'true');
 	  print end_form,"\n";
@@ -885,7 +885,7 @@ sub menu_handler {
 
       param('menu', 'nets');
       param('list', 'all');
-      print startform(-method=>'GET', -action=>$selfurl),
+      print start_form(-method=>'GET', -action=>$selfurl),
       hidden('menu', 'nets'), hidden('list', 'all');
       print submit(-name=>'foobar', -value=>'Go to Nets/All');
       print end_form,"\n";
@@ -1016,7 +1016,7 @@ sub menu_handler {
 #	$newip=$host{ip}[1][1];
 	$newip = param('select_ip');
       }
-      print p,startform(-method=>'GET',-action=>$selfurl),
+      print p,start_form(-method=>'GET',-action=>$selfurl),
             hidden('menu','hosts'),hidden('h_id',$id),hidden('sub','Move'),
             hidden('select_ip', param('select_ip')),
             hidden('move_confirm'),hidden('move_net'),p,"<TABLE>",
@@ -1099,7 +1099,7 @@ sub menu_handler {
     db_query("SELECT net FROM nets WHERE server=$serverid AND subnet=true " .
 	     "AND net >> '$ip';",\@q);
     print h2("Move host to another subnet or zone: ");
-    print p,startform(-method=>'GET',-action=>$selfurl),
+    print p,start_form(-method=>'GET',-action=>$selfurl),
           hidden('menu','hosts'),hidden('h_id',$id),
           hidden('select_ip', param('select_ip')),
           hidden('sub','Move'),
@@ -1279,7 +1279,7 @@ sub menu_handler {
       }
     }
 
-    print h2("Edit host:"),p,startform(-method=>'POST',-action=>$selfurl),
+    print h2("Edit host:"),p,start_form(-method=>'POST',-action=>$selfurl),
 	  hidden('menu','hosts'),hidden('sub','Edit');
     $host{hostid} = $host{id};
     $host{perms} = $perms;
@@ -1900,7 +1900,7 @@ sub menu_handler {
 
     if ($main::SAURON_NMAP_PROG && param('bh_type') == 1 &&
 	!check_perms('level',$main::ALEVEL_NMAP,1)) {
-	print startform(-method=>'POST',-action=>$selfurl),
+	print start_form(-method=>'POST',-action=>$selfurl),
 	hidden('menu','hosts'),hidden('sub','browse'),
 	hidden('bh_page',$page),
 	hidden('lastsearch','1'),hidden('pingsweep','1');
@@ -1914,13 +1914,13 @@ sub menu_handler {
 	param('menu', 'nets');
 	param('sub', 'Net Info');
 	print "</td><td>";
-	print "\n\n",startform(-method=>'GET',-action=>$selfurl),
+	print "\n\n",start_form(-method=>'GET',-action=>$selfurl),
 	hidden('menu','nets'),"\n",
 	hidden('net_id',get_net_by_cidr($serverid, param('bh_net'))),"\n";
 	print submit(-name=>'foobar',-value=>'Net');
 	print end_form,"\n\n";
 	print "</td><td>";
-	print startform(-method=>'GET',-action=>$selfurl),
+	print start_form(-method=>'GET',-action=>$selfurl),
 	hidden('menu','nets'),"\n",hidden('sub','Net Info'),"\n",
 	hidden('net_id',get_net_by_cidr($serverid, param('bh_net'))),"\n";
 	print submit(-name=>'foobar',-value=>'Net Info');
@@ -1932,7 +1932,7 @@ sub menu_handler {
     print "</td><td><div align=right>";
 
     my $csv_timestamp_v=[sort keys %csv_timestamp];
-    print startform(-method=>'POST',-action=>$selfurl),
+    print start_form(-method=>'POST',-action=>$selfurl),
 	    hidden('menu','hosts'),hidden('sub','browse'),
             hidden('lastsearch','1'),
             "CSV Timestamps&nbsp;",
@@ -2117,7 +2117,7 @@ sub menu_handler {
     }
     print h2("Add $host_types{$type} record");
 
-    print startform(-method=>'POST',-action=>$selfurl),
+    print start_form(-method=>'POST',-action=>$selfurl),
           hidden('menu','hosts'),hidden('sub','add'),hidden('type',$type);
     print hidden('copy_id') if (param('copy_id'));
     if (param('select_ip')) { # select_ip exists only when host is added using Copy TVu 15.03.2017
@@ -2191,7 +2191,7 @@ sub menu_handler {
 	if ($host{expiration} > 0 && $host{expiration} < time());
 # The following line was previously commented out. Why? TVu 20.09.2016
     $host_form{bgcolor}='#ccffff' if ($host{type}==101);
-    print p,startform(-method=>'GET',-action=>$selfurl),
+    print p,start_form(-method=>'GET',-action=>$selfurl),
           hidden('menu','hosts'),hidden('h_id',$id);
     print "<table width=\"99%\"><tr><td align=\"left\">",
           submit(-name=>'sub',-value=>'Refresh')," &nbsp; ";

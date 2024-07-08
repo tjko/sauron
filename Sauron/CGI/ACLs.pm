@@ -52,7 +52,7 @@ sub show_acl_record($$) {
     }
 
     display_form(\%acl,\%acl_form);
-    print p,startform(-method=>'GET',-action=>$url),
+    print p,start_form(-method=>'GET',-action=>$url),
           hidden('menu','acls'), hidden('acl_id',$id),
           submit(-name=>'sub',-value=>'Edit'),"  ",
           submit(-name=>'sub',-value=>'Delete'), end_form;
@@ -194,7 +194,7 @@ sub menu_handler {
       my (@q,@lst,%lsth);
       db_query("SELECT COUNT(id) FROM cidr_entries WHERE acl=$id",\@q);
       print p,"$q[0][0] rules use this ACL.",
-            startform(-method=>'GET',-action=>$selfurl);
+            start_form(-method=>'GET',-action=>$selfurl);
       if ($q[0][0] > 0) {
 	  get_acl_list($serverid,\%lsth,\@lst,0);
 	  print p,"Change references to this ACL to point to: ",

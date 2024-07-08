@@ -356,7 +356,7 @@ sub menu_handler {
   delete $srec{-1};
   shift @l;
   print h2("Select server:"),p,
-    startform(-method=>'POST',-action=>$selfurl),
+    start_form(-method=>'POST',-action=>$selfurl),
     hidden('menu','servers'),p,
     "Available servers:",p,
       scrolling_list(-width=>'100%',-name=>'server_list',
