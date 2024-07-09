@@ -537,7 +537,8 @@ sub login_form($$) {
         Tr,td("Login:"),td(textfield(-id=>"login",-name=>'login_name',-maxlength=>'8')),
         Tr,td("Password:"),
 #                  td(password_field(-name=>'login_pwd',-maxlength=>'30')),
-                   td(password_field(-name=>'login_pwd', -size=>40)), # 2020-10-19 TVu
+#                  td(password_field(-name=>'login_pwd', -size=>40)), # 2020-10-19 TVu
+                   td(password_field(-name=>'login_pwd', -maxlength=>'40', -size=>20)), # 2024-07-08 mesrik
               "</TABLE>",
         hidden(-name=>'login',-default=>'yes'),
         submit(-name=>'submit',-value=>'Login'),
