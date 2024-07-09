@@ -84,7 +84,7 @@ sub list_privs($$) {
   }
 
   db_query("SELECT a.rule,a.id,null FROM user_rights a " .
-	   "WHERE a.rtype=4 AND a.ref=$id AND a.type=$utype AND a.rref=-1" .
+	   "WHERE a.rtype=4 AND a.ref=$id AND a.type=$utype AND a.rref=-1 " .
 	   "UNION ALL " .
 	   "SELECT a.rule,a.id,z.name FROM user_rights a " .
 	   "JOIN zones z ON a.rref=z.id " .
@@ -153,7 +153,7 @@ sub list_privs($$) {
   }
 
   db_query("SELECT a.rule,a.id,null FROM user_rights a " .
-          "WHERE a.rtype=11 AND a.ref=$id AND a.type=$utype AND a.rref=-1" .
+          "WHERE a.rtype=11 AND a.ref=$id AND a.type=$utype AND a.rref=-1 " .
           "UNION ALL " .
           "SELECT a.rule,a.id,z.name FROM user_rights a " .
           "JOIN zones z ON a.rref=z.id " .
