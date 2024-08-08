@@ -9,7 +9,6 @@
 require 5;
 use Getopt::Long;
 use Time::Local;
-use Net::Netmask;
 use Sauron::DB;
 use Sauron::Util;
 use Sauron::BackEnd;
