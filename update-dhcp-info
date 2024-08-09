@@ -8,6 +8,7 @@
 #
 # RHEL7 Systemd journal logging - Riku Meskanen <mesrik@iki.fi>, 2018
 # RHEL7 More fixes, use strict & warnins too  - Riku Meskanen <mesrik@iki.fi>, 2019
+# Debian 11 RFC3999 timestamp etc. daemon.log format fixes - Riku Meskanen <mesrik@iki.fi>, 2022
 #
 use strict;
 use warnings;
@@ -121,6 +122,7 @@ foreach (@reverse_lines) { # Process array instead of file. ****
 
     if (/^(\S+)\s+(\d+)\s+(\d+):(\d+):(\d+)\s+((\S+)\s+dhcpd:(\s+\[.+?\])?|\[dhcpd\])\s(.*)$/) {
 	$m=$months{$1}; $d=$2; $hour=$3; $min=$4; $sec=$5; $host=$7; $rest=$9;
+ 	print "[$1] [$2] [$3]\n" if ($debug > 1);
 	if (defined $pm && $m > $pm) { # ****
 	    $year--;
 	    print "Year changed to ($year)\n" if ($verbose);
@@ -128,6 +130,12 @@ foreach (@reverse_lines) { # Process array instead of file. ****
 	$pm = $m;
 	$t=timelocal($sec,$min,$hour,$d,$m,$year);
     } elsif (/^<\d{2}>1\s+(\S+)\s+(\S+)\s+dhcpd\s+(?:\W+)(.*)$/) { # systemd log format
+	print "[$1] [$2] [$3]\n" if ($debug > 1);
+	$t = UnixDate(ParseDate("$1"),"%s");
+	($sec,$min,$hour,$d,$m,$year) = split(' ',strftime("%S %M %H %d %m %Y",localtime($t)));
+	$host = $2;
+	$rest = $3;
+    } elsif (/^<\d{2}>1\s(\S+)\s+(\S+)\s+dhcpd\s+\d+[^A-Z]+(.*)$/) { # rfc3999 systemd log format
 	print "[$1] [$2] [$3]\n" if ($debug > 1);
 	$t = UnixDate(ParseDate("$1"),"%s");
 	($sec,$min,$hour,$d,$m,$year) = split(' ',strftime("%S %M %H %d %m %Y",localtime($t)));
@@ -147,7 +155,7 @@ foreach (@reverse_lines) { # Process array instead of file. ****
     #print "$m,$d,$hour,$min,$sec,$host,$rest\n";
 
     if ($rest =~ /^(DHCPDISCOVER|BOOTREQUEST)\s+from\s+(\S+)\s+via\s+(.*)$/) {
-	#print "$1 $2 $3\n";
+	print "$1 $2 $3\n" if ($debug == 5);
 	$cmd=$1;
 	$mac=$2;
 	$via=$3;
@@ -155,19 +163,19 @@ foreach (@reverse_lines) { # Process array instead of file. ****
 	$cmd=$1;
 	$mac=$5;
 	$via=$6;
-	#print "$1 $2 ($4) $5 '$6' : $mac\n";
+	print "$1 $2 ($4) $5 '$6' : $mac\n" if ($debug == 6);
     } elsif ($rest =~ /^(DHCPACK|DHCPNAK)\s+on\s+(\S+)\s+to\s+(\S+)\s+via\s+(.*)$/) {
 	$cmd=$1;
 	$ip=$2;
 	$mac=$3;
 	$via=$4;
-	#print "$1 $2 $3 '$4'\n";
+	print "$1 $2 $3 '$4'\n" if ($debug == 6);
     } elsif ($rest =~ /^(BOOTREPLY)\s+for\s+(\S+)\s+to\s+(\S+)\s+\((\S+)\)\s+via\s+(.*)$/) {
 	$cmd=$1;
 	$ip=$2;
 	$mac=$4;
 	$via=$5;
-	#print "$1 $2 $3 $4 '$5'\n";
+	print "$1 $2 $3 $4 '$5'\n" if ($debug == 6);
     }
 
     next unless ($cmd eq 'DHCPACK' || $cmd eq 'BOOTREPLY');
@@ -222,7 +230,7 @@ $matchbyip=0;
 $notfounds=0;
 $notupdated=0;
 
-if (0) {
+if ($debug == 9) {
  print "-- hash --\n";
  print Dumper(%hash);
  print "-- \@q --\n";
@@ -233,7 +241,8 @@ if (0) {
 print "Matching hosts ...\n" if ($verbose);
 
 for $i (0..$#q) {
-    $mac  = uc($q[$i][1]);
+    #$mac  = uc($q[$i][1]);
+    $mac  = defined($q[$i][1]) ? uc($q[$i][1]) : "";
     $ip   = $q[$i][4];
     $type = $q[$i][5]; # ****
 
