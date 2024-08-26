@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# BFMI Install Debian 12 Sauron requred perl-libs - mesrik, 2024
+# BFMI Install Debian 12 Sauron required perl-libs - mesrik, 2024
 #
 
 prog=$(basename $0)
@@ -15,21 +15,22 @@ apt-get update
 # These perl moduleas are found std debian 12 repositories
 install_deb=(
     libcgi-pm-perl
-    libdbi-perl 
+    libdate-manip-perl
     libdbd-pg-perl
-    libnet-dns-perl 
+    libdbi-perl
+    libnet-dns-perl
     libnet-ip-perl
-    libnetaddr-ip-perl 
+    libnetaddr-ip-perl
 )
 apt-get -y install ${install_deb[@]}
 
-# Crypt::RC5 is not found debian12 repos and we need to check 
+# Crypt::RC5 is not found debian12 repos and we need to check
 # if we need to build .den and install it from CPAN <eh>
 
 lib_rc5=$(dpkg -l libcrypt-rc5-perl | grep -Ec '^ii +libcrypt-rc5-perl 2.00-1')
 
 if [ $lib_rc5 -ne 1 ]; then
-    # Using autodeb tool that unfortunately brings large amount 
+    # Using autodeb tool that unfortunately brings large amount
     # of packages, wich we can be remove afterwards. Instructions
     # can be found down there after build.
 
@@ -48,7 +49,7 @@ if [ $lib_rc5 -ne 1 ]; then
 	 Press <ENTER> to Username: and Password: if/when asked
 	 if your proxy does not need credentials.
 	========================================================
-	 Press <ENTER> to continue when ready, please. 
+	 Press <ENTER> to continue when ready, please.
 	MSG
 	read dummy
     fi
@@ -67,8 +68,8 @@ if [ $lib_rc5 -ne 1 ]; then
 	dpkg -i ./$debfile
 
 	# making sure packages needed are also there if any
-	apt-get install -f 
-	
+	apt-get install -f
+
 	# step up one dir
 	cd ..
 
@@ -82,7 +83,7 @@ if [ $lib_rc5 -ne 1 ]; then
 
 	# archive file name
 	archive_file=$savedir/$debname-$yyyymmdd.tar.gz
-	
+
 	tar cvzf $archive_file $tardir &&\
 	    rm -rf $tardir
 
@@ -91,13 +92,13 @@ if [ $lib_rc5 -ne 1 ]; then
 
 	cat <<-REPORT
 	======================================================
-	 Build deb:  $debfile
+	 Build deb:    $debfile
 	 Build arcive: $(basename $archive_file)
 	======================================================
-	 If you rather purge what dh-make-perl perl build tool
-	 brought in and left in system, save following lines 
+	 If you rather purge what dh-make-perl perl build-tool
+	 brought in and left in system. Save following lines
 	 to a file or just cut/paste and then execute it as root.
-	 
+
 	 -- 8< -- snip -- 8< --
 	 #!/usr/bin/env bash
 	 # clean up deb packets
@@ -106,25 +107,24 @@ if [ $lib_rc5 -ne 1 ]; then
 	 # cpan directories that were created
 	 cpancleanup=(
 	    ~/.cache/dh-make-perl
-	    ~/.cache/cme_dpkg_dependency 
+	    ~/.cache/cme_dpkg_dependency
 	    ~/.local/share/.cpan
 	 )
-	 # cpan cleanup 
+	 # cpan cleanup
 	 for dir in \${cpancleanup[@]} ; do
 	     [ -d \$dir ] && rm -rf \$dir
 	 done
-	 # purge just removed perl packages configs 
+	 # purge just removed perl packages configs
 	 dpkg --list | awk '/^rc .*-perl/ {print \$2}' | xargs -r dpkg --purge
 	 # eof
 	 -- 8< -- snip -- 8< --
-	 
-	 Those commands clean up what build tools imported and
-	 leaves system with state built deb & debian deb files
-	 installed together with .deb and .tar.gz archive in
-	 current directory.
-	 
+
+	 These commands clean up build-tools imported packages and
+	 leaves system wich preceeds build time with installed .deb
+	 and tar.gz archive containing used build environment.
+
 	 Cheers,
-	 
+
 	 :-) riku
 	REPORT
 
@@ -132,7 +132,7 @@ if [ $lib_rc5 -ne 1 ]; then
 	echo "$prog: $debfile build and install failed"
     fi
 else
-    dpkg -l libcrypt-rc5-perl
+    apt-get install libcrypt-rc5-perl
 fi
 
 # eof
