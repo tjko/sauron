@@ -267,7 +267,10 @@ if (defined $opt_list) {
   if ($modgroup) {
       if ($opt_list ne '') {
 	  if ($opt_list =~ /^members?,(\S+)$/) { # Added "?" 2018-12-03 TVu
-	      $sql = "select u.username, u.name, u.email, u.id, to_char(u.expiration::abstime,'YYYY-MM-DD') " .
+	      # $sql = "select u.username, u.name, u.email, u.id, to_char(u.expiration::abstime,'YYYY-MM-DD') " .
+	      $sql = "select u.username, u.name, u.email, u.id, " .
+		  # PostgreSQL abstime() was deprecated 7.x and finally removed version 12.x - mesrik, 2024
+	          "to_char('epoch'::timestamptz + (u.expiration) * '1 sec'::interval,'yyyy-mm-dd') " .
 		  "from user_groups ug, user_rights ur, users u " .
 		  "where ug.name = '$1' and ug.id = ur.rref and ur.rtype = 0 " .
 		  "and ur.type = 2 and ur.ref = u.id order by u.username;";
