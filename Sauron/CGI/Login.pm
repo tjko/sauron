@@ -150,7 +150,7 @@ sub list_privs($$) { # TVu 2021-03-15
   display_rows(\@d);
 
   db_query("SELECT 'Hostmask', a.rule, '(Hostname constraint)', null FROM user_rights a " .
-	   "WHERE a.rtype=4 AND a.ref=$id AND a.type=$utype AND a.rref=-1" .
+	   "WHERE a.rtype=4 AND a.ref=$id AND a.type=$utype AND a.rref=-1 " .
 	   "UNION ALL " .
 	   "SELECT 'Hostmask', a.rule, '(Hostname constraint)', z.name FROM user_rights a " .
 	   "JOIN zones z ON a.rref=z.id " .
@@ -165,7 +165,7 @@ sub list_privs($$) { # TVu 2021-03-15
   display_rows(\@d);
 
   db_query("SELECT 'DelMask', a.rule, '(Delete host mask)', null FROM user_rights a " .
-          "WHERE a.rtype=11 AND a.ref=$id AND a.type=$utype AND a.rref=-1" .
+          "WHERE a.rtype=11 AND a.ref=$id AND a.type=$utype AND a.rref=-1 " .
           "UNION ALL " .
           "SELECT 'DelMask', a.rule, '(Delete host mask)', z.name FROM user_rights a " .
           "JOIN zones z ON a.rref=z.id " .
