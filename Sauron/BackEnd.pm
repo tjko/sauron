@@ -748,8 +748,8 @@ sub update_textarea_field($$$$$$) { # Textarea 12 Apr 2017 TVu
     }
     $field = join("\n", @arr);
     if (!$field) { return 0; }
-    $sql = "insert into $table (" . (@ids[0] ? 'id,' : '') .
-	" $fields) values (" . (@ids[0] ? "@ids[0]," : '') .
+    $sql = "insert into $table (" . ($ids[0] ? 'id,' : '') .
+	" $fields) values (" . ($ids[0] ? "$ids[0]," : '') .
 	" " . db_encode_str($field) . ", $vals);";
     return -7 if (db_exec($sql) < 0);
 
@@ -3359,7 +3359,7 @@ sub get_vlan_by_name($$) {
 
 # Name network's ip policies.
 sub ip_policy_names($) {
-    my($ip, $m) = (@_[0] =~ /^(.+)\/(.+)$/);
+    my($ip, $m) = ($_[0] =~ /^(.+)\/(.+)$/);
     my %list = ( 0 => 'Lowest free', 10 => 'Highest free' );
     if ($ip =~ /:/) {
 	if ($m <= 80) { $list{20} = 'MAC based'; }
