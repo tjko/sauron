@@ -214,14 +214,360 @@ my %net_info_form6=(
 );
 
 
+sub show_vmps_record($$)
+{
+    my($state, $vm_id) = @_;
+
+    my $serverid = $state->{serverid};
+    my $selfurl = $state->{selfurl};
+    my $sub=param('sub');
+    my $v_id=param('vlan_id');
+
+    my($res, %vmps, %vlan);
+
+    return unless ($vm_id > 0);
+    return if (check_perms('level',$main::ALEVEL_VLANS));
+
+    if (get_vmps($vm_id,\%vmps)) {
+	alert2("Cannot get vmps record (id=$vm_id)");
+	return;
+    }
+    get_vlan_list($serverid,\%vlan_list_hash,\@vlan_list_lst);
+    $vlan_list_hash{-2}='--Default--';
+    unshift @vlan_list_lst, -2;
+
+    if ($sub eq 'Edit') {
+	return if (check_perms('superuser',''));
+	$res=edit_magic('vmps','VMPS Domain','vmps',\%vmps_form,
+			\&get_vmps,\&update_vmps,$vm_id);
+	return unless ($res == 2 || $res == 1);
+	get_vmps($vm_id,\%vmps);
+    }
+    elsif ($sub eq 'Delete') {
+	return if (check_perms('superuser',''));
+	$res=delete_magic('vmps','VMPS Domain','vmps',\%vmps_form,
+			  \&get_vmps,\&delete_vmps,$vm_id);
+	return unless ($res == 2);
+	get_vlan($v_id,\%vlan);
+    }
+
+    display_form(\%vmps,\%vmps_form);
+    print p,start_form(-method=>'GET',-action=>$selfurl),
+	hidden('menu','nets'),hidden('vmps_id',$vm_id);
+    print submit(-name=>'sub',-value=>'Edit'), "  ",
+	submit(-name=>'sub',-value=>'Delete'), " &nbsp;&nbsp;&nbsp; "
+	unless (check_perms('superuser','',1));
+    print end_form;
+}
+
+
+sub show_vlan_record($$)
+{
+  my($state, $v_id) = @_;
+
+  my $serverid = $state->{serverid};
+  my $selfurl = $state->{selfurl};
+  my $sub=param('sub');
+
+  my($res, %vlan);
+
+  return unless ($v_id > 0);
+  return if (check_perms('level',$main::ALEVEL_VLANS));
+
+  if (get_vlan($v_id,\%vlan)) {
+    alert2("Cannot get vlan record (id=$v_id)");
+    return;
+  }
+
+  if ($sub eq 'Edit') {
+    return if (check_perms('superuser',''));
+    $res=edit_magic('vlan','VLAN','vlans',\%vlan_form,
+		    \&get_vlan,\&update_vlan,$v_id);
+    return unless ($res == 2 || $res == 1);
+    get_vlan($v_id,\%vlan);
+  }
+  elsif ($sub eq 'Delete') {
+    return if (check_perms('superuser',''));
+    $res=delete_magic('vlan','VLAN','vlans',\%vlan_form,\&get_vlan,
+		      \&delete_vlan,$v_id);
+    return unless ($res == 2);
+    get_vlan($v_id,\%vlan);
+  }
+
+  display_form(\%vlan,\%vlan_form);
+  print p,start_form(-method=>'GET',-action=>$selfurl),
+    hidden('menu','nets'),hidden('vlan_id',$v_id);
+  print submit(-name=>'sub',-value=>'Edit'), "  ",
+    submit(-name=>'sub',-value=>'Delete'), " &nbsp;&nbsp;&nbsp; "
+    unless (check_perms('superuser','',1));
+  print end_form;
+}
+
+
+sub show_net_record($$)
+{
+  my($state, $id) = @_;
+
+  my $serverid = $state->{serverid};
+  my $selfurl = $state->{selfurl};
+  my $sub=param('sub');
+
+  my(%net, @vlan_list);
+
+  if (get_net($id,\%net)) {
+    print h2("Cannot get net record (id=$id)!");
+    return;
+  }
+  if (check_perms('level',$main::ALEVEL_VLANS,1)) {
+    $net_form{mode}=0;
+  } else {
+    get_vlan_list($serverid,\%vlan_list_hash,\@vlan_list);
+  }
+  display_form(\%net,\%net_form);
+
+  print p,"<TABLE><TR><TD> ",start_form(-method=>'GET',-action=>$selfurl),
+    hidden('menu','nets');
+  print submit(-name=>'sub',-value=>'Edit'), "  ",
+    submit(-name=>'sub',-value=>'Delete'), " &nbsp;&nbsp;&nbsp; "
+    unless (check_perms('superuser','',1));
+  print submit(-name=>'sub',-value=>'Net Info')," ";
+  print submit(-name=>'sub',-value=>'Ping Sweep')
+    if !check_perms('level',$main::ALEVEL_NMAP,1) and !is_ip6_prefix($net{net});
+  print hidden('net_id',$id),end_form,"</TD><TD>";
+  my $old_menu = param('menu');
+  my $old_sub = param('sub');
+  param('menu','hosts');
+  param('sub','browse');
+  print start_form(-method=>'GET',-action=>$selfurl),
+    hidden('menu','hosts'),hidden('sub','browse'),
+    hidden('bh_type','1'),hidden('bh_sdtype','0'),hidden('bh_order','2'),
+    hidden('bh_size','0'),hidden('bh_stype','0'),hidden('bh_grp','-1'),
+    hidden('bh_net',$net{net}),hidden('bh_submit','Search'),
+    submit(-name=>'foobar',-value=>'Show Hosts'),end_form,
+    "</TD></TR></TABLE>";
+  param('menu',$old_menu);
+  param('sub',$old_sub);
+}
+
+
+
+sub browse_nets($$)
+{
+  my($state, $perms) = @_;
+
+  my $serverid = $state->{serverid};
+  my $selfurl = $state->{selfurl};
+  my $sub=param('sub');
+
+  my $listmode = param('list');
+  my $free = '';
+
+  my(@q, @vlan_list, $i, $dhcp, $vlan, $name, $netname, $comment, $type, $novlans);
+
+  if ($listmode eq 'free') {
+      $free = "union select -1, '', unallocated_subnets($serverid, net) as net, true, '', " . # ****
+	  "true, 0, '', -1, false, 0 " .
+	  "from nets where server = $serverid and subnet = false and dummy = false";
+  }
+  db_query("SELECT id,name,net,subnet,comment,no_dhcp,vlan,netname,alevel," .
+#	   "dummy FROM nets " .
+	   "dummy, (select count(*) from a_entries where ip << nets.net) FROM nets " .
+	   "WHERE server=$serverid AND alevel <= $perms->{alevel} $free " . # ****
+	   "ORDER BY net;",\@q);
+
+  if (@q < 1) {
+    print h2("No networks found!");
+    return;
+  }
+  if (check_perms('level',$main::ALEVEL_VLANS,1)) {
+    $novlans=1;
+  } else {
+    get_vlan_list($serverid,\%vlan_list_hash,\@vlan_list);
+    $novlans=0;
+  }
+
+  my @path;
+# push @path, 0.0.0.0;
+  push @path, '';
+
+# Write CSV list with the same content as the web page.
+  if (param('csv')) {
+      print print_csv(["Net", "NetName", "Description", "Type",
+		       "DHCP", "VLAN", "Level", "Usage %"], 1) . "\n";
+      for $i (0..$#q) {
+	  if ($listmode =~ /^(sub|)$/) {
+	      next if ($q[$i][9] =~ /(t|1)/);
+	  }
+	  if ($listmode =~ /^\s*$/) {
+	      next if ($q[$i][3] =~ /(t|1)/);
+	  }
+
+	  my $parent = $path[-1];
+	  if (is_cidr_within_cidr($q[$i][2],$parent)) {
+	      push @path, $q[$i][2];
+	  } else {
+	      do {
+		  pop @path;
+		  $parent = $path[-1];
+	      } while (@path > 0 && not is_cidr_within_cidr($q[$i][2],$parent));
+	      push @path, $q[$i][2];
+	  }
+
+	  $dhcp=(($q[$i][5] eq 't' || $q[$i][5] eq '1') ? 'No' : 'Yes' );
+	  if ($q[$i][0] == -1) { # ****
+	      $dhcp = $type = '';
+	  } elsif ($q[$i][3] =~ /(1|t)/) {
+	      if ($q[$i][9] =~ /(1|t)/) {
+		  $type='Virtual';
+	      } else {
+		  $type='Subnet';
+	      }
+	  } else {
+	      $type='Net';
+	  }
+
+	  my $spacer = "   " x ($#path - 1);
+
+	  my $pc = $q[$i][2];
+	  if ($pc =~ /\./ && $q[$i][0] != -1) { # && ... ****
+	      $pc =~ s/^.+\/(.+)$/$1/;
+	      my $add = max(2 ** (32 - $pc) - 2, 2);
+	      $pc = 100 * $q[$i][10] / $add;
+	      $pc = sprintf("%.1f", $pc);
+	  } else {
+	      $pc = '';
+	  }
+
+	  $vlan = ($q[$i][6] > 0 ? $vlan_list_hash{$q[$i][6]} : '');
+	  $netname = ($q[$i][7] eq '' ? '' : $q[$i][7]);
+	  $name = ($q[$i][1] eq '' ? '' : $q[$i][1]);
+	  if ($q[$i][0] == -1) { # ****
+	      my $mask; ($mask = $q[$i][2]) =~ s/^.+\/(\d+)$/$1/;
+	      if ($q[$i][2] =~ /\./) {
+		  $name = 2 ** (32 - $mask) . ' unallocated addresses';
+	      } elsif ($mask >= 100) {
+# For IPv6, show number of free addresses only if it's "small" (<= 256 M).
+		  $name = 2 ** (128 - $mask) . ' unallocated addresses';
+	      }
+	  }
+	  print print_csv([$spacer . $q[$i][2], $netname, $name, $type, $dhcp,
+#			    ($novlans ? '' : $vlan), $q[$i][8], $pc], 1) . "\n";
+			    ($novlans ? '' : $vlan), ($q[$i][8] != -1 ? $q[$i][8] : ''), $pc], 1) . "\n"; # ****
+      }
+      return;
+  }
+
+  print "<TABLE bgcolor=\"#ccccff\" width=\"99%\" cellspacing=1 " .
+        " cellpadding=1 border=0>",
+        "<TR bgcolor=\"#aaaaff\">",
+        th("Net"),th("NetName"),th("Description"),th("Type"),
+        th("DHCP"),($novlans?'':th("VLAN")),th("Lvl"),"</TR>";
+
+  for $i (0..$#q) {
+    if ($listmode =~ /^(sub|)$/) {
+      next if ($q[$i][9] =~ /(t|1)/);
+    }
+    if ($listmode =~ /^\s*$/) {
+      next if ($q[$i][3] =~ /(t|1)/);
+    }
+
+    my $parent = $path[-1];
+    if (is_cidr_within_cidr($q[$i][2],$parent)) {
+      push @path, $q[$i][2];
+    } else {
+      do {
+	pop @path;
+	$parent = $path[-1];
+      } while (@path > 0 && not is_cidr_within_cidr($q[$i][2],$parent));
+      push @path, $q[$i][2];
+    }
+
+
+    $dhcp=(($q[$i][5] eq 't' || $q[$i][5] == 1) ? 'No' : 'Yes' );
+    if ($q[$i][0] == -1) { # ****
+	#print "<TR bgcolor=\"#bfeebf\">";
+	print "<TR bgcolor=\"#ddffdd\">";
+	$dhcp = $type = '&nbsp;';
+    } elsif ($q[$i][3] =~ /(1|t)/) {
+	if ($q[$i][9] =~ /(1|t)/) {
+	    print "<TR bgcolor=\"#bfeeee\">";
+	    $type='Virtual';
+	} else {
+	    print $dhcp eq 'Yes' ? "<TR bgcolor=\"#eeeebf\">" :
+		"<TR bgcolor=\"#eeeeee\">";
+	    $type='Subnet';
+	}
+    } else {
+	#print "<TR bgcolor=\"#ddffdd\">";
+	print "<TR bgcolor=\"#bfeebf\">";
+	$type='Net';
+    }
+
+    my $spacer = "&nbsp;&nbsp;&nbsp;" x ($#path -1);
+    $vlan=($q[$i][6] > 0 ? $vlan_list_hash{$q[$i][6]} : '&nbsp;');
+    $netname=($q[$i][7] eq '' ? '&nbsp;' : $q[$i][7]);
+    $name=($q[$i][1] eq '' ? '&nbsp;' : $q[$i][1]);
+    if ($q[$i][0] == -1) { # ****
+	my $mask; ($mask = $q[$i][2]) =~ s/^.+\/(\d+)$/$1/;
+	if ($q[$i][2] =~ /\./) {
+	    $name = 2 ** (32 - $mask) . ' unallocated address' . ($mask - 32 ? 'es' : '');
+	} elsif ($mask >= 108) {
+# For IPv6, show number of free addresses depending on number.
+	    $name = 2 ** (128 - $mask) . ' unallocated address' . ($mask - 128 ? 'es' : '');
+	} else {
+	    $name = '2<sup>' . (128 - $mask) . '</sup> unallocated addresses';
+	}
+    }
+    $comment=$q[$i][4];
+    $comment='&nbsp;' if ($comment eq '');
+    my $pc = $q[$i][2];
+    if ($pc =~ /\./) {
+	$pc =~ s/^.+\/(.+)$/$1/;
+	my $add = max(2 ** (32 - $pc) - 2, 2);
+	$pc = 100 * $q[$i][10] / $add;
+	$pc = sprintf("%.1f", $pc);
+	$pc = " title='Usage: $q[$i][10]/$add = $pc %'";
+    } else {
+	$pc = " title='$q[$i][10] addresses used'";
+    }
+    my $vlanno = $q[$i][6] > 0 ? get_vlanno($serverid, $q[$i][6]) : 0;
+    $vlanno = 'title=' . ($vlanno ? "'VLAN Number $vlanno'": "'No VLAN Number'");
+    if ($vlan eq '&nbsp;') { $vlanno = ''; }
+
+#   print "<td>$spacer<a href=\"$selfurl?menu=nets&net_id=$q[$i][0]\" $pc>",
+#	  "$q[$i][2]</a></td>",td($netname),
+
+    print "<td>$spacer" . ($q[$i][0] == -1 ? "$q[$i][2]" : # ****
+	  "<a href=\"$selfurl?menu=nets&net_id=$q[$i][0]\" $pc>$q[$i][2]</a>") .
+	  "</td>",td($netname),
+
+          td("<FONT size=-1>$name</FONT>"), td("<FONT size=-1>$type</FONT>"),
+          td("<FONT size=-1>$dhcp</FONT>"),
+	  ($novlans?'':"<TD $vlanno><FONT size=-1>$vlan</FONT></TD>"),
+	  # td("<FONT size=-1>$comment</FONT>"),
+#	  td($q[$i][8].'&nbsp;'),"</TR>";
+	  td(($q[$i][8] != -1 ? $q[$i][8] : '').'&nbsp;'),"</TR>"; # ****
+  }
+
+  print "</TABLE>&nbsp;";
+
+  print "<table width='99%'><tr align=right><td>";
+  print start_form(-method=>'POST',-action=>$selfurl),
+  hidden('menu','nets'),hidden('list',param('list')),
+  hidden('csv','1'),
+  submit(-name=>'results.csv',-value=>'Download CSV');
+  print end_form;
+  print "</td></tr></table>\n";
+}
+
 
 # NETS menu
 #
 sub menu_handler {
   my($state,$perms) = @_;
 
-  my(@q,$i,$res,$comment,$netname,$vlan,$type,$name,$dhcp,$ip,$info,$novlans);
-  my (%data,%net,%vlan,,%vmps,%nmaphash,%netmap);
+  my(@q,$i,$res,$ip,$info);
+  my (%data,%net,%vlan,%vmps,%nmaphash,%netmap);
   my (@vlan_list,@pingsweep,@iplist,@pingiplist,@blocks);
 
   my $serverid = $state->{serverid};
@@ -238,73 +584,13 @@ sub menu_handler {
   }
   return if (check_perms('server','R'));
 
- show_vmps_record:
   if ($vm_id > 0) {
-      return if (check_perms('level',$main::ALEVEL_VLANS));
-      if (get_vmps($vm_id,\%vmps)) {
-	  alert2("Cannot get vmps record (id=$vm_id)");
-	  return;
-      }
-      get_vlan_list($serverid,\%vlan_list_hash,\@vlan_list_lst);
-      $vlan_list_hash{-2}='--Default--';
-      unshift @vlan_list_lst, -2;
-
-      if ($sub eq 'Edit') {
-	  return if (check_perms('superuser',''));
-	  $res=edit_magic('vmps','VMPS Domain','vmps',\%vmps_form,
-			  \&get_vmps,\&update_vmps,$vm_id);
-	  return unless ($res == 2 || $res == 1);
-	  get_vmps($vm_id,\%vmps);
-      }
-      elsif ($sub eq 'Delete') {
-	  return if (check_perms('superuser',''));
-	  $res=delete_magic('vmps','VMPS Domain','vmps',\%vmps_form,
-			    \&get_vmps,\&delete_vmps,$vm_id);
-	  return unless ($res == 2);
-	  get_vlan($v_id,\%vlan);
-      }
-
-      display_form(\%vmps,\%vmps_form);
-      print p,start_form(-method=>'GET',-action=>$selfurl),
-            hidden('menu','nets'),hidden('vmps_id',$vm_id);
-      print submit(-name=>'sub',-value=>'Edit'), "  ",
-            submit(-name=>'sub',-value=>'Delete'), " &nbsp;&nbsp;&nbsp; "
-	    unless (check_perms('superuser','',1));
-      print end_form;
-      return;
+    show_vmps_record($state, $vm_id);
+    return;
   }
- show_vlan_record:
   if ($v_id > 0) {
-      return if (check_perms('level',$main::ALEVEL_VLANS));
-
-      if (get_vlan($v_id,\%vlan)) {
-	  alert2("Cannot get vlan record (id=$v_id)");
-	  return;
-      }
-
-      if ($sub eq 'Edit') {
-	  return if (check_perms('superuser',''));
-	  $res=edit_magic('vlan','VLAN','vlans',\%vlan_form,
-			  \&get_vlan,\&update_vlan,$v_id);
-	  return unless ($res == 2 || $res == 1);
-	  get_vlan($v_id,\%vlan);
-      }
-      elsif ($sub eq 'Delete') {
-	  return if (check_perms('superuser',''));
-	  $res=delete_magic('vlan','VLAN','vlans',\%vlan_form,\&get_vlan,
-			    \&delete_vlan,$v_id);
-	  return unless ($res == 2);
-	  get_vlan($v_id,\%vlan);
-      }
-
-      display_form(\%vlan,\%vlan_form);
-      print p,start_form(-method=>'GET',-action=>$selfurl),
-            hidden('menu','nets'),hidden('vlan_id',$v_id);
-      print submit(-name=>'sub',-value=>'Edit'), "  ",
-            submit(-name=>'sub',-value=>'Delete'), " &nbsp;&nbsp;&nbsp; "
-	    unless (check_perms('superuser','',1));
-      print end_form;
-      return;
+    show_vlan_record($state, $v_id);
+    return;
   }
 
   if ($sub eq 'vmps') {
@@ -366,7 +652,8 @@ sub menu_handler {
       #show_hash(\%data);
       #print "<p>$res $data{name}";
       $vm_id=$res;
-      goto show_vmps_record;
+      show_vmps_record($state, $vm_id);
+      return;
     }
     print db_lasterrormsg();
     return;
@@ -380,7 +667,8 @@ sub menu_handler {
       #show_hash(\%data);
       #print "<p>$res $data{name}";
       $v_id=$res;
-      goto show_vlan_record;
+      show_vlan_record($state, $v_id);
+      return;
     }
     print db_lasterrormsg();
     return;
@@ -396,7 +684,7 @@ sub menu_handler {
       #show_hash(\%data);
       #print "<p>$res $data{name}";
       $id=$res;
-      goto show_net_record;
+      show_net_record($state, $id);
     }
     return;
   }
@@ -411,7 +699,7 @@ sub menu_handler {
       #show_hash(\%data);
       #print "<p>$res $data{name}";
       $id=$res;
-      goto show_net_record;
+      show_net_record($state, $id);
     }
     return;
   }
@@ -426,7 +714,7 @@ sub menu_handler {
       #show_hash(\%data);
       #print "<p>$res $data{name}";
       $id=$res;
-      goto show_net_record;
+      show_net_record($state, $id);
     }
     return;
   }
@@ -434,15 +722,15 @@ sub menu_handler {
     return if (check_perms('superuser',''));
     get_vlan_list($serverid,\%vlan_list_hash,\@vlan_list_lst);
     $res=edit_magic('net','Net','nets',\%net_form,\&get_net,\&update_net,$id);
-    goto browse_nets if ($res == -1);
-    goto show_net_record if ($res > 0);
+    browse_nets($state, $perms) if ($res == -1);
+    show_net_record($state, $id) if ($res > 0);
     return;
   }
   elsif ($sub eq 'Delete') {
     return if (check_perms('superuser',''));
     $res=delete_magic('net','Net','nets',\%net_form,\&get_net,
 		      \&delete_net,$id);
-    goto show_net_record if ($res == 2);
+    show_net_record($state, $id) if ($res == 2);
     return;
   }
   elsif ($sub eq 'Net Info') {
@@ -664,244 +952,13 @@ sub menu_handler {
     return;
   }
 
- show_net_record:
   if ($id > 0) {
-    if (get_net($id,\%net)) {
-      print h2("Cannot get net record (id=$id)!");
-      return;
-    }
-    if (check_perms('level',$main::ALEVEL_VLANS,1)) {
-	$net_form{mode}=0;
-    } else {
-	get_vlan_list($serverid,\%vlan_list_hash,\@vlan_list);
-    }
-    display_form(\%net,\%net_form);
-
-    print p,"<TABLE><TR><TD> ",start_form(-method=>'GET',-action=>$selfurl),
-          hidden('menu','nets');
-    print submit(-name=>'sub',-value=>'Edit'), "  ",
-          submit(-name=>'sub',-value=>'Delete'), " &nbsp;&nbsp;&nbsp; "
-	    unless (check_perms('superuser','',1));
-    print submit(-name=>'sub',-value=>'Net Info')," ";
-    print submit(-name=>'sub',-value=>'Ping Sweep')
-            if !check_perms('level',$main::ALEVEL_NMAP,1) and !is_ip6_prefix($net{net});
-    print hidden('net_id',$id),end_form,"</TD><TD>";
-    my $old_menu = param('menu');
-    my $old_sub = param('sub');
-    param('menu','hosts');
-    param('sub','browse');
-    print start_form(-method=>'GET',-action=>$selfurl),
-          hidden('menu','hosts'),hidden('sub','browse'),
-	  hidden('bh_type','1'),hidden('bh_sdtype','0'),hidden('bh_order','2'),
-	  hidden('bh_size','0'),hidden('bh_stype','0'),hidden('bh_grp','-1'),
-	  hidden('bh_net',$net{net}),hidden('bh_submit','Search'),
-          submit(-name=>'foobar',-value=>'Show Hosts'),end_form,
-	  "</TD></TR></TABLE>";
-    param('menu',$old_menu);
-    param('sub',$old_sub);
+    show_net_record($state, $id);
     return;
   }
 
-browse_nets:
-  my $listmode = param('list'); my $free = '';
-  if ($listmode eq 'free') {
-      $free = "union select -1, '', unallocated_subnets($serverid, net) as net, true, '', " . # ****
-	  "true, 0, '', -1, false, 0 " .
-	  "from nets where server = $serverid and subnet = false and dummy = false";
-  }
-  db_query("SELECT id,name,net,subnet,comment,no_dhcp,vlan,netname,alevel," .
-#	   "dummy FROM nets " .
-	   "dummy, (select count(*) from a_entries where ip << nets.net) FROM nets " .
-	   "WHERE server=$serverid AND alevel <= $perms->{alevel} $free " . # ****
-	   "ORDER BY net;",\@q);
-
-  if (@q < 1) {
-    print h2("No networks found!");
-    return;
-  }
-  if (check_perms('level',$main::ALEVEL_VLANS,1)) {
-    $novlans=1;
-  } else {
-    get_vlan_list($serverid,\%vlan_list_hash,\@vlan_list);
-    $novlans=0;
-  }
-
-  my @path;
-# push @path, 0.0.0.0;
-  push @path, '';
-
-# Write CSV list with the same content as the web page.
-  if (param('csv')) {
-      print print_csv(["Net", "NetName", "Description", "Type",
-		       "DHCP", "VLAN", "Level", "Usage %"], 1) . "\n";
-      for $i (0..$#q) {
-	  if ($listmode =~ /^(sub|)$/) {
-	      next if ($q[$i][9] =~ /(t|1)/);
-	  }
-	  if ($listmode =~ /^\s*$/) {
-	      next if ($q[$i][3] =~ /(t|1)/);
-	  }
-
-	  my $parent = $path[-1];
-	  if (is_cidr_within_cidr($q[$i][2],$parent)) {
-	      push @path, $q[$i][2];
-	  } else {
-	      do {
-		  pop @path;
-		  $parent = $path[-1];
-	      } while (@path > 0 && not is_cidr_within_cidr($q[$i][2],$parent));
-	      push @path, $q[$i][2];
-	  }
-
-	  $dhcp=(($q[$i][5] eq 't' || $q[$i][5] eq '1') ? 'No' : 'Yes' );
-	  if ($q[$i][0] == -1) { # ****
-	      $dhcp = $type = '';
-	  } elsif ($q[$i][3] =~ /(1|t)/) {
-	      if ($q[$i][9] =~ /(1|t)/) {
-		  $type='Virtual';
-	      } else {
-		  $type='Subnet';
-	      }
-	  } else {
-	      $type='Net';
-	  }
-
-	  my $spacer = "   " x ($#path - 1);
-
-	  my $pc = $q[$i][2];
-	  if ($pc =~ /\./ && $q[$i][0] != -1) { # && ... ****
-	      $pc =~ s/^.+\/(.+)$/$1/;
-	      my $add = max(2 ** (32 - $pc) - 2, 2);
-	      $pc = 100 * $q[$i][10] / $add;
-	      $pc = sprintf("%.1f", $pc);
-	  } else {
-	      $pc = '';
-	  }
-
-	  $vlan = ($q[$i][6] > 0 ? $vlan_list_hash{$q[$i][6]} : '');
-	  $netname = ($q[$i][7] eq '' ? '' : $q[$i][7]);
-	  $name = ($q[$i][1] eq '' ? '' : $q[$i][1]);
-	  if ($q[$i][0] == -1) { # ****
-	      my $mask; ($mask = $q[$i][2]) =~ s/^.+\/(\d+)$/$1/;
-	      if ($q[$i][2] =~ /\./) {
-		  $name = 2 ** (32 - $mask) . ' unallocated addresses';
-	      } elsif ($mask >= 100) {
-# For IPv6, show number of free addresses only if it's "small" (<= 256 M).
-		  $name = 2 ** (128 - $mask) . ' unallocated addresses';
-	      }
-	  }
-	  print print_csv([$spacer . $q[$i][2], $netname, $name, $type, $dhcp,
-#			    ($novlans ? '' : $vlan), $q[$i][8], $pc], 1) . "\n";
-			    ($novlans ? '' : $vlan), ($q[$i][8] != -1 ? $q[$i][8] : ''), $pc], 1) . "\n"; # ****
-      }
-      return;
-  }
-
-  print "<TABLE bgcolor=\"#ccccff\" width=\"99%\" cellspacing=1 " .
-        " cellpadding=1 border=0>",
-        "<TR bgcolor=\"#aaaaff\">",
-        th("Net"),th("NetName"),th("Description"),th("Type"),
-        th("DHCP"),($novlans?'':th("VLAN")),th("Lvl"),"</TR>";
-
-  for $i (0..$#q) {
-    if ($listmode =~ /^(sub|)$/) {
-      next if ($q[$i][9] =~ /(t|1)/);
-    }
-    if ($listmode =~ /^\s*$/) {
-      next if ($q[$i][3] =~ /(t|1)/);
-    }
-
-    my $parent = $path[-1];
-    if (is_cidr_within_cidr($q[$i][2],$parent)) {
-      push @path, $q[$i][2];
-    } else {
-      do {
-	pop @path;
-	$parent = $path[-1];
-      } while (@path > 0 && not is_cidr_within_cidr($q[$i][2],$parent));
-      push @path, $q[$i][2];
-    }
-
-
-    $dhcp=(($q[$i][5] eq 't' || $q[$i][5] == 1) ? 'No' : 'Yes' );
-    if ($q[$i][0] == -1) { # ****
-	#print "<TR bgcolor=\"#bfeebf\">";
-	print "<TR bgcolor=\"#ddffdd\">";
-	$dhcp = $type = '&nbsp;';
-    } elsif ($q[$i][3] =~ /(1|t)/) {
-	if ($q[$i][9] =~ /(1|t)/) {
-	    print "<TR bgcolor=\"#bfeeee\">";
-	    $type='Virtual';
-	} else {
-	    print $dhcp eq 'Yes' ? "<TR bgcolor=\"#eeeebf\">" :
-		"<TR bgcolor=\"#eeeeee\">";
-	    $type='Subnet';
-	}
-    } else {
-	#print "<TR bgcolor=\"#ddffdd\">";
-	print "<TR bgcolor=\"#bfeebf\">";
-	$type='Net';
-    }
-
-    my $spacer = "&nbsp;&nbsp;&nbsp;" x ($#path -1);
-    $vlan=($q[$i][6] > 0 ? $vlan_list_hash{$q[$i][6]} : '&nbsp;');
-    $netname=($q[$i][7] eq '' ? '&nbsp;' : $q[$i][7]);
-    $name=($q[$i][1] eq '' ? '&nbsp;' : $q[$i][1]);
-    if ($q[$i][0] == -1) { # ****
-	my $mask; ($mask = $q[$i][2]) =~ s/^.+\/(\d+)$/$1/;
-	if ($q[$i][2] =~ /\./) {
-	    $name = 2 ** (32 - $mask) . ' unallocated address' . ($mask - 32 ? 'es' : '');
-	} elsif ($mask >= 108) {
-# For IPv6, show number of free addresses depending on number.
-	    $name = 2 ** (128 - $mask) . ' unallocated address' . ($mask - 128 ? 'es' : '');
-	} else {
-	    $name = '2<sup>' . (128 - $mask) . '</sup> unallocated addresses';
-	}
-    }
-    $comment=$q[$i][4];
-    $comment='&nbsp;' if ($comment eq '');
-    my $pc = $q[$i][2];
-    if ($pc =~ /\./) {
-	$pc =~ s/^.+\/(.+)$/$1/;
-	my $add = max(2 ** (32 - $pc) - 2, 2);
-	$pc = 100 * $q[$i][10] / $add;
-	$pc = sprintf("%.1f", $pc);
-	$pc = " title='Usage: $q[$i][10]/$add = $pc %'";
-    } else {
-	$pc = " title='$q[$i][10] addresses used'";
-    }
-    my $vlanno = $q[$i][6] > 0 ? get_vlanno($serverid, $q[$i][6]) : 0;
-    $vlanno = 'title=' . ($vlanno ? "'VLAN Number $vlanno'": "'No VLAN Number'");
-    if ($vlan eq '&nbsp;') { $vlanno = ''; }
-
-#   print "<td>$spacer<a href=\"$selfurl?menu=nets&net_id=$q[$i][0]\" $pc>",
-#	  "$q[$i][2]</a></td>",td($netname),
-
-    print "<td>$spacer" . ($q[$i][0] == -1 ? "$q[$i][2]" : # ****
-	  "<a href=\"$selfurl?menu=nets&net_id=$q[$i][0]\" $pc>$q[$i][2]</a>") .
-	  "</td>",td($netname),
-
-          td("<FONT size=-1>$name</FONT>"), td("<FONT size=-1>$type</FONT>"),
-          td("<FONT size=-1>$dhcp</FONT>"),
-	  ($novlans?'':"<TD $vlanno><FONT size=-1>$vlan</FONT></TD>"),
-	  # td("<FONT size=-1>$comment</FONT>"),
-#	  td($q[$i][8].'&nbsp;'),"</TR>";
-	  td(($q[$i][8] != -1 ? $q[$i][8] : '').'&nbsp;'),"</TR>"; # ****
-  }
-
-  print "</TABLE>&nbsp;";
-
-  print "<table width='99%'><tr align=right><td>";
-  print start_form(-method=>'POST',-action=>$selfurl),
-  hidden('menu','nets'),hidden('list',param('list')),
-  hidden('csv','1'),
-  submit(-name=>'results.csv',-value=>'Download CSV');
-  print end_form;
-  print "</td></tr></table>\n";
-
+ browse_nets($state, $perms);
 }
-
-
 
 
 1;

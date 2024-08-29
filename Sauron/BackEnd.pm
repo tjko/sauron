@@ -3150,31 +3150,32 @@ sub add_net($) {
   $net = new Net::IP($rec->{net});
   return -101 unless ($net);
 
-# Create ranges for subnets and virtual nets only. 2019-01-03 TVu
-  if ($rec->{subnet} =~ /^f/i && $rec->{dummy} =~ /^f/i) { goto NO_RANGES; }
+  # Create ranges for subnets and virtual nets only. 2019-01-03 TVu
+  unless ($rec->{subnet} =~ /^f/i && $rec->{dummy} =~ /^f/i) {
 
-  # Dirty hack for /31,/32 & /127, /128 subnets:]
-  if ($net->size() <= 2) {
+    # Dirty hack for /31,/32 & /127, /128 subnets:]
+    if ($net->size() <= 2) {
       $rec->{range_start} = ip_compress_address(($net)->ip(), $net->version())
-	  unless (is_cidr($rec->{range_start}));
+	unless (is_cidr($rec->{range_start}));
       $rec->{range_end}   = ip_compress_address($net->last_ip(), $net->version())
-	  unless (is_cidr($rec->{range_end}));
-  } else {
-#     $rec->{range_start} = ip_compress_address((++$net)->ip(), $net->version())
-#	  unless (is_cidr($rec->{range_start}));
-#     $rec->{range_end} = ($net->version() eq 4 ? new Net::Netmask($rec->{net})->nth(-2) :
-#			   ip_compress_address($net->last_ip(), $net->version()))
-#	  unless (is_cidr($rec->{range_end}));
-# The same without Net::Netmask.
+	unless (is_cidr($rec->{range_end}));
+    } else {
+      #     $rec->{range_start} = ip_compress_address((++$net)->ip(), $net->version())
+      #	  unless (is_cidr($rec->{range_start}));
+      #     $rec->{range_end} = ($net->version() eq 4 ? new Net::Netmask($rec->{net})->nth(-2) :
+      #			   ip_compress_address($net->last_ip(), $net->version()))
+      #	  unless (is_cidr($rec->{range_end}));
+      # The same without Net::Netmask.
       $rec->{range_start} = ip_compress_address((++$net)->ip(), $net->version())
-	  unless (is_cidr($rec->{range_start}));
+	unless (is_cidr($rec->{range_start}));
       $rec->{range_end} = ($net->version() eq 4 ? new NetAddr::IP($rec->{net})->last() :
 			   ip_compress_address($net->last_ip(), $net->version()))
-	  unless (is_cidr($rec->{range_end}));
+	unless (is_cidr($rec->{range_end}));
       $rec->{range_end} =~ s=/\d+$==; # new NetAddr::IP(...)->last() returns CIDR not IP TVu 2018-02-07
+    }
+
   }
 
-NO_RANGES:
 
   $res = add_record('nets',$rec);
   if ($res < 0) { db_rollback(); return -1; }
