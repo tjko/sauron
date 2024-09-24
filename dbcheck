@@ -5,6 +5,8 @@
 # Copyright (c) Teppo Vuori <teppo.vuori@teppovuori.fi> 18.05.2016.
 # $Id:$
 #
+# Fixed undefined return values assignments - mesrik, 2024
+#
 # ------------------------------------------------------------------------------
 use Getopt::Long;
 use Sauron::DB;
@@ -411,7 +413,7 @@ sub process_edit_hash($$) {
 	    $count++;
 	}
     }
-    return $count;
+    return $count || 0;
 }
 
 # A single sub is also good enough for most 'fix' operations.
@@ -928,7 +930,7 @@ sub fix_a_entries_n($) {
 
     my ($arr) = @_;
     my @msg = ('IP address', 1, 'IP', 5, 1, 'a_entries outside subnets');
- 
+
 # Delete. Record history.
     return generic_fix($arr, 'a_entries', \@msg);
 }
@@ -1192,7 +1194,7 @@ for $ind1 (0 .. $#funcs) {
 	$funcs[$ind1][0]->(\@arr, \$msg, \@titles)) {              # Check. Returns # of rows.
 
 # Total number of errors found.
-	$err_count += @arr;
+	$err_count += @arr || 0;
 
 # Explain what sort of errors were found (title)
 	$expl = "Found " . @arr . " $msg\n";
@@ -1250,7 +1252,7 @@ for $ind1 (0 .. $#funcs) {
 	    $keep_count += process_edit_hash(\@arr, \%ids);
 	}
 # Delete / update.
-	$del_count += $funcs[$ind1][1]->(\@arr);
+	$del_count += $funcs[$ind1][1]->(\@arr) || 0;
 
     }
 }
