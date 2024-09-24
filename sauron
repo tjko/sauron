@@ -1254,7 +1254,9 @@ if ($bind_conf) {
 	  $ttl='' unless ($ttl > 0);
 	  $alias =~ s/\/\d{1,2}\s*$//g;
 	  if ($bind_conf) {
-            my $recA = (ip_is_ipv4($ip) ? 'A' : 'AAAA');
+	    # Oops, the address to check is in $alias not in $ip - mesrik, 2024
+            #my $recA = (ip_is_ipv4($ip) ? 'A' : 'AAAA');
+            my $recA = (ip_is_ipv4($alias) ? 'A' : 'AAAA');
             printf ZONEFILE $ZFORMAT, $domain,$ttl,$class,$recA,$alias;
             printf ZONEFILE $ZFORMAT, '',$ttl,$class,'TXT',
 	                    "\"IP alias for $q[$i][1]\"";
