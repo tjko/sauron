@@ -1543,6 +1543,78 @@ sub print_cidr_list($$$$$) {
 ######################################################################
 # DHCP
 
+
+sub print_dhcp_classes($$) {
+    my ($serverid, $opt_dhcpclass) = @_;
+
+    my (@dclasses, $hddc);
+
+    db_query("SELECT id,name,type FROM groups " .
+	     "WHERE server=$serverid AND (type=3 OR type=103) " .
+	     ($opt_dhcpclass ?
+	      " AND name=".db_encode_str($opt_dhcpclass)." " : "") .
+	     "ORDER BY name",\@dclasses);
+
+    # **** hack hack hack ****
+
+    if (@dclasses > 0 and "$server{name}" ne "ns2") {
+
+    #if (@dclasses > 0 ) {
+
+    # **** hack hack hack ****
+	print DHCPFILE "\n# (dynamic) classes\n\n";
+	for my $i (0..$#dclasses) {
+	    my @qq;
+	    db_query("SELECT h.ether,h.domain " .
+		     " FROM zones z JOIN hosts h ON z.id=h.zone " .
+		     " LEFT JOIN group_entries g ON h.id=g.host " .
+		     " WHERE z.server=$serverid AND h.ether NOTNULL " .
+		     " AND (coalesce(z.expiration, 0) <= 0 OR coalesce(z.expiration, 0) > " .
+		     " extract(epoch from now())) " . # Exclude expired zones.
+		     " AND (h.grp=$dclasses[$i][0] OR g.grp=$dclasses[$i][0]) " .
+		     " AND (h.expiration > EXTRACT(epoch FROM current_timestamp) OR h.expiration = 0 OR h.expiration ISNULL) " .
+		     " ORDER BY h.ether",\@qq);
+
+	    next unless(@qq);
+
+	    print DHCPFILE "\nclass \"$dclasses[$i][1]\" {\n";
+	    print DHCPFILE "\tmatch pick-first-value " .
+		"(option dhcp-client-identifier, hardware);\n"
+		if ($dclasses[$i][2] == 3);
+	    my @q;
+	    db_query("SELECT dhcp, comment FROM dhcp_entries " .
+		     "WHERE type=5 and ref=$dclasses[$i][0] ORDER BY id",\@q);
+	    for my $j (0..$#q) {
+		$q[$j][0].=';' unless ($q[$j][0] =~ /[;\{\}]\s*$/);
+		print DHCPFILE "\t$q[$j][0]\t #$q[$j][1]\n";
+	    }
+	    print DHCPFILE "}\n\n";
+
+	    # subclasses
+	    if ($dclasses[$i][2]== 3) {
+		my $lastmac;
+		for my $j (0..$#qq) {
+		    unless ($qq[$j][0] =~ /^[0-9A-F]{12}$/) {
+			#error("invalid ether for subclass: $q[$j][0]");
+			next;
+		    }
+		    next if ($qq[$j][0] eq $lastmac);
+		    print DHCPFILE "subclass \"$dclasses[$i][1]\" 1:" .
+			dhcpether($qq[$j][0]) . ";  # $qq[$j][1]\n";
+
+		    $hddc .= sprintf("host %s-%s { hardware ethernet %s; }\n", $qq[$j][1], $dclasses[$i][1], dhcpether($qq[$j][0]));
+		    $lastmac=$qq[$j][0];
+		}
+	    }
+
+	}
+	print DHCPFILE "\n";
+    }
+
+    return $hddc;
+}
+
+
 sub make_dhcp() {
   print "DHCP configuration\n";
   $time_now = localtime;
@@ -1562,7 +1634,19 @@ sub make_dhcp() {
                  "# server: $server{name} -- $server{comment}\n#\n\n";
 
   $serverid=$server{masterserver} if ($server{masterserver} > 0);
-  goto print_dhcp_classes if ($opt_dhcpclass);
+
+  if ($opt_dhcpclass) {
+      print_dhcp_classes($serverid, $opt_dhcpclass);
+      close(DHCPFILE);
+      # remove $tmp_extension from generated file name
+      foreach $tmpfile (keys %open_tmpfiles) {
+	  print "rename: $tmpfile --> $open_tmpfiles{$tmpfile}\n" if ($opt_verbose);
+	  fatal("failed to rename tmpfile: $tmpfile")
+	      unless(rename($tmpfile,$open_tmpfiles{$tmpfile})==1);
+	  delete $open_tmpfiles{$tmpfile};
+      }
+      return;
+  }
 
 
   # failover stuff
@@ -1685,90 +1769,7 @@ sub make_dhcp() {
   print DHCPFILE "\n\n";
 
   #Host declaration for dyn. classes
-  my $hddc = "";
-
-  # FIXME
-  # **** hack hack hack ****
-  # - dhcp v3 & v4 configuration broken unless
-  #   dhcp2_mode turned explisitly off - mesrik
-  #
-
-# DHCP2 removed 2020-07-20 TVu
-# $dhcp2_mode = 0;
-
-  # **** hack hack hack ****
-
-  # dynamic hosts (DHCP classes)
-# DHCP2 removed 2020-07-20 TVu
-# unless ($dhcp2_mode) {
-  print_dhcp_classes:
-    undef @dclasses;
-    db_query("SELECT id,name,type FROM groups " .
-	     "WHERE server=$serverid AND (type=3 OR type=103) " .
-	     ($opt_dhcpclass ?
-	      " AND name=".db_encode_str($opt_dhcpclass)." " : "") .
-	     "ORDER BY name",\@dclasses);
-
-    # **** hack hack hack ****
-
-    if (@dclasses > 0 and "$server{name}" ne "ns2") {
-
-    #if (@dclasses > 0 ) {
-
-    # **** hack hack hack ****
-      print DHCPFILE "\n# (dynamic) classes\n\n";
-      for $i (0..$#dclasses) {
-	 undef @qq;
-     db_query("SELECT h.ether,h.domain " .
-		   " FROM zones z JOIN hosts h ON z.id=h.zone " .
-		   " LEFT JOIN group_entries g ON h.id=g.host " .
-		   " WHERE z.server=$serverid AND h.ether NOTNULL " .
-		   " AND (coalesce(z.expiration, 0) <= 0 OR coalesce(z.expiration, 0) > " .
-		   " extract(epoch from now())) " . # Exclude expired zones.
-		   " AND (h.grp=$dclasses[$i][0] OR g.grp=$dclasses[$i][0]) " .
-           " AND (h.expiration > EXTRACT(epoch FROM current_timestamp) OR h.expiration = 0 OR h.expiration ISNULL) " .
-		   " ORDER BY h.ether",\@qq);
-
-     next unless(@qq);
-
-    print DHCPFILE "\nclass \"$dclasses[$i][1]\" {\n";
-    print DHCPFILE "\tmatch pick-first-value " .
-	"(option dhcp-client-identifier, hardware);\n"
-	if ($dclasses[$i][2] == 3);
-	undef @q;
-	db_query("SELECT dhcp, comment FROM dhcp_entries " .
-		 "WHERE type=5 and ref=$dclasses[$i][0] ORDER BY id",\@q);
-	for $j (0..$#q) {
-	    $q[$j][0].=';' unless ($q[$j][0] =~ /[;\{\}]\s*$/);
-	    print DHCPFILE "\t$q[$j][0]\t #$q[$j][1]\n";
-	}
-	print DHCPFILE "}\n\n";
-
-	# subclasses
-	if ($dclasses[$i][2]== 3) {
-	  my $lastmac;
-	  for $j (0..$#qq) {
-	    unless ($qq[$j][0] =~ /^[0-9A-F]{12}$/) {
-	      #error("invalid ether for subclass: $q[$j][0]");
-	      next;
-	    }
-	    next if ($qq[$j][0] eq $lastmac);
-	    print DHCPFILE "subclass \"$dclasses[$i][1]\" 1:" .
-	                   dhcpether($qq[$j][0]) . ";  # $qq[$j][1]\n";
-
-        $hddc .= sprintf("host %s-%s { hardware ethernet %s; }\n", $qq[$j][1], $dclasses[$i][1], dhcpether($qq[$j][0]));
-        $lastmac=$qq[$j][0];
-	  }
-	}
-
-      }
-      print DHCPFILE "\n";
-    }
-
-    goto dhcpd_conf_done if ($opt_dhcpclass);
-# DHCP2 removed 2020-07-20 TVu
-# }
-
+  my $hddc = print_dhcp_classes($serverid, $opt_dhcpclass);
 
   # check for dynamic IP pools
   undef @dpools;
@@ -1848,7 +1849,7 @@ sub make_dhcp() {
           }
       }
 
-print DHCPFILE "\n";
+      print DHCPFILE "\n";
     }
 
     undef @q;
@@ -2139,7 +2140,6 @@ print DHCPFILE "\n";
   }
 
 
- dhcpd_conf_done:
   # remove $tmp_extension from generated file name
   foreach $tmpfile (keys %open_tmpfiles) {
     print "rename: $tmpfile --> $open_tmpfiles{$tmpfile}\n" if ($opt_verbose);
@@ -2148,6 +2148,72 @@ print DHCPFILE "\n";
     delete $open_tmpfiles{$tmpfile};
   }
 
+}
+
+
+sub print_dhcp6_classes($$) {
+    my ($serverid, $opt_dhcpclass) = @_;
+
+    my (@dclasses, $hddc);
+
+    db_query("SELECT id,name,type FROM groups " .
+	     "WHERE server=$serverid AND (type=3 OR type=103) " .
+	     ($opt_dhcpclass ?
+	      " AND name=".db_encode_str($opt_dhcpclass)." " : "") .
+	     "ORDER BY name",\@dclasses);
+
+    if (@dclasses > 0) {
+	print DHCPFILE "\n# (dynamic) classes\n\n";
+	for my $i (0..$#dclasses) {
+	    my @qq;
+	    db_query("SELECT h.duid,h.domain " .
+		     " FROM zones z JOIN hosts h ON z.id=h.zone " .
+		     " LEFT JOIN group_entries g ON h.id=g.host " .
+		     " WHERE z.server=$serverid AND h.duid NOTNULL " .
+		     " AND (coalesce(z.expiration, 0) <= 0 OR coalesce(z.expiration, 0) > " .
+		     " extract(epoch from now())) " . # Exclude expired zones.
+		     " AND (h.grp=$dclasses[$i][0] OR g.grp=$dclasses[$i][0]) " .
+		     " AND (h.expiration > EXTRACT(epoch FROM current_timestamp) OR h.expiration = 0 OR h.expiration ISNULL) " .
+		     " ORDER BY h.duid",\@qq);
+
+	    next unless(@qq);
+
+	    print DHCPFILE "\nclass \"$dclasses[$i][1]\" {\n";
+	    my @q;
+	    db_query("SELECT dhcp, comment FROM dhcp_entries " .
+		     "WHERE type=15 and ref=$dclasses[$i][0] ORDER BY id",\@q);
+	    for my $j (0..$#q) {
+		$q[$j][0].=';' unless ($q[$j][0] =~ /[;\{\}]\s*$/);
+		if($q[$j][1] ne '') {
+		    print DHCPFILE "\t$q[$j][0]\t #$q[$j][1]\n";
+		}
+		else {
+		    print DHCPFILE "\t$q[$j][0]\n";
+		}
+	    }
+	    print DHCPFILE "}\n\n";
+
+	    # subclasses
+	    if ($dclasses[$i][2]== 3) {
+		my $lastduid;
+		for my $j (0..$#qq) {
+		    unless ($qq[$j][0] =~ /^[a-f0-9A-F]{24,40}$/) {
+			error("invalid duid for subclass: $qq[$j][0]");
+			next;
+		    }
+		    next if ($qq[$j][0] eq $lastduid);
+		    print DHCPFILE "subclass \"$dclasses[$i][1]\" ".  dhcpduid($qq[$j][0]) .  ";  # $qq[$j][1]\n";
+
+		    $hddc .= sprintf("host %s-%s { host-identifier option dhcp6.client-id %s; }\n", $qq[$j][1], $dclasses[$i][1], dhcpduid($qq[$j][0]));
+		    $lastduid=$qq[$j][0];
+		}
+	    }
+
+	}
+	print DHCPFILE "\n";
+    }
+
+    return $hddc;
 }
 
 
@@ -2170,7 +2236,19 @@ sub make_dhcp6() {
                  "# server: $server{name} -- $server{comment}\n#\n\n";
 
   $serverid=$server{masterserver} if ($server{masterserver} > 0);
-  goto print_dhcp_classes if ($opt_dhcpclass);
+
+  if ($opt_dhcpclass) {
+      print_dhcp6_classes($serverid, $opt_dhcpclass);
+      close(DHCPFILE);
+      # remove $tmp_extension from generated file name
+      foreach $tmpfile (keys %open_tmpfiles) {
+	  print "rename: $tmpfile --> $open_tmpfiles{$tmpfile}\n" if ($opt_verbose);
+	  fatal("failed to rename tmpfile: $tmpfile")
+	      unless(rename($tmpfile,$open_tmpfiles{$tmpfile})==1);
+	  delete $open_tmpfiles{$tmpfile};
+      }
+      return;
+  }
 
 
   # failover stuff
@@ -2276,73 +2354,7 @@ sub make_dhcp6() {
   print DHCPFILE "\n\n";
 
   #Host declaration for dyn. classes
-  my $hddc = "";
-
-  # dynamic hosts (DHCP classes)
-# DHCP2 removed 2020-07-20 TVu
-# unless ($dhcp2_mode) {
-  print_dhcp_classes:
-    undef @dclasses;
-    db_query("SELECT id,name,type FROM groups " .
-	     "WHERE server=$serverid AND (type=3 OR type=103) " .
-	     ($opt_dhcpclass ?
-	      " AND name=".db_encode_str($opt_dhcpclass)." " : "") .
-	     "ORDER BY name",\@dclasses);
-    if (@dclasses > 0) {
-      print DHCPFILE "\n# (dynamic) classes\n\n";
-      for $i (0..$#dclasses) {
-      undef @qq;
-      db_query("SELECT h.duid,h.domain " .
-	       " FROM zones z JOIN hosts h ON z.id=h.zone " .
-	       " LEFT JOIN group_entries g ON h.id=g.host " .
-	       " WHERE z.server=$serverid AND h.duid NOTNULL " .
-	       " AND (coalesce(z.expiration, 0) <= 0 OR coalesce(z.expiration, 0) > " .
-	       " extract(epoch from now())) " . # Exclude expired zones.
-	       " AND (h.grp=$dclasses[$i][0] OR g.grp=$dclasses[$i][0]) " .
-	       " AND (h.expiration > EXTRACT(epoch FROM current_timestamp) OR h.expiration = 0 OR h.expiration ISNULL) " .
-	       " ORDER BY h.duid",\@qq);
-
-    next unless(@qq);
-
-	print DHCPFILE "\nclass \"$dclasses[$i][1]\" {\n";
-    undef @q;
-	db_query("SELECT dhcp, comment FROM dhcp_entries " .
-		 "WHERE type=15 and ref=$dclasses[$i][0] ORDER BY id",\@q);
-	for $j (0..$#q) {
-	    $q[$j][0].=';' unless ($q[$j][0] =~ /[;\{\}]\s*$/);
-	     if($q[$j][1] ne '') {
-            print DHCPFILE "\t$q[$j][0]\t #$q[$j][1]\n";
-         }
-         else {
-            print DHCPFILE "\t$q[$j][0]\n";
-         }
-	}
-	print DHCPFILE "}\n\n";
-
-	# subclasses
-	if ($dclasses[$i][2]== 3) {
-      my $lastduid;
-      for $j (0..$#qq) {
-	    unless ($qq[$j][0] =~ /^[a-f0-9A-F]{24,40}$/) {
-	      error("invalid duid for subclass: $qq[$j][0]");
-	      next;
-	    }
-	    next if ($qq[$j][0] eq $lastduid);
-	    print DHCPFILE "subclass \"$dclasses[$i][1]\" ".  dhcpduid($qq[$j][0]) .  ";  # $qq[$j][1]\n";
-
-        $hddc .= sprintf("host %s-%s { host-identifier option dhcp6.client-id %s; }\n", $qq[$j][1], $dclasses[$i][1], dhcpduid($qq[$j][0]));
-        $lastduid=$qq[$j][0];
-	  }
-	}
-
-      }
-      print DHCPFILE "\n";
-    }
-
-    goto dhcpd_conf_done if ($opt_dhcpclass);
-# DHCP2 removed 2020-07-20 TVu
-# }
-
+  my $hddc = print_dhcp6_classes($serverid, $opt_dhcpclass);
 
   # check for dynamic IP pools
   undef @dpools;
@@ -2676,7 +2688,6 @@ sub make_dhcp6() {
   }
 
 
- dhcpd_conf_done:
   # remove $tmp_extension from generated file name
   foreach $tmpfile (keys %open_tmpfiles) {
     print "rename: $tmpfile --> $open_tmpfiles{$tmpfile}\n" if ($opt_verbose);
