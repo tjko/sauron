@@ -1529,7 +1529,7 @@ sub print_cidr_list($$$$$) {
 	elsif ($mode == 2 && $keyname) { $val="key $keyname"; }
 
 	# forward zones forwarders port
-	if ($mode == 0 & $type == 12 && $port) { $val .= " port $port"; }
+	if ($mode == 0 && $type == 12 && $port) { $val .= " port $port"; }
 
 	printf BINDFILE "$hdr\t%1s %-39s %s\n",$op,"$val;",$com # 20 -> 39 for IPv6.
 	  if ($val);
