@@ -208,18 +208,6 @@ sub cidr4ok($) {
     /^((25[0-5]|2[0-4]\d|[01]?\d{1,2})\.){0,3}(25[0-5]|2[0-4]\d|[01]?\d{1,2})(\/([012]?\d|3[012]))?$/;
 }
 
-# Additions for IPv6.
-
-# Verify IPv4 CIDR is formally correct.
-# d.d.d.d/m, where the number of ds is 1-4 and each d may be 0-255
-# and m 0-32; /m may also be omitted.
-# Does not test if masked portion is actually all zeros,
-# nor are private/reserved addresses checked.
-sub cidr4ok($) {
-    local ($_) = @_;
-    /^((25[0-5]|2[0-4]\d|[01]?\d{1,2})\.){0,3}(25[0-5]|2[0-4]\d|[01]?\d{1,2})(\/([012]?\d|3[012]))?$/;
-}
-
 # Verify IPv6 CIDR is formally correct.
 # x:x:x:x:x:x:x:x/m, where each x is up to 4-digit hex number and m 0-128,
 # or fewer than 8 x's with (exactly) one :: somewhere;
