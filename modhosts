@@ -108,7 +108,7 @@ GetOptions(
     "rename=s"       => \$opt_rename,
     "commit"         => \$opt_commit,
     "excludeip=s"    => \$opt_excludeip,
-    "excludename=s"  => \$opt_excludename,
+#    "excludename=s"  => \$opt_excludename,
     "type=s"         => \$opt_type,
     "ether=s"        => \$opt_ether,
     "etherempty"     => \$opt_etherempty,
