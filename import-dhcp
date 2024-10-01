@@ -1,4 +1,4 @@
-#!/usr/bin/perl -I/opt/sauron
+#!/usr/bin/perl -I/usr/local/sauron
 #
 # import-dhcp - imports ISC DHCPD configuration
 #
@@ -354,7 +354,7 @@ foreach $key (keys %{$data{host}}) {
     unshift @{$sclass2class{$ether}}, ['SubGroup'];
   }
   else {
-    @sclasess = [];
+    #@sclasess = [];
   }
 
   unshift @q, ['DHCP', 'Comments'] if @q > 0;

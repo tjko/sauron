@@ -1,4 +1,4 @@
-#!/usr/bin/perl -I/opt/sauron
+#!/usr/bin/perl -I/usr/local/sauron
 #
 # moduser - utility to modify user/group rights
 #

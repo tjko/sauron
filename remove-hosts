@@ -1,4 +1,4 @@
-#!/usr/bin/perl -I/opt/sauron
+#!/usr/bin/perl -I/usr/local/sauron
 #
 # remove-hosts -- removes hosts based on list of MACs read from a file
 #

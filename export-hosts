@@ -1,4 +1,4 @@
-#!/usr/bin/perl -I/opt/sauron
+#!/usr/bin/perl -I/usr/local/sauron
 #
 # export-hosts  generates list of IPs in use for given networks
 #
@@ -15,6 +15,11 @@ use Sauron::Util;
 use Sauron::BackEnd;
 use Sauron::Sauron;
 use Data::Dumper;
+use strict;
+
+
+my(@zones);
+
 
 sub qstr($) {
     my($str)=@_;
@@ -26,7 +31,7 @@ sub match_zone($) {
     my($id)=@_;
 
     return 1 unless (@zones > 0);
-    for $i (0..$#zones) { return 1 if ($id == $zones[$i]); }
+    for my $i (0..$#zones) { return 1 if ($id == $zones[$i]); }
     return 0;
 }
 
@@ -64,14 +69,10 @@ sub rtype($) {
 
 load_config();
 
-$user = (getpwuid($<))[0];
-$host = `hostname`;
+my $host = `hostname`;
 $host =~ s/\n//g;
-$time_now = localtime;
-$tnow = time();
-$tmp_extension = ".tmp.$<.$$"; # generate extension for temp files
 
-my ($debug,@cidr,$group,$level,@name,@nocidr,$noheader,@noname,$privacy,$type,$verbose,$help);
+my ($debug,@cidr,$group,$level,@name,@nocidr,$noheader,@noname,$privacy,$type,$verbose,$help,$dhcponly,$subgroup,$mac);
 
 GetOptions('debug=i'   => \$debug,
 	   'cidr=s@'   => \@cidr,
@@ -110,11 +111,11 @@ if ($help || @ARGV < 1) {
 
 $verbose = ($verbose ? 1 : 0);
 $dhcponly = ($dhcponly ? 1 : 0);
-$servername=shift;
+my $servername=shift;
 
 db_connect();
 
-$serverid=get_server_id($servername);
+my $serverid=get_server_id($servername);
 fatal("cannot find server '$servername'") unless ($serverid > 0);
 
 my $limit="";
@@ -208,8 +209,8 @@ if ($mac) { # ** 2022-02-24 TVu
     $limit .= "and h.ether ~ '$mac' ";
 }
 
-while (($zone=shift)) {
-    $zoneid=get_zone_id($zone,$serverid);
+while (my $zone = shift) {
+    my $zoneid=get_zone_id($zone,$serverid);
     fatal("cannot find zone: $zone") unless ($zoneid > 0);
     push @zones, $zoneid;
 }
@@ -217,7 +218,7 @@ while (($zone=shift)) {
 
 # fetch host records for this server...
 
-$sql = "SELECT h.id,h.zone,z.name,h.type,h.domain,a.ip,h.ttl,h.class," .  # 0-8
+my $sql = "SELECT h.id,h.zone,z.name,h.type,h.domain,a.ip,h.ttl,h.class," .  # 0-8
        " g.name,h.alias, al.domain, al.zone, zal.name, h.cname_txt," .    # 9-13
        " h.hinfo_hw, h.hinfo_sw, wx.name, mx.name," .                     # 14-17
        " h.router, h.ether, h.ether_alias, eal.ether," .                  # 18-21
@@ -244,6 +245,7 @@ if (defined($debug)) {
 
 print STDERR "Fetching host entries for server: $servername ...\n"
     if ($verbose);
+my @q;
 db_query($sql,\@q);
 print STDERR $#q . " host entries found for this server.\n" if ($verbose);
 
@@ -261,7 +263,8 @@ if (defined($debug) and $debug == 8) {
     exit(1);
 }
 
-$lastid=-1;
+my $lastid = -1;
+my $counter = 0;
 
 unless ($noheader) {
     printf "\"%s\"\n", join('","',
@@ -272,8 +275,8 @@ unless ($noheader) {
                                DUID IAID Comment Subgroups)); # ** Subgroups 2022-02-24 TVu
 }
 
-for $i (0..$#q) {
-    @r=@{$q[$i]};
+for my $i (0..$#q) {
+    my @r=@{$q[$i]};
 
     #
     # NB: $lastid used to check if multiple lines
@@ -286,12 +289,13 @@ for $i (0..$#q) {
     next if ($verbose == 0 && $lastid == $r[0]);
     next unless (match_zone($r[1]));
     next if ($group && $r[8] !~ /$group/);
-    $domain=$r[4];
+    my $domain=$r[4];
     next if ($domain eq '@');
 
     $domain.=".".$r[2] unless ($domain =~ /\.$/);
-    $type=$r[3];
-    $ip=$r[5];
+    my $type=$r[3];
+    my $ip=$r[5];
+    my $alias;
     if ($type == 4 || $type == 7) { # if cname or arec
 	if ($r[9] > 0) {
 	    $alias=$r[10];
@@ -299,13 +303,13 @@ for $i (0..$#q) {
 	} else {
 	    $alias=$r[13];
 	}
-    } else {
-	$alias='';
     }
-    $ether=$r[19];
+    my $ether=$r[19];
     if ($r[20] > 0) {
 	$ether="(".$r[21].")";
     }
+    my $etheralias;
+
     print join(",",
 	       qstr($domain),      #1  hostname
 	       qstr(rtype($type)), #2  record type
