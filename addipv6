@@ -236,7 +236,7 @@ if ($opt_method eq 'repl' or $opt_method eq 'del') {
 			    "from host $cidr1hash{$ind1}{name}\n";
 		    }
 # Record host modification.
-		    $sql = "update hosts set muser = '$opt_user', mdate = " . time . 
+		    $sql = "update hosts set muser = '$opt_user', mdate = " . time .
 			" where id = $cidr1hash{$ind1}{id};";
 		    $tmp3 = db_exec($sql);
 		    if ($tmp3 < 0) {
@@ -261,193 +261,198 @@ if ($opt_method eq 'repl' or $opt_method eq 'del') {
 	    print "Host $cidr1hash{$ind1}{name} has no IPv6 address to delete\n" if ($opt_verbose == 3);
 	}
     }
-    if ($opt_method eq 'del') { goto commit_or_rollback; }
+    # goto-removal-fix: instead jumping over there, make inverted test and
+    #           made code to be skipped conditional on that test right
+    #           after this block :)
+    #if ($opt_method eq 'del') { goto commit_or_rollback; }
 }
 
-# ------------------------------------------------------------------------------
-# Add IPv6 addresses.
-$lastcidr1 = 'null'; $skip = 0;
-host: for $ind1 (sort keys %cidr1hash) {
+# goto-removal-fix: inverted test, see above comment
+if ($opt_method ne 'del') {
+    # ------------------------------------------------------------------------------
+    # Add IPv6 addresses.
+    $lastcidr1 = 'null'; $skip = 0;
+  host: for $ind1 (sort keys %cidr1hash) {
 
-# Given or deduced net to which host should be added.
-    $newnet = $cidr2 || ${$cidr1hash{$ind1}{cidr2}}[0];
+      # Given or deduced net to which host should be added.
+      $newnet = $cidr2 || ${$cidr1hash{$ind1}{cidr2}}[0];
 
-# These checks are only made for the first net or if the net has changed between hosts
-# or if no net was found for a host. Net level checks must precede host level checks!
-    if (!$cidr1hash{$ind1}{cidr1} || $cidr1hash{$ind1}{cidr1} ne $lastcidr1) { subnet: {
+      # These checks are only made for the first net or if the net has changed between hosts
+      # or if no net was found for a host. Net level checks must precede host level checks!
+      if (!$cidr1hash{$ind1}{cidr1} || $cidr1hash{$ind1}{cidr1} ne $lastcidr1) { subnet: {
 
-# Report hosts that don't belong to any subnet.
-# These shouldn't exist, but you can't trust that.
-# Note that if this special case occurs, and --net was given, the script will
-# try to add an IPv6 address to the host, but may not succeed, and what happens
-# after this block is quite subtle (most importantly, the next two if blocks
-# are skipped). Be sure to understand the code if you intend to change it!
-# (All things considered, one goto statement would have made the code more
-# readable, and it would also have been easier to write.)
-	if (!$cidr1hash{$ind1}{cidr1}) {
-	    $tmp1 = "No IPv4 subnet was found for host $cidr1hash{$ind1}{name}";
-# Report recoverable error.
-	    if (!$opt_net) {
-		$tmp1 .= "\n- You didn't give --net and no IPv6 subnet can be deduced";
-		if ($opt_stop) {
-		    db_rollback();
-		    fatal($tmp1 . $entire);
-		}
-		print "$tmp1\n";
-		$skip = 1;
-		last subnet;
-	    }
-	    print "$tmp1\n";
-	} else {
-	    $lastcidr1 = $cidr1hash{$ind1}{cidr1};
-# Don't recheck a net that was already found to have an error.
-	    if ($errornet{$cidr1hash{$ind1}{cidr1}}) {
-		$skip = 1;
-		last subnet;
-	    }
-	}
+	  # Report hosts that don't belong to any subnet.
+	  # These shouldn't exist, but you can't trust that.
+	  # Note that if this special case occurs, and --net was given, the script will
+	  # try to add an IPv6 address to the host, but may not succeed, and what happens
+	  # after this block is quite subtle (most importantly, the next two if blocks
+	  # are skipped). Be sure to understand the code if you intend to change it!
+	  # (All things considered, one goto statement would have made the code more
+	  # readable, and it would also have been easier to write.)
+	  if (!$cidr1hash{$ind1}{cidr1}) {
+	      $tmp1 = "No IPv4 subnet was found for host $cidr1hash{$ind1}{name}";
+	      # Report recoverable error.
+	      if (!$opt_net) {
+		  $tmp1 .= "\n- You didn't give --net and no IPv6 subnet can be deduced";
+		  if ($opt_stop) {
+		      db_rollback();
+		      fatal($tmp1 . $entire);
+		  }
+		  print "$tmp1\n";
+		  $skip = 1;
+		  last subnet;
+	      }
+	      print "$tmp1\n";
+	  } else {
+	      $lastcidr1 = $cidr1hash{$ind1}{cidr1};
+	      # Don't recheck a net that was already found to have an error.
+	      if ($errornet{$cidr1hash{$ind1}{cidr1}}) {
+		  $skip = 1;
+		  last subnet;
+	      }
+	  }
 
-# Report recoverable error if --net was not given and no IPv6 net was found.
-	if (!$opt_net && !@{$cidr1hash{$ind1}{cidr2}}) {
-	    $tmp1 = "You didn't give --net and no IPv6 subnet was found for " .
-		"$cidr1hash{$ind1}{cidr1} based on VLAN settings";
-	    if ($opt_stop) {
-		db_rollback();
-		fatal($tmp1 . $entire);
-	    }
-	    print "$tmp1\n";
-	    $errornet{$cidr1hash{$ind1}{cidr1}} = 1;
-	    $skip = 1;
-	    last subnet;
-	}
+	  # Report recoverable error if --net was not given and no IPv6 net was found.
+	  if (!$opt_net && !@{$cidr1hash{$ind1}{cidr2}}) {
+	      $tmp1 = "You didn't give --net and no IPv6 subnet was found for " .
+		  "$cidr1hash{$ind1}{cidr1} based on VLAN settings";
+	      if ($opt_stop) {
+		  db_rollback();
+		  fatal($tmp1 . $entire);
+	      }
+	      print "$tmp1\n";
+	      $errornet{$cidr1hash{$ind1}{cidr1}} = 1;
+	      $skip = 1;
+	      last subnet;
+	  }
 
-# Report recoverable error if --net was not given and several IPv6 nets share the same VLAN.
-	if (!$opt_net && $#{$cidr1hash{$ind1}{cidr2}} > 0) {
-	    $tmp1 = "You didn't give --net and ${$cidr1hash{$ind1}{cidr2}}[0] " .
-		"shares the same VLAN with another IPv6 subnet\n" .
-		"- each such subnet must be processed individually";
-	    if ($opt_stop) {
-		db_rollback();
-		fatal($tmp1 . $entire);
-	    }
-	    print "$tmp1\n";
-	    $errornet{$cidr1hash{$ind1}{cidr1}} = 1;
-	    $skip = 1;
-	    last subnet;
-	}
+	  # Report recoverable error if --net was not given and several IPv6 nets share the same VLAN.
+	  if (!$opt_net && $#{$cidr1hash{$ind1}{cidr2}} > 0) {
+	      $tmp1 = "You didn't give --net and ${$cidr1hash{$ind1}{cidr2}}[0] " .
+		  "shares the same VLAN with another IPv6 subnet\n" .
+		  "- each such subnet must be processed individually";
+	      if ($opt_stop) {
+		  db_rollback();
+		  fatal($tmp1 . $entire);
+	      }
+	      print "$tmp1\n";
+	      $errornet{$cidr1hash{$ind1}{cidr1}} = 1;
+	      $skip = 1;
+	      last subnet;
+	  }
 
-# Report recoverable error if the IPv6 net to which the
-# host should be attached includes virtual nets.
-	$sql = "select count(*) from nets " .
-	    "where dummy = 't' and net << '$newnet';";
-	undef @dbarr;
-	db_query($sql, \@dbarr);
-	if ($dbarr[0][0] > 0) {
-	    if (!$errornet{$newnet}) {
-		$tmp1 = "$newnet includes virtual nets " .
-		    "- each such virtual net must be processed separately";
-		if ($opt_stop || $cidr2) {
-		    db_rollback();
-		    fatal($tmp1 . $entire);
-		}
-		print "$tmp1\n";
-		$errornet{$newnet} = 1;
-	    }
-	    $skip = 1;
-	    last subnet;
-	}
+	  # Report recoverable error if the IPv6 net to which the
+	  # host should be attached includes virtual nets.
+	  $sql = "select count(*) from nets " .
+	      "where dummy = 't' and net << '$newnet';";
+	  undef @dbarr;
+	  db_query($sql, \@dbarr);
+	  if ($dbarr[0][0] > 0) {
+	      if (!$errornet{$newnet}) {
+		  $tmp1 = "$newnet includes virtual nets " .
+		      "- each such virtual net must be processed separately";
+		  if ($opt_stop || $cidr2) {
+		      db_rollback();
+		      fatal($tmp1 . $entire);
+		  }
+		  print "$tmp1\n";
+		  $errornet{$newnet} = 1;
+	      }
+	      $skip = 1;
+	      last subnet;
+	  }
 
-# Subnet level checks ok, hosts in this subnet can be processed.
-	$skip = 0;
+	  # Subnet level checks ok, hosts in this subnet can be processed.
+	  $skip = 0;
 
-    } }
+	  } }
 
-# If a recoverable subnet level error occurred, skip all remaining hosts in that
-# subnet. Also skip hosts that lie outside subnets unless --net was given.
-    if ($skip) {
-	print "Skipping host $cidr1hash{$ind1}{name} because of a subnet level error\n"
-	    if ($opt_verbose == 3);
-	next host;
-    }
+      # If a recoverable subnet level error occurred, skip all remaining hosts in that
+      # subnet. Also skip hosts that lie outside subnets unless --net was given.
+      if ($skip) {
+	  print "Skipping host $cidr1hash{$ind1}{name} because of a subnet level error\n"
+	      if ($opt_verbose == 3);
+	  next host;
+      }
 
-# Next host if --method is 'keep' and the host already has an IPv6 address.
-    if ($opt_method eq 'keep' && $#{$cidr1hash{$ind1}{ipv6}} >= 0) {
-	print "Host $cidr1hash{$ind1}{name} already has an IPv6 address\n" if ($opt_verbose == 3);
-	next host;
-    }
+      # Next host if --method is 'keep' and the host already has an IPv6 address.
+      if ($opt_method eq 'keep' && $#{$cidr1hash{$ind1}{ipv6}} >= 0) {
+	  print "Host $cidr1hash{$ind1}{name} already has an IPv6 address\n" if ($opt_verbose == 3);
+	  next host;
+      }
 
-# Next host if selection criterion gave multiple IPv4 addresses for the same host.
-    if ($#{$cidr1hash{$ind1}{ipv4}} > 0) {
-	$tmp1 = "Host $cidr1hash{$ind1}{name} has multiple IPv4 addresses and must be handled manually";
-# Report recoverable error.
-	if ($opt_stop eq 'h') {
-	    db_rollback();
-	    fatal($tmp1 . $entire);
-	}
-	print "$tmp1\n";
-	next host;
-    }
+      # Next host if selection criterion gave multiple IPv4 addresses for the same host.
+      if ($#{$cidr1hash{$ind1}{ipv4}} > 0) {
+	  $tmp1 = "Host $cidr1hash{$ind1}{name} has multiple IPv4 addresses and must be handled manually";
+	  # Report recoverable error.
+	  if ($opt_stop eq 'h') {
+	      db_rollback();
+	      fatal($tmp1 . $entire);
+	  }
+	  print "$tmp1\n";
+	  next host;
+      }
 
-# Create one new IPv6 address for the host.
-    $tmp1 = get_free_ip_by_net($serverid, $newnet, $cidr1hash{$ind1}{ether},
-			       ${$cidr1hash{$ind1}{ipv4}}[0], $opt_policy =~ /[a-z]/ ?
-			       $policy{$opt_policy} : $cidr1hash{$ind1}{policy});
-    $tmp2 = lc(substr($tmp1, 0, 1));
-    if (is_ip($tmp1)) {
-# Add the address.
-	$sql = "insert into a_entries (host, ip) values " .
-	    "($cidr1hash{$ind1}{id}, '$tmp1');";
-	$tmp3 = db_exec($sql);
-	if ($tmp3 <= 0) {
-	    db_rollback();
-	    fatal("Failed to add IPv6 for $cidr1hash{$ind1}{name}" .
-		  "\n- Error code $tmp3$entire");
-	} else {
-# Report to user.
-	    if ($opt_verbose) {
-		print "Added IP address $tmp1 to host $cidr1hash{$ind1}{name}\n";
-	    }
-# Record host modification.
-	    $sql = "update hosts set muser = '$opt_user', mdate = " . time . 
-		" where id = $cidr1hash{$ind1}{id};";
-	    $tmp3 = db_exec($sql);
-	    if ($tmp3 < 0) {
-		db_rollback();
-		fatal("Failed to mark host $cidr1hash{$ind1}{name} as modified (add)" .
-		      "\n- Error code $tmp3$entire");
-	    }
-# Update history.
-	    $tmp3 = update_history($uid, $sid, 1, "ADD: IP to host", "ip: $tmp1 (" .
-				   ($login_user ne $opt_user ? "$login_user/" : '') . 'batch)',
-				   $cidr1hash{$ind1}{id});
-	    if ($tmp3 < 0) {
-		db_rollback();
-		fatal("Failed to update history for host $cidr1hash{$ind1}{name} (add)" .
-		      "\n- Error code $tmp3$entire");
-	    }
-	    $add_count++;
-	}
-    } else {
-# Report recoverable error if IPv6 address can't be created.
-	$tmp3 = "Failed to create an IPv6 address for $cidr1hash{$ind1}{name}\n- " .
-	    substr($tmp1, 2);
-	if ($opt_stop eq 'h' || $opt_stop eq 's' && $tmp2 eq 's') {
-	    db_rollback();
-	    fatal($tmp3 . $entire);
-	}
-	print "$tmp3\n";
-# If this was a subnet level error, skip other hosts in this net.
-	if ($tmp2 eq 's') {
-	    $errornet{$cidr1hash{$ind1}{cidr1}} = 1;
-	    $skip = 1;
-	    next host;
-	}
-    }
-
+      # Create one new IPv6 address for the host.
+      $tmp1 = get_free_ip_by_net($serverid, $newnet, $cidr1hash{$ind1}{ether},
+				 ${$cidr1hash{$ind1}{ipv4}}[0], $opt_policy =~ /[a-z]/ ?
+				 $policy{$opt_policy} : $cidr1hash{$ind1}{policy});
+      $tmp2 = lc(substr($tmp1, 0, 1));
+      if (is_ip($tmp1)) {
+	  # Add the address.
+	  $sql = "insert into a_entries (host, ip) values " .
+	      "($cidr1hash{$ind1}{id}, '$tmp1');";
+	  $tmp3 = db_exec($sql);
+	  if ($tmp3 <= 0) {
+	      db_rollback();
+	      fatal("Failed to add IPv6 for $cidr1hash{$ind1}{name}" .
+		    "\n- Error code $tmp3$entire");
+	  } else {
+	      # Report to user.
+	      if ($opt_verbose) {
+		  print "Added IP address $tmp1 to host $cidr1hash{$ind1}{name}\n";
+	      }
+	      # Record host modification.
+	      $sql = "update hosts set muser = '$opt_user', mdate = " . time .
+		  " where id = $cidr1hash{$ind1}{id};";
+	      $tmp3 = db_exec($sql);
+	      if ($tmp3 < 0) {
+		  db_rollback();
+		  fatal("Failed to mark host $cidr1hash{$ind1}{name} as modified (add)" .
+			"\n- Error code $tmp3$entire");
+	      }
+	      # Update history.
+	      $tmp3 = update_history($uid, $sid, 1, "ADD: IP to host", "ip: $tmp1 (" .
+				     ($login_user ne $opt_user ? "$login_user/" : '') . 'batch)',
+				     $cidr1hash{$ind1}{id});
+	      if ($tmp3 < 0) {
+		  db_rollback();
+		  fatal("Failed to update history for host $cidr1hash{$ind1}{name} (add)" .
+			"\n- Error code $tmp3$entire");
+	      }
+	      $add_count++;
+	  }
+      } else {
+	  # Report recoverable error if IPv6 address can't be created.
+	  $tmp3 = "Failed to create an IPv6 address for $cidr1hash{$ind1}{name}\n- " .
+	      substr($tmp1, 2);
+	  if ($opt_stop eq 'h' || $opt_stop eq 's' && $tmp2 eq 's') {
+	      db_rollback();
+	      fatal($tmp3 . $entire);
+	  }
+	  print "$tmp3\n";
+	  # If this was a subnet level error, skip other hosts in this net.
+	  if ($tmp2 eq 's') {
+	      $errornet{$cidr1hash{$ind1}{cidr1}} = 1;
+	      $skip = 1;
+	      next host;
+	  }
+      }
+  }
 }
-
 # ------------------------------------------------------------------------------
-commit_or_rollback:
+# fix-goto end - mesrik
+#commit_or_rollback:
 print "$del_count IPv6 address(es) deleted\n"
     if ($opt_method eq 'repl' or $opt_method eq 'del');
 print "$add_count IPv6 address(es) added\n"
@@ -633,7 +638,7 @@ doesn't commit the changes to the database.
 
 This utility adds IPv6 addresses to several hosts in a single operation. Use
 this when you already have an IPv4 network and you want to start using
-IPv6 addresses 
+IPv6 addresses
 
 Preliminary steps: Once you have obtained an IPv6 address range, create
 a new IPV6 net in Sauron. Then create an IPv6 network hierarchy of virtual

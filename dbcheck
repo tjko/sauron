@@ -87,16 +87,21 @@ if (defined $opt_check && $opt_check ne '' && $opt_check ne 'all') {
 	if (!$tmp1) {
 	    print "Unknown value for --check: $chks[$ind1]\n";
 	    $opt_check = 'error';
-	    goto list_groups;
+	    # goto-removal-fix: with 'last' instead
+	    #goto list_groups;
+	    last;
 	}
     }
-    $opt_check = '#' . join('#', @chks) . '#';
+    # goto-removal-fix: don't assign incase $opt_error contains error
+    #$opt_check = '#' . join('#', @chks) . '#';
+    $opt_check = '#' . join('#', @chks) . '#' if ($opt_check ne 'error');
 } elsif (!defined $opt_check || $opt_check eq '') {
     $opt_check = 'default';
 }
 
 # Show names of check groups.
-list_groups:
+# goto-removal-fix: now unused goto label
+#list_groups:
 if ($opt_groups || $opt_check eq 'error') {
     for $ind1 (0..$#funcs) {
 	$groups{$funcs[$ind1][3]} = 1;
