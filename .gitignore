@@ -15,6 +15,7 @@
 
 # configured Sauron
 Sauron/DB.pm
+modgroup
 
 # GNU configure generated stuff
 config.log
