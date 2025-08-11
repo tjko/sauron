@@ -18,6 +18,7 @@ use Sauron::CGI::Utils;
 use Sauron::Sauron;
 use Data::Dumper;
 #use strict;
+use warnings;;
 
 $CGI::DISABLE_UPLOADS = 1; # no uploads
 $CGI::POST_MAX = 100000; # max 100k posts
@@ -174,7 +175,7 @@ sub frame_set2();
 sub frame_1();
 sub frame_2();
 sub init_plugins($);
-
+sub is_superuser();
 
 #####################################################################
 
@@ -289,14 +290,14 @@ set_muser($state{user});
 $bgcolor='black';
 $bgcolor='white' if ($frame_mode);
 
-unless ($state{superuser} eq 'yes') {
+unless (is_superuser()) {
   html_error("cannot get permissions!")
     if (get_permissions($state{uid},\%perms));
   foreach $rhf_key (keys %{$perms{rhf}}) {
     $SAURON_RHF{$rhf_key}=$perms{rhf}->{$rhf_key};
   }
 } else {
-  $perms{alevel}=999 if ($state{superuser});
+  $perms{alevel}=999 if (is_superuser());
 }
 
 
@@ -317,8 +318,8 @@ if (param('csv')) {
           "</head><body bgcolor=\"$bgcolor\">\n";
   } else {
     $refresh=meta({-http_equiv=>'Refresh',-content=>'1800'})
-      if (($state{superuser} eq 'yes') && (param('menu') eq 'login') &&
-	  (param('sub') eq 'who'));
+	if (is_superuser() && (defined(param('menu')) && param('menu') eq 'login') &&
+	    (defined(param('sub')) && param('sub') eq 'who'));
     print start_html(-charset=>$SAURON_CHARSET,-title=>"Sauron ($SERVER_ID)",-BGCOLOR=>$bgcolor,
 		     -meta=>{keywords=>'Sauron DNS DHCP tool'},
 		     -head=>$refresh);
@@ -612,8 +613,8 @@ sub login_auth() {
       } else {
 	$pwd_chk = pwd_check($p,$user{password});
       }
-      if ( ($pwd_chk == 0) &&
-	   ($user{expiration} == 0 || $user{expiration} > time()) ) {
+      if ( ($pwd_chk == 0) && (!defined($user{expiration}) ||
+	   $user{expiration} == 0 || $user{expiration} > time()) ) {
 	$state{'auth'}='yes';
 	$state{'user'}=$u;
 	$state{'uid'}=$user{'id'};
@@ -622,7 +623,7 @@ sub login_auth() {
 	$state{'serverid'}=$user{'server'};
 	$state{'zoneid'}=$user{'zone'};
 	$state{'superuser'}='yes' if ($user{superuser} eq 't' ||
-				      $user{superuser} == 1);
+				      $user{superuser} eq 1);
 	if ($state{'serverid'} > 0) {
 	  $state{'server'}=$h{'name'}
 	    unless(get_server($state{'serverid'},\%h));
@@ -650,22 +651,22 @@ sub login_auth() {
 	      "</TR><TR><TD colspan=3><CENTER>\n";
 
 # Is login allowed to superusers only?
-	if ($SAURON_TEMP_LOCK && $state{'superuser'} ne 'yes') { # **** 2020-09-16 TVu
+	if ($SAURON_TEMP_LOCK && !is_superuser()) {
 	    print '<br><h1>Sorry, Sauron is temporarily closed</h1></center></td></table>';
 	    logout(0);
 	}
 
 	print h1("Login ok!"),p,"<TABLE><TR><TD>",
-	      start_form(-method=>'POST',-action=>$s_url),$arg_str,
+	      start_form(-method=>'POST',-action=>$s_url),$arg_str || '',
 	      submit(-name=>'submit',-value=>'No Frames',
 		     autofocus=>'true'),end_form, # Autofocus 2020-06-16 TVu
 	      "</TD><TD> ",
-	      start_form(-method=>'POST',-action=>"$s_url/frames"),$arg_str,
+	      start_form(-method=>'POST',-action=>"$s_url/frames"),$arg_str || '',
 	      submit(-name=>'submit',-value=>'Frames'),end_form,
 	      "</TD></TR></TABLE>";
 
 	# warn about expiring account
-	if ( ($user{expiration} > 0) &&
+	if (defined($user{expiration}) && ($user{expiration} > 0) &&
 	     ($user{expiration} < time() + 14*86400) ) {
 	  print "<FONT color=\"red\">",
 	        h2("NOTE! Your account will expire soon!"),
@@ -766,7 +767,7 @@ sub top_menu($) {
   }
 
 # Warn users if web interface will soon be closed.
-  if ($SAURON_TEMP_LOCK == 1 && $state{'superuser'} ne 'yes') { # **** 2020-09-16 TVu
+  if ($SAURON_TEMP_LOCK == 1 && !is_superuser()) {
       print '</td><tr><td colspan=3><center><font color="#ffffff"><h3>Please log ' .
 	  'out from Sauron &ndash; maintenance break imminent!</h3></font></center>';
   }
@@ -774,7 +775,7 @@ sub top_menu($) {
   print "</FONT></TD></TR></TABLE>";
 
 # Terminate session if not superuser and only superusers allowed.
-  if ($SAURON_TEMP_LOCK == 2 && $state{'superuser'} ne 'yes') { # **** 2020-09-16 TVu
+  if ($SAURON_TEMP_LOCK == 2 && !is_superuser()) {
       print '<center><br><font color="#ffffff"><h1>' .
 	  'Sorry, Sauron is temporarily closed</h1></font></center>';
       logout(0);
@@ -808,12 +809,12 @@ sub left_menu($) {
 	print Tr({-bgcolor=>'#cccccc',-height=>5},td(''));
 	next;
       }
-      next if ($$l[$i][2] =~ /(^|\|)root/ && $state{superuser} ne 'yes');
-      next if ($$l[$i][2] =~ /(^|\|)noframes/ && $frame_mode);
-      next if ($$l[$i][2] =~ /(^|\|)frames/ && not $frame_mode);
-      next if ($$l[$i][2] =~ /(^|\|)scname/ && check_perms('flags','SCNAME',1)); # 2020-09-08 TVu
-# Show / hide menuitem based on auth level.
-      next if ($$l[$i][2] =~ /(^|\|)(\d{1,3})$/ && check_perms('level', $2, 1));
+      next if (defined($$l[$i][2]) && $$l[$i][2] =~ /(^|\|)root/ && !is_superuser());
+      next if (defined($$l[$i][2]) && $$l[$i][2] =~ /(^|\|)noframes/ && $frame_mode);
+      next if (defined($$l[$i][2]) && $$l[$i][2] =~ /(^|\|)frames/ && not $frame_mode);
+      next if (defined($$l[$i][2]) && $$l[$i][2] =~ /(^|\|)scname/ && check_perms('flags','SCNAME',1)); # 2020-09-08 TVu
+      # Show / hide menuitem based on auth level.
+      next if (defined($$l[$i][2]) && $$l[$i][2] =~ /(^|\|)(\d{1,3})$/ && check_perms('level', $2, 1));
       $name=$$l[$i][0];
       $ref=$$l[$i][1];
       $u="$url";
@@ -942,8 +943,7 @@ sub init_plugins($) {
 
 # Add hooks for all 'sub's (it is necessary).
 	for my $ind1 (2..$#{$$MENUDATA[$j]}) { # TVu 2021-04-21
-	  $menuhooks{$MENU}->{$$MENUDATA[$j][$ind1]}=[$NAME,$file2];
-
+	    $menuhooks{$MENU}->{$$MENUDATA[$j][$ind1]}=[$NAME,$file2] if (defined([$NAME,$file2]));
 	}
       }
     }
@@ -951,4 +951,8 @@ sub init_plugins($) {
 
 }
 
+# verify first value is defined before testing against passed argument
+sub is_superuser() {
+    return (defined($state{superuser}) && $state{superuser} eq 'yes') ? 1 : 0;
+}
 # eof
