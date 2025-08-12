@@ -206,7 +206,7 @@ unless (is_cidr($remote_addr)) {
   $remote_addr = '0.0.0.0';
 }
 
-($scookie = cookie(-name=>"sauron-$SERVER_ID")) =~ s/[^A-Fa-f0-9]//g;
+($scookie = cookie(-name=>"sauron-$SERVER_ID") // '') =~ s/[^A-Fa-f0-9]//g;
 if ($scookie) {
   unless (load_state($scookie,\%state)) {
     logmsg("notice","invalid cookie ($scookie) supplied by $remote_addr");
@@ -224,7 +224,7 @@ unless ($scookie) {
   login_form("Welcome",$scookie);
 }
 
-if ($state{'mode'} eq '1' && param('login') eq 'yes') {
+if ($state{'mode'} eq '1' && (param('login') // '') eq 'yes') {
   logmsg("debug","login authentication: $remote_addr");
   print header(-charset=>$SAURON_CHARSET,-target=>'_top',-expires=>'now'),
         start_html(-title=>"Sauron Login",-BGCOLOR=>'white');
@@ -350,16 +350,19 @@ if ($menu eq 'about') {
 elsif ($menuref=$menus{$menu}) {
   my $fail = 0;
   my $module = $menuref;
+  my $sub = param('sub');
 
   # check if we should call a plugin instead of default menu handler module
 #  print "$menuref<BR>";
 #  print param('sub') . '<BR>';
 #  print Dumper(\%menuhooks) . '<br>';
-  if (($hook = $menuhooks{$menu}->{param('sub')})) {
-    #print h2("HOOK: $$hook[0] ($$hook[1])");
-    $module="\"$$hook[1]\"";
-    $menuref="Sauron::Plugins::$$hook[0]";
-#   print "$menuref<BR>";
+  if (defined $menuhooks{$menu} && defined $menuhooks{$menu}->{$sub}) {
+    if (($hook = $menuhooks{$menu}->{$sub})) {
+      #print h2("HOOK: $$hook[0] ($$hook[1])");
+      $module="\"$$hook[1]\"";
+      $menuref="Sauron::Plugins::$$hook[0]";
+      #   print "$menuref<BR>";
+    }
   }
 
   # load module containing menu handler
@@ -421,7 +424,7 @@ exit;
 # ABOUT menu
 #
 sub about_menu() {
-  $sub=param('sub');
+  my $sub=param('sub') // '';
 
   if ($sub eq 'copyright') {
     open(FILE,"$PROG_DIR/COPYRIGHT") || return;
@@ -872,7 +875,7 @@ sub frame_set() {
 
 sub frame_set2() {
   print header(-charset=>$SAURON_CHARSET);
-  $menu="?menu=" . param('menu') if ($menu);
+  $menu="?menu=$menu" if ($menu);
 
   print "<HTML>" .
         "<FRAMESET border=\"0\" cols=\"120,*\">\n" .
