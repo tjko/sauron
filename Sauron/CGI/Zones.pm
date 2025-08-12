@@ -484,7 +484,7 @@ sub menu_handler {
   print "<table width='99%'><tr align=right><td>";
   print start_form(-method=>'POST',-action=>$selfurl),
   hidden('menu','zones'),hidden('sub','select'),
-  hidden('select_filter',param('select_filter')),
+  hidden('select_filter',scalar(param('select_filter'))),
   hidden('csv','1'),
   submit(-name=>'results.csv',-value=>'Download CSV');
   print end_form;

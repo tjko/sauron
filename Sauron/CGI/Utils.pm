@@ -491,7 +491,7 @@ sub delete_magic($$$$$$$) {
   print h2("Delete $name:"),p,
           start_form(-method=>'POST',-action=>$selfurl),
           hidden('menu',$menu),hidden('sub','Delete'),
-          hidden('select_ip', param('select_ip')),
+          hidden('select_ip', scalar(param('select_ip'))),
           hidden($prefix . "_id",$id);
   print submit(-name=>$prefix . '_confirm',-value=>'Delete'),"  ",
         submit(-name=>$prefix . '_cancel',-value=>'Cancel'),end_form;

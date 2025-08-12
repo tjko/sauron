@@ -553,7 +553,7 @@ sub browse_nets($$)
 
   print "<table width='99%'><tr align=right><td>";
   print start_form(-method=>'POST',-action=>$selfurl),
-  hidden('menu','nets'),hidden('list',param('list')),
+  hidden('menu','nets'),hidden('list',scalar(param('list'))),
   hidden('csv','1'),
   submit(-name=>'results.csv',-value=>'Download CSV');
   print end_form;

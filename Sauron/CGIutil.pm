@@ -376,7 +376,7 @@ sub form_check_form($$$) {
   }
 
 # Make note if this is a Static alias. 2020-12-17 TVu
-    my @names = param(); # Names of parameters.
+    my @names = multi_param(); # Names of parameters.
     foreach my $var (@names) {
 	if ($var eq $prefix . '_static_alias') {
 	    $data->{'static_alias'} = 1;
@@ -548,7 +548,7 @@ sub form_check_form($$$) {
     }
     elsif ($type == 3) {
       next if ($rec->{type} eq 'list');
-      return 3 unless (${$rec->{enum}}{param($p)});
+      return 3 unless (${$rec->{enum}}{scalar(param($p))});
       $data->{$tag}=param($p);
       if ($rec->{tag} eq 'net') {
         $inetNet = param($p);
@@ -713,7 +713,7 @@ sub form_magic($$$) {
     $p1=$prefix."_".$rec->{tag};
 
     if ($rec->{hidden}) {
-      print hidden($p1,param($p1));
+      print hidden($p1,scalar(param($p1)));
       next;
     }
     if ($rec->{restricted}) {
@@ -723,7 +723,7 @@ sub form_magic($$$) {
       $val=param($prefix."_".${$rec->{iff}}[0]);
       $e=${$rec->{iff}}[1];
       unless ($val =~ /^($e)$/) {
-	print hidden($p1,param($p1)) if ($rec->{iff}[2]);
+	print hidden($p1,scalar(param($p1))) if ($rec->{iff}[2]);
 	next;
       }
     }
@@ -751,13 +751,13 @@ sub form_magic($$$) {
       }
       if ($rec->{type} eq 'passwd') {
 	print password_field(-name=>$p1,-size=>$rec->{len},
-			     -maxlength=>$maxlen,-value=>param($p1));
+			     -maxlength=>$maxlen,-value=>scalar(param($p1)));
       } elsif ($rec->{type} eq 'textarea') {
 	print textarea(-name=>$p1,-rows=>$rec->{rows},
-		       -columns=>$rec->{columns},-value=>param($p1));
+		       -columns=>$rec->{columns},-value=>scalar(param($p1)));
       } else {
 	print textfield(-name=>$p1,-size=>$rec->{len},-maxlength=>$maxlen,
-		    -value=>param($p1));
+		    -value=>scalar(param($p1)));
 	if ($data->{'static_alias'}) { # 2020-12-17 TVu
 	    print hidden(-name=>$prefix.'_static_alias',-value=>1);
 	}
@@ -823,7 +823,7 @@ sub form_magic($$$) {
       print "</TR>";
       for $j (1..$a) {
 	$p2=$p1."_".$j;
-	print "<TR>",hidden(-name=>$p2."_id",param($p2."_id"));
+	print "<TR>",hidden(-name=>$p2."_id",scalar(param($p2."_id")));
 	for $k (1..$rec->{fields}) {
 	  $n=$p2."_".$k;
 	  $maxlen=${$rec->{maxlen}}[$k-1];
@@ -833,11 +833,11 @@ sub form_magic($$$) {
 	      print "<TD>",textarea(-name=>$n,
 				    -rows => $rec->{rows},
 				    -columns => ${$rec->{len}}[$k-1],
-				    -value => param($n));
+				    -value => scalar(param($n)));
 	  } else {
 
 	      print "<TD>",textfield(-name=>$n,-size=>${$rec->{len}}[$k-1],
-				     -maxlength=>$maxlen,-value=>param($n));
+				     -maxlength=>$maxlen,-value=>scalar(param($n)));
 
 	  }
 
@@ -845,7 +845,7 @@ sub form_magic($$$) {
                 form_check_field($rec,param($n),$k),"</FONT></TD>";
         }
         print td("<FONT size=-2>",checkbox(-label=>'Delete',
-	             -name=>$p2."_del",-checked=>param($p2."_del")),
+		     -name=>$p2."_del",-checked=>scalar(param($p2."_del"))),
 		 "</FONT>"),
 	       "</TR>";
       }
@@ -860,11 +860,11 @@ sub form_magic($$$) {
 	    print td(textarea(-name=>$n,
 			      -rows => $rec->{rows},
 			      -columns => ${$rec->{len}}[$k-1],
-			      -value => param($n)));
+			      -value => scalar(param($n))));
 	} else {
 
 	    print td(textfield(-name=>$n,-size=>${$rec->{len}}[$k-1],
-			       -maxlength=>$maxlen,-value=>param($n)));
+			       -maxlength=>$maxlen,-value=>scalar(param($n))));
 
 	}
 
@@ -909,7 +909,7 @@ sub form_magic($$$) {
       $val=${$rec->{enum}}{$val}  if ($rec->{type} eq 'enum');
 #     print td($rec->{name}),"<TD><FONT color=\"$form->{ro_color}\">",
       print "<td title='$rec->{title}'>$rec->{name}</td>","<TD><FONT color=\"$form->{ro_color}\">",
-	    "$val</FONT></TD>", hidden($p1,param($p1));
+	  "$val</FONT></TD>", hidden($p1,scalar(param($p1)));
     } elsif ($rec->{ftype} == 5) {
       $rec->{fields}=5;
       $rec->{type}=['ip','text','text','text'];
@@ -930,34 +930,34 @@ sub form_magic($$$) {
 
       for $j (1..$a) {
 	$p2=$p1."_".$j;
-	print "<TR>",hidden(-name=>$p2."_id",-value=>param($p2."_id"));
+	print "<TR>",hidden(-name=>$p2."_id",-value=>scalar(param($p2."_id")));
 
 	$n=$p2."_1";
 	if (!param($n) && param('subnetlist') && param('subnetlist') ne 'null') { # ****
 	    param($n, param('subnetlist'));
 	}
-	print "<TD>",textfield(-name=>$n,-size=>40,-value=>param($n));
+	print "<TD>",textfield(-name=>$n,-size=>40,-value=>scalar(param($n)));
         print "<FONT size=-1 color=\"red\"><BR>",
               #Value to be deleted won't be checked.
               (param($p2."_del") eq 'on' ? '' : form_check_field($rec,param($n),1)),"</FONT></TD>";
               #form_check_field($rec,param($n),1),"</FONT></TD>";
 	if ($rec->{restricted_mode}) {
 	  $n=$p2."_3";
-	  print hidden(-name=>$n,-value=>param($n)),
+	  print hidden(-name=>$n,-value=>scalar(param($n))),
 	        td((param($n) eq 'on' ? 'on':'off'));
 	  $n=$p2."_2";
-	  print hidden(-name=>$n,-value=>param($n)),
+	  print hidden(-name=>$n,-value=>scalar(param($n))),
 	        td((param($n) eq 'on' ? 'on':'off'));
 	}
 	else {
 	  $n=$p2."_3";
-	  print td(checkbox(-label=>' A',-name=>$n,-checked=>param($n))) if ip_is_ipv4(param($p2 . "_1"));
-	  print td(checkbox(-label=>' AAAA',-name=>$n,-checked=>param($n))) if ip_is_ipv6(param($p2 . "_1"));
+	  print td(checkbox(-label=>' A',-name=>$n,-checked=>scalar(param($n)))) if ip_is_ipv4(scalar(param($p2 . "_1")));
+	  print td(checkbox(-label=>' AAAA',-name=>$n,-checked=>scalar(param($n)))) if ip_is_ipv6(scalar(param($p2 . "_1")));
 	  $n=$p2."_2";
-	  print td(checkbox(-label=>' PTR',-name=>$n,-checked=>param($n)));
+	  print td(checkbox(-label=>' PTR',-name=>$n,-checked=>scalar(param($n))));
 
 	  print td(checkbox(-label=>' Delete',
-			    -name=>$p2."_del",-checked=>param($p2."_del") )),
+			    -name=>$p2."_del",-checked=>scalar(param($p2."_del")) )),
 			      "</TR>";
 	}
       }
@@ -969,7 +969,7 @@ sub form_magic($$$) {
 	if ($rec->{subnetlist}) { # ****
 	    $subnetlist = get_ip_sugg($data->{hostid}, $serverid, $data->{perms});
 	}
-	print "<TR>",td(textfield(-name=>$n,-size=>40,-value=>param($n))),
+	print "<TR>",td(textfield(-name=>$n,-size=>40,-value=>scalar(param($n)))),
 	td(submit(-name=>$prefix."_".$rec->{tag}."_add",-value=>'Add')),
 	"<td colspan=2>$subnetlist</td>",
 	"</TR>";
@@ -981,7 +981,7 @@ sub form_magic($$$) {
       get_mx_template(param($p1),\%tmpl_rec);
       print td($rec->{name}),"<TD><TABLE WIDTH=\"99%\">\n<TR>",
 	    td(popup_menu(-name=>$p1,-values=>\@lst,
-	                  -default=>param($p1),-labels=>\%lsth),
+	                  -default=>scalar(param($p1)),-labels=>\%lsth),
             submit(-name=>$prefix."_".$rec->{tag}."_update",
 		      -value=>'Update')),"</TR>\n<TR>",
 	    "<TD>";
@@ -992,7 +992,7 @@ sub form_magic($$$) {
       get_wks_template(param($p1),\%tmpl_rec);
       print td($rec->{name}),"<TD><TABLE WIDTH=\"99%\">\n<TR>",
 	    td(popup_menu(-name=>$p1,-values=>\@lst,
-	                  -default=>param($p1),-labels=>\%lsth),
+	                  -default=>scalar(param($p1)),-labels=>\%lsth),
             submit(-name=>$prefix."_".$rec->{tag}."_update",
 		      -value=>'Update')),"</TR>\n<TR>",
 	    "<TD>";
@@ -1022,17 +1022,17 @@ sub form_magic($$$) {
 
       for $j (1..$a) {
 	$p2=$p1."_".$j;
-	print "<TR>",hidden(-name=>$p2."_id",param($p2."_id"));
+	print "<TR>",hidden(-name=>$p2."_id",scalar(param($p2."_id")));
 	$n=$p2."_1";
-	print hidden($n,param($n));
+	print hidden($n,scalar(param($n)));
 	$n=$p2."_2";
-	print td(param($n)),hidden($n,param($n));
+	print td(param($n)),scalar(hidden($n,param($n)));
         print td(checkbox(-label=>' Delete',
-	             -name=>$p2."_del",-checked=>param($p2."_del") )),"</TR>";
+	             -name=>$p2."_del",-checked=>scalar(param($p2."_del")) )),"</TR>";
       }
       $j=$a+1;
       $n=$prefix."_".$rec->{tag}."_".$j."_2";
-      print "<TR><TD>",textfield(-name=>$n,-size=>25,-value=>param($n));
+      print "<TR><TD>",textfield(-name=>$n,-size=>25,-value=>scalar(param($n)));
       print "<BR><FONT color=\"red\">Uknown host!</FONT>"
 	if ($unknown_host);
       print "<BR><FONT color=\"red\">Invalid host!</FONT>"
@@ -1061,7 +1061,7 @@ sub form_magic($$$) {
       get_group(param($p1),\%tmpl_rec);
       print td($rec->{name}),"<TD>",
 	    popup_menu(-name=>$p1,-values=>\@lst,
-	                  -default=>param($p1),-labels=>\%lsth),
+	                  -default=>scalar(param($p1)),-labels=>\%lsth),
             "</TD>";
     }
     elsif ($rec->{ftype} == 11) {
@@ -1087,18 +1087,18 @@ sub form_magic($$$) {
       print hidden(-name=>$p1."_count",-value=>$a);
       for $j (1..$a) {
 	$p2=$p1."_".$j;
-	print hidden($p2."_id",param($p2."_id")),
-	      hidden($p2."_1",param($p2."_1")),
-	      hidden($p2."_2",param($p2."_2")),
+	print hidden($p2."_id",scalar(param($p2."_id"))),
+	      hidden($p2."_1",scalar(param($p2."_1"))),
+	      hidden($p2."_2",scalar(param($p2."_2"))),
 	      "[".param($p2."_2")," ",
 	      checkbox(-label=>' (delete)',-name=>$p2."_del",
-		       -checked=>param($p2."_del")),"] ";
+		       -checked=>scalar(param($p2."_del"))),"] ";
 	print "<br>" if ($j % 4 == 0);
       }
       $n=$p1."_".($a+1)."_1";
       param($n,"-1") unless (param($n));
       print "<br>",
-	    popup_menu(-name=>$n,-values=>\@lst,-default=>param($n),
+	    popup_menu(-name=>$n,-values=>\@lst,-default=>scalar(param($n)),
 		       -labels=>\%lsth), " ",
 	    submit(-name=>$p1."_add",-value=>'Add');
       print "</TD>";
@@ -1178,7 +1178,7 @@ sub form_magic($$$) {
 	          td(textfield(-name=>$p2."_6",-size=>25,-maxlength=>80,
 			       -value=>$aml_comment)),
 	          td("<FONT size=-2>",checkbox(-label=>'Delete',
-	             -name=>$p2."_del",-checked=>param($p2."_del") ),
+	             -name=>$p2."_del",-checked=>scalar(param($p2."_del")) ),
 		     "</FONT>"),
 	          "</TR>";
 	}
@@ -1255,7 +1255,7 @@ sub form_magic($$$) {
 	    popup_menu(-name=>$p1."_l",-values=>\@lst,-default=>$lst[0],
 		       -labels=>\%lsth),
 	    " ",textfield(-name=>$p1,-size=>$rec->{len},-maxlength=>$maxlen,
-			  -value=>param($p1));
+			  -value=>scalar(param($p1)));
 
       $tmp=param($p1);
       $tmp=param($p1."_l") if ($tmp eq '');
