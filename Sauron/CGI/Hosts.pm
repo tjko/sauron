@@ -732,6 +732,156 @@ sub restricted_add_host($) {
   return add_host($rec);
 }
 
+sub show_host_record($$)
+{
+  my($state,$perms) = @_;
+
+  my $selfurl = $state->{selfurl};
+  my $id=param('h_id');
+  my (%host);
+
+  if (get_host($id,\%host)) {
+    alert2("Cannot get host record (id=$id)!");
+    return 1;
+  }
+
+  $host_form{bgcolor}='#ffcccc'
+    if ($host{expiration} > 0 && $host{expiration} < time());
+  # The following line was previously commented out. Why? TVu 20.09.2016
+  $host_form{bgcolor}='#ccffff' if ($host{type}==101);
+  print p,start_form(-method=>'GET',-action=>$selfurl),
+    hidden('menu','hosts'),hidden('h_id',$id);
+  print "<table width=\"99%\"><tr><td align=\"left\">",
+    submit(-name=>'sub',-value=>'Refresh')," &nbsp; ";
+  print submit(-name=>'sub',-value=>'-> This Subnet')," &nbsp; " if ($host{type} == 1);
+
+  # This drop-down list is not strictly for IPv6, but will probably be useful with it.
+  # It is used to select IP for "This subnet", "Ping", "Traceroute", "Copy" and "Move"
+  # when a host has multiple IP addresses, especially both IPv4 and IPv6.
+  my @opt;
+  for my $ind1 (1..$#{$host{ip}}) {
+    push @opt, $host{ip}[$ind1][1];
+  }
+  if (@opt) { print popup_menu('select_ip', \@opt); }
+
+  print "</td><td align=\"right\">";
+  print submit(-name=>'sub',-value=>'History'), " "
+    if (!check_perms('level',$main::ALEVEL_HISTORY,1));
+  print submit(-name=>'sub',-value=>'Network Settings'), " "
+    if ($host{type} == 1);
+  print submit(-name=>'sub',-value=>'Ping'), " "
+    if ($host{type} == 1 && $main::SAURON_PING_PROG &&
+	!check_perms('level',$main::ALEVEL_PING,1));
+  print submit(-name=>'sub',-value=>'Traceroute')
+    if ($host{type} == 1 && $main::SAURON_TRACEROUTE_PROG &&
+	!check_perms('level',$main::ALEVEL_TRACEROUTE,1));
+  print "</td></tr></table>";
+  my %fqdnzone; # ****
+  if (get_zone($host{zone}, \%fqdnzone) == 0) {
+    $host{fqdn} = $host{domain} . '.' . $fqdnzone{name} . '.';
+  }
+  display_form(\%host,\%host_form);
+
+  # 2020-11-11 TVu
+  # User's right to add, edit and delete SRV records or AREC, CNAME or Static aliases:
+  # No RW permission to the zone => None of the above
+  # RWX permission to the zone => All of the above
+  # RW permission to the zone => Right to a specific type if user has that flag set
+  # Flags don't affect reading
+
+  # 2021-03-01 TVu
+  # Only superusers are allowed to edit, delete or copy Delegations (2) and Glue
+  # records (6). The same is true for adding, but that is handled in sauron.cgi.
+
+  unless (check_perms('zone','RW',1) ||
+	  ($host{type} == 2 || $host{type} == 6) && check_perms('superuser','',1)) {
+    my $rwx = check_perms('zone','RWX',1);
+    print submit(-name=>'sub',-value=>'Edit'), " ",
+      submit(-name=>'sub',-value=>'Delete'), " "
+      # Check alias permission flags. 2020-09-07 TVu
+      # Added check of SRV flag. TVu 2020-11-09
+      unless ($host{type} == 4 &&
+	      ($host{cname_alias} && $rwx && check_perms('flags','CNAME',1) ||
+	       $host{static_alias} && $rwx && check_perms('flags','SCNAME',1)) ||
+	      $host{type} == 7 && $rwx && check_perms('flags','AREC',1) ||
+	      $host{type} == 8 && $rwx && check_perms('flags','SRV',1));
+
+    # CNAME and AREC aliases can't be copied because there are bugs in the program,
+    # and finding those bugs proved to be too time-consuming. 2020-09-14 TVu
+    # Please fix if you know how.
+    print submit(-name=>'sub',-value=>'Copy'), " "
+      # Check static alias permission flag.
+      # Added check of SRV flag. TVu 2020-11-09
+      unless ($host{type} == 4 && ($host{cname_alias} || $host{static_alias} && $rwx && check_perms('flags','SCNAME',1)) ||
+	      $host{type} == 7 ||
+	      $host{type} == 8 && $rwx && check_perms('flags','SRV',1));
+
+    print submit(-name=>'sub',-value=>'Move'), " " if ($host{type} == 1);
+
+    #print submit(-name=>'sub',-value=>'Alias'), " " if ($host{type} == 1);
+
+    # Show button to create a CNAME or AREC alias if permission flags allow at least one of them.
+    print submit(-name=>'sub',-value=>'Alias'), " " # 2020-09-07 TVu
+
+      #	    if ($host{type} == 1 && !$rwx &&
+      #		(!check_perms('flags','CNAME',1) || !check_perms('flags','AREC',1)));
+
+      if ($host{type} == 1 && (!$rwx || # ** 2022-02-21 TVu
+			       !check_perms('flags','CNAME',1) || !check_perms('flags','AREC',1)));
+
+    print submit(-name=>'sub',-value=>'Disable'), " " if ($host{type} == 1);
+    print submit(-name=>'sub',-value=>'Enable'), " " if ($host{type} == 101);
+  }
+  print end_form,"<br><br>";
+
+  return 0;
+}
+
+sub browse_hosts($$)
+{
+  my($state,$perms) = @_;
+
+  my $selfurl = $state->{selfurl};
+  my $serverid = $state->{serverid};
+  my (%nethash,@netkeys);
+
+  param('sub','browse');
+  make_net_list($serverid,1,\%nethash,\@netkeys,0,$perms);
+  $browse_hosts_form{alevel}=$perms->{alevel};
+
+  my %bdata=(domain=>'',net=>'ANY',nets=>\%nethash,nets_k=>\@netkeys,
+	     type=>1,order=>2,stype=>0,size=>3,sdtype=>0,grp=>-1);
+  if ($state->{searchopts} =~
+#     /^(\d+),(\d+),(\d+),(-?\d+),(\d+),(\S*),(\S*),(\S*),(-?\d+)$/) {
+      /^(\d+),(\d+),(\d+),(-?\d+),(\d+),(\S*),(\S*),(\S*),(-?\d+),(\S*),(\S*)$/) { # ****
+    $bdata{type}=$1;
+    $bdata{order}=$2;
+    $bdata{size}=$3;
+    $bdata{stype}=$4;
+    $bdata{sdtype}=$5;
+    $bdata{net}=$6 if ($6);
+    $bdata{cidr}=$7 if ($7);
+    $bdata{dates}=$8 if ($8);
+    $bdata{grp}=$9;
+    $bdata{bh_domain_anydom}=$10; # ****
+    $bdata{search_txt}=$11 if ($11); # TVu 2020-11-03
+  }
+  $bdata{domain}=$state->{searchdomain} if ($state->{searchdomain});
+  $bdata{pattern}=$state->{searchpattern} if ($state->{searchpattern});
+  $bdata{search_txt}=$state->{search_txt} if ($state->{search_txt}); # TVu 2020-11-03
+
+  print start_form(-method=>'GET',-action=>$selfurl),
+          hidden('menu','hosts'),hidden('sub','browse'),
+          hidden('bh_page','0');
+  form_magic('bh',\%bdata,\%browse_hosts_form);
+  print submit(-name=>'bh_submit',-value=>'Search')," &nbsp;&nbsp; ",
+        submit(-name=>'bh_submit',-value=>'Clear'),
+        end_form;
+
+  return 0;
+}
+
+
 # HOSTS menu
 #
 sub menu_handler {
@@ -805,11 +955,17 @@ sub menu_handler {
 	}
     }
 
-    goto show_host_record if (check_perms('delhost',$host{domain}));
+    if (check_perms('delhost',$host{domain})) {
+      show_host_record($state,$perms);
+      return;
+    }
 
     $res=delete_magic('h','Host','hosts',\%host_form,\&get_host,\&delete_host,
 		      $id);
-    goto show_host_record if ($res == 2);
+    if ($res == 2) {
+      show_host_record($state,$perms);
+      return;
+    }
     if ($res==1) {
       update_history($state->{uid},$state->{sid},1,
 		    "DELETE: $host_types{$host{type}} ",
@@ -903,23 +1059,28 @@ sub menu_handler {
   }
   elsif ($sub eq 'Disable') {
     return unless ($id > 0);
-    goto show_host_record if (check_perms('delhost',$host{domain}));
-    if (update_host({id=>$id,type=>101}) < 0) {
-      alert2("Failed to update host record (id=$id)");
-    } else {
-      update_history($state->{uid},$state->{sid},1,
-		    "DISABLE: $host_types{$host{type}} ",
-		    "domain: $host{domain}, ip:$host{ip}[1][1], " .
-		    "ether: $host{ether}",$host{id});
-      print h3("Host disabled (converted to a host reservation)");
+    if (!check_perms('delhost',$host{domain})) {
+      if (update_host({id=>$id,type=>101}) < 0) {
+	alert2("Failed to update host record (id=$id)");
+      } else {
+	update_history($state->{uid},$state->{sid},1,
+		       "DISABLE: $host_types{$host{type}} ",
+		       "domain: $host{domain}, ip:$host{ip}[1][1], " .
+		       "ether: $host{ether}",$host{id});
+	print h3("Host disabled (converted to a host reservation)");
+      }
     }
-    goto show_host_record;
+    show_host_record($state,$perms);
+    return;
   }
   elsif ($sub eq 'Alias') { # add static alias - This really adds AREC and CNAME aliases!
     if ($id > 0) {
       $data{alias}=$id;
       $data{aliasname}=$host{domain};
-      goto show_host_record if (check_perms('host',$host{domain}));
+      if (check_perms('host',$host{domain})) {
+	show_host_record($state,$perms);
+	return;
+      }
     }
 
     $data{type}=4;
@@ -928,36 +1089,42 @@ sub menu_handler {
     $res=add_magic('aliasadd','ALIAS','hosts',\%new_alias_form,
 		   \&restricted_add_host,\%data);
     if ($res > 0) {
-# Alias inherits TTL from host. 2019-01-08 TVu
-	if (param('aliasadd_alias')) {
-	    my $sql = "update hosts set ttl = (select ttl from hosts where id = " .
-		param('aliasadd_alias') . ") where id = $res;";
-	    db_exec($sql); # No error checking.
-	}
-	update_history($state->{uid},$state->{sid},1,
-		       "ALIAS: $host_types{$data{type}} ",
-		       "domain: $data{domain}, alias=$data{alias}",$res);
-	param('h_id',$res);
-	goto show_host_record;
+      # Alias inherits TTL from host. 2019-01-08 TVu
+      if (param('aliasadd_alias')) {
+	my $sql = "update hosts set ttl = (select ttl from hosts where id = " .
+	  param('aliasadd_alias') . ") where id = $res;";
+	db_exec($sql); # No error checking.
+      }
+      update_history($state->{uid},$state->{sid},1,
+		     "ALIAS: $host_types{$data{type}} ",
+		     "domain: $data{domain}, alias=$data{alias}",$res);
+      param('h_id',$res);
+      show_host_record($state,$perms);
+      return;
     }
     elsif ($res < 0) {
       param('h_id',param('aliasadd_alias'));
-      goto show_host_record;
+      show_host_record($state,$perms);
+      return;
     }
     return;
   }
   elsif ($sub eq 'Move') {
     return unless ($id > 0);
-    goto show_host_record if (check_perms('host',$host{domain}));
-# These moves are now supported.
-#   if ($#{$host{ip}} > 1) {
-#     alert2("Host has multiple IPs!");
-#     print  p,"Move of hosts with multiple IPs not supported (yet)";
-#     return;
-#   }
+    if (check_perms('host',$host{domain})) {
+      show_host_record($state,$perms);
+      return;
+    }
+    # These moves are now supported.
+    #   if ($#{$host{ip}} > 1) {
+    #     alert2("Host has multiple IPs!");
+    #     print  p,"Move of hosts with multiple IPs not supported (yet)";
+    #     return;
+    #   }
     if (param('move_cancel')) {
       print h2("Host record not moved");
-      goto show_host_record;
+      show_host_record($state,$perms);
+      return;
     } elsif (param('move_confirm')) {
       if (param('move_confirm2')) {
 	if (not is_cidr(param('new_ip'))) {
@@ -967,53 +1134,53 @@ sub menu_handler {
 	} elsif (check_perms('ip',param('new_ip'),1)) {
 	  alert1('Invalid IP number: outside allowed range(s)');
 	} else {
-# Old code.
-#	    my $old_ip=$host{ip}[1][1];
-#	    $host{ip}[1][1]=param('new_ip');
-#	    $host{ip}[1][4]=1;
-# Support for moving hosts with multiple IPs, one IP at a time.
-# The selected IP will be replaced. TVu
-	    my $old_ip = param('select_ip');
-	    my $ind2;
-	    for my $ind1 (1..$#{$host{ip}}) {
-		if ($old_ip eq $host{ip}[$ind1][1]) { $ind2 = $ind1; last; }
-	    }
-	    if (!$ind2) {
-		alert2("Someone has changed the IP that you were trying to change!");
-		return;
-	    }
-	    $host{ip}[$ind2][1] = param('new_ip');
-	    $host{ip}[$ind2][4] = 1;
-# End of new code.
-	    $host{huser}=param('new_user') unless (param('new_user') =~ /^\s*$/);
-	    $host{dept}=param('new_dept') unless (param('new_dept') =~ /^\s*$/);
-	    $host{location}=param('new_loc')
-		unless (param('new_loc') =~ /^\s*$/);
-	    $host{info}=param('new_info') unless (param('new_info') =~ /^\s*$/);
-	    unless (($res=update_host(\%host)) < 0) {
-		update_history($state->{uid},$state->{sid},1,
-			       "MOVE: $host_types{$host{type}} ",
-#		   "domain: $host{domain}, IP: $old_ip --> $host{ip}[1][1]",
-		   "domain: $host{domain}, IP: $old_ip --> $host{ip}[$ind2][1]",
-			  $host{id});
+	  # Old code.
+	  #	    my $old_ip=$host{ip}[1][1];
+	  #	    $host{ip}[1][1]=param('new_ip');
+	  #	    $host{ip}[1][4]=1;
+	  # Support for moving hosts with multiple IPs, one IP at a time.
+	  # The selected IP will be replaced. TVu
+	  my $old_ip = param('select_ip');
+	  my $ind2;
+	  for my $ind1 (1..$#{$host{ip}}) {
+	    if ($old_ip eq $host{ip}[$ind1][1]) { $ind2 = $ind1; last; }
+	  }
+	  if (!$ind2) {
+	    alert2("Someone has changed the IP that you were trying to change!");
+	    return;
+	  }
+	  $host{ip}[$ind2][1] = param('new_ip');
+	  $host{ip}[$ind2][4] = 1;
+	  # End of new code.
+	  $host{huser}=param('new_user') unless (param('new_user') =~ /^\s*$/);
+	  $host{dept}=param('new_dept') unless (param('new_dept') =~ /^\s*$/);
+	  $host{location}=param('new_loc')
+	    unless (param('new_loc') =~ /^\s*$/);
+	  $host{info}=param('new_info') unless (param('new_info') =~ /^\s*$/);
+	  unless (($res=update_host(\%host)) < 0) {
+	    update_history($state->{uid},$state->{sid},1,
+			   "MOVE: $host_types{$host{type}} ",
+			   "domain: $host{domain}, IP: $old_ip --> $host{ip}[$ind2][1]",
+			   $host{id});
 	    print h2('Host moved.');
-	    goto show_host_record;
+	    show_host_record($state,$perms);
+	    return;
 	  } else {
 	    alert1("Host update failed! ($res)");
 	  }
 	}
       }
       print h2("Move host to another IP");
-#     my $tmpnet=new Net::IP(param('move_net'));
-#     $newip=auto_address($serverid,param('move_net'));
+      # my $tmpnet=new Net::IP(param('move_net'));
+      # $newip=auto_address($serverid,param('move_net'));
       $newip = get_free_ip_by_net($serverid, param('move_net'), $data{ether}, '',
 				  get_net_ip_policy($serverid, param('move_net')));
       unless (is_cidr($newip)) {
-	  logmsg("notice","get_free_ip_by_net($serverid, '" . param('move_net') . "', '" .
-	      $data{ether} . "', '', " . get_net_ip_policy($serverid, param('move_net')) . ") failed!");
+	logmsg("notice","get_free_ip_by_net($serverid, '" . param('move_net') . "', '" .
+	       $data{ether} . "', '', " . get_net_ip_policy($serverid, param('move_net')) . ") failed!");
 	print h3($newip);
-# Support for moving hosts with multiple IPs.
-#	$newip=$host{ip}[1][1];
+	# Support for moving hosts with multiple IPs.
+	# $newip=$host{ip}[1][1];
 	$newip = param('select_ip');
       }
       print p,start_form(-method=>'GET',-action=>$selfurl),
@@ -1145,13 +1312,16 @@ sub menu_handler {
 
     $host{type}=1 if ($sub eq 'Enable');
     return unless ($id > 0);
-    goto show_host_record if (check_perms('host',$host{domain}));
-#   my $hform=(check_perms('zone','RW',1) || check_perms('flags','SRV') ?
+    if (check_perms('host',$host{domain})) {
+      show_host_record($state,$perms);
+      return;
+    }
+    # my $hform=(check_perms('zone','RW',1) || check_perms('flags','SRV') ?
     my $hform=(check_perms('zone','RW',1) || check_perms('flags','SRV',1) ? # 2020-10-19 TVu
 	       \%restricted_host_form : \%host_form);
 
-# An ordinary user can't edit TTL if superuser has set a value, which is outside limits.
-# TVu 2021-02-15
+    # An ordinary user can't edit TTL if superuser has set a value, which is outside limits.
+    # TVu 2021-02-15
     if (defined($host{'ttl'}) && $host{'ttl'} > 0 &&
 	!check_perms('flags','TTL',1) && check_perms('superuser','',1)) {
 	for my $item (@{$$hform{'data'}}) {
@@ -1165,7 +1335,8 @@ sub menu_handler {
 
     if (param('h_cancel')) {
       print h2("No changes made to host record.");
-      goto show_host_record;
+      show_host_record($state,$perms);
+      return;
     }
 
     if (param('h_submit')) {
@@ -1270,7 +1441,8 @@ sub menu_handler {
 			      "ip: $old_ips[1] --> $host{ip}[1][1] ":""),
 			     $host{id});
 	      print h2("Host record succesfully updated.");
-	      goto show_host_record;
+	      show_host_record($state,$perms);
+	      return;
 	    }
 	  }
 	}
@@ -1293,12 +1465,15 @@ sub menu_handler {
     return;
   }
   elsif ($sub eq 'Network Settings') {
-    goto show_host_record unless ($id > 0 && $host{type} == 1);
-#   get_host_network_settings($serverid,$host{ip}[1][1],\%data);
+    unless ($id > 0 && $host{type} == 1) {
+      show_host_record($state,$perms);
+      return;
+    }
+    # get_host_network_settings($serverid,$host{ip}[1][1],\%data);
     print "Current network settings for: $host{domain}<p>";
-#   display_form(\%data,\%host_net_info_form);
-# Show network settings for all IP addresses that the host has, not just
-# the first one. Unrelated to IPv6, but probably useful with it.
+    # display_form(\%data,\%host_net_info_form);
+    # Show network settings for all IP addresses that the host has, not just
+    # the first one. Unrelated to IPv6, but probably useful with it.
     for my $ind1 (1..$#{$host{ip}}) {
         undef %data;
         get_host_network_settings($serverid,$host{ip}[$ind1][1],\%data);
@@ -1306,11 +1481,15 @@ sub menu_handler {
         print "<br>";
     }
     print "<br><hr noshade><br>";
-    goto show_host_record;
+    show_host_record($state,$perms);
+    return;
   }
   elsif ($sub eq 'Ping') {
     return if check_perms('level',$main::ALEVEL_PING);
-    goto show_host_record unless ($id > 0 && $host{type} == 1);
+    unless ($id > 0 && $host{type} == 1) {
+      show_host_record($state,$perms);
+      return;
+    }
     if ($main::SAURON_PING_PROG && -x $main::SAURON_PING_PROG) {
 # Selected IP address instead of the first one only.
 #     ($ip=$host{ip}[1][1]) =~ s/\/32\s*$//;
@@ -1337,7 +1516,10 @@ sub menu_handler {
   }
   elsif ($sub eq 'Traceroute') {
     return if check_perms('level',$main::ALEVEL_TRACEROUTE);
-    goto show_host_record unless ($id > 0 && $host{type} == 1);
+    unless ($id > 0 && $host{type} == 1) {
+      show_host_record($state,$perms);
+      return;
+    }
     if ($main::SAURON_TRACEROUTE_PROG && -x $main::SAURON_TRACEROUTE_PROG) {
 # Selected IP address instead of the first one only.
 #     ($ip=$host{ip}[1][1]) =~ s/\/32\s*$//;
@@ -1368,7 +1550,10 @@ sub menu_handler {
   }
   elsif ($sub eq 'History') {
     return if (check_perms('level',$main::ALEVEL_HISTORY));
-    goto show_host_record unless ($id > 0);
+    unless ($id > 0) {
+      show_host_record($state,$perms);
+      return;
+    }
     print "History for host record: $id ($host{domain}):<br>";
     get_history_host($id,\@q);
     unshift @q, [$host{cdate},'CREATE','record created',$host{cuser}];
@@ -1411,11 +1596,13 @@ sub menu_handler {
 	param('bh_order','2');
 	param('bh_size','0');
 	param('bh_grp','-1');
-	goto browse_hosts;
+	browse_hosts($state,$perms);
+	return;
       }
       if (form_check_form('bh',\%bdata,\%browse_hosts_form)) {
 	alert2("Invalid parameters.");
-	goto browse_hosts;
+	browse_hosts($state,$perms);
+	return;
       }
       $state->{searchopts}=param('bh_type').",".param('bh_order').",".
                    param('bh_size').",".param('bh_stype').",".
@@ -1445,7 +1632,8 @@ sub menu_handler {
 	param('bh_search_txt',$11) if ($11); # TVu 2020-11-03
       } else {
 	print h2('No previous search found');
-	goto browse_hosts;
+	browse_hosts($state,$perms);
+	return;
       }
       param('bh_domain',$state->{searchdomain});
       param('bh_pattern',$state->{searchpattern});
@@ -1549,7 +1737,8 @@ sub menu_handler {
           }
           else {
               alert2("Invalid pattern for IAID!");
-              goto browse_hosts;
+	      browse_hosts($state,$perms);
+	      return;
           }
       }
 
@@ -1694,7 +1883,8 @@ sub menu_handler {
 #     alert2("No matching records found.");
       alert2('No matching records found' .
 	     (param('bh_domain_anydom') eq 'on' ? '' : ' in this zone') . '.'); # 14 Jun 2017 TVu
-      goto browse_hosts;
+      browse_hosts($state,$perms);
+      return;
     }
 
     #print "\n",url(-path_info=>1,-query=>1),"\n";
@@ -1735,13 +1925,14 @@ sub menu_handler {
 
     if ($count == 1) {
       param('h_id',$q[0][2]);
-      goto show_host_record;
+      show_host_record($state,$perms);
+      return;
     }
 
-#    print "<TABLE width=\"99%\" cellspacing=1 cellpadding=1 border=0 " .
-#          "BGCOLOR=\"ffffff\">",
-#          "<TR><TD><B>Zone:</B> $zone</TD>",
-#          "<TD align=right>Page: ".($page+1)."</TD></TR></TABLE>";
+    #    print "<TABLE width=\"99%\" cellspacing=1 cellpadding=1 border=0 " .
+    #          "BGCOLOR=\"ffffff\">",
+    #          "<TR><TD><B>Zone:</B> $zone</TD>",
+    #          "<TD align=right>Page: ".($page+1)."</TD></TR></TABLE>";
 
     print "<TABLE width=\"99%\" cellspacing=1 cellpadding=1 border=0 " .
 	  "BGCOLOR=\"ffffff\"><TR>"; # ****
@@ -1985,10 +2176,10 @@ sub menu_handler {
       $newhostform = \%restricted_new_host_form if ($type==1);
     }
 
-# Use default host name template, if defined. TVu 02 Jun 2015
+    # Use default host name template, if defined. TVu 02 Jun 2015
     if ($perms->{defhost}) {
 	$data{domain} = $perms->{defhost};
-#	$newhostform->{defhost} = 1;
+	# $newhostform->{defhost} = 1;
     }
     $newhostform->{defhost} = 1; # Allow anyone to use variable %{id} to name hosts. TVu 23 May 2017
 
@@ -2012,33 +2203,34 @@ sub menu_handler {
       print h2("$host_types{$type} record creation canceled.");
       if (param('copy_id')) {
 	param('h_id',param('copy_id'));
-	goto show_host_record;
+	show_host_record($state,$perms);
+	return;
       }
       return;
     }
     elsif (param('addhost_submit')) {
 
-# Adding a Static alias. As if the data had come from the database
-# (as it appears when editing a Static alias). 2020-07-16 TVu
-	if ($type == 4) { $data{'static_alias'} = 1; }
+      # Adding a Static alias. As if the data had come from the database
+      # (as it appears when editing a Static alias). 2020-07-16 TVu
+      if ($type == 4) { $data{'static_alias'} = 1; }
 
       unless (($res=form_check_form('addhost',\%data,$newhostform))) {
 	if (($data{type}==1 || $data{type} == 101) && $data{net} ne 'MANUAL' &&
 	    not is_cidr($data{ip})) {
-#	  #my $tmpnet=new Net::Netmask($data{net});
-#	  #$ip=auto_address($serverid,$tmpnet->desc());
-#	    print "$data{net}\n";
-#      $ip=auto_address($serverid,$data{net});
-#     print $data{net} . "<br>\n";
-	    $ip = get_free_ip_by_net($serverid, $data{net}, $data{ether}, '',
-				     get_net_ip_policy($serverid, $data{net}));
-	    unless (is_cidr($ip)) {
-		logmsg("notice","get_free_ip_by_net($serverid, $data{net}, '" .
-		       "$data{ether}', '', " . get_net_ip_policy($serverid, $data{net}) . ") failed!");
-		alert1("Cannot get free IP: $ip");
-		return;
-	    }
-	    $data{ip}=$ip;
+	  # my $tmpnet=new Net::Netmask($data{net});
+	  # $ip=auto_address($serverid,$tmpnet->desc());
+	  # print "$data{net}\n";
+	  # $ip=auto_address($serverid,$data{net});
+	  # print $data{net} . "<br>\n";
+	  $ip = get_free_ip_by_net($serverid, $data{net}, $data{ether}, '',
+				   get_net_ip_policy($serverid, $data{net}));
+	  unless (is_cidr($ip)) {
+	    logmsg("notice","get_free_ip_by_net($serverid, $data{net}, '" .
+		   "$data{ether}', '', " . get_net_ip_policy($serverid, $data{net}) . ") failed!");
+	    alert1("Cannot get free IP: $ip");
+	    return;
+	  }
+	  $data{ip}=$ip;
 	}
 	if ($data{net} eq 'MANUAL' && not is_cidr($data{ip})) {
 	  alert1("IP number must be specified if using Manual IP!");
@@ -2078,7 +2270,8 @@ sub menu_handler {
 			   "domain: $data{domain}",$res);
 	    print h2("Host added successfully");
 	    param('h_id',$res);
-	    goto show_host_record;
+	    show_host_record($state,$perms);
+	    return;
 	  } else {
 	    alert1("Cannot add host record!");
 	    if (db_lasterrormsg() =~ /ether_key/) {
@@ -2137,9 +2330,9 @@ sub menu_handler {
     delete $data{iaid};
     delete $data{serial};
     delete $data{asset_id};
-# Selected IP address instead of the first one only.
-#   $data{ip}=$host{ip}[1][1];
-#   $data{ip} = param('select_ip');
+    # Selected IP address instead of the first one only.
+    # $data{ip}=$host{ip}[1][1];
+    # $data{ip} = param('select_ip');
     $data{ip} = param('select_ip') if (param('select_ip') =~ /\./); # IPv4 only. ****
     $data{preselectnet} = get_net_cidr_by_ip($serverid, param('select_ip'));
     $type=$host{type};
@@ -2149,7 +2342,7 @@ sub menu_handler {
       $p1=$1; $p2=$2;
       if ($p1 =~ /(\d+)/) {
 	my $p3len=length(($p3=$1));
-# Added checks for hostname_in_use, TVu 20.11.2012.
+	# Added checks for hostname_in_use, TVu 20.11.2012.
 	do {
 	    $p4 = sprintf("%0${p3len}d",$p3+1);
 	    $p1 =~ s/${p3}/${p4}/;
@@ -2164,161 +2357,27 @@ sub menu_handler {
 	  } while hostname_in_use($zoneid, $data{domain});
       }
     }
-# Use default host name template, if defined. TVu 02 Jun 2015
+    # Use default host name template, if defined. TVu 02 Jun 2015
     if ($perms->{defhost}) {
 	$data{domain} = $perms->{defhost};
-#	$newhostform->{defhost} = 1;
+	# $newhostform->{defhost} = 1;
     }
     $newhostform->{defhost} = 1; # Allow anyone to use variable %{id} to name hosts. TVu 23 May 2017
-# New ip by network policy instead of 'next free'. This really only works for Lowest or Highest free.
-#   $data{ip}=$newip if (($newip=next_free_ip($serverid,$data{ip})));
+    # New ip by network policy instead of 'next free'. This really only works for Lowest or Highest free.
+    # $data{ip}=$newip if (($newip=next_free_ip($serverid,$data{ip})));
     $data{ip} = $newip if (is_ip($newip = get_free_ip_by_net($serverid, $data{preselectnet},
-		'', '', get_net_ip_policy($serverid, $data{preselectnet}))));
-#   print "$serverid $data{preselectnet}<br>\n";
+				     '', '', get_net_ip_policy($serverid, $data{preselectnet}))));
+    #   print "$serverid $data{preselectnet}<br>\n";
     goto copy_add_label;
   }
 
-
   if (param('h_id')) {
-  show_host_record:
-    $id=param('h_id');
-    if (get_host($id,\%host)) {
-      alert2("Cannot get host record (id=$id)!");
-      return;
-    }
-
-    $host_form{bgcolor}='#ffcccc'
-	if ($host{expiration} > 0 && $host{expiration} < time());
-# The following line was previously commented out. Why? TVu 20.09.2016
-    $host_form{bgcolor}='#ccffff' if ($host{type}==101);
-    print p,start_form(-method=>'GET',-action=>$selfurl),
-          hidden('menu','hosts'),hidden('h_id',$id);
-    print "<table width=\"99%\"><tr><td align=\"left\">",
-          submit(-name=>'sub',-value=>'Refresh')," &nbsp; ";
-    print submit(-name=>'sub',-value=>'-> This Subnet')," &nbsp; " if ($host{type} == 1);
-
-# This drop-down list is not strictly for IPv6, but will probably be useful with it.
-# It is used to select IP for "This subnet", "Ping", "Traceroute", "Copy" and "Move"
-# when a host has multiple IP addresses, especially both IPv4 and IPv6.
-    my @opt;
-    for my $ind1 (1..$#{$host{ip}}) {
-	push @opt, $host{ip}[$ind1][1];
-    }
-    if (@opt) { print popup_menu('select_ip', \@opt); }
-
-    print "</td><td align=\"right\">";
-    print submit(-name=>'sub',-value=>'History'), " "
-      if (!check_perms('level',$main::ALEVEL_HISTORY,1));
-    print submit(-name=>'sub',-value=>'Network Settings'), " "
-      if ($host{type} == 1);
-    print submit(-name=>'sub',-value=>'Ping'), " "
-      if ($host{type} == 1 && $main::SAURON_PING_PROG &&
-	  !check_perms('level',$main::ALEVEL_PING,1));
-    print submit(-name=>'sub',-value=>'Traceroute')
-      if ($host{type} == 1 && $main::SAURON_TRACEROUTE_PROG &&
-	  !check_perms('level',$main::ALEVEL_TRACEROUTE,1));
-    print "</td></tr></table>";
-    my %fqdnzone; # ****
-    if (get_zone($host{zone}, \%fqdnzone) == 0) {
-	$host{fqdn} = $host{domain} . '.' . $fqdnzone{name} . '.';
-    }
-    display_form(\%host,\%host_form);
-
-# 2020-11-11 TVu
-# User's right to add, edit and delete SRV records or AREC, CNAME or Static aliases:
-# No RW permission to the zone => None of the above
-# RWX permission to the zone => All of the above
-# RW permission to the zone => Right to a specific type if user has that flag set
-# Flags don't affect reading
-
-# 2021-03-01 TVu
-# Only superusers are allowed to edit, delete or copy Delegations (2) and Glue
-# records (6). The same is true for adding, but that is handled in sauron.cgi.
-
-    unless (check_perms('zone','RW',1) ||
-	    ($host{type} == 2 || $host{type} == 6) &&
-	    check_perms('superuser','',1)) {
-	my $rwx = check_perms('zone','RWX',1);
-	print submit(-name=>'sub',-value=>'Edit'), " ",
-	submit(-name=>'sub',-value=>'Delete'), " "
-# Check alias permission flags. 2020-09-07 TVu
-# Added check of SRV flag. TVu 2020-11-09
-	    unless ($host{type} == 4 &&
-		    ($host{cname_alias} && $rwx && check_perms('flags','CNAME',1) ||
-		     $host{static_alias} && $rwx && check_perms('flags','SCNAME',1)) ||
-		    $host{type} == 7 && $rwx && check_perms('flags','AREC',1) ||
-		    $host{type} == 8 && $rwx && check_perms('flags','SRV',1));
-
-# CNAME and AREC aliases can't be copied because there are bugs in the program,
-# and finding those bugs proved to be too time-consuming. 2020-09-14 TVu
-# Please fix if you know how.
-	print submit(-name=>'sub',-value=>'Copy'), " "
-# Check static alias permission flag.
-# Added check of SRV flag. TVu 2020-11-09
-	    unless ($host{type} == 4 && ($host{cname_alias} ||
-		     $host{static_alias} && $rwx && check_perms('flags','SCNAME',1)) ||
-		    $host{type} == 7 ||
-		    $host{type} == 8 && $rwx && check_perms('flags','SRV',1));
-
-	print submit(-name=>'sub',-value=>'Move'), " " if ($host{type} == 1);
-
-#       print submit(-name=>'sub',-value=>'Alias'), " " if ($host{type} == 1);
-
-# Show button to create a CNAME or AREC alias if permission flags allow at least one of them.
-	print submit(-name=>'sub',-value=>'Alias'), " " # 2020-09-07 TVu
-
-#	    if ($host{type} == 1 && !$rwx &&
-#		(!check_perms('flags','CNAME',1) || !check_perms('flags','AREC',1)));
-
-	    if ($host{type} == 1 && (!$rwx || # ** 2022-02-21 TVu
-		!check_perms('flags','CNAME',1) || !check_perms('flags','AREC',1)));
-
-	print submit(-name=>'sub',-value=>'Disable'), " " if ($host{type} == 1);
-	print submit(-name=>'sub',-value=>'Enable'), " " if ($host{type} == 101);
-    }
-    print end_form,"<br><br>";
-    return;
+    show_host_record($state,$perms);
+  } else {
+    browse_hosts($state,$perms);
   }
-
-
- browse_hosts:
-  param('sub','browse');
-  make_net_list($serverid,1,\%nethash,\@netkeys,0,$perms);
-  $browse_hosts_form{alevel}=$perms->{alevel};
-
-  %bdata=(domain=>'',net=>'ANY',nets=>\%nethash,nets_k=>\@netkeys,
-	    type=>1,order=>2,stype=>0,size=>3,sdtype=>0,grp=>-1);
-  if ($state->{searchopts} =~
-#     /^(\d+),(\d+),(\d+),(-?\d+),(\d+),(\S*),(\S*),(\S*),(-?\d+)$/) {
-      /^(\d+),(\d+),(\d+),(-?\d+),(\d+),(\S*),(\S*),(\S*),(-?\d+),(\S*),(\S*)$/) { # ****
-    $bdata{type}=$1;
-    $bdata{order}=$2;
-    $bdata{size}=$3;
-    $bdata{stype}=$4;
-    $bdata{sdtype}=$5;
-    $bdata{net}=$6 if ($6);
-    $bdata{cidr}=$7 if ($7);
-    $bdata{dates}=$8 if ($8);
-    $bdata{grp}=$9;
-    $bdata{bh_domain_anydom}=$10; # ****
-    $bdata{search_txt}=$11 if ($11); # TVu 2020-11-03
-  }
-  $bdata{domain}=$state->{searchdomain} if ($state->{searchdomain});
-  $bdata{pattern}=$state->{searchpattern} if ($state->{searchpattern});
-  $bdata{search_txt}=$state->{search_txt} if ($state->{search_txt}); # TVu 2020-11-03
-
-  print start_form(-method=>'GET',-action=>$selfurl),
-          hidden('menu','hosts'),hidden('sub','browse'),
-          hidden('bh_page','0');
-  form_magic('bh',\%bdata,\%browse_hosts_form);
-  print submit(-name=>'bh_submit',-value=>'Search')," &nbsp;&nbsp; ",
-        submit(-name=>'bh_submit',-value=>'Clear'),
-        end_form;
 
 }
-
-
-
 
 
 1;
