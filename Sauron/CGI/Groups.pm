@@ -92,7 +92,56 @@ sub restricted_update_group($) {
   return update_group($rec);
 }
 
+sub show_group_record($$$)
+{
+  my($state,$perms,$id) = @_;
 
+  my $selfurl = $state->{selfurl};
+  my (%group);
+
+  return 1 if ($id <= 0);
+
+  if (get_group($id,\%group)) {
+    print h2("Cannot get group record (id=$id)!");
+    return;
+  }
+  display_form(\%group,\%group_form);
+  print p,start_form(-method=>'GET',-action=>$selfurl),
+    hidden('menu','groups');
+  print submit(-name=>'sub',-value=>'Edit'), "  ",
+    submit(-name=>'sub',-value=>'Delete')
+    unless (check_perms('grpmask',$group{name},1));
+  print hidden('grp_id',$id),end_form;
+
+  return 0;
+}
+
+sub browse_groups($$)
+{
+  my($state,$perms) = @_;
+
+  my $serverid = $state->{serverid};
+  my $server = $state->{server};
+  my $selfurl = $state->{selfurl};
+  my (@q,@list);
+
+  db_query("SELECT id,name,comment,type,alevel FROM groups " .
+	   "WHERE server=$serverid ORDER BY name;",\@q);
+  if (@q < 1) {
+    print h2("No groups found!");
+    return;
+  }
+
+  for my $i (0..$#q) {
+    my $name = "<a href=\"$selfurl?menu=groups&grp_id=$q[$i][0]\">$q[$i][1]</a>";
+    push @list, [$name,$group_type_hash{$q[$i][3]},$q[$i][2],$q[$i][4]];
+  }
+  print h3("Groups for server: $server");
+  display_list(['Name','Type','Comment','Lvl'],\@list,0);
+  print "<br>";
+
+  return 0;
+}
 
 # GROUPS menu
 #
@@ -122,20 +171,15 @@ sub menu_handler {
     $data{server}=$serverid;
     $res=add_magic('add','Group','groups',\%group_form,
 		   \&restricted_add_group,\%data);
-    if ($res > 0) {
-      #show_hash(\%data);
-      #print "<p>$res $data{name}";
-      $id=$res;
-      goto show_group_record;
-    }
+    show_group_record($state,$perms,$res) if ($res > 0);
     return;
   }
   elsif ($sub eq 'Edit') {
     $res=edit_magic('grp','Group','groups',\%group_form,
 		    \&restricted_get_group,
 		    \&restricted_update_group,$id);
-    goto browse_groups if ($res == -1);
-    goto show_group_record if ($res > 0);
+    browse_groups($state,$perms) if ($res == -1);
+    show_group_record($state,$perms,$id) if ($res > 0);
     return;
   }
   elsif ($sub eq 'Delete') {
@@ -146,14 +190,16 @@ sub menu_handler {
     return if (check_perms('grpmask',$group{name}));
     if (param('grp_cancel')) {
       print h2('Group not removed');
-      goto show_group_record;
+      show_group_record($state,$perms,$id);
+      return;
     }
     elsif (param('grp_confirm')) {
       $new_id=param('grp_new');
       if ($new_id eq $id) {
 	print h2("Cannot change host records to point to the group " .
 		 "being deleted!");
-	goto show_group_record;
+	show_group_record($state,$perms,$id);
+	return;
       }
       $new_id = -1 unless ($new_id > 0);
 
@@ -234,37 +280,12 @@ sub menu_handler {
     return;
   }
 
- show_group_record:
+
   if ($id > 0) {
-    if (get_group($id,\%group)) {
-      print h2("Cannot get group record (id=$id)!");
-      return;
-    }
-    display_form(\%group,\%group_form);
-    print p,start_form(-method=>'GET',-action=>$selfurl),
-          hidden('menu','groups');
-    print submit(-name=>'sub',-value=>'Edit'), "  ",
-          submit(-name=>'sub',-value=>'Delete')
-	    unless (check_perms('grpmask',$group{name},1));
-    print hidden('grp_id',$id),end_form;
-    return;
+    show_group_record($state,$perms,$id);
+  } else {
+    browse_groups($state,$perms);
   }
-
- browse_groups:
-  db_query("SELECT id,name,comment,type,alevel FROM groups " .
-	   "WHERE server=$serverid ORDER BY name;",\@q);
-  if (@q < 1) {
-    print h2("No groups found!");
-    return;
-  }
-
-  for $i (0..$#q) {
-    $name = "<a href=\"$selfurl?menu=groups&grp_id=$q[$i][0]\">$q[$i][1]</a>";
-    push @list, [$name,$group_type_hash{$q[$i][3]},$q[$i][2],$q[$i][4]];
-  }
-  print h3("Groups for server: $server");
-  display_list(['Name','Type','Comment','Lvl'],\@list,0);
-  print "<br>";
 }
 
 
