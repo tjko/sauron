@@ -35,6 +35,8 @@ sub write2log{
 } # End of write2log
 
 
+my %ztypenames=(M=>'Master',S=>'Slave',F=>'Forward',H=>'Hint');
+
 my %new_zone_form=(
  data=>[
   {ftype=>0, name=>'New zone'},
@@ -182,18 +184,199 @@ my %copy_zone_form=(
 );
 
 
-# ZONES menu
-#
-sub menu_handler {
-  my($state,$perms) = @_;
 
-  my($i,@q,$res,%data,%zonelist,%server,%zone);
+sub select_zone($$)
+{
+  my($state,$perms) = @_;
 
   my $selfurl = $state->{selfurl};
   my $serverid = $state->{serverid};
   my $zoneid = $state->{zoneid};
   my $zone = $state->{zone};
-  my %ztypenames=(M=>'Master',S=>'Slave',F=>'Forward',H=>'Hint');
+  my (%server,%zonelist);
+
+  #display zone selection list
+  my %ztypecolors=(M=>'#c0ffc0',S=>'#eeeeff',F=>'#eedfdf',H=>'#eeeebf');
+  # 2022-08-10 mesrik: add last expired arg, no skipping here
+  my $list=get_zone_list($serverid,0,0,0);
+# my $zlimit = 50; # Limit removed.
+
+  if ($state->{'zone'}) {
+    print h2("Selected zone: <a href='$selfurl?menu=zones&amp;selected_zone=" .
+	     "$state->{'zone'}'>$state->{'zone'}</a>");
+  }
+
+  print start_form(-method=>'GET',-action=>$selfurl),
+        hidden('menu','zones'),hidden('sub','select'),"Zone display filter: ",
+	textfield(-name=>'select_filter',-size=>20,-maxlength=>80),"  ",
+	submit(-name=>'filter',-value=>'Go'),end_form,
+        h2("Select zone:"),
+#       ((@{$list} > $zlimit && ! param('select_filter')) ? # Limit removed.
+#        "(only first $zlimit zones displayed)":""),
+	p,"<TABLE width=98% bgcolor=white border=0>",
+        "<TR bgcolor=\"#aaaaff\">",th(['#','Zone','Type','Reverse','Comments']);
+
+  my $ord = 1;
+
+  for my $i (0 .. $#{$list}) {
+    my $type=$ztypenames{$$list[$i][2]};
+    # 2022-08-10 mesrik: hack - show expiry more information
+    my $expires = $$list[$i][5];
+    my ($color,$title);
+    if ($expires > 0 && $expires < time()) {
+	$color = '#ffcccc'; # has already expired
+	$title = sprintf "Expired %s",utimefmt($expires,'rfc822date');
+    } elsif ($expires > 0 && ($expires - ($main::SAURON_REMOVE_EXPIRED_DELAY * 86400)) < time()) {
+	$color='#eeeebf'; # upcoming expiration
+	$title = sprintf "Expires %s",utimefmt($expires,'rfc822date');
+    } elsif ($expires > 0) {
+	$color='#ddffdd'; # remark expire is set
+	$title = sprintf "Expires %s",utimefmt($expires,'rfc822date');
+    } else {
+	$color=$ztypecolors{$$list[$i][2]};
+	$title = "Expiry undefined";
+    }
+    my $rev=(($$list[$i][3] eq 't' || $$list[$i][3] == 1) ? 'Yes' : 'No');
+    my $id=$$list[$i][1];
+    my $name=$$list[$i][0];
+    my $comment=$$list[$i][4].'&nbsp;';
+    my $filter = param('select_filter');
+
+    if ($main::SAURON_PRIVILEGE_MODE==1) {
+      next unless ( $perms->{zone}->{$id} =~ /R/ ||
+		    !check_perms('superuser','',1) );
+    }
+
+    next if ($filter && $name !~ /$filter/);
+#   last if ($i >= $zlimit && ! $filter); # Limit removed. TVu
+
+# If the comment is an URL, show it as a link. TVu
+    $comment = url2link($comment);
+    print "<TR bgcolor=\"$color\">",td([$ord,
+	"<a href=\"$selfurl?menu=zones&selected_zone=$name\"" .
+	" title=\"$title\">$name</a>",$type,$rev,$comment]);
+    $ord++;
+    $zonelist{$name}=$id;
+  }
+  print "</TABLE><BR>";
+
+  print "<table width='99%'><tr align=right><td>";
+  print start_form(-method=>'POST',-action=>$selfurl),
+  hidden('menu','zones'),hidden('sub','select'),
+  hidden('select_filter',scalar(param('select_filter'))),
+  hidden('csv','1'),
+  submit(-name=>'results.csv',-value=>'Download CSV');
+  print end_form;
+  print "</td></tr></table>\n";
+
+  get_server($serverid,\%server);
+  if ($server{masterserver} > 0) {
+    %ztypecolors=(M=>'#eedeff',S=>'#eeeeff',F=>'#eedfdf',H=>'#eeeebf');
+    %ztypenames=(M=>'Slave (Master)',S=>'Slave',F=>'Forward',H=>'Hint');
+
+    print h4("Zones from master server:"),
+          p,"<TABLE width=98% bgcolor=white border=0>",
+        "<TR bgcolor=\"#aaaaff\">",th(['Zone','Type','Reverse','Comments']);
+    # 2022-08-10 mesrik: add no_expired arg
+    # $list=get_zone_list($server{masterserver},0,0);
+    $list=get_zone_list($server{masterserver},0,0,0);
+    for my $i (0 .. $#{$list}) {
+      my $type=$$list[$i][2];
+      next if ($server{named_flags_isz}!=1 && $type !~ /^M/);
+      next unless ($type =~ /^[MS]$/);
+      $type=$ztypenames{$$list[$i][2]};
+      my $color=$ztypecolors{$$list[$i][2]};
+      my $rev=(($$list[$i][3] eq 't' || $$list[$i][3] == 1) ? 'Yes' : 'No');
+      my $id=$$list[$i][1];
+      my $name=$$list[$i][0];
+      my $comment=$$list[$i][4].'&nbsp;';
+      next if ($zonelist{$name});
+# If the comment is an URL, show it as a link. TVu
+      $comment = url2link($comment);
+      print "<TR bgcolor=$color>",td([$name,$type,$rev,$comment]);
+    }
+    print "</TABLE><BR>";
+
+  }
+
+  return 0;
+}
+
+
+sub display_zone($$)
+{
+  my($state,$perms) = @_;
+
+  my $selfurl = $state->{selfurl};
+  my $serverid = $state->{serverid};
+
+  my $zone = param('selected_zone');
+  my $sub = param('sub');
+
+# By default, go to zone selection instead of showing previously selected zone.
+# $zone=$state->{'zone'} unless ($zone);
+  if ($zone && $sub ne 'select') {
+    #display selected zone info
+    my $zoneid=get_zone_id($zone,$serverid);
+    if ($zoneid < 1) {
+      print h3("Cannot select zone '$zone'!"),p;
+      select_zone($state,$perms);
+      return;
+    }
+    my %state_save = %{$state};
+    $state->{'zone'}=$zone;
+    $state->{'zoneid'}=$zoneid;
+    if (check_perms('zone','R')) {
+      %{$state}=%state_save;
+      select_zone($state,$perms);
+      return
+    }
+    print h2("Selected zone: $zone"),p;
+    my %data;
+    get_zone($zoneid,\%data);
+    save_state($state->{cookie},$state);
+
+    display_form(\%data,\%zone_form);
+    return;
+  }
+
+  select_zone($state,$perms);
+
+  return 0;
+}
+
+
+sub new_zone_edit($$)
+{
+  my($state,$data) = @_;
+
+  my $selfurl = $state->{selfurl};
+
+  unless (param('addzone_re_edit')) { $data->{type}='M'; }
+  print h2("New Zone:"),p,
+    start_form(-method=>'POST',-action=>$selfurl),
+    hidden('menu','zones'),hidden('sub','add');
+  form_magic('addzone',$data,\%new_zone_form);
+  print 'Tip: The cidr of a forward zone can be used<br>' . # ****
+    'as the name of the corresponding reverse zone.<br>' .
+    'Mask length must be a multiple of 8 (IPv4) or 4 (IPv6).<br>';
+  print submit(-name=>'add_submit',-value=>"Create Zone"),end_form;
+
+  return 0;
+}
+
+
+# ZONES menu
+#
+sub menu_handler {
+  my($state,$perms) = @_;
+
+  my($i,@q,$res,%data,%zone);
+
+  my $selfurl = $state->{selfurl};
+  my $serverid = $state->{serverid};
+  my $zoneid = $state->{zoneid};
+  my $zone = $state->{zone};
 
   $zone_form{serverid}=$state->{serverid};
   $zone_form{zoneid}=$state->{zoneid};
@@ -249,7 +432,8 @@ sub menu_handler {
 	  my $new_net=arpa2cidr($data{name});
 	  if ($new_net eq '0.0.0.0/0') {
 	    print h2('Invalid name for reverse zone!');
-	    goto new_zone_edit;
+	    new_zone_edit($state,\%data);
+	    return;
 	  }
 	  $data{reversenet}=$new_net;
 	}
@@ -260,22 +444,14 @@ sub menu_handler {
 	      "result code=$res</FONT>";
 	} else {
 	  param('selected_zone',$data{name});
-	  goto display_zone;
+	  display_zone($state,$perms);
+	  return;
 	}
       } else {
 	print "<FONT color=\"red\">",h2("Invalid data in form!"),"</FONT>";
       }
     }
-  new_zone_edit:
-    unless (param('addzone_re_edit')) { $data{type}='M'; }
-    print h2("New Zone:"),p,
-          start_form(-method=>'POST',-action=>$selfurl),
-          hidden('menu','zones'),hidden('sub','add');
-    form_magic('addzone',\%data,\%new_zone_form);
-    print 'Tip: The cidr of a forward zone can be used<br>' . # ****
-          'as the name of the corresponding reverse zone.<br>' .
-	  'Mask length must be a multiple of 8 (IPv4) or 4 (IPv6).<br>';
-    print submit(-name=>'add_submit',-value=>"Create Zone"),end_form;
+    new_zone_edit($state,\%data);
     return;
   }
   elsif ($sub eq 'Delete') {
@@ -288,11 +464,16 @@ sub menu_handler {
       $state->{'zone'}='';
       $state->{'zoneid'}=-1;
       save_state($state->{cookie},$state);
-      goto select_zone;
+      select_zone($state,$perms);
+      return;
     }
     param('selected_zone', $state->{'zone'}); # Show selected zone.
-    goto display_zone if ($res == 2);
-    goto select_zone if ($res == -1);
+    if ($res == 2) {
+      display_zone($state,$perms);
+    }
+    elsif ($res == -1) {
+      select_zone($state,$perms);
+    }
     return;
   }
   elsif ($sub eq 'Edit') {
@@ -300,9 +481,12 @@ sub menu_handler {
 
     $res=edit_magic('zn','Zone','zones',\%zone_form,\&get_zone,\&update_zone,
 		    $zoneid);
-    goto select_zone if ($res == -1);
-    param('selected_zone', $state->{'zone'}); # Show selected zone.
-    goto display_zone if ($res == 2 || $res == 1);
+    if ($res == -1) {
+      select_zone($state,$perms);
+    } else {
+      param('selected_zone', $state->{'zone'}); # Show selected zone.
+      display_zone($state,$perms) if ($res == 2 || $res == 1);
+    }
     return;
   }
   elsif ($sub eq 'Copy') {
@@ -381,146 +565,9 @@ sub menu_handler {
   }
   elsif ($sub eq 'Current') {
       param('selected_zone', $state->{'zone'}); # Show selected zone.
-      goto display_zone;
-  }
-#  elsif ($sub eq 'select') {
-#      goto select_zone;
-#  }
-
- display_zone:
-  $zone=param('selected_zone');
-# By default, go to zone selection instead of showing previously selected zone.
-# $zone=$state->{'zone'} unless ($zone);
-  if ($zone && $sub ne 'select') {
-    #display selected zone info
-    $zoneid=get_zone_id($zone,$serverid);
-    if ($zoneid < 1) {
-      print h3("Cannot select zone '$zone'!"),p;
-      goto select_zone;
-    }
-    my %state_save = %{$state};
-    $state->{'zone'}=$zone;
-    $state->{'zoneid'}=$zoneid;
-    if (check_perms('zone','R')) {
-      %{$state}=%state_save;
-      goto select_zone;
-    }
-    print h2("Selected zone: $zone"),p;
-    get_zone($zoneid,\%data);
-    save_state($state->{cookie},$state);
-
-    display_form(\%data,\%zone_form);
-    return;
   }
 
-
- select_zone:
-  #display zone selection list
-  my %ztypecolors=(M=>'#c0ffc0',S=>'#eeeeff',F=>'#eedfdf',H=>'#eeeebf');
-  # 2022-08-10 mesrik: add last expired arg, no skipping here
-  # my $list=get_zone_list($serverid,0,0);
-  my $list=get_zone_list($serverid,0,0,0);
-# my $zlimit = 50; # Limit removed.
-
-  if ($state->{'zone'}) {
-      print h2("Selected zone: <a href='$selfurl?menu=zones&amp;selected_zone=" .
-	       "$state->{'zone'}'>$state->{'zone'}</a>");
-  }
-
-  print start_form(-method=>'GET',-action=>$selfurl),
-        hidden('menu','zones'),hidden('sub','select'),"Zone display filter: ",
-	textfield(-name=>'select_filter',-size=>20,-maxlength=>80),"  ",
-	submit(-name=>'filter',-value=>'Go'),end_form,
-        h2("Select zone:"),
-#       ((@{$list} > $zlimit && ! param('select_filter')) ? # Limit removed.
-#        "(only first $zlimit zones displayed)":""),
-	p,"<TABLE width=98% bgcolor=white border=0>",
-        "<TR bgcolor=\"#aaaaff\">",th(['#','Zone','Type','Reverse','Comments']);
-
-  my $ord = 1;
-
-  for $i (0 .. $#{$list}) {
-    my $type=$ztypenames{$$list[$i][2]};
-    # 2022-08-10 mesrik: hack - show expiry more information
-    my $expires = $$list[$i][5];
-    my ($color,$title);
-    if ($expires > 0 && $expires < time()) {
-	$color = '#ffcccc'; # has already expired
-	$title = sprintf "Expired %s",utimefmt($expires,'rfc822date');
-    } elsif ($expires > 0 && ($expires - ($main::SAURON_REMOVE_EXPIRED_DELAY * 86400)) < time()) {
-	$color='#eeeebf'; # upcoming expiration
-	$title = sprintf "Expires %s",utimefmt($expires,'rfc822date');
-    } elsif ($expires > 0) {
-	$color='#ddffdd'; # remark expire is set
-	$title = sprintf "Expires %s",utimefmt($expires,'rfc822date');
-    } else {
-	$color=$ztypecolors{$$list[$i][2]};
-	$title = "Expiry undefined";
-    }
-    my $rev=(($$list[$i][3] eq 't' || $$list[$i][3] == 1) ? 'Yes' : 'No');
-    my $id=$$list[$i][1];
-    my $name=$$list[$i][0];
-    my $comment=$$list[$i][4].'&nbsp;';
-    my $filter = param('select_filter');
-
-    if ($main::SAURON_PRIVILEGE_MODE==1) {
-      next unless ( $perms->{zone}->{$id} =~ /R/ ||
-		    !check_perms('superuser','',1) );
-    }
-
-    next if ($filter && $name !~ /$filter/);
-#   last if ($i >= $zlimit && ! $filter); # Limit removed. TVu
-
-# If the comment is an URL, show it as a link. TVu
-    $comment = url2link($comment);
-    print "<TR bgcolor=\"$color\">",td([$ord,
-	"<a href=\"$selfurl?menu=zones&selected_zone=$name\"" .
-	" title=\"$title\">$name</a>",$type,$rev,$comment]);
-    $ord++;
-    $zonelist{$name}=$id;
-  }
-  print "</TABLE><BR>";
-
-  print "<table width='99%'><tr align=right><td>";
-  print start_form(-method=>'POST',-action=>$selfurl),
-  hidden('menu','zones'),hidden('sub','select'),
-  hidden('select_filter',scalar(param('select_filter'))),
-  hidden('csv','1'),
-  submit(-name=>'results.csv',-value=>'Download CSV');
-  print end_form;
-  print "</td></tr></table>\n";
-
-  get_server($serverid,\%server);
-  if ($server{masterserver} > 0) {
-    %ztypecolors=(M=>'#eedeff',S=>'#eeeeff',F=>'#eedfdf',H=>'#eeeebf');
-    %ztypenames=(M=>'Slave (Master)',S=>'Slave',F=>'Forward',H=>'Hint');
-
-    print h4("Zones from master server:"),
-          p,"<TABLE width=98% bgcolor=white border=0>",
-        "<TR bgcolor=\"#aaaaff\">",th(['Zone','Type','Reverse','Comments']);
-    # 2022-08-10 mesrik: add no_expired arg
-    # $list=get_zone_list($server{masterserver},0,0);
-    $list=get_zone_list($server{masterserver},0,0,0);
-    for $i (0 .. $#{$list}) {
-      my $type=$$list[$i][2];
-      next if ($server{named_flags_isz}!=1 && $type !~ /^M/);
-      next unless ($type =~ /^[MS]$/);
-      $type=$ztypenames{$$list[$i][2]};
-      my $color=$ztypecolors{$$list[$i][2]};
-      my $rev=(($$list[$i][3] eq 't' || $$list[$i][3] == 1) ? 'Yes' : 'No');
-      my $id=$$list[$i][1];
-      my $name=$$list[$i][0];
-      my $comment=$$list[$i][4].'&nbsp;';
-      next if ($zonelist{$name});
-# If the comment is an URL, show it as a link. TVu
-      $comment = url2link($comment);
-      print "<TR bgcolor=$color>",td([$name,$type,$rev,$comment]);
-    }
-    print "</TABLE><BR>";
-
-  }
-
-
+ display_zone($state,$perms);
 }
 
 
