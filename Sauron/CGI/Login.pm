@@ -12,9 +12,9 @@ use Sauron::CGIutil;
 use Sauron::BackEnd;
 use Sauron::Sauron;
 use Sauron::CGI::Utils;
-# use Data::Dumper;
+use Data::Dumper;
 # use Storable qw(nstore store_fd nstore_fd freeze thaw dclone); # TVu 2021-03-15
-use Storable qw(freeze thaw); # TVu 2021-03-15
+#use Storable qw(freeze thaw); # TVu 2021-03-15
 use strict;
 use vars qw($VERSION @ISA @EXPORT);
 
@@ -211,6 +211,259 @@ sub list_privs($$) { # TVu 2021-03-15
   display_rows(\@d);
 }
 
+
+sub show_user_info($$)
+{
+  my($state_o,$perms_o) = @_;
+
+  my $selfurl = $state_o->{selfurl};
+  my(%user,$state,$perms,@q);
+
+  print h2("User info:");
+
+  my $uname = $state_o->{user};
+  $uname = param('user_id') if (param('user_id'));
+
+  if (get_user($uname,\%user)) {
+    html_error2("Cannot get user record: $uname");
+    return;
+  }
+
+  # Permissions.
+  $perms = {};
+  if (get_permissions($user{'id'}, $perms)) {
+    html_error2("Cannot get permissions: $user{'id'}");
+    return;
+  };
+
+
+  # Simulated session state information, where possible
+  # (the selected user may not have a current session).
+  $state->{user} = $user{'username'}; # Login name.
+  $state->{login} = $user{'last'};    # Last login.
+  $state->{superuser} = $user{'superuser'} eq 't' ? 'yes' : 'no';
+  # alevel defaults to 0 when absent in the database (BackEnd.pm).
+  # When a superuser logs in, alevel is set to 999. Simulated here.
+  $perms->{alevel} = 999 if ($user{superuser} eq 't');
+
+  if (param('user_id')) {
+      undef @q;
+      if ($user{'server'} && $user{'zone'}) {
+	  db_query("select s.name, z.name from servers s, zones z " .
+		   "where s.id = $user{'server'} and z.id = $user{'zone'} and " .
+		   "z.server = s.id;",\@q);
+      }
+      $state->{server} = $q[0][0] || $user{'server'};
+      $state->{zone} = $q[0][1] || $user{'zone'};
+  } else {
+      $state->{server} = $state_o->{server};
+      $state->{zone} = $state_o->{zone};
+      $state->{sid} = $state_o->{sid};
+  }
+
+  $state->{email}=$user{email};
+  $state->{name}=$user{name};
+  $state->{last_pwd}=$user{last_pwd};
+  $state->{expiration}=($user{expiration} > 0 ?
+			localtime($user{expiration}) : 'None');
+  $state->{email_notify}=$user{email_notify};
+  $state->{groupname}=$perms->{groups};
+  display_form($state,\%user_info_form);
+
+  # Show buttons if there is a plugin to handle their functions.
+  if ($main::menuhooks{'login'}->{'Pl_Users_Users'} && param('user_id')) { # TVu 2021-04-19
+    my $par_menu = param('menu');
+    my $par_sub = param('sub');
+    print "\n<table><tr><td>";
+    print start_form(-method=>'GET', -action=>$selfurl);
+    param('menu', 'login'); print hidden('menu', 'login');
+    param('sub', 'Edit-user'); print hidden('sub', 'Edit-user');
+    print hidden('user_id', param('user_id'));
+    print submit(-name=>'foobar', -value=>'Edit');
+    print end_form,"\n";
+    print "</td>\n<td>";
+    print start_form(-method=>'GET', -action=>$selfurl);
+    param('menu', 'login'); print hidden('menu', 'login');
+    param('sub', 'Copy-user'); print hidden('sub', 'Copy-user');
+    print hidden('user_id', param('user_id'));
+    print submit(-name=>'foobar', -value=>'Copy');
+    print end_form,"\n";
+    print "</td>\n<td>";
+    print start_form(-method=>'GET', -action=>$selfurl);
+    param('menu', 'login'); print hidden('menu', 'login');
+    param('sub', 'Anonymize-user'); print hidden('sub', 'Anonymize-user');
+    print hidden('user_id', param('user_id'));
+    print submit(-name=>'foobar', -value=>'Anonymize', -title=>
+		 'To completely delete a user, use command-line tool deluser');
+    print end_form,"\n";
+    print "</td></table>\n";
+    param('menu', $par_menu);
+    param('sub', $par_sub);
+    # ** Button to lock or unlock user.
+  }
+
+  # Note! It is important to sort everything that can be sorted, so that if the same information
+  # is viewd on two or more computers at the same time, line numbers are the same for everybody!
+
+  print h3("Individual permissions:");
+  print '<TABLE BGCOLOR="#ccccff" BORDER="0" cellspacing="1" cellpadding="1">' .
+    '<TR bgcolor="#aaaaff"><TD>#</TD><TD>Type</TD><TD>Ref.</TD><TD>Permissions</TD>';
+  list_privs($user{'id'}, 2);
+  print '</TABLE>';
+
+  for my $ind1 (sort split(',', $state->{groupname})) { # TVu 2021-03-15
+    db_query("SELECT id, comment FROM user_groups WHERE name='$ind1'",\@q);
+    my $gid = $q[0][0];
+    print h3("Permissions via group $ind1<BR>($q[0][1]):");
+    print '<TABLE BGCOLOR="#ccccff" BORDER="0" cellspacing="1" cellpadding="1">' .
+      '<TR bgcolor="#aaaaff"><TD>#</TD><TD>Type</TD><TD>Ref.</TD><TD>Permissions</TD>';
+    list_privs($gid, 1);
+    print '</TABLE>';
+  }
+
+  print "<P>";
+  # No longer showing combined permissions. 2021-04-14 TVu
+  if (0) {
+    my($tmp,$s);
+
+    print h3("Combined permissions:"),"<TABLE border=0 cellspacing=1>",
+      "<TR bgcolor=\"#aaaaff\"><TD>Type</TD><TD>Ref.</TD>",
+      "<TD>Permissions</TD></TR>";
+
+    # Server permissions
+    foreach my $s (keys %{$perms->{server}}) {
+      undef @q;
+      db_query("SELECT name FROM servers WHERE id=$s;",\@q);
+      $tmp=$q[0][0];
+      print "<TR bgcolor=\"#dddddd\">",td("Server"),td("$tmp"),
+	td($perms->{server}->{$s}." &nbsp;"),"</TR>";
+    }
+
+    # Zone permissions
+    foreach my $s (keys %{$perms->{zone}}) {
+      undef @q;
+      db_query("SELECT s.name,z.name FROM zones z, servers s " .
+	       "WHERE z.server=s.id AND z.id=$s;",\@q);
+      $tmp="$q[0][0]: $q[0][1]";
+      print "<TR bgcolor=\"#dddddd\">",td("Zone"),td("$tmp"),
+	td($perms->{zone}->{$s}." &nbsp;"),"</TR>";
+    }
+
+    # Net permissions
+    # FIXME:  output is not sorted properly raising order server:cidr
+    #foreach $s (keys %{$perms->{net}}) {
+    #  undef @q;
+    #  db_query("SELECT s.name,n.net,n.range_start,n.range_end " .
+    #       "FROM servers s, nets n WHERE n.server=s.id AND n.id=$s;",\@q);
+    #  $tmp="$q[0][0]:$q[0][1]";
+    #  print "<TR bgcolor=\"#dddddd\">",td("Net"),td("$tmp"),
+    #     td($perms->{net}->{$s}[0]." - ".$perms->{net}->{$s}[1]),"</TR>";
+    #}
+
+    # Net permissions
+    # Fixed better than previous, but still a bit hack
+    $s = join(',',(keys %{$perms->{net}})) . "\n";
+    if ($s) { # Empty $s caused sql errors 13.03.2017 TVu
+      undef @q;
+      db_query("SELECT s.name,n.net,n.range_start,n.range_end " .
+	       "FROM servers s, nets n WHERE n.server=s.id AND " .
+	       "n.id in ($s) ORDER BY name,net;",\@q);
+      for $s (0..$#q) {
+	$tmp="$q[$s][0]: $q[$s][1]";
+	print "<TR bgcolor=\"#dddddd\">",td("Net"),td("$tmp"),
+	  td($q[$s][2]." - ".$q[$s][3]),"</TR>";
+      }
+    }
+
+    # Host permissions
+    foreach $s (@{$perms->{hostname}}) {
+      if (@{$s}[0] != -1) {
+	undef @q;
+	db_query("SELECT z.name FROM zones z, servers s " .
+		 "WHERE z.server=s.id AND z.id=@{$s}[0];",\@q);
+	$tmp="$q[0][0]: @{$s}[1]";
+      } else {
+	$tmp="@{$s}[1]";
+      }
+      print "<TR bgcolor=\"#dddddd\">",
+	td("Hostmask"),td("$tmp"),td("(Hostname constraint)"),
+	"</TR>";
+    }
+
+    # IP mask permissions
+    foreach $s (@{$perms->{ipmask}}) {
+      print "<TR bgcolor=\"#dddddd\">",td("IP mask"),td("$s"),
+	td("(IP address constraint)"),"</TR>";
+    }
+
+    # Delete mask permissions
+    foreach $s (@{$perms->{delmask}}) {
+      if (@{$s}[0] != -1) {
+	undef @q;
+	db_query("SELECT z.name FROM zones z, servers s " .
+		 "WHERE z.server=s.id AND z.id=@{$s}[0];",\@q);
+	$tmp="$q[0][0]: @{$s}[1]";
+      } else {
+	$tmp="@{$s}[1]";
+      }
+      print "<TR bgcolor=\"#dddddd\">",
+	td("Delmask"),td("$tmp"),td("(Delete host mask)"),
+	"</TR>";
+    }
+
+    # Expiration limit ** TVu 2021-04-07
+    if (defined $perms->{'elimit'}) {
+      print "<TR bgcolor=\"#dddddd\">",td("Elimit"),td($perms->{'elimit'}),
+	td("(Expiration limit, days)"),"</TR>";
+    }
+
+    # Default department ** TVu 2021-04-07
+    if ($perms->{'defdept'}) {
+      print "<TR bgcolor=\"#dddddd\">",td("DefDept"),td($perms->{'defdept'}),
+	td("(Default department string)"),"</TR>";
+    }
+
+    # Default hostname ** TVu 2021-04-07
+    if ($perms->{'defhost'}) {
+      print "<TR bgcolor=\"#dddddd\">",td("DefHost"),td($perms->{'defhost'}),
+	td("(Default hostname template)"),"</TR>";
+    }
+
+    # Template masks
+    foreach $s (@{$perms->{tmplmask}}) {
+      print "<TR bgcolor=\"#dddddd\">",td("Template mask"),td("$s"),
+	td("(Template modify mask)"),"</TR>";
+    }
+
+    # Group masks
+    foreach $s (@{$perms->{grpmask}}) {
+      print "<TR bgcolor=\"#dddddd\">",td("GrpMask"),td("$s"),
+	td("(Group modify mask)"),"</TR>";
+    }
+
+    # Required host fields
+    foreach $s (sort keys %{$perms->{rhf}}) {
+      print "<TR bgcolor=\"#dddddd\">",td("ReqHostField"),td("$s"),
+	td(($perms->{rhf}->{$s} ? 'Optional':'Required')),"</TR>";
+    }
+
+    # Flags
+    foreach $s (sort keys %{$perms->{flags}}) {
+      print "<TR bgcolor=\"#dddddd\">",td("Flag"),td("$s"),
+	td('(Permission to add / modify)'),"</TR>";
+    }
+
+    # Alevel permission
+    print "<TR bgcolor=\"#dddddd\">",td("Level"),td($perms->{alevel}),
+      td("(Authorization level)"),"</TR>";
+
+    print "</TABLE><P>&nbsp;";
+  }
+
+
+  return 0;
+}
+
 # -------------------------------------------------
 # LOGIN menu
 #
@@ -320,8 +573,8 @@ sub menu_handler {
       } else {
 	print h3("Personal settings successfully updated.");
       }
-      get_user($state->{user},\%user);
-      goto show_user_info;
+      show_user_info($state,$perms);
+      return;
     } elsif ($res == -1) {
       print h2("No changes made.");
     }
@@ -486,259 +739,10 @@ sub menu_handler {
     return;
   }
   else {
-  show_user_info:
-    print h2("User info:");
-
-# Save current user's information and replace it
-# temporarily with selected user's information.
-    my ($t_user, $t_state, $t_perms); # TVu 2021-03-15
-    if (param('user_id')) {
-# User record.
-	$t_user = freeze(\%user);
-	undef %user;
-	if (get_user(param('user_id'), \%user) < 0) {
-	    %user = %{thaw($t_user)};
-	    fatal('Cannot get user record!');
-	};
-# Permissions.
-	$t_perms = freeze($perms);
-	undef %{$perms};
-	if (get_permissions($user{'id'}, $perms)) {
-	    %user = %{thaw($t_user)};
-	    $perms = thaw($t_perms);
-	    fatal('Cannot get permissions!');
-	};
-# Simulated session state information, where possible
-# (the selected user may not have a current session).
-	$t_state = freeze($state);
-	undef %{$state};
-	$state->{user} = $user{'username'}; # Login name.
-	$state->{login} = $user{'last'};    # Last login.
-	$state->{superuser} = $user{'superuser'} eq 't' ? 'yes' : 'no';
-# alevel defaults to 0 when absent in the database (BackEnd.pm).
-# When a superuser logs in, alevel is set to 999. Simulated here.
-	$perms->{alevel} = 999 if ($user{superuser} eq 't');
-	undef @q;
-	db_query("select s.name, z.name from servers s, zones z " .
-		 "where s.id = $user{'server'} and z.id = $user{'zone'} and " .
-		 "z.server = s.id;",\@q);
-	$state->{server} = $q[0][0] || $user{'server'};
-	$state->{zone} = $q[0][1] || $user{'zone'};
-    } # TVu 2021-03-15
-
-    $state->{email}=$user{email};
-    $state->{name}=$user{name};
-    $state->{last_pwd}=$user{last_pwd};
-    $state->{expiration}=($user{expiration} > 0 ?
-			localtime($user{expiration}) : 'None');
-    $state->{email_notify}=$user{email_notify};
-    $state->{groupname}=$perms->{groups};
-    display_form($state,\%user_info_form);
-
-# Show buttons if there is a plugin to handle their functions.
-    if ($main::menuhooks{'login'}->{'Pl_Users_Users'} && param('user_id')) { # TVu 2021-04-19
-	my $par_menu = param('menu');
-	my $par_sub = param('sub');
-	print "\n<table><tr><td>";
-	print start_form(-method=>'GET', -action=>$selfurl);
-	param('menu', 'login'); print hidden('menu', 'login');
-	param('sub', 'Edit-user'); print hidden('sub', 'Edit-user');
-	print hidden('user_id', param('user_id'));
-	print submit(-name=>'foobar', -value=>'Edit');
-	print end_form,"\n";
-	print "</td>\n<td>";
-	print start_form(-method=>'GET', -action=>$selfurl);
-	param('menu', 'login'); print hidden('menu', 'login');
-	param('sub', 'Copy-user'); print hidden('sub', 'Copy-user');
-	print hidden('user_id', param('user_id'));
-	print submit(-name=>'foobar', -value=>'Copy');
-	print end_form,"\n";
-	print "</td>\n<td>";
-	print start_form(-method=>'GET', -action=>$selfurl);
-	param('menu', 'login'); print hidden('menu', 'login');
-	param('sub', 'Anonymize-user'); print hidden('sub', 'Anonymize-user');
-	print hidden('user_id', param('user_id'));
-	print submit(-name=>'foobar', -value=>'Anonymize', -title=>
-	    'To completely delete a user, use command-line tool deluser');
-	print end_form,"\n";
-	print "</td></table>\n";
-	param('menu', $par_menu);
-	param('sub', $par_sub);
-# ** Button to lock or unlock user.
-    }
-
-# Note! It is important to sort everything that can be sorted, so that if the same information
-# is viewd on two or more computers at the same time, line numbers are the same for everybody!
-
-    print h3("Individual permissions:");
-    print '<TABLE BGCOLOR="#ccccff" BORDER="0" cellspacing="1" cellpadding="1">' .
-	'<TR bgcolor="#aaaaff"><TD>#</TD><TD>Type</TD><TD>Ref.</TD><TD>Permissions</TD>';
-    list_privs($user{'id'}, 2);
-    print '</TABLE>';
-
-    for my $ind1 (sort split(',', $state->{groupname})) { # TVu 2021-03-15
-	db_query("SELECT id, comment FROM user_groups WHERE name='$ind1'",\@q);
-	my $gid = $q[0][0];
-	print h3("Permissions via group $ind1<BR>($q[0][1]):");
-	print '<TABLE BGCOLOR="#ccccff" BORDER="0" cellspacing="1" cellpadding="1">' .
-	    '<TR bgcolor="#aaaaff"><TD>#</TD><TD>Type</TD><TD>Ref.</TD><TD>Permissions</TD>';
-	list_privs($gid, 1);
-	print '</TABLE>';
-    }
-
-# No longer showing combined permissions. 2021-04-14 TVu
-    print "<P>";
-    goto END_COMB;
-
-    print h3("Combined permissions:"),"<TABLE border=0 cellspacing=1>",
-	  "<TR bgcolor=\"#aaaaff\"><TD>Type</TD><TD>Ref.</TD>",
-	  "<TD>Permissions</TD></TR>";
-
-    # Server permissions
-    foreach $s (keys %{$perms->{server}}) {
-      undef @q;
-      db_query("SELECT name FROM servers WHERE id=$s;",\@q);
-      $tmp=$q[0][0];
-      print "<TR bgcolor=\"#dddddd\">",td("Server"),td("$tmp"),
-            td($perms->{server}->{$s}." &nbsp;"),"</TR>";
-    }
-
-    # Zone permissions
-    foreach $s (keys %{$perms->{zone}}) {
-      undef @q;
-      db_query("SELECT s.name,z.name FROM zones z, servers s " .
-	       "WHERE z.server=s.id AND z.id=$s;",\@q);
-      $tmp="$q[0][0]: $q[0][1]";
-      print "<TR bgcolor=\"#dddddd\">",td("Zone"),td("$tmp"),
-	     td($perms->{zone}->{$s}." &nbsp;"),"</TR>";
-    }
-
-    # Net permissions
-    # FIXME:  output is not sorted properly raising order server:cidr
-    #foreach $s (keys %{$perms->{net}}) {
-    #  undef @q;
-    #  db_query("SELECT s.name,n.net,n.range_start,n.range_end " .
-    #       "FROM servers s, nets n WHERE n.server=s.id AND n.id=$s;",\@q);
-    #  $tmp="$q[0][0]:$q[0][1]";
-    #  print "<TR bgcolor=\"#dddddd\">",td("Net"),td("$tmp"),
-    #     td($perms->{net}->{$s}[0]." - ".$perms->{net}->{$s}[1]),"</TR>";
-    #}
-
-    # Net permissions
-    # Fixed better than previous, but still a bit hack
-    $s = join(',',(keys %{$perms->{net}})),"\n";
-    if ($s) { # Empty $s caused sql errors 13.03.2017 TVu
-	undef @q;
-	db_query("SELECT s.name,n.net,n.range_start,n.range_end " .
-		 "FROM servers s, nets n WHERE n.server=s.id AND " .
-		 "n.id in ($s) ORDER BY name,net;",\@q);
-	for $s (0..$#q) {
-	    $tmp="$q[$s][0]: $q[$s][1]";
-	    print "<TR bgcolor=\"#dddddd\">",td("Net"),td("$tmp"),
-	    td($q[$s][2]." - ".$q[$s][3]),"</TR>";
-	}
-    }
-
-    # Host permissions
-    foreach $s (@{$perms->{hostname}}) {
-	if (@{$s}[0] != -1) {
-	    undef @q;
-	    db_query("SELECT z.name FROM zones z, servers s " .
-		     "WHERE z.server=s.id AND z.id=@{$s}[0];",\@q);
-	    $tmp="$q[0][0]: @{$s}[1]";
-	} else {
-	    $tmp="@{$s}[1]";
-	}
-	print "<TR bgcolor=\"#dddddd\">",
-	td("Hostmask"),td("$tmp"),td("(Hostname constraint)"),
-	"</TR>";
-    }
-
-    # IP mask permissions
-    foreach $s (@{$perms->{ipmask}}) {
-      print "<TR bgcolor=\"#dddddd\">",td("IP mask"),td("$s"),
-	     td("(IP address constraint)"),"</TR>";
-    }
-
-    # Delete mask permissions
-    foreach $s (@{$perms->{delmask}}) {
-	if (@{$s}[0] != -1) {
-	    undef @q;
-	    db_query("SELECT z.name FROM zones z, servers s " .
-		     "WHERE z.server=s.id AND z.id=@{$s}[0];",\@q);
-	    $tmp="$q[0][0]: @{$s}[1]";
-	} else {
-	    $tmp="@{$s}[1]";
-	}
-	print "<TR bgcolor=\"#dddddd\">",
-	td("Delmask"),td("$tmp"),td("(Delete host mask)"),
-	"</TR>";
-    }
-
-    # Expiration limit ** TVu 2021-04-07
-    if (defined $perms->{'elimit'}) {
-	print "<TR bgcolor=\"#dddddd\">",td("Elimit"),td($perms->{'elimit'}),
-	td("(Expiration limit, days)"),"</TR>";
-    }
-
-    # Default department ** TVu 2021-04-07
-    if ($perms->{'defdept'}) {
-	print "<TR bgcolor=\"#dddddd\">",td("DefDept"),td($perms->{'defdept'}),
-	td("(Default department string)"),"</TR>";
-    }
-
-    # Default hostname ** TVu 2021-04-07
-    if ($perms->{'defhost'}) {
-	print "<TR bgcolor=\"#dddddd\">",td("DefHost"),td($perms->{'defhost'}),
-	td("(Default hostname template)"),"</TR>";
-    }
-
-    # Template masks
-    foreach $s (@{$perms->{tmplmask}}) {
-      print "<TR bgcolor=\"#dddddd\">",td("Template mask"),td("$s"),
-	     td("(Template modify mask)"),"</TR>";
-    }
-
-    # Group masks
-    foreach $s (@{$perms->{grpmask}}) {
-      print "<TR bgcolor=\"#dddddd\">",td("GrpMask"),td("$s"),
-	     td("(Group modify mask)"),"</TR>";
-    }
-
-    # Required host fields
-    foreach $s (sort keys %{$perms->{rhf}}) {
-      print "<TR bgcolor=\"#dddddd\">",td("ReqHostField"),td("$s"),
-	    td(($perms->{rhf}->{$s} ? 'Optional':'Required')),"</TR>";
-    }
-
-    # Flags
-    foreach $s (sort keys %{$perms->{flags}}) {
-      print "<TR bgcolor=\"#dddddd\">",td("Flag"),td("$s"),
-	    td('(Permission to add / modify)'),"</TR>";
-    }
-
-    # Alevel permission
-    print "<TR bgcolor=\"#dddddd\">",td("Level"),td($perms->{alevel}),
-	     td("(Authorization level)"),"</TR>";
-
-    print "</TABLE><P>&nbsp;";
-
-END_COMB:
-
-# Restore current user's information
-    if (param('user_id')) { # TVu 2021-03-15
-	undef %user;
-	%user = %{thaw($t_user)};
-	undef $perms;
-	$perms = thaw($t_perms);
-	undef $state;
-	$state = thaw($t_state);
-    }
-
+    show_user_info($state,$perms);
   }
+
 }
-
-
 
 1;
 # eof
