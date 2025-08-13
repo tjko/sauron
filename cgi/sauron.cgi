@@ -398,7 +398,7 @@ if ($debug_mode) {
         "<br>remote_addr=$remote_addr",
         "<br>remote_user=$remote_user",
         "<p><table><tr valign=\"top\"><td><table border=1>Parameters:";
-  @names = param();
+  @names = multi_param();
   foreach $var (@names) { print Tr(td($var),td(param($var)));  }
   print "</table></td><td>State vars:<table border=1>\n";
   foreach $key (keys %state) { print Tr(td($key),td($state{$key})); }
@@ -443,7 +443,7 @@ sub about_menu() {
     $VER=sauron_version();
 
     print "<P><BR><CENTER>",
-        "<a href=\"http://sauron.jyu.fi/\" target=\"sauron\">",
+        "<a href=\"https://github.com/tjko/sauron/\" target=\"sauron\">",
         "<IMG src=\"$SAURON_ICON_PATH/logo_large.png\" border=\"0\" ",
 	"  alt=\"Sauron\">",
         "</a><BR>Version $VER<BR>(CGI $SAURON_CGI_VER)<P>",
@@ -550,7 +550,7 @@ sub login_form($$) {
         "<br></CENTER></TD></TR></TABLE>";
 
   # save arguments (allows linking to "pages" in Sauron)
-  foreach $arg (param()) { print hidden($arg,param($arg)); }
+  foreach $arg (multi_param()) { print hidden($arg,scalar(param($arg))); }
 
   print end_form,
   "\n<script type='text/JavaScript'>document.getElementById('login').focus();</script>",
@@ -636,9 +636,9 @@ sub login_auth() {
 	    unless(get_zone($state{'zoneid'},\%h));
 	}
 
-	foreach $arg (param()) {
+	foreach $arg (multi_param()) {
 	  next if ($arg =~ /^(login_name|login_pwd|login|submit)$/);
-	  $arg_str .= hidden($arg,param($arg));
+	  $arg_str .= hidden($arg,scalar(param($arg)));
 	}
 
 	print "<TABLE border=0 cellspacing=0 bgcolor=\"#efefff\" " .
@@ -736,14 +736,14 @@ sub top_menu($) {
   if ($frame_mode) {
     print '<TABLE border="0" cellspacing="0" width="100%">',
           '<TR bgcolor="#002d5f"><TD rowspan=2>',
-          '<a href="http://sauron.jyu.fi/" target="sauron">',
+          '<a href="https://github.com/tjko/sauron/" target="sauron">',
           '<IMG src="' .$SAURON_ICON_PATH .
 	  '/logo.png" width="80" height="70" border="0" alt=""></a></TD>',
           '<TD colspan=2><FONT size=+2 color="white">Sauron</WHITE></TD></TR>',
 	  '<TR bgcolor="#002d5f" align="left" valign="center">',
           '<TD><FONT color="white">';
   } else {
-    print '<a href="http://sauron.jyu.fi/" target="sauron">',
+    print '<a href="https://github.com/tjko/sauron/" target="sauron">',
           '<IMG src="' .$SAURON_ICON_PATH .
           '/logo.png" width="80" height="70" border="0" alt=""></a>';
 
