@@ -247,6 +247,68 @@ my %new_server_form=(
 );
 
 
+sub select_server($$)
+{
+  my($state,$perms) = @_;
+
+  my $selfurl = $state->{selfurl};
+  my (%srec,@l);
+
+  if ($state->{'serverid'} && $state->{'serverid'}) {
+      print h2("Selected server: <a href='$selfurl?menu=servers&amp;server_list=$state->{'serverid'}'>$state->{'server'}</a>");
+  }
+  #display server selection dialig
+  get_server_list(-1,\%srec,\@l);
+  delete $srec{-1};
+  shift @l;
+  print h2("Select server:"),p,
+    start_form(-method=>'POST',-action=>$selfurl),
+    hidden('menu','servers'),p,
+    "Available servers:",p,
+    scrolling_list(-width=>'100%',-name=>'server_list',-size=>'10',-values=>\@l,-labels=>\%srec),
+    br,
+    submit(-name=>'server_select_submit',-value=>'Select server'),
+    end_form;
+
+  return 0;
+}
+
+sub display_new_server($$$$)
+{
+  my($state,$perms,$serverid,$scookie) = @_;
+
+  my (%serv);
+
+  #display selected server info
+  unless ($serverid > 0) {
+    print h3("Cannot select server!"),p;
+    select_server($state,$perms);
+    return 1;
+  }
+
+  my $serveridsave = $state->{'serverid'};
+  $state->{'serverid'}=$serverid;
+  my $pcheck = check_perms('server','R');
+  $state->{'serverid'}=$serveridsave;
+  if ($pcheck) {
+    select_server($state,$perms);
+    return;
+  }
+  get_server($serverid,\%serv);
+  my $server=$serv{name};
+  print h2("Selected server: $server"),p;
+  if ($state->{'serverid'} ne $serverid) {
+    $state->{'zone'}='';
+    $state->{'zoneid'}=-1;
+    $state->{'server'}=$server;
+    $state->{'serverid'}=$serverid;
+    save_state($scookie,$state);
+  }
+
+  display_form(\%serv,\%server_form); # display server record
+  return 0;
+}
+
 # SERVERS menu
 #
 sub menu_handler {
@@ -263,7 +325,10 @@ sub menu_handler {
 
   my($res,%data,%serv,%srec,@l,$server);
 
-  goto select_server if ($serverid && check_perms('server','R'));
+  if ($serverid && check_perms('server','R')) {
+    select_server($state,$perms);
+    return;
+  }
 
 
   if ($sub eq 'add') {
@@ -275,7 +340,8 @@ sub menu_handler {
     if ($res > 0) {
       #print "<p>$res $data{name}";
       $serverid=$res;
-      goto display_new_server;
+      display_new_server($state,$perms,$serverid,$scookie);
+      return;
     }
 
     return;
@@ -292,7 +358,7 @@ sub menu_handler {
 	$state->{'zone'}=''; $state->{'zoneid'}=-1;
 	$state->{'server'}=''; $state->{'serverid'}=-1;
 	save_state($scookie,$state);
-	goto select_server;
+	select_server($state,$perms);
       }
       return;
     }
@@ -311,59 +377,19 @@ sub menu_handler {
 
     $res=edit_magic('srv','Server','servers',\%server_form,
 		    \&get_server,\&update_server,$serverid);
-    goto select_zone if ($res == -1);
-    goto display_new_server if ($res == 1 || $res == 2);
+    select_server($state,$perms) if ($res == -1);
+    display_new_server($state,$perms,$serverid,$scookie) if ($res == 1 || $res == 2);
     return;
-  }
-
-  if ($sub eq 'select') {
-    goto select_server;
   }
 
   $serverid=param('server_list') if (param('server_list'));
- display_new_server:
+
   if ($serverid && $sub ne 'select') {
-    #display selected server info
-    unless ($serverid > 0) {
-      print h3("Cannot select server!"),p;
-      goto select_server;
-    }
-    my $serveridsave = $state->{'serverid'};
-    $state->{'serverid'}=$serverid;
-    my $pcheck = check_perms('server','R');
-    $state->{'serverid'}=$serveridsave;
-    goto select_server if ($pcheck);
-    get_server($serverid,\%serv);
-    $server=$serv{name};
-    print h2("Selected server: $server"),p;
-    if ($state->{'serverid'} ne $serverid) {
-      $state->{'zone'}='';
-      $state->{'zoneid'}=-1;
-      $state->{'server'}=$server;
-      $state->{'serverid'}=$serverid;
-      save_state($scookie,$state);
-    }
-    display_form(\%serv,\%server_form); # display server record
+    display_new_server($state,$perms,$serverid,$scookie);
     return;
   }
 
-  select_server:
-  if ($state->{'serverid'} && $state->{'serverid'}) {
-      print h2("Selected server: <a href='$selfurl?menu=servers&amp;server_list=$state->{'serverid'}'>$state->{'server'}</a>");
-  }
-  #display server selection dialig
-  get_server_list(-1,\%srec,\@l);
-  delete $srec{-1};
-  shift @l;
-  print h2("Select server:"),p,
-    start_form(-method=>'POST',-action=>$selfurl),
-    hidden('menu','servers'),p,
-    "Available servers:",p,
-      scrolling_list(-width=>'100%',-name=>'server_list',
-		   -size=>'10',-values=>\@l,-labels=>\%srec),
-      br,submit(-name=>'server_select_submit',-value=>'Select server'),
-      end_form;
-
+  select_server($state,$perms);
 }
 
 
