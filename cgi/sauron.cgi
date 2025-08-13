@@ -263,7 +263,7 @@ unless ($SAURON_NO_REMOTE_ADDR_AUTH) {
 
 $server=$state{'server'};
 $serverid=$state{'serverid'};
-$zone=$state{'zone'};
+$zone=$state{'zone'} || '';
 $zoneid=$state{'zoneid'};
 
 unless ($menu) {
