@@ -16,7 +16,7 @@ CREATE TABLE wks_entries (
 	proto	    CHAR(10), /* protocol (tcp,udp) */
 	services    TEXT, /* services (ftp,telnet,smtp,http,...) */
         comment     TEXT
-) WITH OIDS;
+);
 
 CREATE INDEX wks_entries_ref_index ON wks_entries (type,ref);
 

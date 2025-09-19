@@ -18,7 +18,7 @@ CREATE TABLE mx_entries (
         pri	    INT4 NOT NULL CHECK (pri >= 0), /* MX priority */
 	mx	    TEXT, /* MX domain (FQDN) */
         comment     TEXT
-) WITH OIDS;
+);
 
 CREATE INDEX mx_entries_ref_index ON mx_entries (type,ref);
 

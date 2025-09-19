@@ -32,6 +32,6 @@ CREATE TABLE user_rights (
 				101=asset management flags  */
 	rref	INT NOT NULL, /* ptr to table specified by type field */
 	rule	CHAR(80) /* R,RW,RWS or regexp */
-) WITH OIDS;
+);
 
 CREATE INDEX user_rights_ref_index ON user_rights (type,ref);

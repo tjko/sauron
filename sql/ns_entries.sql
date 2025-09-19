@@ -15,7 +15,7 @@ CREATE TABLE ns_entries (
 					-->hosts.id */
 	ns	    TEXT, /* value of NS record (FQDN) */
         comment     TEXT
-) WITH OIDS;
+);
 
 CREATE INDEX ns_entries_ref_index ON ns_entries (type,ref);
 

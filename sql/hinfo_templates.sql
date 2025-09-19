@@ -14,6 +14,6 @@ CREATE TABLE hinfo_templates (
 					1=software */
 	pri     INT4 DEFAULT 100 /* priority (defines the order in which
   			    entries are displayed in user interfaces) */
-) INHERITS(common_fields) WITH OIDS;
+) INHERITS(common_fields);
 
 
