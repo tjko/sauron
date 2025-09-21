@@ -1,22 +1,17 @@
-Sauron v.0.7.4 - DNS/DHCP Management System
+Sauron v.0.8.5 - DNS/DHCP Management System
 ==============
-
-This is a development branch release (current stable branch is v0.6.x).
-However, based on reports from users current development branch releases
-should be more stable than the current "stable" branch :)
-
 
 DBI (DBD::Pg) is now the default database access method, but Pg can still
 be used by specifying --with-Pg option to configure script.
 
 
 UPGRADE
-	See README.upgrade if upgradig from a previous version.
+	See README.upgrade if upgrading from a previous version.
 
 REQUIREMENTS
-	- BIND v8 or later [9.2.x or newer recommended]
-	- ISC dhcpd v2 or later [3.x or newer recommended] (optional)
-	- Perl 5 or better [at least 5.6 recommended]
+	- BIND v9 or later [at least 9.18.33 recommended]
+	- ISC dhcpd v3 or later [at least 4.4.3 recommended] (optional)
+	- Perl 5 or better [at least 5.36 recommended]
 		- CGI module
 		- DBD::Pg (and DBI) module (or Pg module)
 		- Net::DNS module
@@ -27,20 +22,13 @@ REQUIREMENTS
 		- Digest::SHA1 module
 		- MIME::Base64
 		- Crypt::RC5
-	- PostgresSQL [7.4 or newer (may work fine with earlier 7.x versions)] 
+	- PostgresSQL [15.10 or newer  recommended]
 	  (or add support to your favorite db yourself :)
 	- www-server (Apache or any other www-server with CGI support)
 
-SOURCE
-	http://sourceforge.net/p/sauron-dns/code/
-
 DOWNLOAD
 	Sauron and related files are available from:
-	 WWW: http://sauron.jyu.fi/
-               or
-              http://sourceforge.net/projects/sauron-dns/files/ 
-
-	 FTP: ftp://ftp.jyu.fi/pub/sauron/
+	 WWW: https://github.com/tjko/sauron/
 
 
 TESTED PLATFORMS
