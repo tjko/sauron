@@ -12,7 +12,7 @@ use Sauron::CGIutil;
 use Sauron::BackEnd;
 use Sauron::Sauron;
 use Sauron::CGI::Utils;
-use Data::Dumper;
+#use Data::Dumper;
 # use Storable qw(nstore store_fd nstore_fd freeze thaw dclone); # TVu 2021-03-15
 #use Storable qw(freeze thaw); # TVu 2021-03-15
 use strict;

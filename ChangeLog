@@ -1,4 +1,4 @@
-0.8.5 (beta 1)
+0.8.5
 	- Removed 'WITH OIDS' from SQL table creation; not supported since 
 	  version 12. [svamberg]
 	- Fixed zone expiration. Defined value was not honored while generating
