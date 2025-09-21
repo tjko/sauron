@@ -24,5 +24,5 @@ CREATE TABLE groups (
        comment	    TEXT,
 
        CONSTRAINT   groups_key UNIQUE(name,server)
-) INHERITS(common_fields) WITH OIDS;
+) INHERITS(common_fields);
 

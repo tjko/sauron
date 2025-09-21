@@ -17,6 +17,6 @@ CREATE TABLE printer_entries (
 					-->printer_classes.id */
 	printer	    TEXT, /* printcap entry */
         comment     TEXT
-) WITH OIDS;
+);
 
 

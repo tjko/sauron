@@ -38,6 +38,8 @@ TESTED PLATFORMS
 
 
 INSTALLATION 
+  
+  This instalation was tested on Debian 13.1.
 
   See User Guide for complete installation instruction. This section
   is only a quick overview of the installation process:
@@ -50,7 +52,13 @@ INSTALLATION
 
   2) Create database for Sauron to use in PostgreSQL
      	(use createdb command to create the database, see PostgreSQL
-	 documentation for more help)
+	 documentation for more help), example:
+        su postgres
+        createdb sauron;
+        psql
+        psql> CREATE USER sauron WITH PASSWORD '<random_password>';
+        psql> ALTER DATABASE sauron OWNER TO sauron;
+        psql> exit
 
   3) Edit configuration files: config and config-browser
 	(these are usually in /usr/local/etc/sauron or /etc/sauron)

@@ -16,7 +16,7 @@ CREATE TABLE srv_entries (
 	port        INT4 NOT NULL CHECK (port >= 0), /* port */
 	target	    TEXT NOT NULL DEFAULT '.', /* target */
         comment     TEXT /* comment */
-) WITH OIDS;
+);
 
 CREATE INDEX srv_entries_ref_index ON srv_entries (type,ref);
 
