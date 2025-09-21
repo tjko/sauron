@@ -1,7 +1,13 @@
-0.8.5 (beta 1)
-	- Increased maximum login length to 321 characters to allow storage 
+0.9.0 (beta)
+
+ - Increased maximum login length to 321 characters to allow storage 
 	  of eduPersonUniqueId according to RFC4512. [svamberg]
-	- Fixed zone expiration. Defined value was not honored while generating
+	- Removed 'WITH OIDS' from SQL table creation; not supported since 
+	  version 12. [svamberg]
+
+0.8.5
+
+- Fixed zone expiration. Defined value was not honored while generating
 	  configurations. While on the matter, added also zone expiration to
 	  show in zone listing. Pink denotes already expired zone, pale yellow
 	  warns upcoming expiration from SAURON_REMOVE_EXPIRED_DELAY config

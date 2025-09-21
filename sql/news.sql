@@ -11,6 +11,6 @@ CREATE TABLE news (
 	server		INT DEFAULT -1, /* ptr to server or -1 for global
 					   news messages */
        	info		TEXT NOT NULL /* news/motd message */
-) INHERITS(common_fields) WITH OIDS;
+) INHERITS(common_fields);
 
 

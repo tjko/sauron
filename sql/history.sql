@@ -21,7 +21,7 @@ CREATE TABLE history (
 	ref		INT,      /* optional reference */
 	action		CHAR(25), /* operation performed */
 	info		TEXT      /* extra info */
-) WITH OIDS;
+);
 
 CREATE INDEX history_sid_index ON history(sid);
 CREATE INDEX history_uid_index ON history(uid);

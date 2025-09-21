@@ -31,7 +31,7 @@ binmode(STDOUT, ":utf8");          #treat as if it is UTF-8
 binmode(STDIN, ":encoding(utf8)"); #actually check if it is UTF-8
 
 sub sauron_version() {
-  return "0.8.4 (beta 1)"; # current Sauron version
+  return "0.8.5"; # current Sauron version
 }
 
 

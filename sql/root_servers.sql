@@ -14,4 +14,4 @@ CREATE TABLE root_servers (
 	domain		TEXT NOT NULL,  /* domainname */
 	type		TEXT NOT NULL,  /* A,NS,... */
 	value		TEXT NOT NULL   /* value */
-) WITH OIDS;
+);

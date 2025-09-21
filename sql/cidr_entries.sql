@@ -44,7 +44,7 @@ CREATE TABLE cidr_entries (
 					1 = NOT */
 	port	    INT,            /* port value, used by: forwarders */      
 	comment     TEXT
-) WITH OIDS;
+);
 
 CREATE INDEX cidr_entries_ref_index ON cidr_entries (type,ref);
 CREATE INDEX cidr_entries_ip_index ON cidr_entries (ip);

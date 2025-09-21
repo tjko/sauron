@@ -19,6 +19,6 @@ CREATE TABLE lastlog (
 	ldate		INT DEFAULT -1, /* logout date */
 	ip		INET,	        /* remote IP */
 	host		TEXT		/* remote host */
-) WITH OIDS;
+);
 
 

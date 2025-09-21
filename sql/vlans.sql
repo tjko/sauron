@@ -18,6 +18,6 @@ CREATE TABLE vlans (
        comment	   TEXT,  /* comments */
 
        CONSTRAINT  vlans_key UNIQUE (name,server)
-) INHERITS(common_fields) WITH OIDS;
+) INHERITS(common_fields);
 
 

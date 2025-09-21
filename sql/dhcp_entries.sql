@@ -22,7 +22,7 @@ CREATE TABLE dhcp_entries (
 					-->groups.id */
 	dhcp	    TEXT, /* DHCP entry value (without trailing ';') */
         comment     TEXT
-) WITH OIDS;
+);
 
 CREATE INDEX dhcp_entries_ref_index ON dhcp_entries (type,ref);
 

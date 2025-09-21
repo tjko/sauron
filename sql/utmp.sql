@@ -26,5 +26,5 @@ CREATE TABLE utmp (
 	searchopts	TEXT, /* current search options */
 	searchdomain	TEXT, /* current search domain */
 	searchpattern	TEXT  /* current search pattern */
-) WITH OIDS;
+);
 
