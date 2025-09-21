@@ -598,7 +598,7 @@ sub login_auth() {
   if ($u eq '' || $p eq '') {
     print p,h1("Username or password empty!");
   }
-  elsif ($u !~ /^[a-zA-Z0-9\.\-]+$/) {
+  elsif ($u !~ /^[a-zA-Z0-9\-\.@]+$/) {
     print p,h1("Invalid username!");
   }
   else {

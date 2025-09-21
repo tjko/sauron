@@ -1,5 +1,5 @@
-Sauron v.0.8.5 - DNS/DHCP Management System
-==============
+Sauron v.0.9.0beta - DNS/DHCP Management System
+==================
 
 DBI (DBD::Pg) is now the default database access method, but Pg can still
 be used by specifying --with-Pg option to configure script.
@@ -22,7 +22,8 @@ REQUIREMENTS
 		- Digest::SHA1 module
 		- MIME::Base64
 		- Crypt::RC5
-	- PostgresSQL [15.10 or newer  recommended]
+		- Text::Table;
+ 	- PostgresSQL [15.10 or newer  recommended]
 	  (or add support to your favorite db yourself :)
 	- www-server (Apache or any other www-server with CGI support)
 

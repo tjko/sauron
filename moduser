@@ -13,6 +13,7 @@ use Sauron::DB;
 use Sauron::Util;
 use Sauron::BackEnd;
 use Sauron::Sauron;
+use Text::Table;
 
 my ($PG_DIR,$PG_NAME) = ($0 =~ /^(.*\/)(.*)$/);
 $0 = $PG_NAME;
@@ -595,15 +596,25 @@ if (defined $opt_list) {
 	      undef @q;
 	      db_query($sql, \@q);
 	      print "Members of user group $1\n\n";
-# Name is in the last column to avoid alignment problems caused by multi-byte Unicode characters.
-	      print "Login    Email                     Flags  Expiration Name                     \n";
-	      print "-------- ------------------------- ------ ---------- -------------------------\n";
+              # Name is in the last column to avoid alignment problems caused by multi-byte Unicode characters.
+	      # init table         
+              my $tb = Text::Table->new("Login", "Email", "Flags", "Expiration", "Name");
+
 	      for $i (0..$#q) {
 		  $q[$i][4] =~ s/1970-01-01//; # 2018-12-03 TVu
-		  printf "%-8s %-25s %-6s %10s %-25s\n", $q[$i][0], substr($q[$i][2], 0, 25),
-#		  ($q[$i][3] =~ /^(t|1)$/ ? 'Yes' : '', substr($q[$i][1], 0, 25));
-		  get_user_status($q[$i][3]), $q[$i][4], substr($q[$i][1], 0, 25);
+                  # fill table
+                  $tb->add(
+                    $q[$i][0], # Login
+                    substr($q[$i][2], 0, 25), # Email
+                    get_user_status($q[$i][3]), # Flags
+                    $q[$i][4], # Expiration
+                    substr($q[$i][1], 0, 25) # Name  
+                  );
 	      }
+              # print table
+              print $tb->title();
+	      print $tb->body_rule('-');
+    	      print $tb->body();
 	  } else {
 	      fatal("Bad parameters for --list");
 	  }
@@ -622,10 +633,9 @@ if (defined $opt_list) {
 	  print "No parameters allowed for --list\n";
 	  exit 0;
       }
-# Name is in the last column to avoid alignment problems caused by multi-byte Unicode characters.
-    print
-     "Login    Group        Email                     Flags  Name\n",
-     "-------- ------------ ------------------------- ------ -------------------------\n";
+    # Name is in the last column to avoid alignment problems caused by multi-byte Unicode characters.
+    # init table         
+    my $tb = Text::Table->new("Login", "Group", "Email", "Flags", "Name");
     undef @q;
     db_query("SELECT id,username,name,superuser,comment,email FROM users ".
 	     "ORDER BY username;",\@q);
@@ -634,11 +644,19 @@ if (defined $opt_list) {
                "WHERE g.id=r.rref AND r.rtype=0 AND r.type=2 AND " .
 	       " r.ref=$q[$i][0] ORDER BY g.id",\@qq);
       $group=substr($qq[0][0],0,12);
-      printf "%-8s %-12s %-25s %-6s %-25s\n",
-      $q[$i][1],$group, substr($q[$i][5],0,25),
-#     ($q[$i][3] =~ /^(t|1)$/ ? 'Yes' : ''), substr($q[$i][2],0,25);
-      get_user_status($q[$i][0]), substr($q[$i][2],0,25);
+      # fill table
+      $tb->add(
+        $q[$i][1], # Login
+        $group, # Group
+        substr($q[$i][5],0,25), # Email
+        get_user_status($q[$i][0]), # Flags
+        substr($q[$i][2],0,25) # Name
+      );
     }
+    # print table
+    print $tb->title();
+    print $tb->body_rule('-');
+    print $tb->body();
   }
 
   exit 0;
