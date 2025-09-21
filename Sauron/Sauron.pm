@@ -1,16 +1,17 @@
 # Sauron::Sauron.pm -- configuration file parsing and default settings
 #
+# Copyright (c) Michal Kostenec <kostenec@civ.zcu.cz> 2013-2014.
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>  2003-2007.
-# $Id$
+# $Id:$
 #
 package Sauron::Sauron;
 require Exporter;
 use Sauron::Util;
-use MIME::Base64 qw(decode_base64); 
+use MIME::Base64 qw(decode_base64);
 use strict;
 use vars qw($VERSION $CONF_FILE_PATH @ISA @EXPORT);
 
-$VERSION = '$Id$ ';
+$VERSION = '$Id:$ ';
 $CONF_FILE_PATH = '__CONF_FILE_PATH__';
 
 
@@ -24,10 +25,13 @@ $CONF_FILE_PATH = '__CONF_FILE_PATH__';
 	     print_browser_config
 	    );
 
-
+# A hack adapted from following page, mesrik - 2024
+# - https://stackoverflow.com/questions/627661/how-can-i-output-utf-8-from-perl
+binmode(STDOUT, ":utf8");          #treat as if it is UTF-8
+binmode(STDIN, ":encoding(utf8)"); #actually check if it is UTF-8
 
 sub sauron_version() {
-  return "0.7.3"; # current Sauron version
+  return "0.8.5"; # current Sauron version
 }
 
 
@@ -68,7 +72,8 @@ sub set_defaults() {
   $main::SAURON_AUTH_MODE = 0;
   $main::SAURON_AUTH_PROG = '';
   $main::SAURON_DHCP_CHK_PROG = '';
-  $main::SAURON_DHCP_CHK_ARGS = '-q -t -cf';
+  $main::SAURON_DHCP_CHK_ARGS  = '-4 -q -t -cf';
+  $main::SAURON_DHCP6_CHK_ARGS = '-6 -q -t -cf';
   $main::SAURON_NAMED_CHK_PROG = '';
   $main::SAURON_NAMED_CHK_ARGS = '';
   $main::SAURON_ZONE_CHK_PROG = '';
@@ -79,7 +84,12 @@ sub set_defaults() {
   $main::SAURON_KEY = '';
   $main::SAURON_DNSSEC_KEYGEN_PROG = '';
   $main::SAURON_DNSSEC_KEYGEN_ARGS = '';
-  $main::SAURON_DNSNAME_CHECK_MODE = 0;
+# $main::SAURON_DNSNAME_CHECK_MODE = 0;    # Replaced 2020-10-12 TVu
+  $main::SAURON_DNSNAME_CHECK_LEVEL = 999; # 2020-10-12 TVu
+  $main::SAURON_TEMP_LOCK = 0;             # 2020-10-13 TVu
+  $main::SAURON_REMOVE_WHITESPACE = 0;     # 2020-10-13 TVu
+  $main::TTL_MIN_SEC = 600;                # 2021-02-11 TVu
+  $main::TTL_MAX_SEC = 86400;              # 2021-02-11 TVu
 
   $main::SAURON_RHF{huser}    = 0; # User
   $main::SAURON_RHF{dept}     = 0; # Dept.
@@ -98,6 +108,8 @@ sub set_defaults() {
   $main::ALEVEL_PING = 1;
   $main::ALEVEL_TRACEROUTE = 1;
   $main::ALEVEL_HISTORY = 1;
+  $main::ALEVEL_HISTORY_SEARCH = 3;         # 2020-10-13 TVu
+  $main::ALEVEL_SHOW_UNALLOCATED_CIDRS = 3; # 2020-10-13 TVu
 
   $main::LOOPBACK_NET = '127.0.0.0/8';
   $main::LOOPBACK_ZONE = 'loopback.';
@@ -112,7 +124,7 @@ sub print_config() {
   print "DB_PASSWORD=",$main::DB_PASSWORD,"\n";
   print "SERVER_ID=",$main::SERVER_ID,"\n";
 
-  print "SAURON_KEY=".($main::SAURON_KEY ? 
+  print "SAURON_KEY=".($main::SAURON_KEY ?
 		       "<".(length($main::SAURON_KEY)*8)." bit key defined>" :
 		       "<undefined>")."\n";
   print "SAURON_DEBUG_MODE=",$main::SAURON_DEBUG_MODE,"\n";
@@ -143,6 +155,8 @@ sub print_config() {
   print "SAURON_AUTH_PROG=",$main::SAURON_AUTH_PROG,"\n";
   print "SAURON_DHCP_CHK_PROG=",$main::SAURON_DHCP_CHK_PROG,"\n";
   print "SAURON_DHCP_CHK_ARGS=",$main::SAURON_DHCP_CHK_ARGS,"\n";
+  print "SAURON_DHCP6_CHK_PROG=",$main::SAURON_DHCP6_CHK_PROG,"\n";
+  print "SAURON_DHCP6_CHK_ARGS=",$main::SAURON_DHCP6_CHK_ARGS,"\n";
   print "SAURON_NAMED_CHK_PROG=",$main::SAURON_NAMED_CHK_PROG,"\n";
   print "SAURON_NAMED_CHK_ARGS=",$main::SAURON_NAMED_CHK_ARGS,"\n";
   print "SAURON_ZONE_CHK_PROG=",$main::SAURON_ZONE_CHK_PROG,"\n";
@@ -170,7 +184,7 @@ sub load_config_file($$) {
   my($cfile,$modemask)=@_;
   my($file,$ret);
 
-  fatal("internal error in load_config_file(): file not specified") 
+  fatal("internal error in load_config_file(): file not specified")
       unless ($cfile);
   $modemask=0 unless ($modemask);
 
@@ -195,7 +209,7 @@ sub load_config_file($$) {
   }
 
   fatal("cannot read configuration file: $file") unless (-r $file);
-  
+
   my $filemode = (stat($file))[2];
   fatal("unsafe file permissions for: $file") if ($filemode & $modemask);
 

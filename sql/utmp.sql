@@ -1,6 +1,6 @@
 /* utmp table creation
  *
- * $Id$
+ * $Id:$
  */
 
 /** This table contains "utmp" data of currently logged in www-interface
@@ -26,5 +26,5 @@ CREATE TABLE utmp (
 	searchopts	TEXT, /* current search options */
 	searchdomain	TEXT, /* current search domain */
 	searchpattern	TEXT  /* current search pattern */
-);
+) WITH OIDS;
 

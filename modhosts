@@ -2,49 +2,126 @@
 #
 # modhosts - utility to modify (move,delete) host records
 #
+# Added $opt_debug, $opt_hinfo, @opt_setfields, --type=dhcponly and
+# help() function and cleaned GetOptions()  - Riku Meskanen <mesrik@iki.fi> 2019.
+#
+# Copyright (c) Michal Kostenec <kostenec@civ.zcu.cz> 2013-2014.
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>  2001-2003.
-# $Id$
+# $Id:$
 #
 require 5;
 use Getopt::Long;
-use Net::Netmask;
+# use Net::Netmask;
 use Sauron::DB;
 use Sauron::Util;
 use Sauron::BackEnd;
 use Sauron::Sauron;
+use Net::IP qw(:PROC);
+use Data::Dumper;
 
 load_config();
 
 ##############################################
 
-$user = (getpwuid($<))[0];
+my %setfields_host = (
+    # WebUI-name => field name in host table
+    "User" => "user",
+    "Dept" => "dept",
+    "Location" => 'location',
+    "Email"    => 'email',
+    "[Extra] Info"   => 'info',
+    "HINFO hardware" => 'hinfo_hw',
+    "HINFO software" => 'hinfo_sw',
+    'Model' => 'model',
+    "Misc"  => 'misc',
+    "Asset ID" => 'asset_id'
+    );
 
-GetOptions("help|h","cidr=s","name=s","move=s","delete",
-	   "info=s","rename=s","commit","excludeip=s",
-	   "excludename=s","type=s","ether=s","etherempty",
-	   "setedate=s","verbose","setgroup=s");
+sub setfields_list($$) {
+    my ($sep, $lcnt) = (@_);
+    my $ret = $sep;
+    my $c = 1;
 
-if ($opt_help || @ARGV < 2) {
-  print "syntax: $0 <server> <zone> [options]\n\n",
-        "options:\n",
-	"\t--cidr=<cidr>\t\tselect hosts within CIDR block\n",
-	"\t--name=<regexp>\t\tselect hostnames matching the regexp\n",
-	"\t--info=<regexp>\t\tselect host with matching info\n\n",
-	"\t--type=<type>\t\tselect only hosts of this type\n",
-	"\t--ether=<regexp>\t\tselect hosts with matching MAC\n",
-	"\t--etherempty\t\tselect hosts without a MAC\n",
-	"\t--delete\t\tdelete matching hosts\n",
-	"\t--move=<CIDR>,<IP>\tmove hosts to given net starting from IP\n",
-	"\t--rename=<regexp>\trename hosts with given substitution 'regexp'\n",
-	"\t--setedate=<days>\tset host expiration date to today+days\n",
-	"\t--setgroup=<name>\tassign host to a group\n",
-	"\n",
-	"\t--commit\t\tcommit changes (w/o this NO changes are made)\n",
-	"\n";
-  print "" if ($opt_help);
-  exit(0);
+    foreach $i (sort keys %setfields_host) {
+	$ret .= "\"$i\"";
+	if ($c++ % $lcnt eq 0) {
+	    $ret .= "$sep";
+	} else {
+	    $ret .= " ";
+	}
+    }
+    return $ret;
 }
 
+sub setfield_xlat($) {
+    my ($fn) = (@_);
+    return $setfields_host{$fn};
+}
+
+sub help() {
+    print qq{Syntax: $0 <server> <zone> [options]
+
+Options:
+  --cidr=<cidr>                  select hosts within CIDR block
+  --ether=<regexp>               select hosts with matching MAC
+  --etherempty                   select hosts without a MAC
+  --hinfo=<regexp>               select host with matching hinfo
+  --info=<regexp>                select host with matching info
+  --name=<regexp>                select hostnames matching the regexp
+  --type=<type>                  select only hosts of this type
+
+  --delete                       delete matching hosts
+  --disable                      change hosts to host reservations
+  --enable                       change host reservations to hosts
+  --move=<CIDR>,<IP>             move hosts to given net starting from IP
+  --rename=<regexp>              rename hosts with given substitution 'regexp'
+                                 regexp format: s/<pattern1>/<pattern2>/
+  --setedate=<days>              set host expiration date to today+days
+  --setfield="<field>:<string>"  set host field to string
+  --setgroup=<name>              assign host to a group, NONE for no group
+  --addsubgroup=<name>           add host to a subgroup
+  --rmsubgroup=<name>            remove host from a subgroup
+
+  --commit                       commit changes (w/o this NO changes are made)
+
+  The --type is any of: "host" "cname" "arec" "srv" "dhcponly" "disabled"
+
+  The --setfield allows simultaneous uses and understands fields: @{[setfields_list("\n\t\t",5)]}
+  NOTICE: It's advisable to make backup dump of the database before using this
+          tool in production. Better yet have a separate test or staging sauron
+          installation where you can first verify you get expected results.
+  } . "\n";
+    exit(0);
+}
+
+$user = (getpwuid($<))[0];
+
+GetOptions(
+    "debug"          => \$opt_debug,
+    "help|h"         => \$opt_help,
+    "cidr=s"         => \$opt_cidr,
+    "name=s"         => \$opt_name,
+    "move=s"         => \$opt_move,
+    "delete"         => \$opt_delete,
+    "info=s"         => \$opt_info,
+    "hinfo=s"        => \$opt_hinfo,
+    "rename=s"       => \$opt_rename,
+    "commit"         => \$opt_commit,
+    "excludeip=s"    => \$opt_excludeip,
+#    "excludename=s"  => \$opt_excludename,
+    "type=s"         => \$opt_type,
+    "ether=s"        => \$opt_ether,
+    "etherempty"     => \$opt_etherempty,
+    "setedate=i"     => \$opt_setedate,
+    "setfield=s"     => \@opt_setfield,
+    "setgroup=s"     => \$opt_setgroup,
+    "addsubgroup=s"  => \$opt_addsubgroup,
+    "rmsubgroup=s"   => \$opt_rmsubgroup,
+    "disable"        => \$opt_disable,
+    "enable"         => \$opt_enable
+    ) or help();
+
+help() if ($opt_help || @ARGV < 2);
 
 db_connect();
 
@@ -52,7 +129,6 @@ set_muser($user);
 
 $server=$ARGV[0];
 $zone=$ARGV[1];
-$opt_verbose=($opt_verbose ? 1 : 0);
 $opt_etherempty=($opt_etherempty ? 1 : 0);
 
 $serverid=get_server_id($server);
@@ -73,7 +149,7 @@ if ($opt_cidr || $opt_move) {
 
 if ($opt_cidr) {
   fatal("invalid CIDR: $cidr") unless (is_cidr($opt_cidr));
-  if ($opt_cidr =~ /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(\/32)?$/) {
+  if (new Net::IP($opt_cidr)->size() == 1) {
     $cidr .= " AND a.ip = '$opt_cidr' ";
   } else {
     $cidr.= " AND a.ip << '$opt_cidr' ";
@@ -83,13 +159,15 @@ if ($opt_cidr) {
 
 if ($opt_ether) {
     print "ETHER: criteria: $opt_ether\n";
-    $ether= " AND h.ether ~ '$opt_ether' ";
+#   $ether= " AND h.ether ~ '$opt_ether' ";
+    $ether= " AND h.ether ~ " . db_encode_str($opt_ether) . " ";
 }
 if ($opt_etherempty) {
     $ether= " AND (h.ether = '' OR h.ether IS NULL) ";
 }
 
-if ($opt_setedate) {
+
+if (defined($opt_setedate)) {
     fatal("invalid arguments for setedate option: $opt_setedate")
 	unless ($opt_setedate =~ /^\d+$/);
     $new_edate = time() + int($opt_setedate * 86400);
@@ -97,9 +175,36 @@ if ($opt_setedate) {
 }
 
 if ($opt_setgroup) {
-    fatal("cannot find group '$opt_setgroup'")
-	if (($gid=get_group_by_name($serverid,$opt_setgroup)) < 0);
+    if($opt_setgroup eq "NONE") {
+        $gid = -1;
+    }
+    else {
+        fatal("cannot find group '$opt_setgroup'") if (($gid=get_group_by_name($serverid,$opt_setgroup)) < 0);
+        fatal("cannot get group type for '$opt_setgroup'") if (($gtype = get_group_type_by_name($serverid,$opt_setgroup)) < 0);
+	# Not allowing Custom DHCP Class before better understood what that is for - mesrik
+        fatal("cannot assign group with type 'Custom DHCP Class' ($opt_setgroup)") if $gtype == 103;
+    }
 }
+
+$gid_a = -1, $gid_r = -2;
+
+if ($opt_addsubgroup) {
+    fatal("cannot find group '$opt_addsubgroup'")
+	if (($gid_a = get_group_by_name($serverid, $opt_addsubgroup)) < 0);
+    fatal("cannot get group type for '$opt_addsubgroup'")
+	if (($gtype = get_group_type_by_name($serverid, $opt_addsubgroup)) < 0);
+    # Not allowing Custom DHCP Class before better understood what that is for - mesrik
+    fatal("cannot assign group with type 'Custom DHCP Class' ($opt_addsubgroup)")
+	if ($gtype == 103);
+}
+
+if ($opt_rmsubgroup) {
+    fatal("cannot find group '$opt_rmsubgroup'")
+	if (($gid_r = get_group_by_name($serverid, $opt_rmsubgroup)) < 0);
+}
+
+fatal("You can't add and remove the same group at the same time")
+    if ($gid_a == $gid_r);
 
 if ($opt_type) {
   $opt_type=lc($opt_type);
@@ -107,21 +212,46 @@ if ($opt_type) {
   elsif ($opt_type eq 'cname') { $type=4; }
   elsif ($opt_type eq 'arec') { $type=7; }
   elsif ($opt_type eq 'srv') { $type=8; }
+  elsif ($opt_type eq 'dhcponly') { $type=9; }
+  elsif ($opt_type eq 'disabled') { $type=101; }
   else {
     fatal("unknown type for option --type");
   }
   $type = " AND h.type = $type ";
 }
 
+# --disable and --enable added by TVu 19.03.2014, 27.05.2015.
+if (($opt_disable || $opt_enable) && $opt_type) {
+    fatal("--disable and --enable are incompatible with --type");
+}
+if ($opt_disable && $opt_enable) {
+    fatal("You can't both disable and enable at the same time!");
+}
+# --disable and --enable imply type.
+if ($opt_disable) {
+    $type = " AND h.type = 1 ";
+}
+if ($opt_enable) {
+    $type = " AND h.type = 101 ";
+}
+
 if ($opt_name) {
-  $name=" AND h.domain ~* '$opt_name' ";
+# $name=" AND h.domain ~* '$opt_name' ";
+  $name=" AND h.domain ~* " . db_encode_str($opt_name) . " ";
+  #$name=" AND h.domain ~* " . quote_sql($opt_name) . " ";
   print "Hostname regexp: $opt_name\n";
 }
 
 if ($opt_info) {
-  $info=" AND (h.info ~* '$opt_info' OR h.huser ~* '$opt_info' " .
-        " OR h.dept ~* '$opt_info' OR h.location ~* '$opt_info') ";
+  $info=" AND (h.info ~* " . db_encode_str($opt_info) . " OR h.huser ~* " . db_encode_str($opt_info) .
+        " OR h.dept ~* " . db_encode_str($opt_info) . " OR h.location ~* " . db_encode_str($opt_info) . ") ";
   print "Host info regexp: $opt_info\n";
+}
+
+if ($opt_hinfo) {
+  $hinfo=" AND (h.hinfo_hw ~* " . db_encode_str($opt_hinfo) .
+        " OR   h.hinfo_sw ~* " . db_encode_str($opt_hinfo) . ") ";
+  print "Host hinfo regexp: $opt_hinfo\n";
 }
 
 if ($opt_move) {
@@ -129,13 +259,17 @@ if ($opt_move) {
     unless ($opt_move =~ /^(\S+),(\S+)$/);
   $move_net=$1;
   $move_ip=$2;
-  fatal("invalid CIDR parameter to option move: $move_net")
-    unless (is_cidr($move_net));
-  fatal("invalid IP parameter to option move: $move_ip")
-    unless ($move_ip =~ /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/);
+
+  $m_net = new Net::IP($move_net); # ** or print "nelze net\n";    Prints commented by
+  $m_ip = new Net::IP($move_ip); # ** or print "nelze ip\n";       TVu 2021-03-08
+
+  fatal("Invalid CIDR parameter to option move: $move_net")
+    unless $m_net;
+  fatal("Invalid IP parameter to option move: $move_ip")
+    unless $m_ip && $move_ip !~ /\/\d{1,3}$/; # Added regex check 2021-03-08 TVu
   print "Move matching hosts to net $move_net starting from $move_ip\n";
-  $net=new Net::Netmask($move_net);
-  fatal("invalid parameters to option move")  unless ($net->match($move_ip));
+  fatal("Invalid parameters to option move - IP not included in CIDR")
+      if ($m_net->overlaps($m_ip) == $IP_NO_OVERLAP or $m_net->overlaps($m_ip) == undef);
 }
 
 if ($opt_rename) {
@@ -156,10 +290,10 @@ if ($opt_excludeip) {
 
 
 $sql="SELECT h.id,h.domain,h.type,h.ether $cidr_f FROM hosts h $cidr_t " .
-     "WHERE h.zone=$zoneid $cidr_r $cidr $name $ether $info $type " .
+     "WHERE h.zone=$zoneid $cidr_r $cidr $name $ether $info $hinfo $type " .
      "ORDER BY h.domain;";
 
-print "$sql\n" if ($opt_verbose);
+print "$sql\n" if ($opt_debug);
 
 db_query($sql,\@q);
 print db_errormsg() . "\n" if (db_errormsg());
@@ -168,14 +302,17 @@ $count=@q;
 print "Found $count hosts(s) matching the criteria.\n";
 exit unless ($count > 0);
 
-if ($opt_delete || $opt_rename || $opt_move || $opt_setgroup ||
-    $opt_setedate) {
-  if ($opt_commit) {
-    print "Are you sure you want to apply changes to database? [y/N]? ";
-    chomp ($answer = <STDIN>);
-    exit unless ($answer eq 'y' || $answer eq 'Y');
-  }
-}
+# Confirmation no longer asked - --commit alone is sufficient to
+# tell that the user (or script) is serious. ** 2022-02-22 TVu
+# if ($opt_delete || $opt_rename || $opt_move || $opt_setgroup ||
+#     $opt_addsubgroup || $opt_rmsubgroup ||
+#     defined($opt_setedate) || $opt_model || $opt_disable || $opt_enable) {
+#   if ($opt_commit) {
+#     print "Are you sure you want to apply changes to database? [y/N]? ";
+#     chomp ($answer = <STDIN>);
+#     exit unless ($answer eq 'y' || $answer eq 'Y');
+#   }
+# }
 
 db_begin();
 db_ignore_begin_and_commit(1);
@@ -194,17 +331,24 @@ for $i (0..$#q) {
     next if ($ip_skip);
   }
 
+  undef @history;
   $id=$q[$i][0];
   $domain=$q[$i][1];
   if ($opt_rename) {
     $domain =~ s/$rename1/$rename2/;
     print "\trename: $q[$i][1] --> $domain\n";
+    push(@{$history[0]}, 'EDIT: Host');
+    push(@{$history[1]}, " --> $domain");
   }
   if ($opt_move) {
-    $new_ip=int2ip(ip2int($move_ip)+$ipcounter++);
-    while (ip_in_use($serverid,$new_ip) && $net->match($new_ip)) {
+    $m_net += ($m_ip->intip() - $m_net->intip());
+    $new_ip = ip_compress_address($m_net->ip(), $m_net->version());
+
+    while (ip_in_use($serverid,$new_ip)) {
       #print "\tSKIP ip: $new_ip\n";
-      $new_ip=int2ip(ip2int($move_ip)+$ipcounter++);
+      $m_net++;
+      last if (!defined $m_net); # TVu 13.01.2016
+      $new_ip = ip_compress_address($m_net->ip(), $m_net->version());
     }
     fatal("cannot find new ip!") if (ip_in_use($serverid,$new_ip));
     print "\tnew ip: $new_ip\n";
@@ -216,29 +360,126 @@ for $i (0..$#q) {
   if ($opt_delete) {
     print "\tDelete: $q[$i][1]\n";
     fatal("cannot delete host: $q[$i][1]") if (delete_host($id));
-  }
-  elsif ($opt_rename || $opt_move || $opt_setedate || $opt_setgroup) {
+    update_history(-1, -1, 1,      # No UID. No SID. 1 = Host table changes.
+		   'DELETE: Host', # Action.
+		   "domain: $q[$i][1], ip: $host{ip}[1][1], mac: $q[$i][3] (login: " . getlogin(). ')', # Info
+		   $q[$i][0]);     # Ref.
+
+  } elsif ($opt_rename || $opt_move || defined($opt_setedate) || $opt_setgroup ||
+	   $opt_addsubgroup || $opt_rmsubgroup ||
+	 @opt_setfield || $opt_disable || $opt_enable) {
     $host{domain}=$domain;
     if ($opt_move) {
       for $j (1..$#{$host{ip}}) {
 	#print "IP: $host{ip}[$j][0] $host{ip}[$j][1]\n";
 	if ($host{ip}[$j][0] eq $q[$i][5]) {
 	  print "\tIP MATCH: $host{ip}[$j][0] $host{ip}[$j][1]\n";
+	  push(@{$history[0]}, 'MOVE: Host');
+	  push(@{$history[1]}, ", IP: $host{ip}[$j][1] --> $new_ip");
 	  $host{ip}[$j][1]=$new_ip;
 	  $host{ip}[$j][4]=1;
 	}
       }
     }
 
-    $host{expiration}=$new_edate if ($opt_setedate);
+    if (defined($opt_setedate)) {
+	$host{expiration}=$new_edate ;
+	push(@{$history[0]}, 'EDIT: Host');
+	push(@{$history[1]}, ', expiration date');
+    }
+
     if ($opt_setgroup) {
 	print "Changing group $host{grp} --> $gid\n";
+	push(@{$history[0]}, 'EDIT: Host');
+	push(@{$history[1]}, ", group $host{grp} --> $gid");
 	$host{grp}=$gid;
     }
 
+# Removing before adding seems more natural,
+# should these be done at the same time.
+
+    if ($opt_rmsubgroup) {
+	my $tmp1 = 1;
+	for my $ind1 (1 .. scalar(@{$host{'subgroups'}}) - 1) {
+	    if (${$host{'subgroups'}}[$ind1][1] == $gid_r) {
+		print "Removing host from subgroup $gid_r\n";
+		push(@{$host{'subgroups'}},
+		     [ ${$host{'subgroups'}}[$ind1][0], undef, -1 ]);
+		push(@{$history[0]}, 'EDIT: Host');
+		push(@{$history[1]}, ", removed from subgroup $gid_r");
+		$tmp1 = 0;
+		last;
+	    }
+	}
+	if ($tmp1) {
+	    print "Host '$q[$i][1]' is not in subgroup " .
+		"'$opt_rmsubgroup' - Skipped removing\n";
+	}
+    }
+
+    if ($opt_addsubgroup) {
+	for my $ind1 (1 .. scalar(@{$host{'subgroups'}}) - 1) {
+	    if (${$host{'subgroups'}}[$ind1][1] == $gid_a) {
+		print "Host '$q[$i][1]' is already in subgroup " .
+		    "'$opt_addsubgroup' - Skipped adding \n";
+		$gid_a = 0;
+		last;
+	    }
+	}
+	if ($gid_a) {
+	    print "Adding host to subgroup $gid_a\n";
+	    push(@{$host{'subgroups'}}, [ undef, $gid_a, 2 ]);
+	    push(@{$history[0]}, 'EDIT: Host');
+	    push(@{$history[1]}, ", added to subgroup $gid_a");
+	}
+    }
+
+    #if (defined(@opt_setfield)) {
+    if (@opt_setfield) {
+	foreach $i (@opt_setfield) {
+	    if ($i =~ /^([^:]+):(.+)$/) {
+		if (defined(setfield_xlat($1))) {
+		    $host{setfield_xlat($1)}="$2";
+		    push(@{$history[0]}, 'EDIT: Host');
+		    push(@{$history[1]}, ", $1: $2");
+		} else {
+		    fatal("\tError: --setfield unknown field \"$i\"");
+		}
+	    } else {
+		fatal("\tError: --setfield parsing \"$i\" failed.\n");
+	    }
+	}
+    }
+
+    if ($opt_disable) {
+	$host{type} = 101;
+	push(@{$history[0]}, 'DISABLE: Host');
+	push(@{$history[1]}, '');
+    }
+
+    if ($opt_enable) {
+	$host{type} = 1;
+	push(@{$history[0]}, 'ENABLE: Host');
+	push(@{$history[1]}, '');
+    }
+
+    printf "-- begin \%host dump --\n" . Dumper(%host) .
+	"-- end \%host dump --\n" if ($opt_debug);
+
+#   print "domain: $q[$i][1]$history[1][0] (login: " . getlogin() . ')' . "\n";
+
     print "Updating $q[$i][1]...\n";
-    fatal("cannot update host: $q[$i][1]\n".db_errormsg()."\n") 
+
+    fatal("cannot update host: $q[$i][1]\n" . db_errormsg() . "\n")
 	if (update_host(\%host));
+
+    for my $ind1 (0..$#{$history[0]}) {
+	update_history(-1, -1, 1,          # No UID. No SID. 1 = Host table changes.
+		       $history[0][$ind1], # Action.
+		       "domain: $q[$i][1]$history[1][$ind1] (login: " . getlogin() . ')', # Info
+		       $q[$i][0]);         # Ref.
+    }
+
   }
 
 }
@@ -246,13 +487,11 @@ for $i (0..$#q) {
 db_ignore_begin_and_commit(0);
 
 if ($opt_commit) {
-  fatal("cannot commit changes to database") if (db_commit() < 0);
+    fatal("Cannot commit changes to database") if (db_commit() < 0);
 } else {
-  print "NO CHANGES MADE!\n";
+    print "No --commit - NO CHANGES MADE!\n";
 }
 
 exit;
 
-
 # eof :-)
-

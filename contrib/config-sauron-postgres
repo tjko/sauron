@@ -1,0 +1,106 @@
+#!/bin/bash
+#
+# $Id:$
+#
+# BFMI configure local postgres for sauron -- mesrik@iki.fi
+#
+# This script was written for Fedora Core 5 (FC5),
+# but there is no reason to believe it wouldn't
+# work properly in any recent Fedora and Red Hat
+# Enterprise Linux (RHEL3 & RHEL4). It should work
+# with at least after fresh FC5 postgres install.
+#
+# The script creates system user "sauron", also
+# postgres user "sauron" is created together with
+# database also named "sauron". The password for
+# database is generated using /dev/random as source.
+#
+# Script was intended to work with sauron rpm package
+# and expects to find Sauron from /opt/sauron 
+#
+# This script is provided with the same license and
+# copyright the sauron software itself -- :) riku
+#
+
+PATH="/usr/bin:/bin:/usr/sbin:/sbin"
+IFS="
+"
+export PATH IFS
+sauron=/opt/sauron
+
+[ -d $sauron/contrib ] ||\
+ mkdir -p $sauron/contrib
+
+
+if [ -d $sauron/contrib ]; then
+    sqlfile="$sauron/contrib/`basename $0 .sh`.sql"
+else
+    sqlfile="/var/tmp/`basename $0 .sh`.sql"
+fi
+
+# Add user 
+grep -q "^sauron:" /etc/passwd ||\
+    useradd -c "Sauron" -m sauron
+
+# To make sure postgres has been started at least once.
+# To be sure we try to start it now ... (this is important 
+# phase as ~postgres/data directory is set up this phase!)
+service postgresql start
+
+# Add local host based authentication configs
+hba=~postgres/data/pg_hba.conf
+
+if [ -f $hba -a `grep -c "^# sauron " $hba` -eq 0 ]; then
+    [ -f $hba.dist ] || cp -p $hba{,.dist}
+    sed -e '/^# TYPE.*METHOD$/a\
+	#\
+	# sauron\
+	#\
+	local	template1	all		trust\
+	local	all		postgres	trust\
+	local	all		root		trust\
+	local	sameuser	all		md5' < $hba |\
+    sed -e 's/^	//' > $hba.tmp &&\
+    cp $hba.tmp $hba && rm -f $hba.tmp &&\
+    service postgresql condrestart
+fi
+
+# Configure database & db-user
+if [ -f "$sqlfile" ]; then
+    echo "`basename $0`: \"$sqlfile\" already exist"
+else
+    genpw="`dd if=/dev/random bs=1 count=6 2>/dev/null | openssl base64`"
+    umask 002
+    cat <<-EOF>"$sqlfile"
+	CREATE USER sauron ENCRYPTED PASSWORD '$genpw';
+	CREATE DATABASE sauron WITH OWNER = sauron;
+	EOF
+    chown sauron:postgres "$sqlfile"
+    chmod 640 "$sqlfile"
+    su -c "/usr/bin/psql -d template1 -f $sqlfile" postgres >/dev/null 2>&1 &&\
+    cat <<-EOF
+	Notice: Postgres is now configured for Sauron
+	---------------------------------------------
+	database: sauron
+	username: sauron
+	password: $genpw (picked from /dev/random)
+	
+	The used sql sentences can also be found
+	now from following file:
+
+	$sqlfile
+
+	You are now ready to follow Sauron README instructions 
+	how to either start with initial database and populate it.
+
+	Or if upgrading then load first your existing sauron db and 
+	then run appropriate database upgrade scripts advised by
+	the README.upgrade -file.
+
+	EOF
+fi
+
+# make sure postgres starts after reboot
+chkconfig postgresql on
+
+# eof

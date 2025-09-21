@@ -1,7 +1,8 @@
 # Sauron::UtilDhcp.pm - ISC DHCPD config file reading/parsing routines
 #
+# Copyright (c) Michal Kostenec <kostenec@civ.zcu.cz> 2013-2014.
 # Copyright (c) Timo Kokkonen <tjko@iki.fi> 2002.
-# $Id$
+# $Id:$
 #
 package Sauron::UtilDhcp;
 require Exporter;
@@ -10,7 +11,7 @@ use Sauron::Util;
 use strict;
 use vars qw($VERSION @ISA @EXPORT);
 
-$VERSION = '$Id$ ';
+$VERSION = '$Id:$ ';
 
 @ISA = qw(Exporter); # Inherit from Exporter
 @EXPORT = qw(process_dhcpdconf);
@@ -20,8 +21,8 @@ my $debug = 0;
 
 # parse dhcpd.conf file, build hash of all entries in the file
 #
-sub process_dhcpdconf($$) {
-  my ($filename,$data)=@_;
+sub process_dhcpdconf($$$) {
+  my ($filename,$data,$v6)=@_;
 
   my $fh = IO::File->new();
   my ($i,$c,$tmp,$quote,$lend,$fline,$prev,%state);
@@ -51,59 +52,65 @@ sub process_dhcpdconf($$) {
       }
       $tmp .= $c;
       if ($lend) {
-	process_line($tmp,$data,\%state);
+	process_line($tmp,$data,\%state,$v6);
 	$tmp='';
       }
     }
 
     fatal("$filename($.): unterminated quoted string!\n") if ($quote);
   }
-  process_line($tmp,$data,\%state);
+  process_line($tmp,$data,\%state,$v6);
 
   close($fh);
 
   return 0;
 }
 
-sub process_line($$$) {
-  my($line,$data,$state) = @_;
+sub process_line($$$$) {
+  my($line,$data,$state,$v6) = @_;
 
   my($tmp,$block,$rest,$ref);
 
   return if ($line =~ /^\s*$/);
   $line =~ s/(^\s+|\s+$)//g;
+  #$line =~ s/\"//g;
 
 
-  if ($line =~ /^(\S+)\s+(\S.*)?{$/) {
+  #if ($line =~ /^(\S+)\s+(\S.*)?{$/) {
+  if ($line =~ /^(\S+)\s?(\s+\S.*)?{$/) {
     $block=lc($1);
+    #print "BLOCK: $block\n";
     ($rest=$2) =~ s/^\s+|\s+$//g;
-    if ($block eq 'group') {
+    $rest =~ s/\"//g;
+    #print "REST: $rest\n";
+    if ($block =~ /^(group)/) {
       # generate name for groups
       $$state{groupcounter}++;
-      $rest="group-" . $$state{groupcounter};
+      my $groupname = (!$v6 ? "group" : "group6");
+      $rest="$groupname-" . $$state{groupcounter};
     }
-    elsif ($block eq 'pool') {
-      $tmp=$$state{'shared-network'}->[0];
-      if ($tmp) {
-	unshift @{$$data{POOLS}->{$tmp}}, [];
-      } else {
-	warn("pools not under shared-network aren't currently supported");
-      }
+    elsif ($block =~ /^(pool[6]?)/) {
+      $$state{poolcounter}++;
+      $rest="$1-" . $$state{poolcounter};
+
+#warn("pools not under shared-network aren't currently supported");
     }
-    # print "begin '$block:$rest'\n";
+    #print "begin '$block:$rest'\n";
     unshift @{$$state{BLOCKS}}, $block;
     unshift @{$$state{$block}}, $rest;
     $$data{$block}->{$rest}=[] if ($rest);
     $$state{rest}=$2;
 
-    if ($block eq 'host') {
-      push @{$$data{$block}->{$rest}}, "GROUP $$state{group}->[0]"
-	if ($$state{group}->[0]);
+    if ($block =~ /^host/) {
+      push @{$$data{$block}->{$rest}}, "GROUP $$state{group}->[0]" if ($$state{group}->[0]);
     }
-    if ($block eq 'subnet') {
-      push @{$$data{$block}->{$rest}}, "VLAN $$state{'shared-network'}->[0]"
-	if ($$state{'shared-network'}->[0]);
+    if ($block =~ /^subnet[6]?/) {
+      if ($$state{'shared-network'}->[0]) {
+         push @{$$data{$block}->{$rest}}, "VLAN $$state{'shared-network'}->[0]";
+      }
+      $$state{lastsubnet} = $rest;
     }
+
     return 0;
   }
 
@@ -111,7 +118,7 @@ sub process_line($$$) {
   $rest=$$state{$block}->[0];
 
   if ($line =~ /^\s*}\s*$/) {
-    # print "end '$block:$rest'\n";
+    #print "end '$block:$rest'\n";
     unless (@{$$state{BLOCKS}} > 0) {
       warn("mismatched parenthesis");
       return -1;
@@ -125,16 +132,21 @@ sub process_line($$$) {
   #print "line($block:$rest) '$line'\n";
 
   if ($block eq 'GLOBAL') {
-    push @{$$data{GLOBAL}}, $line;
+    #if($line =~ /subclass\s+\"(.*)\"\s+(.*)/) {
+    if($line =~ /subclass\s+\"(.*)\"\s+(.*)/) {
+        push @{$$data{'subclass'}->{$1}}, $2;
+    }
+    else {
+        push @{$$data{GLOBAL}}, $line;
+    }
   }
-  elsif ($block =~ /^(subnet|shared-network|group)$/) {
+  elsif ($block =~ /^(subnet[6]?|shared-network|group|class)$/) {
     push @{$$data{$block}->{$rest}}, $line;
   }
-  elsif ($block eq 'pool') {
-    $tmp=$$state{'shared-network'}->[0];
-    push @{$$data{POOLS}->{$tmp}->[0]}, $line if ($tmp);
+  elsif ($block =~ /^pool[6]?/) {
+    push @{$$data{$block}->{$rest}}, $line;
   }
-  elsif ($block eq 'host') {
+  elsif ($block =~ /^host/) {
     push @{$$data{$block}->{$rest}}, $line;
   }
 

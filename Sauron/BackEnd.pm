@@ -1,17 +1,23 @@
 # Sauron::BackEnd.pm  -- Sauron back-end routines
 #
+# Copyright (c) Michal Kostenec <kostenec@civ.zcu.cz> 2013-2014.
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000-2005.
-# $Id$
+# $Id:$
 #
 package Sauron::BackEnd;
 require Exporter;
-use Net::Netmask;
+# use Net::Netmask;
+use NetAddr::IP; # For IPv6;
 use Sauron::DB;
 use Sauron::Util;
+use Sys::Syslog qw(:DEFAULT setlogsock);
+Sys::Syslog::setlogsock('unix');
+use Net::IP qw (:PROC);
+
 use strict;
 use vars qw($VERSION @ISA @EXPORT);
 
-$VERSION = '$Id$ ';
+$VERSION = '$Id:$ ';
 
 @ISA = qw(Exporter); # Inherit from Exporter
 @EXPORT = qw(
@@ -57,6 +63,7 @@ $VERSION = '$Id$ ';
 	     update_host
 	     delete_host
 	     add_host
+	     get_host_types
 
 	     get_mx_template_by_name
 	     get_mx_template
@@ -82,6 +89,7 @@ $VERSION = '$Id$ ';
 	     delete_hinfo_template
 
 	     get_group_by_name
+             get_group_type_by_name
 	     get_group
 	     update_group
 	     add_group
@@ -95,8 +103,10 @@ $VERSION = '$Id$ ';
 	     get_user_group_id
              get_user_group
              delete_user_group
+             get_user_status
 
 	     get_net_by_cidr
+             get_net_cidr_by_ip
 	     get_net_list
 	     get_net
 	     update_net
@@ -108,7 +118,13 @@ $VERSION = '$Id$ ';
 	     add_vlan
 	     delete_vlan
 	     get_vlan_list
+             get_vlanno
 	     get_vlan_by_name
+
+             ip_policy_names
+             get_net_ip_policy
+             get_free_ip_by_net
+	     get_ip_sugg
 
 	     get_vmps_by_name
 	     get_vmps
@@ -153,6 +169,20 @@ $VERSION = '$Id$ ';
 
 my($muser);
 
+
+
+sub write2log
+{
+  #my $priority  = shift;
+  my $msg       = shift;
+  my $filename  = File::Basename::basename($0);
+
+  Sys::Syslog::openlog($filename, "cons,pid", "debug");
+  Sys::Syslog::syslog("info", "$msg");
+  Sys::Syslog::closelog();
+} # End of write2log
+
+
 sub fix_bools($$) {
   my($rec,$names) = @_;
   my(@l,$name,$val);
@@ -166,7 +196,7 @@ sub fix_bools($$) {
 }
 
 sub sauron_db_version() {
-  return "1.4"; # required db format version for this backend
+  return "1.7"; # required db format version for this backend
 }
 
 sub set_muser($) {
@@ -184,34 +214,39 @@ sub get_db_version() {
 
 sub auto_address($$) {
   my($serverid,$net) = @_;
-  my(@q,$s,$e,$i,$j,%h);
+  my(@q,$s,$e,$i,$j,%h, $family);
 
   return 'Invalid server id'  unless ($serverid > 0);
   return 'Invalid net'  unless (is_cidr($net));
+  return 'Invalid ip ' unless ($family = new Net::IP($net)->version());
 
   db_query("SELECT net,range_start,range_end FROM nets " .
 	   "WHERE server=$serverid AND net = '$net';",\@q);
   return "No auto address range defined for this net: $net ".
          "($q[0][0],$q[0][1],$q[0][2]) "
 	   unless (is_cidr($q[0][1]) && is_cidr($q[0][2]));
-  $s=ip2int($q[0][1]);
-  $e=ip2int($q[0][2]);
-  return 'Invalid auto address range' if ($s >= $e);
+
+
+  my $rangeIP = new Net::IP($q[0][1] . " - " . $q[0][2]) or return 'Invalid auto address range';
 
   undef @q;
   db_query("SELECT a.ip FROM hosts h, a_entries a, zones z " .
 	   "WHERE z.server=$serverid AND h.zone=z.id AND a.host=h.id " .
 	   " AND '$net' >> a.ip ORDER BY a.ip;",\@q);
-  for $i (0..$#q) {
-    $j=ip2int($q[$i][0]);
-    next if ($j < 0 || $j < $s || $j > $e);
-    $h{$j}=$q[$i][0];
-    #print "<br>$q[$i][0]";
-  }
-  for $i (0..($e-$s)) {
-    #print "<br>$i " . int2ip($s+$i);
-    return int2ip($s+$i) unless ($h{($s+$i)});
-  }
+
+  my @usedIP;
+  push @usedIP, $_ foreach @q;
+
+  #Nasty use ip_compress_address due $ip->short() bug in IPv4
+  do{
+	#skip IPv4 broadcast address
+	{
+        	last  if $family == 4 and $rangeIP->ip() eq $rangeIP->last_ip();
+	}
+	return ip_compress_address($rangeIP->ip(), $family)
+	unless ( grep {$_->[0] eq ip_compress_address($rangeIP->ip(), $family)} @usedIP ) ;
+  } while (++$rangeIP);
+
 
   return "No free addresses left";
 }
@@ -219,25 +254,47 @@ sub auto_address($$) {
 sub next_free_ip($$)
 {
   my($serverid,$ip) = @_;
-  my(@q,@ips,%h,$net,$i,$t);
+  my(@q,@ips,%h,$net,$i,$t, $family);
 
   return '' unless ($serverid > 0);
   return '' unless (is_cidr($ip));
+  return '' unless ($family = ip_get_version($ip));
+
+  #First IP is network address
+  #my $firstIPshift = 1;
+  #UWB Pilsen has first IP ::1:0/112 => + 2^16 hosts
+  #Need global config
+  #$firstIPshift += 2 ** 16 if $family == 6;
 
   db_query("SELECT net FROM nets WHERE server=$serverid AND net >> '$ip' " .
-	   "ORDER BY net DESC",\@q);
+	   "ORDER BY masklen(net) DESC LIMIT 1",\@q);
   return '' unless (@q > 0);
   db_query("SELECT a.ip FROM hosts h , a_entries a, zones z " .
 	   "WHERE z.server=$serverid AND h.zone=z.id AND a.host=h.id " .
 	   " AND '$q[0][0]' >> a.ip ORDER BY a.ip;",\@ips);
-  for $i (0..$#ips) { $h{$ips[$i][0]} = 1; }
-  $net = new Net::Netmask($q[0][0]);
-  $i = ip2int($ip) + 1;
-  while ($net->match(($t=int2ip($i)))) {
-    return $t unless ($h{$t});
-    $i++;
-  }
+
+  my $rangeIP = new Net::IP($q[0][0]) or return '';
+  my $m_ip = new Net::IP($ip) or return '';
+
+  my @usedIP;
+  push @usedIP, $_ foreach @ips;
+
+  #Skip network address + firstIPshift :]
+  #$rangeIP += $firstIPshift;
+  $rangeIP += ($m_ip->intip() - $rangeIP->intip() + 1);
+
+  #Nasty use ip_compress_address due $ip->short() bug in IPv4
+  do{
+	#skip IPv4 broadcast address
+	{
+  		last if $family == 4 and $rangeIP->ip() eq $rangeIP->last_ip();
+	}
+	return ip_compress_address($rangeIP->ip(), $family)
+	unless ( grep {$_->[0] eq ip_compress_address($rangeIP->ip(), $family)} @usedIP ) ;
+  } while (++$rangeIP);
+
   return '';
+
 }
 
 sub ip_in_use($$) {
@@ -272,7 +329,8 @@ sub hostname_in_use($$) {
   return -2 unless ($hostname =~ /^([A-Za-z0-9\-]+)(\.|$)/);
   $domain=$1;
   db_query("SELECT h.id FROM hosts h ".
-	   "WHERE h.zone=$zoneid AND domain ~* '^$domain(\\\\.|\$)';",\@q);
+#	   "WHERE h.zone=$zoneid AND domain ~* '^$domain(\\\\.|\$)';",\@q);
+	   "WHERE h.zone=$zoneid AND domain ~* " . db_encode_str("^$domain(\\.|\$)") . ";",\@q);
   return $q[0][0] if ($q[0][0] > 0);
   return 0;
 }
@@ -289,26 +347,39 @@ sub get_host_network_settings($$$) {
   my(@q,$tmp,$net);
 
   return -1 unless (is_cidr($ip) && ($serverid > 0));
-  $rec->{ip}=$ip;
+  $rec->{ip}=$ip; # IP
 
-  db_query("SELECT id,name,net FROM nets " .
-	   "WHERE server=$serverid AND dummy=false AND '$ip' << net " .
-	   "ORDER BY subnet,net",\@q);
+  db_query("SELECT n.id, n.name, n.net, v.vlanno, v.name " .
+	   "FROM nets n left join vlans v on v.server = $serverid and n.vlan = v.id " .
+	   "WHERE n.server = $serverid AND n.dummy = false AND '$ip' << n.net " .
+	   "ORDER BY n.subnet, n.net",\@q);
   return -2 unless (@q > 0);
   return -3 unless ($q[$#q][0] > 0);
   $net = $q[$#q][2];
-  $tmp = new Net::Netmask($net);
-  $rec->{net}=$tmp->desc();
-  $rec->{base}=$tmp->base();
-  $rec->{mask}=$tmp->mask();
-  $rec->{broadcast}=$tmp->broadcast();
+
+#  $tmp = new Net::Netmask($net);
+#  $rec->{net}=$tmp->desc();
+#  $rec->{base}=$tmp->base();
+#  $rec->{mask}=$tmp->mask();
+#  $rec->{broadcast}=$tmp->broadcast();
+
+  $tmp = new Net::IP($net);
+  $rec->{net} = $tmp->short();
+  $rec->{base} = ipv6compress($tmp->ip()) . '/' . $tmp->prefixlen(); # Network address
+  $rec->{mask} = $tmp->mask();                                       # Netmask
+  $rec->{broadcast} = $ip =~ /\./ ? $tmp->last_ip() : '';            # Broadcast address (IPV4 only)
+
+  $rec->{netname} = $q[$#q][1];
+  $rec->{vlan} = '';
+  $rec->{vlan} = $q[$#q][4] if ($q[$#q][4]);
+  $rec->{vlan} .= " ($q[$#q][3])" if ($q[$#q][3]);
 
   undef @q;
   db_query("SELECT a.ip FROM hosts h, a_entries a " .
 	   "WHERE a.host=h.id AND h.router>0 AND a.ip << '$net' " .
 	   "ORDER BY 1",\@q);
   if (@q > 0) {
-    $rec->{gateway}=$q[0][0];
+    $rec->{gateway}=$q[0][0]; # Gateway (default)
   } else {
     $rec->{gateway}='';
   }
@@ -326,6 +397,7 @@ sub get_record($$$$$) {
   undef %{$rec};
   @list = split(",",$fields);
   $fields =~ s/\@//g;
+
   db_query("SELECT $fields FROM $table WHERE $keyname=".db_encode_str($key),
 	   \@q);
   return -1 if (@q < 1);
@@ -392,10 +464,11 @@ sub update_array_field($$$$$$) {
   return -1 unless (ref($rec) eq 'HASH');
   return -2 unless ($$rec{'id'} > 0);
   $list=$$rec{$keyname};
-  return 0 unless ($list);
+  return 0 unless (\$list);
+
   @f=split(",",$fields);
 
-  for $i (1..$#{$list}) {
+   for $i (1..$#{$list}) {
     $m=$$list[$i][$count];
     $id=$$list[$i][0];
     if ($m == -1) { # delete record
@@ -518,6 +591,7 @@ sub update_record($$) {
 
   foreach $key (keys %{$rec}) {
     next if ($key eq 'id');
+    next if ($key eq 'zentries_id');
     next if (ref($$rec{$key}) eq 'ARRAY');
 
     $sqlstr.="," if ($flag);
@@ -554,6 +628,9 @@ sub add_record_sql($$) {
     $flag=1 unless ($flag);
   }
   $sqlstr.=")";
+  $sqlstr =~ s/hacked_id/id/; # Dirty hack to force an id into the database.
+
+  write2log($sqlstr);
 
   return $sqlstr;
 }
@@ -561,6 +638,7 @@ sub add_record_sql($$) {
 sub add_record($$) {
   my($table,$rec) = @_;
   my($sqlstr,$res,$oid,@q);
+  my $flag; # ** 2018-09-25 TVu
 
   return -130 unless ($table);
   return -131 unless ($rec);
@@ -568,13 +646,26 @@ sub add_record($$) {
   $sqlstr=add_record_sql($table,$rec);
   return -132 if ($sqlstr eq '');
 
+# If $table has column id, return its value after insert.
+  db_query("select column_name from information_schema.columns " . # ** 2018-09-25 TVu
+	   "where table_name = '$table' and column_name = 'id'", \@q);
+  if (@q) {
+      $sqlstr .= ' returning id';
+      $flag = 1;
+  } else {
+      $flag = 0;
+  }
+
   #print "sql '$sqlstr'\n";
   $res=db_exec($sqlstr);
   return -1 if ($res < 0);
-  $oid=db_lastoid();
-  db_query("SELECT id FROM $table WHERE OID=$oid",\@q);
-  return -2 if (@q < 1);
-  return $q[0][0];
+
+# $oid=db_lastoid(); ** Getting rid of OIDs 2018-09-25 TVu
+# db_query("SELECT id FROM $table WHERE OID=$oid",\@q);
+# return -2 if (@q < 1);
+# return $q[0][0];
+
+  return $flag ? db_lastid() : -2; # ** Added 2018-09-25 TVu
 }
 
 sub copy_records($$$$$$$) {
@@ -626,6 +717,45 @@ sub del_std_fields($) {
   $rec->{muser}=$muser;
 }
 
+# This sub inserts / updates / deletes database rows, which were previously
+# displayed / edited as indexed text fields, but are now a single textarea.
+# Newly inserted / updated text is stored as a single row,
+# but old entries still consist of multiple rows.
+sub update_textarea_field($$$$$$) { # Textarea 12 Apr 2017 TVu
+    my($table, $id, $fields, $keyname, $rec, $vals) = @_;
+
+    my($ind1, $sql, $field, @ids);
+
+    return -128 unless ($table);
+    return -1 unless (ref($rec) eq 'HASH');
+
+# Delete old row(s), if any,
+    @ids = split(/,/, $id);
+    $sql = '';
+    for $ind1 (@ids) {
+	$sql .= "id = $ind1 or ";
+    }
+    if ($sql) {
+	$sql =~ s/ or $//;
+	$sql = "delete from $table where $sql;";
+	return -5 if (db_exec($sql) < 0);
+    }
+
+# Insert new row unless the textarea is empty. Use first old id, if any.
+    my @arr;
+    for my $ind1 (1..$#{$$rec{$keyname}}) {
+	push(@arr, $$rec{$keyname}->[$ind1]->[1]);
+    }
+    $field = join("\n", @arr);
+    if (!$field) { return 0; }
+    $sql = "insert into $table (" . ($ids[0] ? 'id,' : '') .
+	" $fields) values (" . ($ids[0] ? "$ids[0]," : '') .
+	" " . db_encode_str($field) . ", $vals);";
+    return -7 if (db_exec($sql) < 0);
+
+    return 0;
+}
+
 ############################################################################
 # server table functions
 
@@ -672,7 +802,10 @@ sub get_server($$) {
 		    "multiple_cnames,rfc2308_type1,authnxdomain," .
 		    "df_port,df_max_delay,df_max_uupdates,df_mclt,df_split,".
 		    "df_loadbalmax,hostaddr,".
-		    "cdate,cuser,mdate,muser,lastrun",
+		    "cdate,cuser,mdate,muser,lastrun," .
+		    "df_port6,df_max_delay6,df_max_uupdates6,df_mclt6,df_split6,".
+		    "df_loadbalmax6,dhcp_flags,".
+            "listen_on_port_v6,transfer_source_v6,query_src_ip_v6,query_src_port_v6",
 		    $id,$rec,"id");
   return -1 if ($res < 0);
   fix_bools($rec,"no_roots,zones_only");
@@ -681,11 +814,16 @@ sub get_server($$) {
   get_aml_field($id,7,$id,$rec,'allow_query');
   get_aml_field($id,8,$id,$rec,'allow_recursion');
   get_aml_field($id,9,$id,$rec,'blackhole');
+  get_aml_field($id,10,$id,$rec,'listen_on');
+  get_aml_field($id,16,$id,$rec,'listen_on_v6');
 
-  get_array_field("cidr_entries",3,"id,ip,comment","IP,Comments",
-		  "type=10 AND ref=$id ORDER BY ip",$rec,'listen_on');
+  #get_array_field("cidr_entries",3,"id,ip,comment","IP,Comments",
+  #		  "type=10 AND ref=$id ORDER BY ip",$rec,'listen_on');
   get_array_field("cidr_entries",3,"id,ip,comment","IP,Comments",
 		  "type=11 AND ref=$id ORDER BY ip",$rec,'forwarders');
+# Local DHCP settings 2020-07-20 TVu
+  get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comments",
+		  "type=7 AND ref=$id ORDER BY id",$rec,'dhcp_l');
   get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comments",
 		  "type=1 AND ref=$id ORDER BY id",$rec,'dhcp');
   get_array_field("txt_entries",3,"id,txt,comment","TXT,Comments",
@@ -696,6 +834,11 @@ sub get_server($$) {
 		  "type=11 AND ref=$id ORDER BY id",$rec,'custom_opts');
   get_array_field("txt_entries",3,"id,txt,comment","TXT,Comments",
 		  "type=13 AND ref=$id ORDER BY id",$rec,'bind_globals');
+# Local DHCP settings 2020-07-20 TVu
+  get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP6,Comments",
+		  "type=17 AND ref=$id ORDER BY id",$rec,'dhcp6_l');
+  get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP6,Comments",
+		  "type=11 AND ref=$id ORDER BY id",$rec,'dhcp6');
 
   get_aml_field($id,14,$id,$rec,'allow_query_cache');
   get_aml_field($id,15,$id,$rec,'allow_notify');
@@ -707,12 +850,16 @@ sub get_server($$) {
   $rec->{named_flags_hinfo}=($rec->{named_flags} & 0x04 ? 1 : 0);
   $rec->{named_flags_wks}=($rec->{named_flags} & 0x08 ? 1 : 0);
 
+  $rec->{dhcp_flags_ad6}=($rec->{dhcp_flags6} & 0x01 ? 1 : 0);
+  $rec->{dhcp_flags_fo6}=($rec->{dhcp_flags6} & 0x02 ? 1 : 0);
+
   if ($rec->{masterserver} > 0) {
     db_query("SELECT name FROM servers WHERE id=$rec->{masterserver}",\@q);
     $rec->{server_type}="Slave for $q[0][0] (id=$rec->{masterserver})";
   } else {
     $rec->{server_type}='Master';
   }
+
 
   add_std_fields($rec);
   return 0;
@@ -726,6 +873,7 @@ sub update_server($) {
 
   del_std_fields($rec);
   delete $rec->{dhcp_flags};
+  delete $rec->{dhcp_flags6};
   delete $rec->{server_type};
 
   $rec->{dhcp_flags}=0;
@@ -733,6 +881,13 @@ sub update_server($) {
   $rec->{dhcp_flags}|=0x02 if ($rec->{dhcp_flags_fo});
   delete $rec->{dhcp_flags_ad};
   delete $rec->{dhcp_flags_fo};
+
+  $rec->{dhcp_flags6}=0;
+  $rec->{dhcp_flags6}|=0x01 if ($rec->{dhcp_flags_ad6});
+  $rec->{dhcp_flags6}|=0x02 if ($rec->{dhcp_flags_fo6});
+  delete $rec->{dhcp_flags_ad6};
+  delete $rec->{dhcp_flags_fo6};
+
   $rec->{named_flags}=0;
   $rec->{named_flags}|=0x01 if ($rec->{named_flags_ac});
   $rec->{named_flags}|=0x02 if ($rec->{named_flags_isz});
@@ -752,9 +907,21 @@ sub update_server($) {
   $r=update_aml_field(1,$id,$rec,'allow_transfer');
   if ($r < 0) { db_rollback(); return -12; }
   # dhcp
+# Local DHCP settings 2020-07-20 TVu
+  $r=update_array_field("dhcp_entries",3,"dhcp,comment,type,ref",'dhcp_l',$rec,
+		        "7,$id");
+  if ($r < 0) { db_rollback(); return -13; }
   $r=update_array_field("dhcp_entries",3,"dhcp,comment,type,ref",'dhcp',$rec,
 		        "1,$id");
   if ($r < 0) { db_rollback(); return -13; }
+  # dhcp6
+# Local DHCP settings 2020-07-20 TVu
+  $r=update_array_field("dhcp_entries",3,"dhcp,comment,type,ref",'dhcp6_l',$rec,
+		        "17,$id");
+  if ($r < 0) { db_rollback(); return -132; }
+  $r=update_array_field("dhcp_entries",3,"dhcp,comment,type,ref",'dhcp6',$rec,
+		        "11,$id");
+  if ($r < 0) { db_rollback(); return -132; }
   # txt
   $r=update_array_field("txt_entries",3,"txt,comment,type,ref",
 			'txt',$rec,"3,$id");
@@ -769,9 +936,12 @@ sub update_server($) {
   $r=update_aml_field(9,$id,$rec,'blackhole');
   if ($r < 0) { db_rollback(); return -17; }
   # listen_on
-  $r=update_array_field("cidr_entries",3,"ip,comment,type,ref",
-			'listen_on',$rec,"10,$id");
+  $r=update_aml_field(10,$id,$rec,'listen_on');
   if ($r < 0) { db_rollback(); return -18; }
+  #
+  #$r=update_array_field("cidr_entries",3,"ip,comment,type,ref",
+  #  		'listen_on',$rec,"10,$id");
+  #if ($r < 0) { db_rollback(); return -18; }
   # forwarder
   $r=update_array_field("cidr_entries",3,"ip,comment,type,ref",
 			 'forwarders',$rec,"11,$id");
@@ -796,6 +966,11 @@ sub update_server($) {
   $r=update_aml_field(15,$id,$rec,'allow_notify');
   if ($r < 0) { db_rollback(); return -23; }
 
+  # listen_on
+  $r=update_aml_field(16,$id,$rec,'listen_on_v6');
+  if ($r < 0) { db_rollback(); return -24; }
+
+
   return db_commit();
 }
 
@@ -815,8 +990,20 @@ sub add_server($) {
   $res = update_aml_field(1,$id,$rec,'allow_transfer');
   if ($res < 0) { db_rollback(); return -10; }
   # dhcp
+# Local DHCP settings 2020-07-20 TVu
+  $res = add_array_field('dhcp_entries','dhcp,comment','dhcp_l',$rec,
+			 'type,ref',"7,$id");
+  if ($res < 0) { db_rollback(); return -11; }
   $res = add_array_field('dhcp_entries','dhcp,comment','dhcp',$rec,
 			 'type,ref',"1,$id");
+  if ($res < 0) { db_rollback(); return -11; }
+  # dhcp6
+# Local DHCP settings 2020-07-20 TVu
+  $res = add_array_field('dhcp_entries','dhcp,comment','dhcp6_l',$rec,
+			 'type,ref',"17,$id");
+  if ($res < 0) { db_rollback(); return -11; }
+  $res = add_array_field('dhcp_entries','dhcp,comment','dhcp6',$rec,
+			 'type,ref',"11,$id");
   if ($res < 0) { db_rollback(); return -11; }
   # txt
   $res = add_array_field('txt_entries','txt,comment','txt',$rec,
@@ -872,7 +1059,7 @@ sub delete_server($) {
 
   db_begin();
 
-  # cidr_entries 
+  # cidr_entries
   $res=db_exec("DELETE FROM cidr_entries " .
 	       "WHERE (type=1 OR type=7 OR type=8 OR type=9 OR type=10 " .
 	       " OR type=11) AND ref=$id;");
@@ -887,6 +1074,9 @@ sub delete_server($) {
   if ($res < 0) { db_rollback(); return -2; }
 
   # dhcp_entries
+# Local DHCP settings 2020-07-20 TVu
+  $res=db_exec("DELETE FROM dhcp_entries WHERE type=7 AND ref=$id;");
+  if ($res < 0) { db_rollback(); return -3; }
   $res=db_exec("DELETE FROM dhcp_entries WHERE type=1 AND ref=$id;");
   if ($res < 0) { db_rollback(); return -3; }
   $res=db_exec("DELETE FROM dhcp_entries WHERE id IN ( " .
@@ -910,6 +1100,35 @@ sub delete_server($) {
 	        "SELECT a.id FROM dhcp_entries a, vlans v " .
 	        "WHERE v.server=$id AND a.type=6 AND a.ref=v.id);");
   if ($res < 0) { db_rollback(); return -8; }
+
+# dhcp_entries6
+# Local DHCP settings 2020-07-20 TVu
+  $res=db_exec("DELETE FROM dhcp_entries WHERE type=17 AND ref=$id;");
+  if ($res < 0) { db_rollback(); return -13; }
+  $res=db_exec("DELETE FROM dhcp_entries WHERE type=11 AND ref=$id;");
+  if ($res < 0) { db_rollback(); return -13; }
+  $res=db_exec("DELETE FROM dhcp_entries WHERE id IN ( " .
+	        "SELECT a.id FROM dhcp_entries a, zones z " .
+	        "WHERE z.server=$id AND a.type=12 AND a.ref=z.id);");
+  if ($res < 0) { db_rollback(); return -14; }
+  $res=db_exec("DELETE FROM dhcp_entries WHERE id IN ( " .
+	        "SELECT a.id FROM dhcp_entries a, zones z, hosts h " .
+	        "WHERE z.server=$id AND h.zone=z.id AND a.type=13 " .
+	        " AND a.ref=h.id);");
+  if ($res < 0) { db_rollback(); return -15; }
+  $res=db_exec("DELETE FROM dhcp_entries WHERE id IN ( " .
+	        "SELECT a.id FROM dhcp_entries a, nets n " .
+	        "WHERE n.server=$id AND a.type=14 AND a.ref=n.id);");
+  if ($res < 0) { db_rollback(); return -16; }
+  $res=db_exec("DELETE FROM dhcp_entries WHERE id IN ( " .
+	        "SELECT a.id FROM dhcp_entries a, groups g " .
+	        "WHERE g.server=$id AND a.type=15 AND a.ref=g.id);");
+  if ($res < 0) { db_rollback(); return -17; }
+  $res=db_exec("DELETE FROM dhcp_entries WHERE id IN ( " .
+	        "SELECT a.id FROM dhcp_entries a, vlans v " .
+	        "WHERE v.server=$id AND a.type=16 AND a.ref=v.id);");
+  if ($res < 0) { db_rollback(); return -8; }
+
 
   # host_info
   # FIXME
@@ -957,9 +1176,13 @@ sub delete_server($) {
   $res=db_exec("DELETE FROM txt_entries " .
 	       "WHERE (type=3 OR type=10 OR type=11) AND ref=$id;");
   if ($res < 0) { db_rollback(); return -17; }
-  $res=db_exec("DELETE FROM txt_entries WHERE id IN ( " . 
+  $res=db_exec("DELETE FROM txt_entries WHERE id IN ( " .
 	       "SELECT a.id FROM txt_entries a, zones z " .
-	       "WHERE z.server=$id AND a.type=12 AND a.ref=z.id);");
+
+#	       "WHERE z.server=$id AND a.type=12 AND a.ref=z.id);");
+
+	       "WHERE z.server=$id AND (a.type=4 OR a.type=12) AND a.ref=z.id);"); # 2020-07-30 TVu
+
   if ($res < 0) { db_rollback(); return -180; }
   $res=db_exec("DELETE FROM txt_entries WHERE id IN ( " .
 	       "SELECT a.id FROM txt_entries a, zones z, hosts h " .
@@ -1039,8 +1262,8 @@ sub get_zone_id($$) {
   return ($q[0][0] > 0 ? $q[0][0] : -2);
 }
 
-sub get_zone_list($$$) {
-  my ($serverid,$type,$reverse) = @_;
+sub get_zone_list($$$$) {
+  my ($serverid,$type,$reverse,$expired) = @_;
   my ($res,$list,$i,$id,$name,$rec);
 
   $type = ($type ? " AND type='$type' " : '');
@@ -1049,9 +1272,19 @@ sub get_zone_list($$$) {
   $list=[];
   return $list unless ($serverid >= 0);
 
-  db_query("SELECT name,id,type,reverse,comment FROM zones " .
-	   "WHERE server=$serverid $type $reverse " .
-	   "ORDER BY type,reverse,reversenet,name;",$list);
+  # 2022-08-10 mesrik: added expired skip
+  if ($expired == 0) {
+      db_query("SELECT name,id,type,reverse,comment,expiration FROM zones " .
+	       "WHERE server=$serverid $type $reverse " .
+	       "ORDER BY type,reverse,reversenet,name;",$list);
+  } else {
+      db_query("SELECT name,id,type,reverse,comment,expiration FROM zones " .
+	       "WHERE server=$serverid $type $reverse " .
+	       " AND (coalesce(expiration, 0) <= 0 OR coalesce(expiration, 0) > " .
+	       " extract(epoch from now())) " . # Exclude expired zones
+	       "ORDER BY type,reverse,reversenet,name;",$list);
+  }
+
   return $list;
 }
 
@@ -1082,7 +1315,7 @@ sub get_zone($$) {
 	       "server,active,dummy,type,reverse,class,name,nnotify," .
 	       "hostmaster,serial,refresh,retry,expire,minimum,ttl," .
 	       "chknames,reversenet,comment,cdate,cuser,mdate,muser," .
-	       "forward,serial_date,flags,rdate,transfer_source",
+	       "forward,serial_date,flags,rdate,transfer_source,transfer_source_v6,expiration",
 	       $id,$rec,"id");
   return -1 if ($res < 0);
   fix_bools($rec,"active,dummy,reverse,noreverse");
@@ -1116,13 +1349,15 @@ sub get_zone($$) {
 		  "type=6 AND ref=$id ORDER BY ip",$rec,'also_notify');
   get_array_field("cidr_entries",4,"id,ip,port,comment","IP,Port,Comments",
 		  "type=12 AND ref=$id ORDER BY ip",$rec,'forwarders');
-  get_array_field("txt_entries",3,"id,txt,comment","ZoneEntry,Comments",
+  get_array_field("txt_entries",2,"id,txt","Zone Entries (current)", # 2020-07-30 TVu
+		  "type=4 AND ref=$id ORDER BY id",$rec,'zentries_ta');
+  get_array_field("txt_entries",3,"id,txt,comment","Zone Entry (deprecated),Comment",
 		  "type=12 AND ref=$id ORDER BY id",$rec,'zentries');
 
   db_query("SELECT COUNT(h.id) FROM hosts h, zones z " .
 	   "WHERE z.id=$id AND h.zone=$id " .
 	   " AND (h.mdate > z.serial_date OR h.cdate > z.serial_date);",\@q);
-  $rec->{pending_info}=($q[0][0] > 0 ? 
+  $rec->{pending_info}=($q[0][0] > 0 ?
 			"<FONT color=\"#ff0000\">$q[0][0]</FONT>" : 'None');
 
 
@@ -1145,6 +1380,12 @@ sub update_zone($) {
   delete $rec->{txt_auto_generation};
 
   if ($rec->{reverse} eq 't' || $rec->{reverse} == 1) {
+
+# For reverse zone, change cidr to in-addr.arpa or ip6.arpa format name. TVu
+      if (is_cidr($rec->{name}) && $rec->{name} =~ /\/\d{1,3}$/) {
+	  $rec->{name} = cidr2arpa($rec->{name});
+      }
+
       $new_net=arpa2cidr($rec->{name});
       if (($new_net eq '0.0.0.0/0') or ($new_net eq '')) {
 	  return -100;
@@ -1206,9 +1447,30 @@ sub update_zone($) {
   $r=update_array_field("cidr_entries",4,"ip,port,comment,type,ref",
 			'forwarders',$rec,"12,$id");
   if ($r < 0) { db_rollback(); return -20; }
-  # zentries
-  $r=update_array_field("txt_entries",3,"txt,comment,type,ref",
-			'zentries',$rec,"12,$id");
+
+  $r=update_array_field("txt_entries",2,"txt,type,ref", # 2020-07-30 TVu
+			'zentries_ta',$rec,"4,$id");
+  if ($r < 0) { db_rollback(); return -22; }
+
+# -------------------------------------------------------------------------------
+# For explanation of these lines, see Zones.pm %zone_form
+
+# Old code, still in use.
+# zentries
+  $r = update_array_field("txt_entries",3,"txt,comment,type,ref",
+			  'zentries',$rec,"12,$id");
+
+# New code, will be activated later.
+# zentries
+# $r = update_textarea_field("txt_entries", $$rec{'zentries_id'}, # Textarea 12 Apr 2017 TVu
+#			  "txt,type,ref", 'zentries', $rec, "12,$id");
+
+# -------------------------------------------------------------------------------
+
+  print "$r<br>\n" if ($r);
+
+# $$rec{'zentries'}[0][0],
+
   if ($r < 0) { db_rollback(); return -21; }
 
   return db_commit();
@@ -1278,7 +1540,11 @@ sub delete_zone($) {
 
   # txt_entries
   print "<BR>Deleting TXT entries...\n";
-  $res=db_exec("DELETE FROM txt_entries WHERE type=12 AND ref=$id");
+
+# $res=db_exec("DELETE FROM txt_entries WHERE type=12 AND ref=$id");
+
+  $res=db_exec("DELETE FROM txt_entries WHERE (type=4 OR type=12) AND ref=$id"); # 2020-07-30 TVu
+
   if ($res < 0) { db_rollback(); return -11; }
   $res=db_exec("DELETE FROM txt_entries WHERE id IN ( " .
 	       "SELECT a.id FROM txt_entries a, hosts h " .
@@ -1347,7 +1613,7 @@ sub add_zone($) {
   if ($rec->{reverse} =~ /^(t|true)$/) {
       $new_net=arpa2cidr($rec->{name});
       if (($new_net eq '0.0.0.0/0') or ($new_net eq '')) {
-	  return -100;
+	  return -200;
       }
       $rec->{reversenet}=$new_net;
   }
@@ -1644,10 +1910,15 @@ sub get_host($$) {
 	       "hinfo_hw,hinfo_sw,wks,mx,rp_mbox,rp_txt,router," .
 	       "prn,ether,ether_alias,info,location,dept,huser,model," .
 	       "serial,misc,cdate,cuser,muser,mdate,comment,dhcp_date," .
-	       "expiration,asset_id,dhcp_info,flags,email",
+	       "expiration,asset_id,dhcp_info,flags,email,duid,iaid",
 	       $id,$rec,"id");
   return -1 if ($res < 0);
   fix_bools($rec,"prn");
+
+  my %fqdnzone;
+  if (get_zone($$rec{zone}, \%fqdnzone) == 0) {
+      $$rec{fqdn} = $$rec{domain} . '.' . $fqdnzone{name} . '.';
+  }
 
   get_array_field("a_entries",4,"id,ip,reverse,forward",
 		  "IP,reverse,forward","host=$id ORDER BY ip",$rec,'ip');
@@ -1663,27 +1934,54 @@ sub get_host($$) {
 		  "type=2 AND ref=$id ORDER BY id",$rec,'txt_l');
   get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comments",
 		  "type=3 AND ref=$id ORDER BY id",$rec,'dhcp_l');
+  get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comments",
+		  "type=13 AND ref=$id ORDER BY id",$rec,'dhcp_l6');
   get_array_field("printer_entries",3,"id,printer,comment","PRINTER,Comments",
 		  "type=2 AND ref=$id ORDER BY printer",$rec,'printer_l');
   get_array_field("srv_entries",6,"id,pri,weight,port,target,comment",
 		  "Priority,Weight,Port,Target",
 		  "type=1 AND ref=$id ORDER BY port,pri,weight",$rec,'srv_l');
 
-  get_array_field("hosts",4,"0,id,domain,type","Domain,cname",
-	          "type=4  AND alias=$id ORDER BY domain",$rec,'alias_l');
+# Get CNAME aliases.
+  get_array_field("hosts",5,"0,id,domain,type,1","Domain,cname",
+	          "type=4 AND alias=$id ORDER BY domain",$rec,'alias_l');
 
   get_array_field("groups b, group_entries a",4,"a.id,a.grp,b.name",
 		  "SubGroup",
 	          "a.host=$id AND a.grp=b.id ORDER BY b.name",
 		  $rec,'subgroups');
 
-  get_array_field("hosts h, arec_entries a",4,"a.id,h.id,h.domain,h.type",
+# Get AREC aliases.
+  get_array_field("hosts h, arec_entries a",5,"a.id,h.id,h.domain,h.type,1",
 		  "Domain,cname",
 	          "h.type=7 AND a.host=h.id AND a.arec=$id ORDER BY h.domain",
 		  $rec,'alias_l2');
   splice(@{$rec->{alias_l2}},0,1);
   push(@{$rec->{alias_l}},@{$rec->{alias_l2}});
   delete $rec->{alias_l2};
+
+# Get Static aliases that point to this host.
+  get_array_field("hosts h1, hosts h2, zones z1, zones z2", 5,
+		  "0, h2.id, h2.domain || '.' || z2.name, h2.type, -1", "Domain,cname",
+	          "h1.id = $id and h1.zone = z1.id and h1.domain || '.' || z1.name || '.' = " .
+		  "h2.cname_txt and h2.zone = z2.id and h2.type = 4 and h2.alias = -1 " .
+		  "order by h2.domain || '.' || z2.name", $rec, 'alias_l2');
+  splice(@{$rec->{alias_l2}},0,1);
+  push(@{$rec->{alias_l}},@{$rec->{alias_l2}});
+  delete $rec->{alias_l2};
+
+# Get id of host that static alias points to, if possible.
+  if ($rec->{alias} == -1) {
+      get_array_field("hosts h1, hosts h2, zones z", 1, "h2.id", "Domain,cname",
+		      "h1.id = $id and h2.domain || '.' || z.name || '.' = h1.cname_txt " .
+		      "and z.id = h2.zone",
+		      $rec, 'stat_alias');
+      if ($rec->{stat_alias}[1][0]) {
+	  $rec->{alias} = $rec->{stat_alias}[1][0];
+      }
+      delete $rec->{stat_alias};
+      $rec->{static_alias} = 1; # Moved 2020-09-01 TVu
+  }
 
   if ($rec->{ether}) {
     $t=substr($rec->{ether},0,6);
@@ -1699,7 +1997,7 @@ sub get_host($$) {
 
   if ($rec->{wks} > 0) {
     $wrec={};
-    print "<p>Error getting WKS template!\n" 
+    print "<p>Error getting WKS template!\n"
       if (get_wks_template($rec->{wks},$wrec));
     $rec->{wks_rec}=$wrec;
   }
@@ -1724,6 +2022,11 @@ sub get_host($$) {
   if ($rec->{type} == 4) {
     get_host($rec->{alias},\%h);
     $rec->{alias_d}=$h{domain};
+
+    $rec->{cname_alias} = 1 if (!$rec->{cname_txt});
+
+#   $rec->{cname_alias} = 1 if ($rec->{alias} != -1); # 2020-09-01 TVu
+
   } elsif ($rec->{type} == 7) {
     get_array_field("hosts h, arec_entries a ",4,"a.id,h.id,h.domain,h.type",
 		    "Domain",
@@ -1763,7 +2066,7 @@ sub get_host($$) {
 
 sub update_host($) {
   my($rec) = @_;
-  my($r,$id);
+  my($r, $id);
 
   del_std_fields($rec);
   delete $rec->{card_info};
@@ -1773,9 +2076,13 @@ sub update_host($) {
   delete $rec->{grp_rec};
   delete $rec->{alias_l};
   delete $rec->{alias_d};
+  delete $rec->{cname_alias};
+  delete $rec->{static_alias};
   delete $rec->{dhcp_date};
   delete $rec->{dhcp_info};
   delete $rec->{dhcp_date_str};
+  delete $rec->{fqdn};
+  $rec->{alias} = -1 if ($rec->{cname_txt});
 
   $rec->{domain}=lc($rec->{domain}) if (defined $rec->{domain});
 
@@ -1821,12 +2128,16 @@ sub update_host($) {
 			'subgroups',$rec,"$id");
   if ($r < 0) { db_rollback(); return -22; }
 
+  $r=update_array_field("dhcp_entries",3,"dhcp,comment,type,ref",
+			'dhcp_l6',$rec,"13,$id");
+  if ($r < 0) { db_rollback(); return -23; }
+
   return db_commit();
 }
 
 sub delete_host($) {
   my($id) = @_;
-  my($res,%host);
+  my($res,%host,$sql);
   my($dtime) = time;
 
   return -100 unless ($id > 0);
@@ -1862,11 +2173,29 @@ sub delete_host($) {
   $res=db_exec("DELETE FROM a_entries WHERE host=$id;");
   if ($res < 0) { db_rollback(); return -7; }
 
+  # static aliases TVu 15.03.2016
+  $sql = "delete from hosts where id in " .
+      "(select h2.id from hosts h1, hosts h2, zones z " .
+      "where h1.id = $id and h1.zone = z.id and " .
+      "h1.domain || '.' || z.name || '.' = h2.cname_txt and " .
+      "h2.type = 4 and h2.alias = -1);";
+  $res = db_exec($sql);
+  if ($res < 0) { db_rollback(); return -13; }
+
+  # arec aliases unless they also point to some other host TVu 15.03.2016
+  # this must be done before deleting arec_entries!
+  $sql = "delete from hosts where id in (select s1.host from " .
+      "(select host, count(arec) as c1 from arec_entries where host in " .
+      "(select host from arec_entries where arec = $id) group by host) " .
+      "as s1 where s1.c1 = 1) and type = 7 and alias = -1;";
+  $res = db_exec($sql);
+  if ($res < 0) { db_rollback(); return -14; }
+
   # arec_entries
   $res=db_exec("DELETE FROM arec_entries WHERE host=$id OR arec=$id;");
   if ($res < 0) { db_rollback(); return -8; }
 
-  # aliases
+  # cname aliases
   $res=db_exec("DELETE FROM hosts WHERE type=4 AND alias=$id;");
   if ($res < 0) { db_rollback(); return -9; }
 
@@ -1883,6 +2212,7 @@ sub delete_host($) {
   $res=db_exec("DELETE FROM group_entries WHERE host=$id;");
   if ($res < 0) { db_rollback(); return -12; }
 
+  # Note that -13 and -14 are already in use!
 
   $res=db_exec("DELETE FROM hosts WHERE id=$id;");
   if ($res < 0) { db_rollback(); return -50; }
@@ -1900,6 +2230,9 @@ sub add_host($) {
   my($rec) = @_;
   my($res,$i,$id,$a_id);
 
+  delete $rec->{cname_alias};
+  delete $rec->{static_alias};
+
   return -100 unless ($rec->{zone} > 0);
   db_begin();
   if ($rec->{type}==7) {
@@ -1909,6 +2242,20 @@ sub add_host($) {
   $rec->{cuser}=$muser;
   $rec->{cdate}=time;
   $rec->{domain}=lc($rec->{domain});
+
+# Replace tag with id.
+  if ($rec->{domain} =~ /%\{id\}/) {
+      my(@q);
+      my $sql = 'select nextval((\'hosts_id_seq\'::text)::regclass);';
+      db_query($sql, \@q);
+      if ($q[0][0]) {
+	  $rec->{hacked_id} = $q[0][0];
+	  $rec->{domain} =~ s/%\{id\}/$q[0][0]/;
+      } else {
+	  return -10;
+      }
+  }
+
   $res=add_record('hosts',$rec);
   if ($res < 0) { db_rollback(); return -1; }
   $id=$res;
@@ -1953,6 +2300,15 @@ sub add_host($) {
   return $id;
 }
 
+# List moved from browser.cgi so that it can be used also in command line
+# tools without need to update multiple lists, should the list change.
+# TVu 02.04.2014.
+sub get_host_types() {
+    return (0 => 'Any type', 1 => 'Host', 2 => 'Delegation', 3 => 'Plain MX',
+	    4 => 'Alias', 5 => 'Printer', 6 => 'Glue record', 7 => 'AREC Alias',
+	    8 => 'SRV record', 9 => 'DHCP only', 10 => 'Zone',
+	    101 => 'Host reservation');
+}
 
 ############################################################################
 # MX template functions
@@ -2301,6 +2657,16 @@ sub get_group_by_name($$) {
   return ($q[0][0]);
 }
 
+sub get_group_type_by_name($$) {
+  my($serverid,$name)=@_;
+  my(@q);
+  return -1 unless ($serverid > 0);
+  $name=db_encode_str($name);
+  db_query("SELECT type FROM groups WHERE server=$serverid AND name=$name",\@q);
+  return -2 unless (@q > 0);
+  return ($q[0][0]);
+}
+
 sub get_group($$) {
   my ($id,$rec) = @_;
 
@@ -2313,6 +2679,9 @@ sub get_group($$) {
 		  "type=5 AND ref=$id ORDER BY id",$rec,'dhcp');
   get_array_field("printer_entries",3,"id,printer,comment","PRINTER,Comments",
 		  "type=1 AND ref=$id ORDER BY printer",$rec,'printer');
+
+  get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comments",
+		  "type=15 AND ref=$id ORDER BY id",$rec,'dhcp6');
 
   add_std_fields($rec);
   return 0;
@@ -2336,6 +2705,10 @@ sub update_group($) {
 			'printer',$rec,"1,$id");
   if ($r < 0) { db_rollback(); return -17; }
 
+  $r=update_array_field("dhcp_entries",3,"dhcp,comment,type,ref",
+			'dhcp6',$rec,"15,$id");
+  if ($r < 0) { db_rollback(); return -16; }
+
   return db_commit();
 }
 
@@ -2355,6 +2728,11 @@ sub add_group($) {
 			 'type,ref',"5,$id");
   if ($res < 0) { db_rollback(); return -3; }
 
+  # dhcp_entries
+  $res = add_array_field('dhcp_entries','dhcp,comment','dhcp6',$rec,
+			 'type,ref',"15,$id");
+  if ($res < 0) { db_rollback(); return -3; }
+
   # printer_entries
   $res = add_array_field('printer_entries','printer,comment','printer',$rec,
 			 'type,ref',"1,$id");
@@ -2365,7 +2743,6 @@ sub add_group($) {
 
 }
 
-
 sub delete_group($) {
   my($id) = @_;
   my($res);
@@ -2374,25 +2751,22 @@ sub delete_group($) {
 
   db_begin();
 
-  # dhcp_entries
-  $res=db_exec("DELETE FROM dhcp_entries WHERE type=5 AND ref=$id");
+# dhcp_entries
+  $res=db_exec("DELETE FROM dhcp_entries WHERE (type=5 OR type=15) AND ref=$id");
   if ($res < 0) { db_rollback(); return -1; }
-  # printer_entries
+# printer_entries
   $res=db_exec("DELETE FROM printer_entries WHERE type=1 AND ref=$id");
   if ($res < 0) { db_rollback(); return -2; }
 
+# group itself
   $res=db_exec("DELETE FROM groups WHERE id=$id");
   if ($res < 0) { db_rollback(); return -3; }
-
-
-  $res=db_exec("UPDATE hosts SET grp=-1 WHERE grp=$id");
-  if ($res < 0) { db_rollback(); return -10; }
 
   return db_commit();
 }
 
-sub get_group_list($$$$) {
-  my($serverid,$rec,$lst,$alevel) = @_;
+sub get_group_list($$$$$) {
+  my($serverid,$rec,$lst,$alevel,$gtype) = @_;
   my(@q,$i);
 
   undef @{$lst};
@@ -2402,8 +2776,10 @@ sub get_group_list($$$$) {
   return unless ($serverid > 0);
   $alevel=0 unless ($alevel > 0);
 
+  my $gtypestr = ($gtype ? "type IN (" . join(",", @$gtype) . ")" : "type < 100");
+
   db_query("SELECT id,name FROM groups " .
-	   "WHERE server=$serverid AND alevel <= $alevel AND type < 100 " .
+	   "WHERE server=$serverid AND alevel <= $alevel AND $gtypestr " .
 	   "ORDER BY name;",\@q);
   for $i (0..$#q) {
     push @{$lst}, $q[$i][0];
@@ -2457,8 +2833,8 @@ sub add_user($) {
   return add_record('users',$rec);
 }
 
-sub delete_user($) {
-  my($id) = @_;
+sub delete_user($$$$$$) {
+  my($id, $name, $delete, $expiration, $now, $user) = @_;
   my($res);
 
   return -100 unless ($id > 0);
@@ -2472,8 +2848,26 @@ sub delete_user($) {
   $res=db_exec("DELETE FROM utmp WHERE uid=$id;");
   if ($res < 0) { db_rollback(); return -2; }
 
-  $res=db_exec("DELETE FROM users WHERE id=$id;");
-  if ($res < 0) { db_rollback(); return -3; }
+  if ($delete) {
+      $res=db_exec("DELETE FROM users WHERE id=$id;");
+      if ($res < 0) { db_rollback(); return -3; }
+  } else {
+      $res=db_exec("update users set (server, zone, superuser, last_pwd, flags, " .
+		   "email, last_from, search_opts, comment, " .
+		   "name, password, expiration, mdate, muser) = " .
+		   "(default, default, default, default, default, " .
+		   "null, null, null, null, " .
+		   "'Removed User', 'LOCKED:REMOVED', $expiration, $now, '$user') " .
+		   "where id = $id;");
+      if ($res < 0) { db_rollback(); return -4; }
+  }
+
+# User was deleted from all user groups, but that is not recorded in history.
+  $res = update_history(-1, -1, 5,      # No UID. No SID. 5 = User changes.
+			($delete ? 'DELETE' : 'ANONYMIZE') . ': User', # Action.
+			"Username: $name (login: " . getlogin(). ')', # Info
+			$id);           # Ref.
+  if ($res < 0) { db_rollback(); return -4; }
 
   return db_commit();
 }
@@ -2496,28 +2890,139 @@ sub get_user_group($$) {
   return $res;
 }
 
-sub delete_user_group($$) {
-  my ($id,$newid) = @_;
-  my ($res);
+# For Users.pm 2021-04-21 TVu
+sub get_user_group_w_members($$) { # Kesken !!!
+  my ($id, $rec) = @_;
+  my ($res, $t, $wrec, $mrec, %h, @q, $infostr);
+
+  $res = get_record("user_groups", "name, comment",
+	       $id, $rec, "id");
+  return -1 if ($res < 0);
+
+  get_array_field("users u, user_rights ur", 3, "u.id, u.username, u.name",
+		  "Members", "ur.type = 2 AND ur.rtype = 0 AND " .
+		  "ur.rref = $id AND ur.ref = u.id ORDER BY u.username",
+		  $rec, 'users');
+
+  return 0;
+}
+
+# For Users.pm 2021-05-10 TVu
+sub get_all_users($$) {
+  my($rec,$lst) = @_;
+  my(@q,$i);
+
+  undef @{$lst};
+  push @{$lst},  -1;
+  undef %{$rec};
+  $$rec{-1}='--None--';
+
+  db_query("SELECT id, username || ' - ' || name FROM users " .
+	   "ORDER BY 2;",\@q);
+  for $i (0..$#q) {
+    push @{$lst}, $q[$i][0];
+    $$rec{$q[$i][0]}=$q[$i][1];
+  }
+}
+
+sub delete_user_group($$$$$$) {
+  my ($id,$newid,$group,$newgroup,$uid,$sid) = @_;
+  my ($res,$sql,@q,$ind1);
 
   db_begin();
 
+# Delete rights given to the group.
   $res = db_exec("DELETE FROM user_rights WHERE type=1 AND ref=$id");
   if ($res < 0) { db_rollback(); return -1; }
+# Delete group.
   $res = db_exec("DELETE FROM user_groups WHERE id=$id");
   if ($res < 0) { db_rollback(); return -2; }
+# Update group history.
+  $res = update_history($uid, $sid, 6,        # 6 = User group changes.
+			'DELETE: User group', # Action.
+			"Group: $group (login: " . getlogin(). ')', # Info
+			$id);                 # Ref.
+  if ($res < 0) { db_rollback(); return -5; }
 
   if ($newid > 0) {
-    $res = db_exec("UPDATE user_rights SET rref=$newid " .
-		   "WHERE type=2 AND rtype=0 AND rref=$id");
-    if ($res < 0) { db_rollback(); return -3; }
+# Get list of users who will be moved.
+# Must be done before users are moved!
+      $sql = "select ur.ref, u.username " .
+	  "from user_rights ur, users u " .
+	  "where ur.type = 2 and ur.rtype = 0 and " .
+	  "ur.rref = $id and ur.ref = u.id;";
+      db_query($sql, \@q);
+# Update user history.
+      for $ind1 (0..$#q) {
+	  $res = update_history($uid, $sid, 5, # 5 = User changes.
+				'MOVE: User',  # Action.
+				"Username: $q[$ind1][1], Group: $group to $newgroup (login: " . getlogin(). ')', # Info
+				$q[$ind1][0]); # Ref.
+	  if ($res < 0) { db_rollback(); return -6; }
+      }
+# Move users to another group.
+      $res = db_exec("UPDATE user_rights SET rref=$newid " .
+		     "WHERE type=2 AND rtype=0 AND rref=$id");
+      if ($res < 0) { db_rollback(); return -3; }
   } else {
-    $res = db_exec("DELETE FROM user_rights ".
-		   "WHERE type=2 AND rtype=0 AND rref=$id");
-    if ($res < 0) { db_rollback(); return -4; }
+# Delete group membership from users.
+      $res = db_exec("DELETE FROM user_rights ".
+		     "WHERE type=2 AND rtype=0 AND rref=$id");
+      if ($res < 0) { db_rollback(); return -4; }
   }
 
+# Moving users may have created duplicates, which have to be deleted. We
+# migjht have avoided creating these duplicates by not selecting those
+# users who already were members of the new group, but then we would
+# have to delete broken references to the old group. It makes more sense
+# to delete *all* duplicates here, new and any old ones that may exist.
+  $sql = 'delete from user_rights where id in (' .
+      'select id from (' .
+      'select id, row_number() over (' .
+      'partition by ref, rref order by id) as rnum ' .
+      'from user_rights ' .
+      'where type = 2 and ' .
+      'rtype = 0) ur ' .
+      'where ur.rnum > 1);';
+  $res = db_exec($sql);
+  if ($res < 0) { db_rollback(); return -7; }
+
   return db_commit();
+}
+
+# Get user's status and authorization level.
+sub get_user_status($) {
+    my ($id) = @_;
+    my ($sql, @res, $status);
+
+# Get status (other than authorization level).
+    $sql = "select coalesce(expiration, 0) <= 0 or coalesce(expiration, 0) > " .
+	"extract(epoch from now()), password, superuser " .
+	"from users " .
+	"where id = $id;";
+    db_query($sql, \@res);
+    return -1 if (!$res[0][1]);
+    $status = '';
+    if (lc($res[0][0]) eq 'f') { $status .= 'E'; } # Expired.
+    if (lc($res[0][1]) =~ /^locked:/) { $status .= 'L'; } # Locked.
+    if (lc($res[0][2]) eq 't') { $status .= 'S'; } # Superuser.
+
+# Get authorization level.
+# Given directly to the user.
+    $sql = "(select rule from user_rights " .
+	"where type = 2 and ref = $id and rtype = 6 " .
+	"union " .
+# Given to a group whose member the user is.
+	"select ur2.rule " .
+	"from user_rights ur1, user_rights ur2 " .
+	"where ur1.type = 2 and ur1.ref = $id and ur1.rtype = 0 and " .
+	"ur2.type = 1 and ur2.ref = ur1.rref and ur2.rtype = 6) " .
+# Return highest value if several were found.
+	"order by 1 desc limit 1;";
+    undef @res;
+    db_query($sql, \@res);
+    $res[0][0] =~ s/\s//g;
+    return $status . ($res[0][0] || 0); # Default to 0.
 }
 
 ############################################################################
@@ -2533,6 +3038,15 @@ sub get_net_by_cidr($$) {
   return ($q[0][0] > 0 ? $q[0][0] : -1);
 }
 
+sub get_net_cidr_by_ip($$) {
+  my($serverid,$ip) = @_;
+  my(@q);
+
+  return '-1' unless ($serverid > 0);
+  return '-2' unless (is_ip($ip));
+  db_query("SELECT net FROM nets WHERE server=$serverid AND net >> '$ip' order by net desc limit 1",\@q);
+  return ($q[0][0] ? $q[0][0] : '');
+}
 
 sub get_net_list($$$) {
   my ($serverid,$subnets,$alevel) = @_;
@@ -2569,7 +3083,7 @@ sub get_net($$) {
   return -100 if (get_record("nets",
                       "server,name,net,subnet,rp_mbox,rp_txt,no_dhcp,comment,".
 		      "range_start,range_end,vlan,cdate,cuser,mdate,muser,".
-                      "netname,alevel,type,dummy", $id,$rec,"id"));
+                      "netname,alevel,type,dummy,ip_policy", $id,$rec,"id"));
 
   fix_bools($rec,"subnet,no_dhcp,dummy");
   get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comment",
@@ -2585,13 +3099,23 @@ sub update_net($) {
   my($r,$id,$net);
 
   return -100 unless (is_cidr($rec->{net}));
-  $net = new Net::Netmask($rec->{net});
+# $net = new Net::Netmask($rec->{net});
+  $net = new NetAddr::IP($rec->{net}); # For IPv6.
   return -101 unless ($net);
+
+# Nets (other than subnets and virtual nets) should never have had a range, and
+# some changes to net's CIDR were not possible when they had. 2019-01-03 TVu
+  if ($rec->{subnet} =~ /^f/i && $rec->{dummy} =~ /^f/i) {
+      $rec->{range_start} = $rec->{range_end} = '';
+  }
+
   if (is_cidr($rec->{range_start})) {
-    return -102 unless ($net->match($rec->{range_start}));
+#   return -102 unless ($net->match($rec->{range_start}));
+    return -102 unless ($net->contains(new NetAddr::IP($rec->{range_start}))); # For IPv6.
   }
   if (is_cidr($rec->{range_end})) {
-    return -102 unless ($net->match($rec->{range_end}));
+#   return -103 unless ($net->match($rec->{range_end}));
+    return -102 unless ($net->contains(new NetAddr::IP($rec->{range_end}))); # For IPv6.
   }
 
   del_std_fields($rec);
@@ -2623,12 +3147,35 @@ sub add_net($) {
   $rec->{cuser}=$muser;
 
   return -100 unless (is_cidr($rec->{net}));
-  $net = new Net::Netmask($rec->{net});
+  $net = new Net::IP($rec->{net});
   return -101 unless ($net);
-  $rec->{range_start}=$net->nth(1)
-    unless (is_cidr($rec->{range_start}));
-  $rec->{range_end}=$net->nth(-2)
-    unless (is_cidr($rec->{range_end}));
+
+  # Create ranges for subnets and virtual nets only. 2019-01-03 TVu
+  unless ($rec->{subnet} =~ /^f/i && $rec->{dummy} =~ /^f/i) {
+
+    # Dirty hack for /31,/32 & /127, /128 subnets:]
+    if ($net->size() <= 2) {
+      $rec->{range_start} = ip_compress_address(($net)->ip(), $net->version())
+	unless (is_cidr($rec->{range_start}));
+      $rec->{range_end}   = ip_compress_address($net->last_ip(), $net->version())
+	unless (is_cidr($rec->{range_end}));
+    } else {
+      #     $rec->{range_start} = ip_compress_address((++$net)->ip(), $net->version())
+      #	  unless (is_cidr($rec->{range_start}));
+      #     $rec->{range_end} = ($net->version() eq 4 ? new Net::Netmask($rec->{net})->nth(-2) :
+      #			   ip_compress_address($net->last_ip(), $net->version()))
+      #	  unless (is_cidr($rec->{range_end}));
+      # The same without Net::Netmask.
+      $rec->{range_start} = ip_compress_address((++$net)->ip(), $net->version())
+	unless (is_cidr($rec->{range_start}));
+      $rec->{range_end} = ($net->version() eq 4 ? new NetAddr::IP($rec->{net})->last() :
+			   ip_compress_address($net->last_ip(), $net->version()))
+	unless (is_cidr($rec->{range_end}));
+      $rec->{range_end} =~ s=/\d+$==; # new NetAddr::IP(...)->last() returns CIDR not IP TVu 2018-02-07
+    }
+
+  }
+
 
   $res = add_record('nets',$rec);
   if ($res < 0) { db_rollback(); return -1; }
@@ -2639,6 +3186,12 @@ sub add_net($) {
     $res=db_exec("INSERT INTO dhcp_entries (type,ref,dhcp) " .
 		 "VALUES(4,$id,'$rec->{dhcp_l}[$i][1]')");
     if ($res < 0) { db_rollback(); return -3; }
+  }
+
+  for $i (0..$#{$rec->{dhcp_l6}}) {
+    $res=db_exec("INSERT INTO dhcp_entries (type,ref,dhcp) " .
+		 "VALUES(4,$id,'$rec->{dhcp_l6}[$i][1]')");
+    if ($res < 0) { db_rollback(); return -4; }
   }
 
   return -10 if (db_commit() < 0);
@@ -2680,6 +3233,8 @@ sub get_vlan($$) {
 
   get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comment",
 		  "type=6 AND ref=$id ORDER BY id",$rec,'dhcp_l');
+  get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comment",
+		  "type=16 AND ref=$id ORDER BY id",$rec,'dhcp_l6');
 
   add_std_fields($rec);
   return 0;
@@ -2701,6 +3256,10 @@ sub update_vlan($) {
 			'dhcp_l',$rec,"6,$id");
   if ($r < 0) { db_rollback(); return -10; }
 
+  $r=update_array_field("dhcp_entries",3,"dhcp,comment,type,ref",
+			'dhcp_l6',$rec,"16,$id");
+  if ($r < 0) { db_rollback(); return -10; }
+
   return db_commit();
 }
 
@@ -2720,6 +3279,13 @@ sub add_vlan($) {
     $res=db_exec("INSERT INTO dhcp_entries (type,ref,dhcp) " .
 		 "VALUES(6,$id,'$rec->{dhcp_l}[$i][1]')");
     if ($res < 0) { db_rollback(); return -3; }
+  }
+
+# dhcp_entries6
+  for $i (0..$#{$rec->{dhcp_l6}}) {
+    $res=db_exec("INSERT INTO dhcp_entries (type,ref,dhcp) " .
+		 "VALUES(16,$id,'$rec->{dhcp_l6}[$i][1]')");
+    if ($res < 0) { db_rollback(); return -4; }
   }
 
   return -10 if (db_commit() < 0);
@@ -2766,6 +3332,17 @@ sub get_vlan_list($$$) {
   }
 }
 
+sub get_vlanno($$) {
+  my($serverid,$id) = @_;
+  my(@q);
+
+  return 0 if ($serverid < 1);
+
+  db_query("SELECT coalesce(vlanno,0) FROM vlans " .
+	   "WHERE server=$serverid and id=$id;",\@q);
+  return $q[0][0];
+}
+
 sub get_vlan_by_name($$) {
   my($serverid,$name) = @_;
   my(@q);
@@ -2775,6 +3352,187 @@ sub get_vlan_by_name($$) {
   $name=db_encode_str($name);
   db_query("SELECT id FROM vlans WHERE server=$serverid AND name=$name",\@q);
   return ($q[0][0] > 0 ? $q[0][0] : -1);
+}
+
+############################################################################
+# IP functions
+
+# Name network's ip policies.
+sub ip_policy_names($) {
+    my($ip, $m) = ($_[0] =~ /^(.+)\/(.+)$/);
+    my %list = ( 0 => 'Lowest free', 10 => 'Highest free' );
+    if ($ip =~ /:/) {
+	if ($m <= 80) { $list{20} = 'MAC based'; }
+	if ($m <= 96) { $list{30} = 'IPv4 based'; }
+    }
+    return \%list;
+}
+
+sub get_net_ip_policy($$) {
+    my ($serverid, $cidr) = @_;
+    my ($sql, @res);
+
+    $cidr =~ s=^(.*)/.*$=$1=;
+    $sql = "select ip_policy from nets where server = $serverid and " .
+	"'$cidr' <<= net order by net desc;";
+    db_query($sql, \@res);
+    return $res[0][0] || 0; # TVu 15.03.2017 Added default just in case ...
+}
+
+# Get one free ip based on net's ip address policy etc.
+sub get_free_ip_by_net($$$$$) {
+    my ($serverid, $cidr, $mac, $old_ip, $ip_policy) = @_;
+    my ($tmp1, $mask, $sql, @res);
+
+# Each error message MUST be prepended by  "S:" (subnet level error)
+# or "H:" (host level error). This is needed in addipv6.
+
+# Use default policy if old ip and ip policy are incompatible.
+# Also if parameters don't support given ip policy. 15.03.2017 TVu
+    if (!$mac && $ip_policy == 20 || $ip_policy == 30 && (!$old_ip || cidr6ok($old_ip))) {
+	$ip_policy = 0;
+    }
+
+    ($mask = $cidr) =~ s=^.*/(.*)$=$1=;
+    $mask =~ s/\D//g;
+# 0 = Lowest free.
+    if ($ip_policy == 0) {
+	my ($beg, $end);
+	$sql = "SELECT range_start, range_end FROM nets " .
+	    "WHERE server = $serverid AND net = '$cidr';";
+	db_query($sql, \@res);
+	return 'S:No auto address range for this net'
+	    unless (is_cidr($res[0][0]) && is_cidr($res[0][1]));
+	return 'S:Net has invalid auto address range'
+#	    if (ip2int($res[0][0]) >= ip2int($res[0][1]));
+	    if (normalize_ip6($res[0][0]) ge normalize_ip6($res[0][1]));
+	$beg = $res[0][0];
+	$end = $res[0][1];
+# Beginning of range must be handled separately.
+	return $beg if (!ip_in_use($serverid, $beg));
+# Find all used addresses in given range, drop all cases where the next address
+# is also in use, and return the smallest of remaining addresses plus one.
+	$sql = "select a.ip + 1 from a_entries a, hosts h, zones z " .
+	    "where z.server = $serverid and h.zone = z.id and a.host = h.id " .
+	    "and a.ip >= '$beg' and a.ip < '$end' and a.ip + 1 not in (" .
+	    "select a.ip from a_entries a, hosts h, zones z " .
+	    "where z.server = $serverid and h.zone = z.id and a.host = h.id " .
+	    "and a.ip >= '$beg' and a.ip <= '$end') " .
+	    "order by a.ip asc limit 1;";
+	undef @res;
+	db_query($sql, \@res);
+	return 'S:No free addresses left in this net' if (!@res);
+	return $res[0][0];
+# 10 = Highest free.
+    } elsif ($ip_policy == 10) {
+	my ($beg, $end);
+	$sql = "SELECT range_start, range_end FROM nets " .
+	    "WHERE server = $serverid AND net = '$cidr';";
+	db_query($sql, \@res);
+	return 'S:No auto address range for this net'
+	    unless (is_cidr($res[0][0]) && is_cidr($res[0][1]));
+	return 'S:Net has invalid auto address range'
+#	    if (ip2int($res[0][0]) >= ip2int($res[0][1]));
+	    if (normalize_ip6($res[0][0]) ge normalize_ip6($res[0][1]));
+	$beg = $res[0][0];
+	$end = $res[0][1];
+	return $end if (!ip_in_use($serverid, $end));
+# See "Lowest free" above for details.
+	$sql = "select a.ip - 1 from a_entries a, hosts h, zones z " .
+	    "where z.server = $serverid and h.zone = z.id and a.host = h.id " .
+	    "and a.ip > '$beg' and a.ip <= '$end' and a.ip - 1 not in (" .
+	    "select a.ip from a_entries a, hosts h, zones z " .
+	    "where z.server = $serverid and h.zone = z.id and a.host = h.id " .
+	    "and a.ip >= '$beg' and a.ip <= '$end') " .
+	    "order by a.ip desc limit 1;";
+	undef @res;
+	db_query($sql, \@res);
+	return 'S:No free addresses left in this net' if (!@res);
+	return $res[0][0];
+# 20 = MAC based.
+    } elsif ($ip_policy == 20) {
+	if ($mask <= 80 && $mac =~ /^[\da-f]{12}$/i) {
+	    ($tmp1 = $mac) =~ s/(.{4})/:$1/g;
+	    $tmp1 = ipv6compress(substr(ipv6decompress($cidr), 0, 24) . $tmp1);
+	    $sql = "select ip from a_entries a where ip = '$tmp1';";
+	    db_query($sql, \@res);
+	    return $res[0][0] ? 'H:MAC based IPv6 already in use' : $tmp1;
+	} else {
+	    return $mask > 80 ?
+		'S:Unable to create MAC based IPv6 address (netmask longer than 80 bits)' :
+		'H:Unable to create MAC based IPv6 address (missing or invalid MAC)';
+	}
+# 30 = IPv4 based.
+    } elsif ($ip_policy == 30) {
+	if ($mask <= 96 && cidr4ok($old_ip) && is_ip($old_ip) && $old_ip =~ /\./) {
+	    $tmp1 = ipv64unmix(ipv6compress(substr(ipv6decompress($cidr), 0, 30) . $old_ip));
+	    $sql = "select ip from a_entries a where ip = '$tmp1';";
+	    db_query($sql, \@res);
+	    return $res[0][0] ? 'H:IPv4 based IPv6 already in use' : $tmp1;
+	} else {
+	    return $mask > 96 ?
+		'S:Unable to create IPv4 based IPv6 address (netmask longer than 96 bits)' :
+		'H:Unable to create IPv4 based IPv6 address (missing or invalid IPv4)';
+	}
+    }
+}
+
+# Get a list of free ip addresses, one per net, for each net in the
+# same vlan as the given host that fits the user's auth level.
+sub get_ip_sugg($$$) {
+    my ($hostid, $serverid, $perms) = @_;
+    my (@row_n, @row_v, $list, $sql, $old_ip, $new_ip, $netname, $cidr, $mac, $ip_policy, $netid, $alevel_n);
+    my $alevel_u = $perms->{alevel};
+
+# Get subnets. Don't care about alevels or permissions.
+    $sql = "select distinct on (n2.netname) " .
+	"n2.netname, n2.net, h.ether, a.ip, n2.ip_policy, n2.id, n2.alevel ".
+	"from a_entries a, vlans v, nets n1, nets n2, hosts h ".
+	"where a.host = $hostid and a.ip << n1.net " .
+	"and n1.server = $serverid and n1.vlan = v.id " .
+	"and v.server = $serverid and v.id = n2.vlan " .
+	"and n2.server = $serverid " .
+	"and a.host = h.id order by n2.netname, a.ip;";
+    db_query($sql, \@row_n);
+    $list = '';
+    for my $ind1 (0..$#row_n) {
+	$mac = $row_n[$ind1][2];
+	$old_ip = $row_n[$ind1][3];
+	$netid = $row_n[$ind1][5];
+	$alevel_n = $row_n[$ind1][6];
+# Show net to user only if alevel and permissions allow.
+	if ($alevel_u >= 998 || $alevel_u >= $alevel_n && (!%{$perms->{net}} || $perms->{net}->{$netid})) {
+	    $netname = $row_n[$ind1][0];
+	    $cidr = $row_n[$ind1][1];
+	    $ip_policy = $row_n[$ind1][4];
+	    $new_ip = get_free_ip_by_net($serverid, $cidr, $mac, $old_ip, $ip_policy);
+	    if (is_ip($new_ip)) {
+		$list .= "<option value='$new_ip'>$netname - $new_ip</option>\n";
+	    }
+	}
+# Get possible virtual nets in each subnet even if user can't see the subnet.
+	$sql = "select netname, net, ip_policy, id, alevel from nets " .
+	    "where dummy = 't' and net << '$cidr' order by netname;";
+	db_query($sql, \@row_v);
+	for my $ind2 (0..$#row_v) {
+	    $netid = $row_v[$ind1][3];
+	    $alevel_n = $row_v[$ind1][4];
+# Show virtual net to user only if alevel and permissions allow.
+	    if ($alevel_u >= 998 || $alevel_u >= $alevel_n && (!%{$perms->{net}} || $perms->{net}->{$netid})) {
+		$netname = $row_v[$ind2][0];
+		$cidr = $row_v[$ind2][1];
+		$ip_policy = $row_v[$ind1][2];
+		$new_ip = get_free_ip_by_net($serverid, $cidr, $mac, $old_ip, $ip_policy);
+		if (is_ip($new_ip)) {
+		    $list .= "<option value='$new_ip'>\n$netname - $new_ip</option>\n";
+		}
+	    }
+	}
+    }
+    if ($list) {
+	$list = "\n<select name='subnetlist'>\n<option value='null'>&lt;Select&gt;</option>\n$list</select>\n";
+    }
+    return $list;
 }
 
 ############################################################################
@@ -2997,7 +3755,7 @@ sub add_acl($) {
 
   db_begin();
   $rec->{cdate}=time;
-  $rec->{cuser}=$muser;
+  $rec->{cuser} = $muser if !$rec->{'cuser'};
   $res = add_record('acls',$rec);
   if ($res < 0) { db_rollback(); return -1; }
   $rec->{id}=$id=$res;
@@ -3106,10 +3864,15 @@ sub get_who_list($$) {
     $midle=($idle-$s) / 60;
     $m=$midle % 60;
     $h=($midle-$m) / 60;
-    $j= sprintf("%02d:%02d",$h,$m);
-    $j= sprintf(" %02ds ",$s) if ($m <= 0 && $h <= 0);
+
+#   $j= sprintf("%02d:%02d",$h,$m);
+#   $j= sprintf(" %02ds ",$s) if ($m <= 0 && $h <= 0);
+
+    $j = sprintf('%02d:%02d:%02d', $h, $m, $s); # ** 2020-10-06 TVu
+
     $ip = $q[$i][2];
     $ip =~ s/\/32$//;
+    $ip =~ s/\/128$//;
     $login_s=localtime($login);
     next unless ($idle < $timeout);
     push @{$lst},[$q[$i][0],$q[$i][1],$ip,$j,$login_s];
@@ -3154,6 +3917,17 @@ sub get_permissions($$) {
 	   "SELECT rtype,rref,rule,NULL,NULL FROM user_rights " .
 	   "WHERE ((ref=$uid AND type=2) OR (type=1 AND ref IN (SELECT rref FROM user_rights WHERE type=2 AND ref=$uid AND rtype=0))) " .
 	   " AND rtype<>3 ORDER BY 1;";
+  $sql = "SELECT ur.rtype, ur.rref, ur.rule, n.range_start, n.range_end " .
+      "FROM user_rights ur, nets n " .
+      "WHERE ((ur.type = 2 AND ur.ref = $uid) OR (ur.type = 1 AND ur.ref IN " .
+      "(SELECT rref FROM user_rights WHERE type = 2 AND ref = $uid AND rtype = 0))) " .
+      "AND ur.rtype = 3 AND ur.rref = n.id " .
+      "UNION " .
+      "SELECT rtype, rref, rule, NULL, NULL " .
+      "FROM user_rights " .
+      "WHERE ((ref = $uid AND type = 2) OR (type = 1 AND ref IN " .
+      "(SELECT rref FROM user_rights WHERE type = 2 AND ref = $uid AND rtype = 0))) " .
+      "AND rtype <> 3 ORDER BY 1;";
   db_query($sql,\@q);
   #print "<p>$sql\n";
 
@@ -3179,6 +3953,7 @@ sub get_permissions($$) {
     elsif ($type == 11) { push @{$rec->{delmask}},[$ref,$mode]; }
     elsif ($type == 12) { $rec->{rhf}->{$mode}=$ref; }
     elsif ($type == 13) { $rec->{flags}->{$mode}=1; }
+    elsif ($type == 14) { $rec->{defhost}=$mode; }
   }
 
   db_query("SELECT g.name FROM user_groups g, user_rights r " .
@@ -3220,8 +3995,9 @@ sub update_history($$$$$$) {
   my($uid,$sid,$type,$action,$info,$ref) = @_;
   my($date,$a,$i,$sql);
 
-  return -1 unless ($uid > 0);
-  return -2 unless ($sid > 0);
+# uid and sid are -1 in some command line scripts
+  return -1 unless ($uid > 0 || $uid == -1);
+  return -2 unless ($sid > 0 || $sid == -1);
   return -3 unless ($type > 0);
   $date=time;
   $a=db_encode_str($action);
@@ -3270,7 +4046,8 @@ sub get_lastlog($$$) {
      ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst)
        = localtime($q[$j][2]);
      $t=sprintf("%02d/%02d/%02d %02d:%02d",$mday,$mon+1,$year%100,$hour,$min);
-     $host=substr($q[$j][6],0,15);
+     #$host=substr($q[$j][6],0,15);
+     $host=$q[$j][6];
      $state=$q[$j][3];
      if ($state < 2) {
        $info="still logged in";
@@ -3370,6 +4147,7 @@ sub load_state($$) {
   $state->{'auth'}='no';
   $state->{'cookie'}=$id;
 
+
   db_query("SELECT uid,addr,auth,mode,serverid,server,zoneid,zone," .
 	   " uname,last,login,searchopts,searchdomain,searchpattern," .
            " superuser,sid " .
@@ -3379,6 +4157,7 @@ sub load_state($$) {
     $state->{'uid'}=$q[0][0];
     $state->{'addr'}=$q[0][1];
     $state->{'addr'} =~ s/\/32\s*$//;
+    $state->{'addr'} =~ s/\/128\s*$//;
     $state->{'auth'}='yes' if ($q[0][2] eq 't' || $q[0][2] == 1);
     $state->{'mode'}=$q[0][3];
     if ($q[0][4] > 0) {
@@ -3417,4 +4196,3 @@ sub remove_state($) {
 
 1;
 # eof
-

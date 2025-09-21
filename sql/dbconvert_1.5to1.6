@@ -1,0 +1,18 @@
+/* convert Sauron database format from 1.5 to 1.6 */
+/* (this requires PostgreSQL v7.3 or later) */
+
+/* Add a new column for net's ip policy. */
+alter table nets add column ip_policy integer default 0;
+
+/* Column type change because char(80) got too short. */
+alter table history alter info type text;
+
+/* Drop columns that are no longer needed (never used). */
+alter table a_entries drop ipv6;
+alter table leases drop ipv6;
+alter table nets drop ipv6;
+alter table servers drop ipv6;
+
+UPDATE settings SET value='1.6' where setting='dbversion';
+
+/* eof */

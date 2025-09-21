@@ -1,9 +1,10 @@
-#!/usr/bin/perl -I/usr/local/sauron
+#!/usr/bin/perl -I/opt/sauron
 #
 # last -- utlity to display lastlog info
 #
+# Copyright (c) Michal Kostenec <kostenec@civ.zcu.cz> 2013-2014.
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>  2001-2003.
-# $Id$
+# $Id:$
 #
 require 5;
 use Getopt::Long;
@@ -32,13 +33,12 @@ db_connect();
 
 $count=get_lastlog($count_rule,$user_rule,\@q);
 
-
-printf "%-9s %5s %-15s %14s - %s\n",
+printf "%-9s %5s %-39s %14s - %s\n",
         'User','SID','Host','Login','Logout';
 print "-" x 78 . "\n";
 
 for $j (0..($count-1)) {
-  printf "%-9s %5d %-15s %14s - %s\n",
+  printf "%-9s %5d %-39s %14s - %s\n",
         $q[$j][0],$q[$j][1],$q[$j][2],$q[$j][3],$q[$j][4];
 }
 

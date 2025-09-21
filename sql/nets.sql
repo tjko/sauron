@@ -1,6 +1,6 @@
 /* nets table creation
  *
- * $Id$
+ * $Id:$
  */
 
 /** Net/subnet descriptions, linked to server record. 
@@ -23,7 +23,6 @@ CREATE TABLE nets (
        alevel	   INT4 DEFAULT 0, /* required authorization level */
        type        INT4 DEFAULT 0, /* network type/option flags:
 				      0x01 = private (hidden from browser) */
-       ipv6        TEXT, /* reserved */
 				  
        rp_mbox	   TEXT DEFAULT '.', /* RP mbox */
        rp_txt	   TEXT DEFAULT '.', /* RP txt */
@@ -33,6 +32,6 @@ CREATE TABLE nets (
        comment	   TEXT, /* comment */
 
        CONSTRAINT  nets_key UNIQUE (net,server)
-) INHERITS(common_fields);
+) INHERITS(common_fields) WITH OIDS;
 
 

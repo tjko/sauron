@@ -1,0 +1,24 @@
+#
+# ignoring needless cruft
+#
+
+# from any directory
+**/*.orig
+**/*.dist
+**/*.save
+**/*~
+*.tar.gz
+*.zip
+
+# year-and-date-ending
+**/*[.-]20??-??-??
+
+# configured Sauron
+Sauron/DB.pm
+modgroup
+
+# GNU configure generated stuff
+config.log
+config.status
+
+# eof

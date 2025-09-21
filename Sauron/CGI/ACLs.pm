@@ -1,20 +1,22 @@
 # Sauron::CGI::ACLs.pm
 #
+# Copyright (c) Michal Kostenec <kostenec@civ.zcu.cz> 2013-2014.
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>  2005.
-# $Id$
+# $Id:$
 #
 package Sauron::CGI::ACLs;
 require Exporter;
-use CGI qw/:standard *table -no_xhtml/;
+use CGI qw/:standard *table -utf8/;
 use Sauron::DB;
 use Sauron::CGIutil;
 use Sauron::BackEnd;
 use Sauron::Sauron;
 use Sauron::CGI::Utils;
+
 use strict;
 use vars qw($VERSION @ISA @EXPORT);
 
-$VERSION = '$Id$ ';
+$VERSION = '$Id:$ ';
 
 @ISA = qw(Exporter); # Inherit from Exporter
 @EXPORT = qw(
@@ -30,8 +32,8 @@ my %acl_form=(
   {ftype=>0, name=>'ACL (Access Control List)'},
   {ftype=>1, tag=>'name', name=>'Name', type=>'texthandle', len=>25, empty=>0},
   {ftype=>4, tag=>'id', name=>'ID'},
-  {ftype=>1, tag=>'comment', name=>'Comment', type=>'text', len=>60, empty=>1},
-  {ftype=>12, tag=>'acl', name=>'ACL Rules', acl_mode=>1 },
+  {ftype=>1, tag=>'comment', name=>'Comment', type=>'text', len=>60, empty=>1, whitesp=>'P'},
+  {ftype=>12, tag=>'acl', name=>'ACL Rules', acl_mode=>1, whitesp=>['','','','','','P'] },
   {ftype=>0, name=>'Record info', no_edit=>1},
   {ftype=>4, name=>'Record created', tag=>'cdate_str', no_edit=>1},
   {ftype=>4, name=>'Last modified', tag=>'mdate_str', no_edit=>1}
@@ -50,7 +52,7 @@ sub show_acl_record($$) {
     }
 
     display_form(\%acl,\%acl_form);
-    print p,startform(-method=>'GET',-action=>$url),
+    print p,start_form(-method=>'GET',-action=>$url),
           hidden('menu','acls'), hidden('acl_id',$id),
           submit(-name=>'sub',-value=>'Edit'),"  ",
           submit(-name=>'sub',-value=>'Delete'), end_form;
@@ -144,7 +146,7 @@ sub menu_handler {
       $res=add_magic('add','ACL','acls',\%acl_form,
 		   \&add_acl,\%data);
       if ($res > 0) {
-	  #show_hash(\%data);
+         #show_hash(\%data);
 	  #print "<p>$res $data{name}";
 	  show_acl_record($res,$selfurl);
       }
@@ -192,7 +194,7 @@ sub menu_handler {
       my (@q,@lst,%lsth);
       db_query("SELECT COUNT(id) FROM cidr_entries WHERE acl=$id",\@q);
       print p,"$q[0][0] rules use this ACL.",
-            startform(-method=>'GET',-action=>$selfurl);
+            start_form(-method=>'GET',-action=>$selfurl);
       if ($q[0][0] > 0) {
 	  get_acl_list($serverid,\%lsth,\@lst,0);
 	  print p,"Change references to this ACL to point to: ",

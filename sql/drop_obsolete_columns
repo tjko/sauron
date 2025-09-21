@@ -1,0 +1,85 @@
+#!/usr/bin/perl -I/opt/sauron
+#
+# drop_obsolete_columns - Sauron utility to drop three obsolete columns
+# from Sauron database - These were supposed to be dropped between database
+# versions 1.0 and 1.1, but for some unknown reason they wern't
+#
+# Copyright (c) Teppo Vuori <sauron@teppovuori.fi> 14.09.2016.
+# $Id:$
+#
+# ------------------------------------------------------------------------------
+use Sauron::DB;
+use Sauron::Sauron;
+use strict;
+use warnings;
+
+load_config();
+
+# Local variables.
+my (@col, $res);
+
+# Connect to database.
+db_connect();
+db_begin();
+
+print "This script drops three obsolete columns from Sauron\n";
+print "database if that has not been done already.\n";
+do {
+    print "Do you want to continue (y/n)? ";
+    $res = lc(<STDIN>);
+    chomp $res
+} while ($res ne 'y' && $res ne 'n');
+exit if ($res eq 'n');
+
+# gid in users
+undef @col;
+db_query("select column_name from information_schema.columns " .
+	 "where table_name = 'users' and column_name = 'gid';", \@col);
+if (@col && $col[0][0] eq 'gid') {
+    $res = db_exec('alter table users drop column gid;');
+    if ($res < 0) {
+	db_rollback();
+	fatal("Error $res while dropping column gid from users");
+    }
+    print "Column gid succesfully dropped from table users\n";
+} else {
+    print "Column gid not found in table users (OK)\n";
+}
+
+# gid in utmp
+undef @col;
+db_query("select column_name from information_schema.columns " .
+	 "where table_name = 'utmp' and column_name = 'gid';", \@col);
+if (@col && $col[0][0] eq 'gid') {
+    $res = db_exec('alter table utmp drop column gid;');
+    if ($res < 0) {
+	db_rollback();
+	fatal("Error $res while dropping column gid from utmp");
+    }
+    print "Column gid succesfully dropped from table utmp\n";
+} else {
+    print "Column gid not found in table utmp (OK)\n";
+}
+
+# host2 in lastlog
+undef @col;
+db_query("select column_name from information_schema.columns " .
+	 "where table_name = 'lastlog' and column_name = 'host2';", \@col);
+if (@col && $col[0][0] eq 'host2') {
+    $res = db_exec('alter table lastlog drop column host2;');
+    if ($res < 0) {
+	db_rollback();
+	fatal("Error $res while dropping column host2 from lastlog");
+    }
+    print "Column host2 succesfully dropped from table lastlog\n";
+} else {
+    print "Column host2 not found in table lastlog (OK)\n";
+}
+
+# db_rollback(); # For testing!
+
+if (($res = db_commit()) < 0) {
+    fatal("Cannot commit changes to database, error code $res");
+}
+
+# eof :-)

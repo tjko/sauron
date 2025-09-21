@@ -46,21 +46,20 @@ while ($filename=$ARGV[0]) {
   $cmd='';
 
   while(<FILE>) {
-  fileloop:
-    s/\s*$//;
-    s/\/\*.*\*\///;
-    if (/(\/\*.*$)/) {
+    s/\s*$//;                    # removing just whitespace containing lines
+    s/\/\*.*\*\///;              # removing /* ... */ on single line comment
+    if (/(\/\*.*$)/) {           # commence procssing multi-line /* ...\n comment state
       #print "comment start: '$1'\n";
       $comment=1;
       s/\/\*.*$//;
-    } elsif (/(^.*\*\/)/) {
+    } elsif (/(^.*\*\/)/) {      # finalize processing multi line  ...*/ comment state
       #print "comment end: '$1'\n";
       $comment=0;
       s/^.*\*\///;
-    } elsif ($comment) { 
-      next; 
+    } elsif ($comment) {         # while in multi line comment state retunr getting nex tline
+      next;
     }
-    next if (/^\s*$/);
+    next if (/^\s*$/);           # skip empty lines
 
     if (/(^.*?;)/) {
       $last=$1;
@@ -76,8 +75,7 @@ while ($filename=$ARGV[0]) {
       }
       $cmd='';
       s/(^.*?;)//;
-      goto fileloop;
-    }	
+    }
 
     #print "   $_\n" if ($opt_verbose);
     s/\s+/ /g;
@@ -92,4 +90,3 @@ unless ($opt_notransaction) {
 }
 
 exit;
-

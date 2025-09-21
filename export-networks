@@ -70,7 +70,7 @@ if (defined($opt_level)) {
 undef @q;
 db_query("SELECT net,netname,comment,name " .
 	 "FROM nets " .
-	 "WHERE server=$serverid $rule1 $rule2" .
+	 "WHERE server=$serverid $rule1 $rule2 " .
 	 "ORDER BY net",\@q);
 
 $found=@q;

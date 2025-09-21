@@ -1,72 +1,91 @@
-#!/usr/bin/perl -I/usr/local/sauron
+#!/usr/bin/perl -I/opt/sauron
 #
 # update-dhcp-info  reads dhcpd syslog entries and updates host dhcp_date
 #                   field in hosts table (for given server)
 #
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>  2001-2005.
-# $Id$
+# $Id:$
 #
+# RHEL7 Systemd journal logging - Riku Meskanen <mesrik@iki.fi>, 2018
+# RHEL7 More fixes, use strict & warnins too  - Riku Meskanen <mesrik@iki.fi>, 2019
+# Debian 11 RFC3999 timestamp etc. daemon.log format fixes - Riku Meskanen <mesrik@iki.fi>, 2022
+#
+use strict;
+use warnings;
 require 5;
 use Getopt::Long;
 use Time::Local;
+use POSIX qw(strftime);
+use Date::Manip;
 use Sauron::DB;
 use Sauron::Util;
 use Sauron::BackEnd;
 use Sauron::Sauron;
+use Data::Dumper;
 
 load_config();
 
-%months = (Jan=>0,Feb=>1,Mar=>2,Apr=>3,May=>4,Jun=>5,
+my (%months) = (Jan=>0,Feb=>1,Mar=>2,Apr=>3,May=>4,Jun=>5,
 	   Jul=>6,Aug=>7,Sep=>8,Oct=>9,Nov=>10,Dec=>11);
+my ($servername, $file, $timenow, $serverid, $c, $cmd, $d, $date,
+    $domain, $first_date, $first_host, %hash, $hashcount, $host,
+    $hour, $i, $id, $info, $ip, %iphash, %iptime, $latest,
+    $latest_str, $m, $mac, @match, $matchbyip, %matchhash,
+    $matchtype, $mcount, $min, $notfounds, $notupdated, $pm,
+    @q, $res, $rest, $sec, $t, $type, $via, $linecount);
 
 ###################################################################
+my ($help,$commit,$year,$verbose,$debug);
 
-GetOptions("help|h","verbose|v","debug|d","commit","year=s");
+$timenow = time();
+$year    = (localtime($timenow))[5] + 1900;
+$verbose = 0;
+$debug   = 0;
+$commit  = 0;
 
-if ($opt_help || @ARGV < 2) {
-  print "syntax: $0 [--help] [--verbose] [--commit] [--year=<YYYY>]",
-        " <servername> <logfile>\n\n";
-  print "" if ($opt_help);
+GetOptions('help|h'    => \$help,
+	   'commit'    => \$commit,
+	   'verbose|v' => \$verbose,
+	   'year=i'    => \$year,
+	   'debug=i'   => \$debug,
+    );
+
+if ($help || @ARGV < 2) {
+  print
+      "syntax: $0 [--help] [--verbose] [--commit] [--year=<YYYY>]" .
+      " <servername> <logfile>\n\n";
   exit(0);
 }
 
-$opt_verbose = ($opt_verbose ? 1 : 0);
-$opt_debug = ($opt_debug ? 1 : 0);
-$opt_commit = ($opt_commit ? 1 : 0);
-$servername=$ARGV[0];
-$file=$ARGV[1];
-$timenow=time();
-$year=(localtime($timenow))[5];
+$servername = $ARGV[0];
+$file       = $ARGV[1];
 
-if ($opt_year) {
-  fatal("invalid argument for option --year ($opt_year)")
-    unless ($opt_year =~ /^\d\d\d\d$/);
-  $year=$opt_year - 1900;
-  fatal("invalid year specified: $opt_year") unless ($year > 0);
+if ($year) {
+  fatal("invalid argument for option --year ($year)")
+    unless ($year =~ /^\d\d\d\d$/);
 }
 
-print "Using year (".($year+1900).") as the year for data in logfile.\n"
-  if ($opt_verbose);
-
+print "Using year ($year) as the year for data in logfile.\n"
+    if ($verbose);
 
 fatal("cannot read input file '$file'") unless (-r $file);
-db_connect();
 
-$serverid=get_server_id($servername);
+db_connect();
+$serverid = get_server_id($servername);
 fatal("cannot find server '$servername'") unless ($serverid > 0);
-print "Updating server: $servername ($serverid)\n" if ($opt_verbose);
+print "Updating server: $servername ($serverid)\n" if ($verbose);
 
 undef @q;
 db_query("SELECT MAX(h.dhcp_date) FROM hosts h, zones z " .
 	 "WHERE z.server=$serverid AND h.zone=z.id AND dhcp_date > 0;",\@q);
-$latest=($q[0][0] > 0 ? $q[0][0] : 0);
+
+$latest     = (defined($q[0][0]) and $q[0][0] > 0) ? $q[0][0] : 0;
 $latest_str = localtime($latest);
 
 print "Latest dhcp_date for this server: $latest_str ($latest)\n"
-  if ($opt_verbose);
+  if ($verbose);
 
-
-print "Reading logfile..." if ($opt_verbose);
+print "Reading logfile ...\n" if ($verbose);
 
 if ($file =~ /\.gz$/) {
   open(FILE,"gzip -dc $file |") || fatal("cannot decompress file: $file");
@@ -76,143 +95,237 @@ if ($file =~ /\.gz$/) {
   open(FILE,"$file") || fatal("cannot open file: $file");
 }
 
-while (<FILE>) {
-  next unless /^(\S+)\s+(\d+)\s+(\d+):(\d+):(\d+)\s+((\S+)\s+dhcpd:(\s+\[.+?\])?|\[dhcpd\])\s(.*)$/;
+my @reverse_lines = reverse <FILE>; # Read entire file into array in reverse order. ****
 
-  $m=$months{$1}; $d=$2; $hour=$3; $min=$4; $sec=$5; $host=$7; $rest=$9;
-  $t=timelocal($sec,$min,$hour,$d,$m,$year);
-  $first_date = $t unless (defined $first_date);
-  # hostname info not currently used anywhere...
-  $first_host = $host unless (defined $first_host);
-  fatal("Log contains new year or time shifts backwards!")
-    if (($t+86400) < $first_date);
-  $mac=''; $cmd=''; $ip=''; $via='';
-  #print "$m,$d,$hour,$min,$sec,$host,$rest\n";
+print "Processing logfile ...\n" if ($verbose);
 
-  if ($rest =~ /^(DHCPDISCOVER|BOOTREQUEST)\s+from\s+(\S+)\s+via\s+(.*)$/) {
-    #print "$1 $2 $3\n";
-    $cmd=$1;
-    $mac=$2;
-    $via=$3;
-  }
-  elsif ($rest =~ /^(DHCPREQUEST)\s+for\s+(\S+)(\s+\((\S+)\))?\s+from\s+(\S+)\s+via\s+(.*)$/) {
-    $cmd=$1;
-    $mac=$5;
-    $via=$6;
-    #print "$1 $2 ($4) $5 '$6' : $mac\n";
-  }
-  elsif ($rest =~ /^(DHCPACK|DHCPNAK)\s+on\s+(\S+)\s+to\s+(\S+)\s+via\s+(.*)$/) {
-    $cmd=$1;
-    $ip=$2;
-    $mac=$3;
-    $via=$4;
-    #print "$1 $2 $3 '$4'\n";
-  }
-  elsif ($rest =~ /^(BOOTREPLY)\s+for\s+(\S+)\s+to\s+(\S+)\s+\((\S+)\)\s+via\s+(.*)$/) {
-    $cmd=$1;
-    $ip=$2;
-    $mac=$4;
-    $via=$5;
-    #print "$1 $2 $3 $4 '$5'\n";
-  }
+# visual progress indicator if verbose and we have a tty
+my (@pa) = ("\b/","\b-","\b\\","\b|");
+my ($ln) = 0;
+my ($progress) = 0;
+if ($verbose and -t STDOUT) {
+    $| = 1;
+    $progress = 1;
+}
 
+# while (<FILE>) {
+foreach (@reverse_lines) { # Process array instead of file. ****
 
-  if ($mac) {
-    my $origmac=$mac;
-    $mac = uc($mac);
-    $mac =~ s/[^A-F0-9]//g;
-    next if (length($mac) == 32); # ignore those damn MS RAS requests...
-    unless (length($mac)==12) {
-      print "$file($.): invalid mac addres found ($origmac)\n";
-      next;
+    # show visual progress ...
+    if ($progress) {
+	if (++$ln % 100) {
+	    printf "\rline [ %s ]  %s",$ln,$pa[$ln % 4];
+	} elsif ($ln % 10) {
+	    printf "  %s",$pa[$ln % 4];
+	}
     }
-    #print "$t : $mac\n";
-    $hash{$mac}={} unless (defined $hash{$mac});
-    $hash{$mac}->{$cmd}=$t;
-    $hash{$mac}->{"$cmd-via"}=$via;
-    $hash{$mac}->{"$cmd-ip"}=$ip;
-    $iphash{$ip}=$mac if ($ip);
-  }
+
+    if (/^(\S+)\s+(\d+)\s+(\d+):(\d+):(\d+)\s+((\S+)\s+dhcpd:(\s+\[.+?\])?|\[dhcpd\])\s(.*)$/) {
+	$m=$months{$1}; $d=$2; $hour=$3; $min=$4; $sec=$5; $host=$7; $rest=$9;
+ 	print "[$1] [$2] [$3]\n" if ($debug > 1);
+	if (defined $pm && $m > $pm) { # ****
+	    $year--;
+	    print "Year changed to ($year)\n" if ($verbose);
+	} # ****
+	$pm = $m;
+	$t=timelocal($sec,$min,$hour,$d,$m,$year);
+    } elsif (/^<\d{2}>1\s+(\S+)\s+(\S+)\s+dhcpd\s+(?:\W+)(.*)$/) { # systemd log format
+	print "[$1] [$2] [$3]\n" if ($debug > 1);
+	$t = UnixDate(ParseDate("$1"),"%s");
+	($sec,$min,$hour,$d,$m,$year) = split(' ',strftime("%S %M %H %d %m %Y",localtime($t)));
+	$host = $2;
+	$rest = $3;
+    } elsif (/^<\d{2}>1\s(\S+)\s+(\S+)\s+dhcpd\s+\d+[^A-Z]+(.*)$/) { # rfc3999 systemd log format
+	print "[$1] [$2] [$3]\n" if ($debug > 1);
+	$t = UnixDate(ParseDate("$1"),"%s");
+	($sec,$min,$hour,$d,$m,$year) = split(' ',strftime("%S %M %H %d %m %Y",localtime($t)));
+	$host = $2;
+	$rest = $3;
+    } else {
+	next;
+    }
+
+    $first_date = $t unless (defined $first_date);
+    # hostname info not currently used anywhere ...
+    $first_host = $host unless (defined $first_host);
+# This test is not very meaningful. ****
+# fatal("Log contains new year or time shifts backwards!")
+#   if (($t+86400) < $first_date);
+    $mac=''; $cmd=''; $ip=''; $via='';
+    #print "$m,$d,$hour,$min,$sec,$host,$rest\n";
+
+    if ($rest =~ /^(DHCPDISCOVER|BOOTREQUEST)\s+from\s+(\S+)\s+via\s+(.*)$/) {
+	print "$1 $2 $3\n" if ($debug == 5);
+	$cmd=$1;
+	$mac=$2;
+	$via=$3;
+    } elsif ($rest =~ /^(DHCPREQUEST)\s+for\s+(\S+)(\s+\((\S+)\))?\s+from\s+(\S+)\s+via\s+(.*)$/) {
+	$cmd=$1;
+	$mac=$5;
+	$via=$6;
+	print "$1 $2 ($4) $5 '$6' : $mac\n" if ($debug == 6);
+    } elsif ($rest =~ /^(DHCPACK|DHCPNAK)\s+on\s+(\S+)\s+to\s+(\S+)\s+via\s+(.*)$/) {
+	$cmd=$1;
+	$ip=$2;
+	$mac=$3;
+	$via=$4;
+	print "$1 $2 $3 '$4'\n" if ($debug == 6);
+    } elsif ($rest =~ /^(BOOTREPLY)\s+for\s+(\S+)\s+to\s+(\S+)\s+\((\S+)\)\s+via\s+(.*)$/) {
+	$cmd=$1;
+	$ip=$2;
+	$mac=$4;
+	$via=$5;
+	print "$1 $2 $3 $4 '$5'\n" if ($debug == 6);
+    }
+
+    next unless ($cmd eq 'DHCPACK' || $cmd eq 'BOOTREPLY');
+
+# **** Don't let older data overwrite newest data.
+# **** Store newest occurrence of each ip.
+# **** IPv6s in db are compressed; compress IPv6s from log, too.
+    $ip = ipv6compress($ip);
+    if ($ip && !$iptime{$ip}) { $iptime{$ip} = [$t, $mac, $via]; }
+
+    if ($mac) {
+	my $origmac=$mac;
+	$mac = uc($mac);
+	$mac =~ s/[^A-F0-9]//g;
+	next if (length($mac) == 32); # ignore those damn MS RAS requests ...
+	unless (length($mac)==12) {
+	    print "$file($.): invalid mac addres found ($origmac)\n";
+	    next;
+	}
+	#print "$t : $mac\n";
+	next if (defined $hash{$mac}); # Store each host only once (latest record). ****
+#   $hash{$mac}={} unless (defined $hash{$mac});
+	$hash{$mac}={}; # ****
+	$hash{$mac}->{$cmd}=$t;
+	$hash{$mac}->{"$cmd-via"}=$via;
+	$hash{$mac}->{"$cmd-ip"}=$ip;
+	$iphash{$ip}=$mac if ($ip);
+    }
 
 }
 
+if ($progress) {
+    printf "\rline [ %s ]    \n",$ln
+}
+
 close(FILE);
+undef @reverse_lines; # Drop the array to free memory. ****
 
 $hashcount = (keys %hash);
-print "done. (found $hashcount different MACs)\n" if ($opt_verbose);
+print "Done. (found $hashcount different MACs)\n" if ($verbose);
 
-print "Fetching host info from database..." if ($opt_verbose);
+print "Fetching host info from database ...\n" if ($verbose);
 undef @q;
-db_query("SELECT h.id,h.ether,h.dhcp_date,h.domain,a.ip " .
+db_query("SELECT h.id,h.ether,h.dhcp_date,h.domain,a.ip,h.type " .
 	 "FROM hosts h JOIN zones z ON h.zone=z.id " .
 	 " LEFT JOIN a_entries a ON a.host=h.id " .
-	 "WHERE z.server=$serverid AND h.type=1",\@q);
+#	 "WHERE z.server=$serverid AND h.type=1",\@q);
+	 "WHERE z.server=$serverid AND (h.type=1 OR h.type=9)",\@q); # Include "DHCP only" hosts. ****
 $c=@q;
-print "done. ($c suitable host entries found in database)\n" if ($opt_verbose);
+print "Done. ($c suitable host entries found in database)\n" if ($verbose);
 $matchbyip=0;
 $notfounds=0;
 $notupdated=0;
 
+if ($debug == 9) {
+ print "-- hash --\n";
+ print Dumper(%hash);
+ print "-- \@q --\n";
+ print Dumper(@q);
+ exit(0);
+}
+
+print "Matching hosts ...\n" if ($verbose);
+
 for $i (0..$#q) {
-  $mac=uc($q[$i][1]);
-  $ip=$q[$i][4];
-  $matchtype='MAC';
-  unless (defined $hash{$mac}) {
-    # try to lookup host record by IP when MAC lookup fails...
-    if ($iphash{$ip}) {
-      $mac=$iphash{$ip};
-      unless (defined $hash{$mac}) {
+    #$mac  = uc($q[$i][1]);
+    $mac  = defined($q[$i][1]) ? uc($q[$i][1]) : "";
+    $ip   = $q[$i][4];
+    $type = $q[$i][5]; # ****
+
+    if ($type == 1) { # ****
+	$matchtype='MAC';
+	unless (defined $hash{$mac}) {
+# try to lookup host record by IP when MAC lookup fails ...
+	    if (defined($ip) and $iphash{$ip}) {
+		$mac=$iphash{$ip};
+		unless (defined $hash{$mac}) {
+		    $notfounds++;
+		    next;
+		}
+		$matchtype='IP';
+		$matchbyip++;
+	    } else {
+		$notfounds++;
+		next;
+	    }
+	}
+    } elsif (defined($ip) and $iptime{$ip}) { # DHCP only. ****
+	$t   = $iptime{$ip}[0];
+	$mac = $iptime{$ip}[1];
+	$via = $iptime{$ip}[2];
+	$matchtype = 'IP';
+	$matchbyip++;
+	$mac = '';
+    } else { # ****
 	$notfounds++;
 	next;
-      }
-      $matchtype='IP';
-      $matchbyip++;
-    } else {
-      $notfounds++;
-      next;
     }
-  }
-  $id=$q[$i][0];
-  $date=($q[$i][2] > 0 ? $q[$i][2] : 0);
-  $domain=$q[$i][3];
-  $t = $hash{$mac}->{DHCPACK} > 0  ?  $hash{$mac}->{DHCPACK}  :  0;
-  $via = $hash{$mac}->{'DHCPACK-via'};
-  $ip = $hash{$mac}->{'DHCPACK-ip'};
-  if ($hash{$mac}->{BOOTREPLY} > $t) {
-    $t = $hash{$mac}->{BOOTREPLY};
-    $via = $hash{$mac}->{'BOOTREPLY-via'};
-    $ip = $hash{$mac}->{'BOOTREPLY-ip'};
-  }
-  
+
+    $id     = $q[$i][0];
+    $date   = (defined($q[$i][2]) and $q[$i][2] > 0) ? $q[$i][2] : 0;
+    $domain = $q[$i][3];
+
+    if ($type == 1) { # ****
+	#$t = $hash{$mac}->{DHCPACK} > 0  ?  $hash{$mac}->{DHCPACK}  :  0;
+	if (defined($hash{$mac}->{DHCPACK})) {
+	    $t = $hash{$mac}->{DHCPACK} > 0  ?  $hash{$mac}->{DHCPACK}  :  0;
+	} else {
+	    $t = 0;
+	}
+	$via = $hash{$mac}->{'DHCPACK-via'};
+	$ip = $hash{$mac}->{'DHCPACK-ip'};
+	if (defined($hash{$mac}->{BOOTREPLY}) and $hash{$mac}->{BOOTREPLY} > $t) {
+	    $t = $hash{$mac}->{BOOTREPLY};
+	    $via = $hash{$mac}->{'BOOTREPLY-via'};
+	    $ip = $hash{$mac}->{'BOOTREPLY-ip'};
+	}
+
+    } # ****
+
+# This test is no longer very meaningful. ****
   next unless ($t > 0); # skip unless time from DHCPACK/BOOTREPLY
 
   if ( ($t <= $date) &&
        ($date < ($timenow + 30*86400)) # handle bogus host dhcp_dates
      ) {
     print "notupdating: $domain (".dhcpether($mac).") : $t : $date\n"
-      if ($opt_debug);
+      if ($debug);
     $notupdated++;
     next;
   }
-  
-  print "match by IP: $domain $id $date : $t ($via,$ip)\n" 
-    if ($opt_debug && $matchtype eq 'IP');
+
+  print "match by IP: $domain $id $date : $t ($via,$ip)\n"
+    if ($debug && $matchtype eq 'IP');
   push @match, [$id,$t,"$ip for " . dhcpether($mac) . " via $via"];
   $matchhash{$id}=$matchtype;
 }
 
 print "$matchbyip host(s) matched using IP\n",
-      "$notupdated host(s) info not updated\n" if ($opt_debug);
+      "$notupdated host(s) info not updated\n" if ($verbose);
 
 $mcount=@match;
 unless ($mcount > 0) {
-  print "Nothing to do (no records to be updated)\n" if ($opt_verbose);
+  print "Nothing to do (no records to be updated)\n" if ($verbose);
   exit;
 }
 
-print "Updating dhcp_date for $mcount host records..." if ($opt_verbose);
-unless ($opt_commit) {
-  print "\nNot updating records (missing --commit)\n";
+print "Updating dhcp_date for $mcount host records ...\n" if ($verbose);
+unless ($commit) {
+  print "Not updating records (missing --commit)\n";
   exit(1);
 }
 
@@ -226,9 +339,8 @@ for $i (0..$#match) {
 }
 fatal("cannot commit changes to database") if (db_commit() < 0);
 
-print "done.\n" if ($opt_verbose);
+print "Done.\n" if ($verbose);
 
 exit 0;
 
 # eof
-

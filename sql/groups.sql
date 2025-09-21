@@ -1,7 +1,7 @@
 /* groups table creation
  *
  *
- * $Id$
+ * $Id:$
  */
 
 /** Group descriptions, linked to server record. Hosts can "belong" to
@@ -24,5 +24,5 @@ CREATE TABLE groups (
        comment	    TEXT,
 
        CONSTRAINT   groups_key UNIQUE(name,server)
-) INHERITS(common_fields);
+) INHERITS(common_fields) WITH OIDS;
 

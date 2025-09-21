@@ -1,6 +1,6 @@
 /* user_rights table creation
  *
- * $Id$
+ * $Id:$
  */
 
 /** This table contains record defining user rights.  **/
@@ -31,8 +31,7 @@ CREATE TABLE user_rights (
 				100=remit (asset management),
 				101=asset management flags  */
 	rref	INT NOT NULL, /* ptr to table specified by type field */
-	rule	CHAR(40) /* R,RW,RWS or regexp */     
-);
+	rule	CHAR(80) /* R,RW,RWS or regexp */
+) WITH OIDS;
 
 CREATE INDEX user_rights_ref_index ON user_rights (type,ref);
-

@@ -2,33 +2,37 @@
 #
 # import-dhcp - imports ISC DHCPD configuration
 #
+# Copyright (c) Michal Kostenec <kostenec@civ.zcu.cz> 2013-2014.
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>  2002,2003.
-# $Id$
+# $Id:$
 #
 require 5;
-use Net::Netmask;
+# use Net::Netmask;
+use NetAddr::IP; # For IPv6.
 use Getopt::Long;
 use Sauron::DB;
 use Sauron::Util;
 use Sauron::UtilDhcp;
 use Sauron::BackEnd;
 use Sauron::Sauron;
+use Net::IP;
 
 load_config();
 
 ##############################
 
 GetOptions("help|h","verbose|v","dir=s","notransaction","chaosnet=s",
-	   "global");
+	   "global","dhcp6");
 
 if ($opt_help || @ARGV < 2) {
     print "syntax: $0 [options] <servername> <dhcpd.conf file>\n";
     print "options:\n",
+          "\t--dhcp6\t\t\timport DHCPv6 configuration\t\n",
           "\t--dir=<directory>\tdirectory where included files are located\n",
 	  "\t\t\t\t(if not in directory specified in dhcpd.conf)\n",
 	  "\t--chaosnet=<name>\ttreat this shared-network as default VLAN\n",
 	  "\t\t\t\t(default is \"CHAOS\")\n",
-	  "\t--global\t\timport 'global' entires into server settings\n",
+	  "\t--global\t\timport 'global' entries into server settings\n",
 	  "\t--verbose\t\tdisplay more detailed progress reports\n",
 	  "\t--help\t\t\tdisplay this help\n\n";
     print "" if ($opt_help);
@@ -41,6 +45,8 @@ $servername = $ARGV[0];
 $dhcpdf = $ARGV[1];
 $user = (getpwuid($<))[0];
 $chaosnet = ($opt_chaosnet ? $opt_chaosnet : 'CHAOS');
+$opt_dhcp6 = ($opt_dhcp6 ? 1 : 0);
+
 
 fatal("cannot read dhcpd.conf ($dhcpdf)") unless (-r $dhcpdf);
 
@@ -58,7 +64,7 @@ if ($dhcpdf =~ /(^.*\/)/) {
 
 # parse named.conf
 undef %data;
-process_dhcpdconf($dhcpdf,\%data);
+process_dhcpdconf($dhcpdf,\%data,$opt_dhcp6);
 
 unless ($opt_notransaction) {
   db_begin();
@@ -72,8 +78,10 @@ if ($opt_global) {
   foreach $line (@{$data{GLOBAL}}) {
     next unless $line =~ /;\s*$/;
     $line =~ s/;\s*//;
-    print "GLOBAL: $line\n" if ($opt_verbose);
-    push @{$server{dhcp}}, [0,$line,'',2];
+    print "GLOBAL: $line\n" if ($opt_verbose && !$opt_dhcp6);
+    print "GLOBAL6: $line\n" if ($opt_verbose && $opt_dhcp6);
+    push @{$server{dhcp}}, [0,$line,'',2] if !$opt_dhcp6;
+    push @{$server{dhcp6}}, [0,$line,'',2] if $opt_dhcp6;
   }
 
   fatal("cannot update server record") if (update_server(\%server) < 0);
@@ -113,49 +121,91 @@ foreach $key (sort keys %{$data{'shared-network'}}) {
 
 # networks (subnets)...
 
-$c = keys %{$data{'subnet'}};
-print "Found $c subnets (nets)\n";
+unless ($opt_dhcp6) {
+    $c = keys %{$data{'subnet'}};
+    print "Found $c subnets (nets)\n";
 
-foreach $key (sort keys %{$data{subnet}}) {
-  $rec = $data{subnet}->{$key};
-  unless (($net,$mask) = ($key =~ /^(\S+)\s+netmask\s+(\S+)\s*$/)) {
-    print "Skipping invalid subnet: $key\n";
-    next;
-  }
+    foreach $key (sort keys %{$data{subnet}}) {
+      $rec = $data{subnet}->{$key};
+      unless (($net,$mask) = ($key =~ /^(\S+)\s+netmask\s+(\S+)\s*$/)) {
+        print "Skipping invalid subnet: $key\n";
+        next;
+      }
 
-  $nh = new2 Net::Netmask($net,$mask);
-  fatal("invalid subnet: $key") unless ($nh);
-  $cidr=$nh->desc();
-  $netcounter++;
-  $name="net-$netcounter";
+#     $nh = new2 Net::Netmask($net,$mask);
+#     fatal("invalid subnet: $key") unless ($nh);
+#     $cidr=$nh->desc();
+      fatal("invalid subnet: $key") unless cidrok($net . '/' . $mask); # For IPv6.
+      $nh = new NetAddr::IP($net . '/' . $mask); # For IPv6.
+      $cidr=$nh->cidr(); # For IPv6.
 
-  undef @q;
-  $id=-1;
-  foreach $line (@{$rec}) {
-    if ($line =~ /^VLAN\s+(\".*\"|\S+)\s*$/) {
-      $vlanname=$1;
-      fatal("cannot find id for VLAN: $vlanname (bug!)")
-	unless (defined $vlans{$vlanname});
-      $id =$vlans{$vlanname};
-      next;
+      $netcounter++;
+      $name="net-$netcounter";
+
+      undef @q;
+      $id=-1;
+      foreach $line (@{$rec}) {
+        if ($line =~ /^VLAN\s+(\".*\"|\S+)\s*$/) {
+          $vlanname=$1;
+          fatal("cannot find id for VLAN: $vlanname (bug!)")
+        unless (defined $vlans{$vlanname});
+          $id =$vlans{$vlanname};
+          next;
+        }
+        next unless ($line =~ /;\s*$/);
+        $line =~ s/;\s*$//;
+        if ($line =~ /^\s*option\s+routers\s+(\S+)\s*$/) {
+          $routerip=$1;
+          print "router interface: $routerip\n" if ($opt_verbose);
+          $routers{$routerip}=-1;
+        } else {
+          push @q, [0,$line];
+        }
+      }
+
+      print "net: $cidr ($name) (vlan id=$id)\n" if ($opt_verbose);
+      $res = add_net({server=>$serverid,netname=>$name,name=>$name, net=>$cidr,subnet=>'true',vlan=>$id, dhcp_l=>\@q}) if !$opt_dhcp6;
+      $res = add_net({server=>$serverid,netname=>$name,name=>$name, net=>$cidr,subnet=>'true',vlan=>$id, dhcp_l6=>\@q}) if $opt_dhcp6;
+      fatal("cannot add NET ($key)") if ($res < 0);
     }
-    next unless ($line =~ /;\s*$/);
-    $line =~ s/;\s*$//;
-    if ($line =~ /^\s*option\s+routers\s+(\S+)\s*$/) {
-      $routerip=$1;
-      print "router interface: $routerip\n" if ($opt_verbose);
-      $routers{$routerip}=-1;
-    } else {
-      push @q, [0,$line];
-    }
-  }
-
-  print "net: $cidr ($name) (vlan id=$id)\n" if ($opt_verbose);
-  $res = add_net({server=>$serverid,netname=>$name,name=>$name,
-		  net=>$cidr,subnet=>'true',vlan=>$id, dhcp_l=>\@q});
-  fatal("cannot add NET ($key)") if ($res < 0);
 }
+else {
+    $c = keys %{$data{'subnet6'}};
+    print "Found $c subnets (nets)\n";
 
+    foreach $key (sort keys %{$data{subnet6}}) {
+      $rec = $data{subnet6}->{$key};
+      $net = $key;
+      $nh = new Net::IP($net);
+      unless ($net) {
+        print "Skipping invalid subnet: $net\n";
+        next;
+      }
+
+      $netcounter++;
+      $name="net6-$netcounter";
+
+      undef @q;
+      $id=-1;
+      foreach $line (@{$rec}) {
+        if ($line =~ /^VLAN\s+(\".*\"|\S+)\s*$/) {
+          $vlanname=$1;
+          fatal("cannot find id for VLAN: $vlanname (bug!)")
+        unless (defined $vlans{$vlanname});
+          $id =$vlans{$vlanname};
+          next;
+        }
+        next unless ($line =~ /;\s*$/);
+        $line =~ s/;\s*$//;
+        push @q, [0,$line];
+      }
+
+      print "net: $net ($name) (vlan id=$id)\n" if ($opt_verbose);
+      $res = add_net({server=>$serverid,netname=>$name,name=>$name,
+              net=>$net,subnet=>'true',vlan=>$id, dhcp_l6=>\@q});
+      fatal("cannot add NET ($net)") if ($res < 0);
+    }
+}
 
 # groups
 
@@ -173,11 +223,85 @@ foreach $key (sort keys %{$data{group}}) {
     push @q, [0,$line,''];
   }
 
-  $res = add_group({server=>$serverid,name=>$key,type=>1,dhcp=>\@q});
+  $res = add_group({server=>$serverid,name=>$key,type=>1,dhcp=>\@q}) if !$opt_dhcp6;
+  $res = add_group({server=>$serverid,name=>$key,type=>1,dhcp6=>\@q}) if $opt_dhcp6;
   fatal("cannot add GROUP ($key)") if ($res < 0);
   $groups{$key}=$res;
 }
 
+# dhcp class
+
+$c = keys %{$data{'class'}};
+print "Found $c classes\n";
+
+foreach $key (sort keys %{$data{class}}) {
+  $rec = $data{class}->{$key};
+  print "class: $key\n" if ($opt_verbose);
+
+  undef @q;
+  foreach $line (@{$rec}) {
+    next unless ($line =~ /;\s*$/);
+    $line =~ s/;\s*$//;
+    push @q, [0,$line,''];
+  }
+
+  $res = add_group({server=>$serverid,name=>$key,type=>3,dhcp=>\@q}) if !$opt_dhcp6;
+  $res = add_group({server=>$serverid,name=>$key,type=>3,dhcp6=>\@q}) if $opt_dhcp6;
+  fatal("cannot add CLASS ($key)") if ($res < 0);
+  $classes{$key}=$res if $res;
+}
+
+# dhcp subclass
+
+$c = keys %{$data{'subclass'}};
+print "Found $c subclasses\n";
+
+foreach $key (sort keys %{$data{subclass}}) {
+  $rec = $data{subclass}->{$key};
+  print "subclass: $key\n" if ($opt_verbose);
+
+  undef @q;
+  foreach $line (@{$rec}) {
+    next unless ($line =~ /;\s*$/);
+    #UWB ~ match pick-first-value (option dhcp-client-identifier, hardware)
+    # 1:00:11:22:33:44:55 = hardware ethernet 00:11:22:33:44:55;  FIXIT;-)
+    $line =~ s/^1:// unless ($opt_dhcp6);
+    $line =~ s/://g;
+    $line =~ s/;\s*$//;
+    $line = uc($line);
+    #sclass2class{00:11:22:33:44:55} = 1
+    push @{$sclass2class{$line}}, [undef, $classes{$key}, 2] if $classes{$key};
+  }
+}
+
+
+# dhcp pools
+$pool_section = (!$opt_dhcp6 ? 'pool' : 'pool6');
+
+$c = keys %{$data{$pool_section}};
+print "Found $c pools\n";
+
+foreach $key (sort keys %{$data{$pool_section}}) {
+  $rec = $data{$pool_section}->{$key};
+  print "pool: $key\n" if ($opt_verbose);
+
+  undef @q;
+  foreach $line (@{$rec}) {
+    next unless ($line =~ /;\s*$/);
+    $line =~ s/;\s*$//;
+    if($line =~ /^range[6]?\s+(.*)\s+(.*)/) {
+        $range = "$1 - $2";
+        next;
+    }
+
+    push @q, [0,$line,''];
+  }
+
+  $res = add_group({server=>$serverid,name=>$key,type=>2,dhcp=>\@q}) if !$opt_dhcp6;
+  $res = add_group({server=>$serverid,name=>$key,type=>2,dhcp6=>\@q}) if $opt_dhcp6;
+  fatal("cannot add POOL ($key)") if ($res < 0);
+  $pools{$range} = $res if $res;
+}
 
 # hosts
 
@@ -188,7 +312,7 @@ foreach $key (keys %{$data{host}}) {
   $rec = $data{host}->{$key};
 
   $id=-1; $ip=''; $ether='';
-  undef @q;
+  my @q;
 
   foreach $line (@{$rec}) {
     if ($line =~ /^GROUP\s+(\S+)\s*$/) {
@@ -202,37 +326,51 @@ foreach $key (keys %{$data{host}}) {
     next unless ($line =~ /;\s*$/);
     $line =~ s/;\s*$//;
     next if ($line =~ /^\s*option\s+domain-name\s+/);
-    if ($line =~ /^\s*fixed\-address\s+(\S.*)\s*$/) {
+    if ($line =~ /^\s*fixed\-address[6]?\s+(\S.*)\s*$/) {
       $tmp =$1;
-      if ($tmp =~ /^\s*(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\s*$/) {
+      #if ($tmp =~ /^\s*(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\s*$/) {
+      if(is_ip($tmp)) {
 	$ip=$1;
       } else {
 	print "Ignoring host with multiple IPs: $key\n";
 	next;
       }
     }
-    elsif ($line =~ /^\s*hardware\s+ethernet\s+(([0-9a-fA-F]{1,2}(:|\b)){6})\s*$/) {
+    elsif ($line =~ /^\s*hardware\s+ethernet\s+(([0-9a-fA-F]{1,2}(:|\b)){6})\s*$/ ||
+           $line =~ /^\s*host-identifier\s+option\s+dhcp6\.client-id\s+(.*)\s*$/) {
       my @tmp = split(/:/, $1);
       my $mac = "";
       foreach $byte (@tmp){ $mac .= sprintf ("%02s", $byte); }
       $ether=uc($mac);
     } else {
-      push @q, $line;
+      push @q, [undef, $line, '', 2];
     }
 
   }
   next unless ($ip && $ether);
-  print "host: $key ip=$ip,ether=$ether,groupid=$id\n" if ($opt_verbose);
-  $hosts{$ip}=[$ether,$id,$key];
-}
 
+  #Add subclass
+  if($sclass2class{$ether}) {
+    unshift @{$sclass2class{$ether}}, ['SubGroup'];
+  }
+  else {
+    #@sclasess = [];
+  }
+
+  unshift @q, ['DHCP', 'Comments'] if @q > 0;
+
+  print "host: $key ip=$ip,ether=$ether,groupid=$id\n" if ($opt_verbose && !$opt_dhcp6);
+  print "host: $key ip=$ip,duid=$ether,groupid=$id\n" if ($opt_verbose && $opt_dhcp6);
+  $hosts{$ip}=[$ether,$id,$key,$sclass2class{$ether}, \@q];
+
+}
 
 print "Querying database...";
 undef @list;
 db_query("SELECT h.id,h.domain,a.ip FROM hosts h,zones z, a_entries a " .
 	 "WHERE z.server=$serverid AND h.zone=z.id AND h.type=1 " .
 	 " AND a.host=h.id ORDER BY a.ip",\@list);
-print "found ",int(@list)," hosts\n";
+print "Found ",int(@list)," hosts\n";
 
 if (@list > 0) {
   for $i (0..$#list) {
@@ -271,13 +409,14 @@ foreach $ip (keys %hostrefs) {
   $domain=$list[$i][1];
   $ip=$list[$i][2];
 
-  if ($macs{$hosts{$ip}[0]}){
+  if ($macs{$hosts{$ip}[0]} && !$opt_dhcp6){
     print "duplicate found, $hosts{$ip}[0]\n" if ($opt_verbose);
     print "Updating $domain ($ip,$id) <-- ",
           "$macs{$hosts{$ip}[0]},$hosts{$ip}[1],$hosts{$ip}[2]\n"
 	    if ($opt_verbose);
-    $res = update_host({id=>$id,ether_alias=>$macs{$hosts{$ip}[0]},
-			grp=>$hosts{$ip}[1]});
+
+    $res = update_host({id=>$id,ether_alias=>$macs{$hosts{$ip}[0]}, grp=>$hosts{$ip}[1], subgroups=> \@{$hosts{$ip}[3]}, dhcp_l=>$hosts{$ip}[4]}) if !$opt_dhcp6;
+    $res = update_host({id=>$id,ether_alias=>$macs{$hosts{$ip}[0]}, grp=>$hosts{$ip}[1], subgroups=> \@{$hosts{$ip}[3]}, dhcp_l6=>$hosts{$ip}[4]}) if $opt_dhcp6;
     fatal("cannot update host: $domain ($res)\n".db_errormsg()) if ($res < 0);
     next;
   }
@@ -285,22 +424,56 @@ foreach $ip (keys %hostrefs) {
 
   print "Updating $domain ($ip,$id) <-- ",
         "$hosts{$ip}[0],$hosts{$ip}[1],$hosts{$ip}[2]\n" if ($opt_verbose);
-  $res = update_host({id=>$id,ether=>$hosts{$ip}[0],grp=>$hosts{$ip}[1]});
-  fatal("cannot update host: $domain ($res)\n".db_errormsg()) if ($res < 0);
+
+    $res = update_host({id=>$id,ether=>$hosts{$ip}[0],grp=>$hosts{$ip}[1], subgroups=> \@{$hosts{$ip}[3]}, dhcp_l=>$hosts{$ip}[4]}) if !$opt_dhcp6;
+    $res = update_host({id=>$id, duid=>$hosts{$ip}[0],grp=>$hosts{$ip}[1], subgroups=> \@{$hosts{$ip}[3]}, dhcp_l6=>$hosts{$ip}[4]}) if $opt_dhcp6;
+
+    fatal("cannot update host: $domain ($res)\n".db_errormsg()) if ($res < 0);
 }
 
+print "Updating dynamic pools members\n";
 
-print "Updating routers...\n";
-foreach $ip (keys %routers) {
-  next if ($routers{$ip} < 0);
-  $i=$routers{$ip};
-  $id=$list[$i][0];
-  $domain=$list[$i][1];
-  print "router interface: $ip $domain (id=$id)\n" if ($opt_verbose);
-  fatal("cannot update router info for: $domain ($ip)")
-    if (update_host({id=>$id,router=>1}) < 0);
+foreach my $pool (keys %pools) {
+    $pool =~ /(.*)\s\-\s(.*)/;
+    $pool_s = $1;
+    $pool_e = $2;
+    $pid = $pools{$pool};
+
+    db_query("SELECT h.id,h.domain,a.ip FROM hosts h,zones z, a_entries a " .
+         "WHERE z.server=$serverid AND h.zone=z.id AND h.type=1 " .
+         " AND a.host=h.id AND a.ip >= inet '$pool_s' AND a.ip <= inet '$pool_e'" .
+         " ORDER BY a.ip",\@pool_members);
+
+    print "Found ",int(@pool_members)," host(s) in range '$pool'\n" if ($opt_verbose);
+
+    my $range_size = (new Net::IP($pool))->size();
+    my $hosts_diff = $range_size - int(@pool_members);
+
+    print "Warning: ", $hosts_diff, " DNS records for pool '$pool' not found!\n" if $hosts_diff > 0;
+    print "Warning: Found more DNS records than size of the pool '$pool'. Possible duplicates in different zones!\n" if $hosts_diff < 0;
+
+    foreach my $m (@pool_members) {
+        $id = $$m[0];
+        $domain = $$m[1];
+        $ip = $$m[2];
+        print "Updating pool grp $domain ($ip,$id) <-- GRP: $pid\n" if ($opt_verbose);
+        $res = update_host({id=>$id,grp=>$pid});
+        fatal("cannot update hosts pool: $domain ($res)\n".db_errormsg()) if ($res < 0);
+    }
 }
 
+unless ($opt_dhcp6) {
+    print "Updating routers...\n";
+    foreach $ip (keys %routers) {
+      next if ($routers{$ip} < 0);
+      $i=$routers{$ip};
+      $id=$list[$i][0];
+      $domain=$list[$i][1];
+      print "router interface: $ip $domain (id=$id)\n" if ($opt_verbose);
+      fatal("cannot update router info for: $domain ($ip)")
+        if (update_host({id=>$id,router=>1}) < 0);
+    }
+}
 
 unless ($opt_notransaction) {
   db_ignore_begin_and_commit(0);

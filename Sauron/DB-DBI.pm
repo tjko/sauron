@@ -1,6 +1,6 @@
 # Sauron::DB.pm  -- Sauron database interface routines using DBI
 #
-# $Id$
+# $Id:$
 #
 package Sauron::DB;
 require Exporter;
@@ -10,7 +10,10 @@ use Sauron::Util;
 use strict;
 use vars qw($VERSION @ISA @EXPORT);
 
-$VERSION = '$Id$ ';
+use Sys::Syslog qw(:DEFAULT setlogsock);
+Sys::Syslog::setlogsock('unix');
+
+$VERSION = '$Id:$ ';
 
 @ISA = qw(Exporter); # Inherit from Exporter
 @EXPORT = qw(
@@ -18,7 +21,7 @@ $VERSION = '$Id$ ';
 	     db_connect2
 	     db_exec
 	     db_query
-	     db_lastoid
+	     db_lastid
 	     db_errormsg
 	     db_lasterrormsg
 	     db_debug
@@ -36,12 +39,25 @@ $VERSION = '$Id$ ';
 	     db_insert
 	    );
 
+#	     db_lastoid # ** Replaced by db_lastid 2018-09-25 TVu
+
+sub write2log
+{
+  #my $priority  = shift;
+  my $msg       = shift;
+  my $filename  = File::Basename::basename($0);
+
+  Sys::Syslog::openlog($filename, "cons,pid", "debug");
+  Sys::Syslog::syslog("info", "$msg");
+  Sys::Syslog::closelog();
+} # End of write2log
 
 my $dbh = 0;
 my $db_last_result = 0;
 my $db_debug_flag = 0;
 my $db_last_error_msg = '';
-my $db_last_oid = 0;
+# my $db_last_oid = 0; # ** Removed 2018-09-25 TVu
+my $db_last_id = 0; # ** Added 2018-09-25 TVu
 my $db_ignore_begin_and_commit_flag = 0;
 
 sub db_connect2() {
@@ -81,7 +97,12 @@ sub db_exec($) {
   }
 
   $rows = $sth->rows;
-  $db_last_oid=$sth->{pg_oid_status};
+
+# $db_last_oid=$sth->{pg_oid_status}; # ** Removed 2018-09-25 TVu
+# eval { $db_last_id = $sth->fetch()->[0]; }; # ** Added 2018-09-25 TVu
+  eval { # ** Added 2018-10-01 TVu
+      $db_last_id = $sqlstr =~ /returning/i ? $sth->fetch()->[0] : -1;
+  };
 
   return ($rows > 0 ? $rows : 0);
 }
@@ -117,8 +138,12 @@ sub db_query($$) {
 }
 
 
-sub db_lastoid() {
-  return $db_last_oid;
+# sub db_lastoid() { # ** Removed 2018-09-25 TVu
+#   return $db_last_oid;
+# }
+
+sub db_lastid() { # ** Added 2018-09-25 TVu
+  return $db_last_id;
 }
 
 sub db_errormsg() {
@@ -159,14 +184,14 @@ sub db_ignore_begin_and_commit($) {
 }
 
 
-
 sub db_encode_str($) {
-  my($str) = @_;
+  my ($str) = @_;
 
   return "NULL" if ($str eq '');
   $str =~ s/\\/\\\\/g;
-  $str =~ s/\'/\\\'/g;
-  return "'" . $str . "'";
+  #$str =~ s/\'/\\\'/g;
+  $str =~ s/\'/\'\'/g;
+  return ($str =~ /\\/ ? 'e' : '') . "'" . $str . "'";
 }
 
 
@@ -178,7 +203,8 @@ sub db_build_list_str($) {
 
   foreach $f (@{$list}) {
     $tmp.="," if ($tmp);
-    $f =~ s/\'/\\\'/g;
+    #$f =~ s/\'/\\\'/g;
+    $f =~ s/\'/\'\'/g;
     $f =~ s/\"/\\\\\"/g;
     $tmp.="\"$f\"";
   }
@@ -249,8 +275,6 @@ sub db_insert($$$) {
   my($table,$fields,$data) = @_;
   my($str,$i,$j,$c,$row,$flag,$res);
 
-
-  $c=0;
   for $i (0..$#{$data}) {
     $row=$$data[$i]; $flag=0;
     $str.="INSERT INTO $table ($fields) VALUES(";
@@ -260,14 +284,9 @@ sub db_insert($$$) {
       $flag=1;
     }
     $str.=");\n";
-    $c++;
-    if ($c > 25) {
-      $c=0;
-      #print "BLOCK: $str\n";
-      $res=db_exec($str);
-      return -1 if ($res < 0);
-      $str='';
-    }
+    $res=db_exec($str);
+    return -1 if ($res < 0);
+    $str='';
   }
 
   if ($str ne '') {

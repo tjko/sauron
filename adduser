@@ -1,9 +1,9 @@
-#!/usr/bin/perl -I/usr/local/sauron
+#!/usr/bin/perl -I/opt/sauron
 #
 # adduser - utility to create users
 #
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000-2003.
-# $Id$
+# $Id:$
 #
 require 5;
 use Time::Local;
@@ -21,23 +21,32 @@ set_muser($user);
 $i = ($#ARGV == -1 );   # If no args, become interactive
 
 GetOptions("user=s","superuser","help|h","passwd=s","name=s",
-	   "group=s","comment=s","email=s","expiration=s");
+	   "group=s","comment=s","email=s","expiration=s",
+	   "server=s", "zone=s" ); # Server & zone added 2017-11-14 TVu
 
 if ($opt_help) {
-  print "syntax: $0 [--user=username] [--group=name] [--superuser] " .
-        "[--help]\n" ,
-        "\t\t[--passwd=password] [--name=\"<user's full name>\"]\n",
-	"\t\t[--email=foo\@bar] [--comment=\"comments\"]\n",
-	"\t\t[--expiration=dd-mm-yyyy]\n";
+  print "syntax: $0 [--help] [--user=username] [--passwd=password]\n" ,
+      "\t\t[--name=\"<user's full name>\"] [--email=foo\@bar]\n",
+      "\t\t[--comment=\"comments\"] [--superuser] [--expiration=dd-mm-yyyy]\n",
+      "\t\t[--group=name] [--server=<default server name>]\n",
+      "\t\t[--zone=<default zone name>]\n";
   print "\n" if ($opt_help); # to get rid of warnings :)
   exit(0);
 }
 
 db_connect();
 
+# Title for questions unless all items were given on the command line.
+# Superuser status is not checked; it will not be asked interactivly.
+unless ($opt_user && $opt_passwd && $opt_name && $opt_group && $opt_comment &&
+	$opt_email && $opt_expiration && $opt_server && $opt_zone || ! $i) {
+    print "Please enter the following information:\n";
+}
+
+# First ask about user.
 
 unless ($opt_user) {
-  print "Enter username: ";
+  print "Username: ";
   chomp ($opt_user = <STDIN>);
   $i=1;
 }
@@ -46,36 +55,39 @@ fatal("Invalid username '$opt_user'!")
 fatal("User allready exists!") unless (get_user($opt_user,\%user));
 undef %user;
 
-unless ($opt_group || ! $i) {
-  print "Enter group name (empty for none): ";
-  chomp($opt_group = <STDIN>);
+unless ($opt_passwd) {
+  my $pmap = 'abcdefghijklmnopqrstuvwxyz' .
+             'ABCDEFGHIJKLMNOPQRSTUVWXYZ' .
+	     '0123456789+-!$#';
+  my $dpasswd;
+  for $i (1..8) { $dpasswd.=substr($pmap,int(rand(length($pmap))),1); }
+  print "Password [$dpasswd]: ";
+  chomp ($opt_passwd = <STDIN>);
+  $i=1;
+  $opt_passwd = $dpasswd unless($opt_passwd);
 }
-
-if ($opt_group) {
-  $gid=get_user_group_id($opt_group);
-  fatal("Cannot find group '$opt_group'") unless ($gid > 0);
-} else {
-  $gid=-1;
-}
-
 
 unless ($opt_name || ! $i) {
-  print "Enter user description (full name): ";
+  print "User description (full name): ";
   chomp($opt_name = <STDIN>);
 }
 
 unless ($opt_email || ! $i) {
-  print "Enter user email address: ";
+  print "User's email address: ";
   chomp($opt_email = <STDIN>);
 }
 
 unless ($opt_comment || ! $i) {
-  print "Enter optional user info: ";
+  print "Optional user info: ";
   chomp($opt_comment = <STDIN>);
 }
 
+$opt_superuser=($opt_superuser==1?"true":"false");
+$user = (getpwuid($<))[0];
+$pwd=pwd_make($opt_passwd,$SAURON_PWD_MODE);
+
 unless ($opt_expiration || ! $i ) {
-  print "Enter account expiration date (dd-mm-yyyy, +<n>d, +<n>y) [none]: ";
+  print "Account expiration date (dd-mm-yyyy, +<n>d, +<n>y) [none]: ";
   chomp($opt_expiration = <STDIN>);
 }
 if ($opt_expiration =~ /^\s*(\d{1,2})-(\d{1,2})-(\d{4})\s*$/) {
@@ -90,31 +102,60 @@ if ($opt_expiration =~ /^\s*(\d{1,2})-(\d{1,2})-(\d{4})\s*$/) {
   fatal("invalid expiration date specification: $opt_expiration");
 }
 
-unless ($opt_passwd) {
-  my $pmap = 'abcdefghijklmnopqrstuvwxyz' .
-             'ABCDEFGHIJKLMNOPQRSTUVWXYZ' .
-	     '0123456789+-!$#';
-  my $dpasswd;
-  for $i (1..8) { $dpasswd.=substr($pmap,int(rand(length($pmap))),1); }
-  print "Enter password [$dpasswd]: ";
-  chomp ($opt_passwd = <STDIN>);
-  $i=1;
-  $opt_passwd = $dpasswd unless($opt_passwd);
+# After user-specific items, ask about group, default server and default zone.
+
+unless ($opt_group || ! $i) {
+  print "Group name (empty for none): ";
+  chomp($opt_group = <STDIN>);
 }
 
-$opt_superuser=($opt_superuser==1?"true":"false");
-$user = (getpwuid($<))[0];
-$pwd=pwd_make($opt_passwd,$SAURON_PWD_MODE);
+if ($opt_group) {
+  $gid=get_user_group_id($opt_group);
+  fatal("Cannot find group '$opt_group'") unless ($gid > 0);
+} else {
+  $gid=-1;
+}
+
+unless ($opt_server || ! $i) {
+  print "Default server name (empty for none): ";
+  chomp($opt_server = <STDIN>);
+}
+
+if ($opt_server) {
+  $sid = get_server_id($opt_server);
+  fatal("Cannot find server '$opt_server'") unless ($sid > 0);
+} else {
+  $sid = -1;
+}
+
+if ($sid == -1 && $opt_zone) {
+    print "No server selected => zone ignored!\n";
+    undef $opt_zone;
+}
+
+unless ($opt_zone || ! $i || $sid == -1) {
+  print "Default zone name (empty for none): ";
+  chomp($opt_zone = <STDIN>);
+}
+
+if ($opt_zone) {
+  $zid = get_zone_id($opt_zone, $sid);
+  fatal("Cannot find zone '$opt_zone' in server '$opt_server'") unless ($zid > 0);
+} else {
+  $zid = -1;
+}
 
 if ($i) { # ask confirmation only in interactive session...
   print "\t   Username: $opt_user\n",
-    "\t      Group: " . ($opt_group ? "$opt_group (GID=$gid)":"<none>") . "\n",
     "\t   Longname: $opt_name\n",
-    "\t      email: $opt_email\n",
-    "\t    comment: $opt_comment\n",
-    "\t expiration: ". ($opt_expiration > 0 ? localtime($opt_expiration) :
+    "\t      Email: $opt_email\n",
+    "\t    Comment: $opt_comment\n",
+    "\t  Superuser: $opt_superuser\n",
+    "\t Expiration: ". ($opt_expiration > 0 ? localtime($opt_expiration) :
 			'<none>') . "\n",
-    "\t  superuser: $opt_superuser\n",
+    "\t      Group: " . ($opt_group ? "$opt_group (GID=$gid)" : "<none>") . "\n",
+    "\t     Server: " . ($opt_server ? "$opt_server (ID=$sid)" : "<none>") . "\n",
+    "\t       Zone: " . ($opt_zone ? "$opt_zone (ID=$zid)" : "<none>") . "\n",
     "Add this user [y/n]?";
 
   chomp($t=<STDIN>);
@@ -126,30 +167,57 @@ if ($i) { # ask confirmation only in interactive session...
 
 $user{username}=$opt_user;
 $user{password}=$pwd;
+$user{server}=$sid;
+$user{zone}=$zid;
 $user{name}=$opt_name;
 $user{superuser}=$opt_superuser;
 $user{email}=$opt_email;
 $user{comment}=$opt_comment;
-$user{gid}=$gid;
+# $user{gid}=$gid; Home group is obsolete.
 $user{expiration}=$opt_expiration;
+
+db_begin();
 
 my $newid;
 fatal("Cannot add user to users table: " . db_errormsg())
   if (($newid=add_user(\%user)) < 0);
+
+$res = update_history(-1, -1, 5,   # No UID. No SID. 5 = User changes.
+		      'ADD: User', # Action.
+		      "Username: $opt_user (login: " . getlogin(). ')', # Info
+		      $newid);     # Ref.
+if ($res) { fatal("Cannot update user history (1): $res"); }
 
 if ($gid > 0) {
     # add group membership
     fatal("Cannot set group membership for user: $opt_user ".db_errormsg())
 	if (db_exec("INSERT INTO user_rights (type,ref,rtype,rref,rule) " .
 		    " VALUES(2,$newid,0,$gid,'')") < 0);
+    $res = update_history(-1, -1, 5,   # No UID. No SID. 5 = User changes.
+			  'ADD: User to group', # Action.
+			  "Username: $opt_user, Group: $opt_group (login: " . getlogin(). ')', # Info
+			  $newid);     # Ref.
+    if ($res) { fatal("Cannot update user history (2): $res"); }
 }
-    
+
+# If server and zone were given, no group was given, and user was not made super-
+# user, give read access for the server and zone as minimum privileges.
+if ($sid != -1 && $zid != -1 && $gid == -1 && $opt_superuser eq 'false') {
+    fatal("Cannot give read access for server $opt_server to user $opt_user ".db_errormsg())
+	if (db_exec("insert into user_rights (type, ref, rtype, rref, rule) " .
+		    "values (2, $newid, 1, $sid, 'R')") < 0);
+    print "Read access for server $opt_server given to user $opt_user.\n";
+    fatal("Cannot give read access for zone $opt_zone to user $opt_user ".db_errormsg())
+	if (db_exec("insert into user_rights (type, ref, rtype, rref, rule) " .
+		    "values (2, $newid, 2, $zid, 'R')") < 0);
+    print "Read access for zone $opt_zone given to user $opt_user.\n";
+}
 
 print "User $opt_user added successfully.\n";
 print "Remember to give user some rights with moduser command.\n"
 	  if (($opt_superuser ne 'true') and ($gid < 1));
 
-exit(0);
+exit(db_commit());
 
 # eof
 

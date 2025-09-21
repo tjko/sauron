@@ -1,11 +1,12 @@
 # Sauron::CGI::Servers.pm
 #
+# Copyright (c) Michal Kostenec <kostenec@civ.zcu.cz> 2013-2014.
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>  2003-2005.
-# $Id$
+# $Id:$
 #
 package Sauron::CGI::Servers;
 require Exporter;
-use CGI qw/:standard *table -no_xhtml/;
+use CGI qw/:standard *table -utf8/;
 use Sauron::CGIutil;
 use Sauron::BackEnd;
 use Sauron::Sauron;
@@ -13,7 +14,7 @@ use Sauron::CGI::Utils;
 use strict;
 use vars qw($VERSION @ISA @EXPORT);
 
-$VERSION = '$Id$ ';
+$VERSION = '$Id:$ ';
 
 @ISA = qw(Exporter); # Inherit from Exporter
 @EXPORT = qw(
@@ -28,11 +29,11 @@ my %server_form = (
   {ftype=>4, tag=>'masterserver', name=>'Masterserver ID', hidden=>1},
   {ftype=>4, tag=>'server_type', name=>'Server type'},
   {ftype=>1, tag=>'hostname', name=>'Hostname',type=>'fqdn', len=>40,
-   default=>'ns.my.domain.',maxlen=>64},
-  {ftype=>1, tag=>'hostaddr', name=>'IP address',type=>'ip',empty=>0,len=>15},
+   default=>'ns.my.domain.'},
+  {ftype=>1, tag=>'hostaddr', name=>'IP address',type=>'ip',empty=>0, len=>39},
   {ftype=>3, tag=>'zones_only', name=>'Output mode', type=>'enum',
    conv=>'L', enum=>{t=>'Generate named.zones',f=>'Generate full named.conf'}},
-  {ftype=>1, tag=>'comment', name=>'Comments',  type=>'text', len=>60,
+  {ftype=>1, tag=>'comment', name=>'Comments',  type=>'text', len=>60, whitesp=>'P',
    empty=>1},
   {ftype=>3, tag=>'named_flags_isz',
    name=>'Include also slave zones from master',
@@ -40,7 +41,7 @@ my %server_form = (
 
   {ftype=>0, name=>'Defaults for zones'},
   {ftype=>1, tag=>'hostmaster', name=>'Hostmaster', type=>'fqdn', len=>30,
-   default=>'hostmaster.my.domain.',maxlen=>64},
+   default=>'hostmaster.my.domain.'},
   {ftype=>1, tag=>'refresh', name=>'Refresh', type=>'int', len=>10},
   {ftype=>1, tag=>'retry', name=>'Retry', type=>'int', len=>10},
   {ftype=>1, tag=>'expire', name=>'Expire', type=>'int', len=>10},
@@ -48,7 +49,8 @@ my %server_form = (
    type=>'int', len=>10},
   {ftype=>1, tag=>'ttl', name=>'Default TTL', type=>'int', len=>10},
   {ftype=>2, tag=>'txt', name=>'Default zone TXT', type=>['text','text'],
-   fields=>2, len=>[40,15], empty=>[0,1], elabels=>['TXT','comment']},
+   fields=>2, len=>[40,15], empty=>[0,1], elabels=>['TXT','comment'],
+   whitesp=>['P','P']},
 
   {ftype=>0, name=>'Paths'},
   {ftype=>1, tag=>'directory', name=>'Configuration directory', type=>'path',
@@ -74,39 +76,54 @@ my %server_form = (
   {ftype=>3, tag=>'forward', name=>'Forward (mode)', type=>'enum',
    conv=>'U', enum=>{'D'=>'Default','O'=>'Only','F'=>'First'}},
   {ftype=>2, tag=>'forwarders', name=>'Forwarders', fields=>2,
-   type=>['ip','text'], len=>[20,30], empty=>[0,1],elabels=>['IP','comment']},
+   type=>['ip','text'], len=>[39,30], empty=>[0,1],elabels=>['IP','comment'],
+   whitesp=>['','P']},
   {ftype=>1, tag=>'transfer_source', name=>'Transfer source IP',
-   type=>'ip', empty=>1, definfo=>['','Default'], len=>15},
+   type=>'ip4', empty=>1, definfo=>['','Default'], len=>15, ver=>4},
+  {ftype=>1, tag=>'transfer_source_v6', name=>'Transfer source IPv6',
+   type=>'ip6', empty=>1, definfo=>['','Default'], len=>39, ver=>6},
   {ftype=>1, tag=>'query_src_ip', name=>'Query source IP',
-   type=>'ip', empty=>1, definfo=>['','Default'], len=>15},
-  {ftype=>1, tag=>'query_src_port', name=>'Query source port', 
+   type=>'ip4', empty=>1, definfo=>['','Default'], len=>15},
+  {ftype=>1, tag=>'query_src_port', name=>'Query source port',
    type=>'port', empty=>1, definfo=>['','Default port'], len=>5},
+  {ftype=>1, tag=>'query_src_ip_v6', name=>'Query source IPv6',
+   type=>'ip6', empty=>1, definfo=>['','Default'], len=>39},
+  {ftype=>1, tag=>'query_src_port_v6', name=>'Query source port v6',
+   type=>'port', empty=>1, definfo=>['','Default port'], len=>5},
+
   {ftype=>1, tag=>'listen_on_port', name=>'Listen on port',
    type=>'port', empty=>1, definfo=>['','Default port'], len=>5},
-  {ftype=>2, tag=>'listen_on', name=>'Listen-on', fields=>2,
-   type=>['cidr','text'], len=>[20,30], empty=>[0,1],
-   elabels=>['CIDR','comment']},
+#  {ftype=>2, tag=>'listen_on', name=>'Listen-on', fields=>2,
+#   type=>['cidr','text'], len=>[45,30], empty=>[0,1],
+#   elabels=>['CIDR','comment']},
+  {ftype=>12, tag=>'listen_on', name=>'Listen-on', whitesp=>['','','','','','P'],
+   iff=>['named_flags_ac','0']},
+  {ftype=>1, tag=>'listen_on_port_v6', name=>'Listen on port v6',
+   type=>'port', empty=>1, definfo=>['','Default port'], len=>5},
+  {ftype=>12, tag=>'listen_on_v6', name=>'Listen-on-v6', whitesp=>['','','','','','P'],
+   iff=>['named_flags_ac','0']},
+
 
   {ftype=>0, name=>'Access control'},
   {ftype=>3, tag=>'named_flags_ac', name=>'Use access control from master',
    type=>'enum', enum=>{0=>'No',1=>'Yes'}, iff=>['masterserver','\d+',1]},
-  {ftype=>12, tag=>'allow_transfer', name=>'Allow-transfer',
+  {ftype=>12, tag=>'allow_transfer', name=>'Allow-transfer', whitesp=>['','','','','','P'],
    iff=>['named_flags_ac','0']},
-  {ftype=>12, tag=>'allow_query', name=>'Allow-query',
+  {ftype=>12, tag=>'allow_query', name=>'Allow-query', whitesp=>['','','','','','P'],
    iff=>['named_flags_ac','0']},
-  {ftype=>12, tag=>'allow_query_cache', name=>'Allow-query-cache',
+  {ftype=>12, tag=>'allow_query_cache', name=>'Allow-query-cache', whitesp=>['','','','','','P'],
    iff=>['named_flags_ac','0']},
-  {ftype=>12, tag=>'allow_recursion', name=>'Allow-recursion',
+  {ftype=>12, tag=>'allow_recursion', name=>'Allow-recursion', whitesp=>['','','','','','P'],
    iff=>['named_flags_ac','0']},
-  {ftype=>12, tag=>'allow_notify', name=>'Allow-notify',
+  {ftype=>12, tag=>'allow_notify', name=>'Allow-notify', whitesp=>['','','','','','P'],
    iff=>['named_flags_ac','0']},
-  {ftype=>12, tag=>'blackhole', name=>'Blackhole',
+  {ftype=>12, tag=>'blackhole', name=>'Blackhole', whitesp=>['','','','','','P'],
    iff=>['named_flags_ac','0']},
 
   {ftype=>0, name=>'BIND settings'},
   {ftype=>2, tag=>'bind_globals', name=>'Global BIND settings',
    type=>['text','text'], fields=>2, len=>[50,20], maxlen=>[100,20],
-   empty=>[0,1], elabels=>['BIND globals','comment']},
+   empty=>[0,1], elabels=>['BIND globals','comment'], whitesp=>['P','P']},
 
   {ftype=>0, name=>'BIND options' },
   {ftype=>3, tag=>'named_flags_hinfo', name=>'Do not generate HINFO records',
@@ -132,22 +149,27 @@ my %server_form = (
   {ftype=>3, tag=>'checknames_r', name=>'Check-names (Responses)',type=>'enum',
    conv=>'U', enum=>\%check_names_enum},
   {ftype=>1, tag=>'version', name=>'Version string',  type=>'text', len=>60,
-   empty=>1, definfo=>['','Default']},
+   whitesp=>'P', empty=>1, definfo=>['','Default']},
   {ftype=>2, tag=>'logging', name=>'Logging options', type=>['text','text'],
    fields=>2, len=>[50,20], maxlen=>[100,20], empty=>[0,1],
-   elabels=>['logging option','comment']},
+   elabels=>['logging option','comment'], whitesp=>['N','P']},
   {ftype=>2, tag=>'custom_opts', name=>'Custom (BIND) options',
    type=>['text','text'], fields=>2, len=>[50,20], maxlen=>[100,20],
-   empty=>[0,1], elabels=>['BIND option','comment']},
+   empty=>[0,1], elabels=>['BIND option','comment'], whitesp=>['P','P']},
 
   {ftype=>0, name=>'DHCP Settings'},
   {ftype=>3, tag=>'dhcp_flags_ad', name=>'auto-domainnames',
    type=>'enum', enum=>{0=>'No',1=>'Yes'}, iff=>['masterserver','-1']},
+# Local DHCP settings 2020-07-20 TVu
+  {ftype=>2, tag=>'dhcp_l', name=>'Local DHCP Settings', type=>['text','text'],
+   fields=>2, len=>[50,20], maxlen=>[200,20], empty=>[0,1],
+   extrainfo => 'Private configuration for this DHCP server only',
+   whitesp=>['N','P'], elabels=>['dhcptab line','comment']}, # , iff=>['masterserver','-1']
   {ftype=>2, tag=>'dhcp', name=>'Global DHCP Settings', type=>['text','text'],
    fields=>2, len=>[50,20], maxlen=>[200,20], empty=>[0,1],
-   elabels=>['dhcptab line','comment'], iff=>['masterserver','-1']},
-
-  {ftype=>0, name=>'DHCP Failover Settings'},
+   whitesp=>['N','P'], elabels=>['dhcptab line','comment'], iff=>['masterserver','-1']},
+  {ftype=>0,
+   name=>'DHCP Failover Settings &mdash; (considered obsolete - use Local DHCP feature instead)'},
   {ftype=>3, tag=>'dhcp_flags_fo', name=>'Enable failover protocol',
    type=>'enum', enum=>{0=>'No',1=>'Yes'}, iff=>['masterserver','-1']},
   {ftype=>1, tag=>'df_port', name=>'Port number', type=>'int', len=>5,
@@ -163,12 +185,41 @@ my %server_form = (
   {ftype=>1, tag=>'df_loadbalmax', name=>'Load balance max (seconds)',
    type=>'int', len=>5, iff=>['masterserver','-1']},
 
+  {ftype=>0, name=>'DHCP6 Settings'},
+  {ftype=>3, tag=>'dhcp_flags_ad6', name=>'auto-domainnames',
+   type=>'enum', enum=>{0=>'No',1=>'Yes'}, iff=>['masterserver','-1']},
+# Local DHCP settings 2020-07-20 TVu
+  {ftype=>2, tag=>'dhcp6_l', name=>'Local DHCP Settings', type=>['text','text'],
+   whitesp=>['N','P'], fields=>2, len=>[50,20], maxlen=>[200,20], empty=>[0,1],
+   extrainfo => 'Private configuration for this DHCP server only',
+   elabels=>['dhcptab line','comment']}, # , iff=>['masterserver','-1']
+  {ftype=>2, tag=>'dhcp6', name=>'Global DHCP Settings', type=>['text','text'],
+   whitesp=>['N','P'], fields=>2, len=>[50,20], maxlen=>[200,20], empty=>[0,1],
+   elabels=>['dhcptab line','comment'], iff=>['masterserver','-1']},
+  {ftype=>0,
+   name=>'DHCP6 Failover Settings &mdash; (considered obsolete - use Local DHCP feature instead)'},
+  {ftype=>3, tag=>'dhcp_flags_fo6', name=>'Enable failover protocol',
+   type=>'enum', enum=>{0=>'No',1=>'Yes'}, iff=>['masterserver','-1']},
+  {ftype=>1, tag=>'df_port6', name=>'Port number', type=>'int', len=>5,
+   iff=>['masterserver','-1']},
+  {ftype=>1, tag=>'df_max_delay6', name=>'Max Response Delay',
+   type=>'int', len=>5, iff=>['masterserver','-1']},
+  {ftype=>1, tag=>'df_max_uupdates6', name=>'Max Unacked Updates',
+   type=>'int', len=>5, iff=>['masterserver','-1']},
+  {ftype=>1, tag=>'df_mclt6', name=>'MCLT', type=>'int', len=>6,
+   iff=>['masterserver','-1']},
+  {ftype=>1, tag=>'df_split6', name=>'Split', type=>'int', len=>5,
+   iff=>['masterserver','-1']},
+  {ftype=>1, tag=>'df_loadbalmax6', name=>'Load balance max (seconds)',
+   type=>'int', len=>5, iff=>['masterserver','-1']},
+
+
   {ftype=>0, name=>'Record info', no_edit=>1},
   {ftype=>4, name=>'Record created', tag=>'cdate_str', no_edit=>1},
   {ftype=>4, name=>'Last modified', tag=>'mdate_str', no_edit=>1}
  ]
 # bgcolor=>'#eeeebf',
-# border=>'0',		
+# border=>'0',
 # width=>'100%',
 # nwidth=>'30%',
 # heading_bg=>'#aaaaff'
@@ -182,19 +233,81 @@ my %new_server_form=(
   {ftype=>1, tag=>'name', name=>'Name', type=>'text',
    len=>20, empty=>0},
   {ftype=>1, tag=>'hostname', name=>'Hostname',type=>'fqdn', len=>40,
-   default=>'ns.my.domain.',maxlen=>64},
-  {ftype=>1, tag=>'hostaddr', name=>'IP address',type=>'ip',empty=>0,len=>15},
+   default=>'ns.my.domain.'},
+  {ftype=>1, tag=>'hostaddr', name=>'IP address',type=>'ip',empty=>0,len=>39},
   {ftype=>1, tag=>'hostmaster', name=>'Hostmaster', type=>'fqdn', len=>30,
-   default=>'hostmaster.my.domain.',maxlen=>64},
+   default=>'hostmaster.my.domain.'},
   {ftype=>1, tag=>'directory', name=>'Configuration directory', type=>'path',
    len=>30, empty=>0},
   {ftype=>3, tag=>'masterserver', name=>'Slave for', type=>'enum',
    enum=>\%master_servers,elist=>\@master_serversl},
-  {ftype=>1, tag=>'comment', name=>'Comment', type=>'text',
+  {ftype=>1, tag=>'comment', name=>'Comment', type=>'text', whitesp=>'P',
    len=>60, empty=>1}
  ]
 );
 
+
+sub select_server($$)
+{
+  my($state,$perms) = @_;
+
+  my $selfurl = $state->{selfurl};
+  my (%srec,@l);
+
+  if ($state->{'serverid'} && $state->{'serverid'}) {
+      print h2("Selected server: <a href='$selfurl?menu=servers&amp;server_list=$state->{'serverid'}'>$state->{'server'}</a>");
+  }
+  #display server selection dialig
+  get_server_list(-1,\%srec,\@l);
+  delete $srec{-1};
+  shift @l;
+  print h2("Select server:"),p,
+    start_form(-method=>'POST',-action=>$selfurl),
+    hidden('menu','servers'),p,
+    "Available servers:",p,
+    scrolling_list(-width=>'100%',-name=>'server_list',-size=>'10',-values=>\@l,-labels=>\%srec),
+    br,
+    submit(-name=>'server_select_submit',-value=>'Select server'),
+    end_form;
+
+  return 0;
+}
+
+sub display_new_server($$$$)
+{
+  my($state,$perms,$serverid,$scookie) = @_;
+
+  my (%serv);
+
+  #display selected server info
+  unless ($serverid > 0) {
+    print h3("Cannot select server!"),p;
+    select_server($state,$perms);
+    return 1;
+  }
+
+  my $serveridsave = $state->{'serverid'};
+  $state->{'serverid'}=$serverid;
+  my $pcheck = check_perms('server','R');
+  $state->{'serverid'}=$serveridsave;
+  if ($pcheck) {
+    select_server($state,$perms);
+    return;
+  }
+  get_server($serverid,\%serv);
+  my $server=$serv{name};
+  print h2("Selected server: $server"),p;
+  if ($state->{'serverid'} ne $serverid) {
+    $state->{'zone'}='';
+    $state->{'zoneid'}=-1;
+    $state->{'server'}=$server;
+    $state->{'serverid'}=$serverid;
+    save_state($scookie,$state);
+  }
+
+  display_form(\%serv,\%server_form); # display server record
+  return 0;
+}
 
 # SERVERS menu
 #
@@ -212,7 +325,10 @@ sub menu_handler {
 
   my($res,%data,%serv,%srec,@l,$server);
 
-  goto select_server if ($serverid && check_perms('server','R'));
+  if ($serverid && check_perms('server','R')) {
+    select_server($state,$perms);
+    return;
+  }
 
 
   if ($sub eq 'add') {
@@ -224,7 +340,8 @@ sub menu_handler {
     if ($res > 0) {
       #print "<p>$res $data{name}";
       $serverid=$res;
-      goto display_new_server;
+      display_new_server($state,$perms,$serverid,$scookie);
+      return;
     }
 
     return;
@@ -241,7 +358,7 @@ sub menu_handler {
 	$state->{'zone'}=''; $state->{'zoneid'}=-1;
 	$state->{'server'}=''; $state->{'serverid'}=-1;
 	save_state($scookie,$state);
-	goto select_server;
+	select_server($state,$perms);
       }
       return;
     }
@@ -260,53 +377,19 @@ sub menu_handler {
 
     $res=edit_magic('srv','Server','servers',\%server_form,
 		    \&get_server,\&update_server,$serverid);
-    goto select_zone if ($res == -1);
-    goto display_new_server if ($res == 1 || $res == 2);
+    select_server($state,$perms) if ($res == -1);
+    display_new_server($state,$perms,$serverid,$scookie) if ($res == 1 || $res == 2);
     return;
   }
-
 
   $serverid=param('server_list') if (param('server_list'));
- display_new_server:
+
   if ($serverid && $sub ne 'select') {
-    #display selected server info
-    unless ($serverid > 0) {
-      print h3("Cannot select server!"),p;
-      goto select_server;
-    }
-    my $serveridsave = $state->{'serverid'};
-    $state->{'serverid'}=$serverid;
-    my $pcheck = check_perms('server','R');
-    $state->{'serverid'}=$serveridsave;
-    goto select_server if ($pcheck);
-    get_server($serverid,\%serv);
-    $server=$serv{name};
-    print h2("Selected server: $server"),p;
-    if ($state->{'serverid'} ne $serverid) {
-      $state->{'zone'}='';
-      $state->{'zoneid'}=-1;
-      $state->{'server'}=$server;
-      $state->{'serverid'}=$serverid;
-      save_state($scookie,$state);
-    }
-    display_form(\%serv,\%server_form); # display server record 
+    display_new_server($state,$perms,$serverid,$scookie);
     return;
   }
 
-  select_server:
-  #display server selection dialig
-  get_server_list(-1,\%srec,\@l);
-  delete $srec{-1};
-  shift @l;
-  print h2("Select server:"),p,
-    startform(-method=>'POST',-action=>$selfurl),
-    hidden('menu','servers'),p,
-    "Available servers:",p,
-      scrolling_list(-width=>'100%',-name=>'server_list',
-		   -size=>'10',-values=>\@l,-labels=>\%srec),
-      br,submit(-name=>'server_select_submit',-value=>'Select server'),
-      end_form;
-
+  select_server($state,$perms);
 }
 
 

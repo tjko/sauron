@@ -1,6 +1,6 @@
 /* vlans table creation
  *
- * $Id$
+ * $Id:$
  */
 
 /** "VLAN" (Layer-2 networks/shared networks) descriptions, 
@@ -18,6 +18,6 @@ CREATE TABLE vlans (
        comment	   TEXT,  /* comments */
 
        CONSTRAINT  vlans_key UNIQUE (name,server)
-) INHERITS(common_fields);
+) INHERITS(common_fields) WITH OIDS;
 
 

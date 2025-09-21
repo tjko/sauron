@@ -1,19 +1,19 @@
-#!/usr/bin/perl -I/usr/local/sauron
+#!/usr/bin/perl -I/opt/sauron
 #
 # addhosts - utility to add host records
 #
+# Copyright (c) Michal Kostenec <kostenec@civ.zcu.cz> 2013-2014.
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>  2001,2003.
-# $Id$
+# $Id:$
 #
 require 5;
 use Getopt::Long;
-use Net::Netmask;
+# use Net::Netmask;
 use Sauron::DB;
 use Sauron::Util;
 use Sauron::UtilZone;
 use Sauron::BackEnd;
 use Sauron::Sauron;
-
 load_config();
 
 
@@ -21,7 +21,7 @@ $user = (getpwuid($<))[0];
 set_muser($user);
 
 $result = GetOptions("help|h","name=s","commit","noreverse",
-		    "newonly","outofzone","verbose","force=s",
+		    "newonly","outofzone","verbose","force=s","addip",
 		    "group=s","info=s");
 
 if ($opt_help || @ARGV < 2 || $result < 1) {
@@ -29,6 +29,7 @@ if ($opt_help || @ARGV < 2 || $result < 1) {
         "options:\n",
 	"\t--name=<regexp>\t\thostname filter (regexp)\n",
 	"\t--newonly\t\tprocess only new records\n",
+	"\t--addip\t\t\tadd new IP to existing hosts\n",
 	"\t--noreverse\t\tdo not add reverse records\n",
 	"\t--outofzone\t\tallow out of zone records\n",
 	"\t--verbose\t\tproduce more verbose output\n",
@@ -59,7 +60,7 @@ fatal("cannot find zone '$zone'") unless ($zoneid > 0);
 fatal("cannot read file: $filename") unless (-r $filename);
 
 if ($opt_group) {
-  fatal("cannot find group '$opt_group'") 
+  fatal("cannot find group '$opt_group'")
     if (($gid=get_group_by_name($serverid,$opt_group)) < 0);
 }
 
@@ -104,24 +105,33 @@ foreach $domain (sort keys %zonedata) {
   }
 
   undef @q;
-  db_query("SELECT id FROM hosts WHERE zone=$zoneid AND domain = '$host';",
-	   \@q);
+  db_query("SELECT h.id, a.id, a.ip, a.forward FROM hosts h, a_entries a WHERE a.host = h.id AND h.zone=$zoneid AND h.domain = '$host';", \@q);
+  #db_query("SELECT id FROM hosts WHERE zone=$zoneid AND domain = '$host';", \@q);
+  my %hostipf = map {$_->[2] => $_->[3]} @q;
+  my %hostipi = map {$_->[2] => $_->[1]} @q;
+
   if (($id=$q[0][0]) > 0) {
     if ($opt_newonly) {
-      print "host: $host  SKIPPED: already exists (id=$id)\n"
-	if ($opt_verbose);
+      print "host: $host  SKIPPED: already exists (id=$id)\n"if ($opt_verbose);
       next;
     }
-    print "host: $host  replacing (id=$id)\n";
-    fatal("cannot delete host record (id=$id)") if(delete_host($id) < 0);
-    $id=-1;
+
+    unless($opt_addip) {
+	    print "host: $host replacing (id=$id)\n";
+	    fatal("cannot delete host record (id=$id)") if(delete_host($id) < 0);
+	    $id=-1;
+    }
+    else {
+	   print "host: $host adding new IP\n";
+    }
   } else {
     print  "host: $host  adding NEW\n";
     $id=-1;
   }
 
-  unless (@{$rec->{A}} > 0 || $rec->{CNAME} || @{$rec->{SRV}} > 0) {
+  unless (@{$rec->{A}} > 0 || @{$rec->{AAAA}} > 0 || $rec->{CNAME} || @{$rec->{SRV}} > 0) {
     print "unknown record type SKIPPED!\n";
+    next;
   }
 
   unless ($id > 0) {
@@ -141,10 +151,22 @@ foreach $domain (sort keys %zonedata) {
   $host{type}=$force_type if ($force_type > 0);
   print " type: $host{type}\n" if ($opt_verbose);
 
-  $a=$rec->{A};
+  $a= (@{$rec->{A}} > 0 ? $rec->{A} : $rec->{AAAA}) ;
   if ($host{type}==1) {
     for $i (0..$#{$a}) {
       print " IP: $$a[$i]\n" if ($opt_verbose);
+      if($opt_addip and $hostipf{$$a[$i]}) {
+            if($hostipf{$$a[$i]} eq 'f') {
+                print "Host $host with IP $$a[$i] exists, UPDATING A/AAAA entry\n" if ($opt_verbose);
+                my %rec = ('id' => $hostipi{$$a[$i]}, 'forward' => 'true');
+                fatal("cannot update host record (id=$id)") if(update_record('a_entries', \%rec) < 0);
+                undef %rec;
+            }
+            else {
+                print "Host $host with IP $$a[$i] exists, IGNORING!\n" if ($opt_verbose);
+            }
+            next;
+      }
       push @{$host{ip}}, [0,$$a[$i],($opt_noreverse ? 'f':'t'),'t',2];
     }
   }
@@ -207,4 +229,3 @@ exit;
 
 
 # eof :-)
-

@@ -1,210 +1,423 @@
-#!/usr/bin/perl -I/usr/local/sauron
+#!/usr/bin/perl -I/opt/sauron
 #
-# expire-hosts - utility to expire hosts w/o recent dhcp activity
+# expire-hosts - Utility to expire hosts w/o recent DHCP activity
 #
-# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2002,2003.
-# $Id$
+# Copyright (c) Timo Kokkonen <tjko@iki.fi>  2004.
+# Modifications and filtering  Riku Meskanen <mesrik@iki.fi>, 2006-2015.
+# Complete rewrite Teppo Vuori 2017.
+# $Id:$
 #
 require 5;
 use Getopt::Long;
-use Net::Netmask;
-use Time::Local;
+# use Net::Netmask;
 use Sauron::DB;
 use Sauron::Util;
 use Sauron::BackEnd;
 use Sauron::Sauron;
+use strict;
+use warnings;
+
+sub sql_array_str($$@) {
+    my ($ss,$tc,@arr) = (@_); # split string, type cast, array
+
+    # split @arr using $ss unless $ss empty
+    # and add array typecast unless $tc empty
+
+    (my $str = "ARRAY[E'" .
+        join("',E'", ("$ss" ne "" ? map(split("$ss", $_), @arr) : @arr)) .
+	"']" . ($tc ne "" ? "::$tc\[]" : "")) =~ s=\\=\\\\=g;
+    return $str;
+}
+
+sub local_date($) {
+    my($date)=@_;
+    my($y,$m,$d);
+
+    ($y,$m,$d) = (localtime($date))[5,4,3];
+    return sprintf("%02d-%02d-%04d",$d,$m+1,$y+1900);
+}
+
+# Try to make sql more readable.
+# Not perfect, but much betteer than nothing.
+sub readable_sql($) {
+
+    my ($str) = @_;
+
+    $str =~ s/select /\nselect /gi;
+    $str =~ s/update /\nupdate /gi;
+    $str =~ s/ from /\nfrom /gi;
+    $str =~ s/ where /\nwhere /gi;
+    $str =~ s/ order /\norder /gi;
+    $str =~ s/ group /\ngroup /gi;
+    $str =~ s/ and / and\n/gi;
+    $str =~ s/ or / or\n/gi;
+    return $str . "\n";
+}
 
 load_config();
 
+my ($sql1, $sql2, $ind1, $tmp1, @nets, @hosts, $date, $mon, $year, $etime,
+    $net, $netnames, $servername, $serverid, $zone, $zoneid, @zones, $domain, $ether,
+    $ip, $dhcp_date, $mdate);
 
-sub local_date($) {
-  my($date)=@_;
-  my($y,$m,$d);
+my ($debug, @cidr, $dhcponly, $group, $level, @name, @netname, @nocidr, @noname, $noip,
+    $treshold, $norecord, $nomac, $edate, $type, $verbose, $help, $clear, $modified, $commit);
 
-  ($y,$m,$d) = (localtime($date))[5,4,3];
-  return sprintf("%02d-%02d-%04d",$d,$m+1,$y+1900);
+GetOptions('debug:i'            => \$debug,
+	   'commit'             => \$commit,
+	   'cidr=s@'            => \@cidr,
+	   'dhcponly'           => \$dhcponly,
+	   'noip'               => \$noip,
+	   'group=s'            => \$group,
+	   'level=s'            => \$level,
+	   'name=s@'            => \@name,
+	   'netname=s@'         => \@netname,
+	   'treshold=i'         => \$treshold,
+	   'modified=i'         => \$modified,
+	   'nocidr|skipcidr=s@' => \@nocidr,
+	   'noname|skipname=s@' => \@noname,
+	   'edate=s'            => \$edate,
+	   'clear'              => \$clear,
+	   'nomac'              => \$nomac,
+	   'norecord'           => \$norecord,
+	   'type=s'             => \$type,
+	   'verbose|v'          => \$verbose,
+	   'help|h'             => \$help) or die;
+
+if ($help || @ARGV < 1) {
+  print "Expire hosts w/o recent DHCP acticity\n",
+	"syntax: $0 [--help] [OPTIONS] <servername> [[zonename] ...]\n",
+        "\noptions:\n",
+
+        "\t--cidr=s[,...]\t\tSelect by cidr list\n",
+        "\t--name=<regexp>[,...]\tSelect only hosts with matching names\n",
+        "\t--netname=<regexp>[,...]Select hosts in networks matching the regexp(s)\n",
+
+	"\t--group=<regexp>\tSelect only hosts belonging to matching group\n",
+        "\t--level=s \t\tLimit authorization level to any of: s,-s,s-s,s-\n",
+        "\t--type=s[,...]\t\tLimit by host type list\n",
+        "\t--nocidr=s[,...]\tExclude by cidr list\n",
+        "\t\t\t\tSynonym: --skipcidr\n",
+        "\t--noname=<regexp>[,...]\tExclude hosts with matching names\n",
+        "\t\t\t\tSynonym: --skipname\n",
+
+        "\t--norecord\t\tOnly expire hosts with no recorded DHCP activity\n",
+        "\t--treshold=<days>\tExpire hosts with no DHCP activity in\n",
+        "\t\t\t\tlast <days> days (default: 90)\n",
+        "\t--modified=<days>\tIgnore hosts created or modified during the\n",
+        "\t\t\t\tlast <days> days (default: 15)\n",
+
+        "\t--dhcponly\t\tInclude only DHCP enabled nets\n",
+        "\t--noip\t\t\tInclude also hosts which don't have an IP address\n",
+        "\t--nomac\t\t\tInclude also hosts that have no MAC address\n",
+
+        "\t--edate=<dd-mm-yyyy>\tSet hosts to expire on this date (default: now)\n",
+        "\t\t\t\t+<days> or -<days> relative to now can also be used\n",
+        "\t--clear\t\t\tRemove expiration date\n",
+
+        "\t--commit\t\tCommit changes (w/o this NO changes are made)\n",
+	"\t--verbose\t\tMore verbose output\n\n",
+
+	"\tHost types: 0 = Miscellaneous, 1 = Host, 2 = Subdomain (delegation),\n",
+	"\t3 = MX entry, 4 = Alias (CNAME), 5 = Printer, 6 = Glue record,\n",
+	"\t7 = Alias (AREC), 8 = SRV entry, 9 = DHCP only, 10 = Zone,\n",
+ 	"\t101 = Host reservation (Not all types are relevant for this tool.)\n\n";
+
+  exit($help ? 0 : 1);
 }
 
-$user = (getpwuid($<))[0];
+# ===============================================
+$verbose = ($verbose ? 1 : 0);
+$dhcponly = ($dhcponly ? 1 : 0);
+$noip = ($noip ? 1 : 0);
+$servername = shift;
 
-GetOptions("help|h","cidr=s","netname=s","name=s","norecord",
-	   "commit","verbose","treshold=s","edate=s","skipname=s");
+# Policy.
+fatal("At least one of --cidr, --name or --netname required")
+    unless (@cidr || @name || @netname);
 
-if ($opt_help || @ARGV < 1) {
-  print "syntax: $0 <server> [options]\n\n",
-    "options:\n",
-    "\t--cidr=<cidr>\t\tselect hosts within CIDR block\n",
-    "\t--name=<regexp>\t\tselect hostnames matching the regexp\n",
-    "\t--netname=<regexp>\tselect hosts in networks matching the regexp\n",
-    "\t\t\t\t(selects only hosts within auto assign ranges)\n",
-    "\t--treshold=<days>\texpire hosts with no dhcp activity in\n",
-    "\t\t\t\tlast <days> days (default: 90)\n",
-    "\t--norecord\t\tonly expire hosts with no recorded dhcp activity\n",
-    "\t--skipname=<regexp>\t\tskips processing matching hosts\n",
-    "\t--edate=<dd-mm-yyy>\tset hosts to expire on this date (default: now)\n",
-    "\t--verbose\t\tdisplay more verbose output\n",
-    "\n",
-    "\t--commit\t\tcommit changes (w/o this NO changes are made)\n";
-  print "\n" if ($opt_help); # to get rid of warnings :)
-  exit(0);
+# --cidr, --nocidr, --dhcponly, --level and --netname select by ip, but
+# --noip allowS selection of hosts which don't have an ip.
+fatal("Cannot specify --noip with --cidr, --nocidr, --dhcponly, --level or --netname")
+   if ($noip && (@cidr || @nocidr || $dhcponly || $level || @netname));
+
+# Alternatives.
+fatal("Cannot specify both --cidr and --netname options")
+    if (@cidr && @netname);
+
+# Incompatible.
+fatal("Cannot specify both --treshold and --norecord options")
+    if (defined $treshold && defined $norecord);
+
+# Incompatible.
+fatal("Cannot specify both --edate and --clear options")
+    if ($edate && defined $clear);
+
+if (defined $treshold) {
+    fatal("Invalid treshold specified") unless ($treshold > 0);
+} else {
+    $treshold = 90;
+    print "Using default treshold of $treshold days\n" unless (defined $norecord);
 }
+$treshold = time() - $treshold * 86400;
+
+if (defined $norecord) {
+    $treshold = 0;
+}
+
+if (defined $modified) {
+    fatal("Invalid --modified value specified") unless ($modified > 0);
+} else {
+    $modified = 15;
+    print "Using default --modified=$modified\n";
+}
+$modified = time() - $modified * 86400;
 
 db_connect();
 
-set_muser($user);
+$serverid = get_server_id($servername);
+fatal("cannot find server '$servername'") unless ($serverid > 0);
 
-$server=shift;
-$opt_verbose=($opt_verbose?1:0);
+# ---------------------------------------------------------------
+my $limit="";
 
-$serverid=get_server_id($server);
-fatal("cannot find server '$server'") unless ($serverid > 0);
-
-fatal("no host selection criteria(s) specified")
-	  unless ($opt_cidr || $opt_name || $opt_netname);
-
-fatal("cannot specify both --cidr and --netname options")
-  if ($opt_cidr && $opt_netname);
-fatal("cannot specify both --treshold and --norecord options")
-  if ($opt_treshold && $opt_norecord);
-
-if ($opt_treshold) {
-  fatal("invalid treshold specified") unless ($opt_treshold > 0);
-} else {
-  $opt_treshold=90;
-  print "Using default treshold of $opt_treshold days\n"
-    unless ($opt_norecord);
+#
+# List of zone ids.
+#
+while (($zone = shift)) {
+    $zoneid = get_zone_id($zone,$serverid);
+    fatal("cannot find zone: $zone") unless ($zoneid > 0);
+    push @zones, $zoneid;
 }
+$limit .= 'and z.id in (' . join(',', @zones) . ') ' if @zones;
 
-$date = time() - $opt_treshold * 86400;
-$date2 = time() - 15 * 86400;
-
-if ($opt_norecord) {
-  $date = 0;
-  print "Expiring hosts with no recorded dhcp activity\n" if ($opt_verbose);
-}
-
-$opt_skipname = '/' . $opt_skipname . '/' 
-    if ($opt_skipname and $opt_skipname !~ /^\/.+\/$/);
-
-if ($opt_edate) {
-  fatal("invalid argument to --edate option")
-    unless ($opt_edate =~ /^\s*(\d{1,2})-(\d{1,2})-(\d{4})\s*$/);
-  $day=$1;
-  $mon=$2;
-  $year=$3;
-  $etime = timelocal(0,0,0,$day,$mon-1,$year-1900);
-} else {
-  $etime = time();
-}
-
-print "Expiration date will be set to: ".localtime($etime)."\n";
-
-if ($opt_cidr) {
-  fatal("invalid CIDR: $cidr") unless (is_cidr($opt_cidr));
-  if ($opt_cidr =~ /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(\/32)?$/) {
-    $cidr .= " AND a.ip = '$opt_cidr' ";
-  } else {
-    $cidr.= " AND a.ip << '$opt_cidr' ";
-  }
-  print "CIDR criteria: $opt_cidr\n";
-}
-
-if ($opt_netname) {
-  print "Checking hosts in these networks:\n" if ($opt_verbose);
-  $opt_netname = db_encode_str($opt_netname);
-  db_query("SELECT id,net,netname,range_start,range_end FROM nets " .
-	   "WHERE server=$serverid AND netname ~ $opt_netname ORDER BY net",
-	   \@nets);
-  for $i (0..$#nets) {
-    $net = $nets[$i][1];
-    next if ($net =~ /\/32$/);
-#    $tmpnet = new Net::Netmask($net);
-#    $nets[$i][3] = $tmpnet->nth(1) unless (is_cidr($nets[$i][3]));
-#    $nets[$i][4] = $tmpnet->nth(-2) unless (is_cidr($nets[$i][4]));
-    next unless (is_cidr($nets[$i][3]) && is_cidr($nets[$i][4]));
-
-    printf "%-18s %-25s (%-15s-%-15s)\n",
-           $net,$nets[$i][2],$nets[$i][3],$nets[$i][4] if ($opt_verbose);
-    $netnames .= " OR " if ($netnames);
-    $netnames .= " a.ip << '$net' ";
-    push @chklist, [ip2int($nets[$i][3]), ip2int($nets[$i][4])];
-  }
-
-  $netnames = " AND ($netnames) ";
-}
-
-if ($opt_name) {
-  $name=" AND h.domain ~* '$opt_name' ";
-  print "Hostname regexp: $opt_name\n";
-}
-
-
-#################
-
-
-$sql="SELECT h.id,h.domain,h.ether,h.ether_alias," .
-     " h.expiration,h.dhcp_date,h.cdate,h.mdate,a.ip " .
-     "FROM hosts h, a_entries a, zones z " .
-     "WHERE h.zone=z.id AND z.server=$serverid AND a.host=h.id " .
-     " $cidr $netnames $name ORDER BY h.domain;";
-
-#print "$sql\n" if ($opt_verbose);
-
-db_query($sql,\@q);
-fatal(db_errormsg()) if (db_errormsg());
-
-$count=@q;
-print "Found $count hosts(s) to check in database.\n";
-exit unless ($count > 0);
-$ecount=0;
-
-for $i (0..$#q) {
-  ($id,$domain,$ether,$etheralias,$expiration,$ddate,$cdate,$mdate,$ip) =
-    @{$q[$i]};
-
-  next if ($etheralias > 0);
-  if ($opt_netname) {
-    # skip hosts outside IP-ranges in chklist
-    $ipi=ip2int($ip);
-    $ok=0;
-    for $j (0..$#chklist) {
-      if ($ipi >= $chklist[$j][0] && $ipi <= $chklist[$j][1]) {
-	$ok=1;
-	last;
-      }
+#
+# Limit using host type list. By default, host reservations are not selected.
+# Processing host reservations together with any other type would be too comlicated.
+#
+if ($type) {
+    if ($type =~ /101/ && $type ne '101') {
+	fatal('You can\'t select type 101 (host reservation) together with any other type');
     }
-    next unless $ok;
-  }
-
-  print "Skipping host w/o Ethernet address $domain $ip ($ether)\n"
-    if ((not $ether) && $opt_verbose);
-
-  $mdate=($cdate > $mdate ? $cdate : $mdate);
-  $ddate=0 unless ($ddate > 0);
-  next if ($ddate == 0 && not $opt_norecord);
-  next if ($mdate > $date2); # ignore hosts modified recently
-  next if ($expiration > 0 && $expiration <= $etime);
-  next unless ($ddate <= $date);
-
-  if (grep { eval $opt_skipname } ($domain)) {
-      print "Skipping host w/  Name '$domain' matching $opt_skipname\n" 
-	  if ($opt_verbose and $opt_skipname); 
-      next;
-  }
-
-  printf "%-25s %-15s %12s %10s %10s\n",
-         $domain,$ip,$ether,
-	($ddate > 0 ? local_date($ddate) : 'N/A'),
-        ($mdate > 0 ? local_date($mdate) : 'N/A');
-  $ecount++;
-
-  if ($opt_commit) {
-    fatal("failed to update host record id=$id")
-      if (db_exec("UPDATE hosts SET expiration=$etime WHERE id=$id")<0);
-  }
+    $limit .= sprintf "AND h.type = ANY (%s) ", sql_array_str(',','int',($type));
+} else {
+    print "Host reservations (type 101) skipped by default\n";
+    $limit .= 'AND h.type != 101 ';
 }
 
-print "$ecount hosts ".($opt_commit ? 'expired' : 'to expire')."\n";
+#
+# Pick hosts using name regexp.
+#
+if (@name) {
+    $limit .= sprintf "AND h.domain ~ ANY (%s) ", sql_array_str(',', '', @name);
+}
 
-# eof :-)
+#
+# Exclude hosts using noname regexp.
+#
+if (@noname) {
+    $limit .= sprintf "AND h.domain !~ ALL (%s) ", sql_array_str(',', '', @noname);
+}
 
+#
+# Hosts must have MAC address, unless --nomac was specified.
+#
+$limit .= "and h.ether ~ '^[0-9A-F]{12}\$' " unless (defined $nomac);
+
+#
+# Constant.
+#
+$limit .=  'and h.ether_alias = -1 ';
+
+#
+# Expiration date to set.
+#
+if ($edate) {
+    $edate =~ s/\s//g;
+    if ($edate !~ /^\d{1,2}-\d{1,2}-\d{4}$/ && $edate !~ /^[+-]\d+$/) {
+	fatal("invalid argument to --edate option");
+    }
+    if ($edate =~ /^(\d{1,2})-(\d{1,2})-(\d{4})$/) { # Absolute date.
+	$date = $1;
+	$mon = $2;
+	$year = $3;
+	$etime = timelocal(0, 0, 0, $date, $mon - 1, $year);
+    } else { # Relative date.
+	$etime = time() + ($edate) * 86400;
+    }
+} else { # Default (now).
+    $etime = time();
+}
+if (defined $clear) {
+    $etime = 'null';
+} else {
+    print "Expiration date will be set to " . localtime($etime) . "\n";
+}
+if ($etime ne 'null') {
+    $limit .= "and not (coalesce(h.expiration, 0) > 0 and coalesce(h.expiration, 0) <= $etime) ";
+} else {
+    $limit .= "and h.expiration is not null ";
+}
+
+#
+# DHCP activity.
+#
+if ($treshold) {
+    $limit .= "and coalesce(h.dhcp_date, 0) < $treshold ";
+} elsif (defined $norecord) {
+    $limit .= 'and coalesce(h.dhcp_date, 0) <= 0 ';
+}
+
+#
+# Ignore hosts created or modified recently.
+#
+$limit .= "and greatest(coalesce(h.cdate, 0), coalesce(h.mdate, 0)) < $modified ";
+
+#
+# Pick hosts that belong to specified groups (including subgroups).
+#
+if ($group) {
+    $limit .= "and (h.grp in " .
+	"(select id " .
+	"from groups " .
+	"where server = $serverid and " .
+	"name ~ '$group') or (h.id in " .
+	"(select ge.host " .
+	"from groups g, group_entries ge " .
+	"where g.server = $serverid and " .
+	"g.name ~ '$group' and " .
+	"ge.grp = g.id))) ";
+}
+
+#
+# Select using cidr list
+#
+if (@cidr) {
+    $limit .= sprintf "AND a.ip << ANY (%s) ",sql_array_str(',', 'cidr', @cidr);
+}
+
+#
+# Exclude using cidr list
+#
+if (@nocidr) {
+    $limit .= sprintf "AND NOT a.ip << ANY (%s) ",sql_array_str(',','cidr',@nocidr);
+}
+
+#
+# Hosts only from DHCP enabled subnets.
+#
+# if dhcp then skip these nets
+if ($dhcponly) {
+    $limit .= "AND a.ip << ANY " .
+	"(SELECT net FROM nets WHERE server = $serverid " .
+	"AND subnet = true AND dummy = false AND no_dhcp = false) ";
+}
+
+#
+# Pick hosts only from subnets of specfied authorization level(s)
+#
+if (defined $level) {
+
+    # base
+    $limit .= "AND a.ip << ANY " .
+	"(SELECT net FROM nets WHERE server = $serverid" .
+	" AND subnet = true AND dummy = false ";
+
+    # suffix
+    if ($level =~ /^(\d{1,2})$/) {
+	    $limit .= "AND alevel = $1) ";
+    } elsif ($level =~ /^-(\d{1,2})$/) {
+	    $limit .= "AND alevel <= $1) ";
+    } elsif ($level =~ /^(\d{1,2})-(\d{1,2})$/) {
+	    $limit .= "AND alevel >= $1 AND alevel <= $2) ";
+    } elsif ($level =~ /^(\d{1,2})-$/) {
+	    $limit .= "AND alevel >= $1) ";
+    } else {
+        fatal("could not parse level");
+    }
+}
+
+#
+# Pick hosts only from nets whose names fit the given regular expressions.
+#
+if (@netname) {
+    print "\nChecking hosts in these networks:\n" if ($verbose);
+    if (@nocidr) {
+	$sql1 = sprintf "AND NOT net <<= ANY (%s) ",sql_array_str(',','cidr',@nocidr);
+    } else {
+	$sql1 = '';
+    }
+    $sql2 = "SELECT id, net, netname FROM nets " .
+	"WHERE server = $serverid AND netname ~ ANY (" .
+	sql_array_str(',','',@netname) . ") $sql1 ORDER BY net;";
+    if (defined $debug) { print readable_sql($sql2); }
+    db_query($sql2, \@nets);
+    fatal('No net matches given --netname') if (!@nets);
+    printf "\n%-43s %-25s\n", 'CIDR', 'Name' if ($verbose);
+    for $ind1 (0..$#nets) {
+	$net = $nets[$ind1][1];
+	next unless (new Net::IP($net)->size());
+	printf "%-43s %-25s\n", $net, $nets[$ind1][2] if ($verbose);
+	$netnames .= " OR " if ($netnames);
+	$netnames .= "a.ip << '$net'";
+    }
+    if ($netnames) {
+	$limit .= "AND ($netnames) ";
+    } else {
+	fatal('No nets found based on --netname');
+    }
+}
+
+# =====================================
+# Fetch host records for this server...
+
+$sql1 = "from zones z, hosts h " .
+    ($noip ? 'left outer ' : '') . "join a_entries a on h.id = a.host " .
+    "where z.server = $serverid and h.zone = z.id $limit";
+
+$sql2 = "select h.domain, h.ether, " .
+    "h.dhcp_date, greatest(h.cdate, h.mdate), a.ip " . $sql1 .
+    "order by h.domain;";
+
+if (defined $debug) { print readable_sql($sql2); }
+
+# Fetch.
+db_query($sql2, \@hosts);
+$tmp1 = @hosts;
+print "\nFound $tmp1 hosts\n";
+exit if (!$tmp1);
+
+# Print host list.
+printf "%-35s %-39s %-12s %-10s %-10s\n",
+    'Hostname', 'IP', 'MAC', 'DHCP Date', 'Last Mod';
+for $ind1 (@hosts) {
+    ($domain, $ether, $dhcp_date, $mdate, $ip) = @{$ind1};
+
+    if (!defined $ip) { $ip = ''; }
+    if (!defined $ether) { $ether = ''; }
+    if (!defined $dhcp_date) { $dhcp_date = 0; }
+    if (!defined $mdate) { $mdate = 0; }
+    printf "%-35s %-39s %12s %10s %10s\n",
+    $domain, $ip, $ether,
+    ($dhcp_date > 0 ? local_date($dhcp_date) : 'N/A'),
+    ($mdate > 0 ? local_date($mdate) : 'N/A');
+}
+
+db_begin() if ($debug && $debug >= 2); # For testing.
+# Update.
+$sql2 = "update hosts set expiration = $etime where id in (select h.id " . $sql1 . ");";
+if (defined $debug) { print readable_sql($sql2); }
+if (defined $commit) {
+    $tmp1 = db_exec($sql2);
+    if ($tmp1 < 0) {
+	fatal("Error $tmp1 updating hosts");
+    }
+    print "\nHosts succesfully updated\n";
+} else {
+    print "\nNo --commit - no changes were made to the database\n"
+}
+db_rollback() if ($debug && $debug >= 2); # For testing.
+
+exit 0;
+
+# eof

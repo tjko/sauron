@@ -2,8 +2,9 @@
 #
 # remove-hosts -- removes hosts based on list of MACs read from a file
 #
+# Copyright (c) Michal Kostenec <kostenec@civ.zcu.cz> 2013-2014.
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>  2003.
-# $Id$
+# $Id:$
 #
 use Getopt::Long;
 use Sauron::DB;
@@ -13,12 +14,13 @@ use Sauron::Sauron;
 
 load_config();
 
-GetOptions("help|h","mac","ip","host","commit");
+GetOptions("help|h","mac","duid","ip","host","commit");
 
 if ($opt_help || @ARGV < 2) {
   print "syntax: $0 [OPTIONS] <servername> <inputfile>\n\n",
         "\toptions:\n",
 	"\t--mac\t\tinput file contains MAC addresses (one per line)\n",
+	"\t--duid\t\tinput file contains DUIDs (one per line)\n",
 	"\t--ip\t\tinput file contains IP addresses (one per line)\n",
 	"\t--host\t\tinput file contains hostnames (one per line)\n\n",
 	"\t--commit\tcommit changes (without this no changes are made)\n\n";
@@ -34,8 +36,9 @@ fatal("cannot find modhosts script in PROG_DIR ($PROG_DIR)")
 fatal("cannot read input file: $filename")
   if ($filename ne '-' && ! -r $filename);
 fatal("cannot specify both --ip and --mac options")  if ($opt_ip && $opt_mac);
-fatal("neither --ip or --mac or --host option specified") 
-  unless ($opt_ip || $opt_mac || $opt_host );
+fatal("cannot specify both --ip and --duid options")  if ($opt_ip && $opt_duid);
+fatal("neither --ip or --mac or --duid or --host option specified")
+  unless ($opt_ip || $opt_mac || $opt_host || $opt_duid);
 
 db_connect();
 
@@ -49,7 +52,7 @@ while(<FILE>) {
   chomp;
   next if /^\s*$/;
 
-  $ip=''; $mac=''; $host='';
+  $ip=''; $mac=''; $host=''; $duid='';
 
   if ($opt_mac) {
     s/[\s:-]//g;
@@ -67,8 +70,10 @@ while(<FILE>) {
     }
   }
   elsif ($opt_ip) {
-    next unless /((\d){1,3}\.(\d){1,3}\.(\d){1,3}\.(\d){1,3})/;
-    $ip=$1;
+    $ip = $_;
+    $ip =~ s/\s+//g;
+    next unless is_cidr($ip);
+
     print "IP=$ip ";
     db_query("SELECT h.id,h.domain FROM hosts h, zones z, a_entries a " .
 	     "WHERE z.server=$serverid AND h.zone=z.id AND a.host=h.id " .
@@ -92,6 +97,23 @@ while(<FILE>) {
       $delhash{$q[0][0]}++;
     } else {
       print "not found\n";
+    }
+  }
+  elsif ($opt_duid) {
+    s/[\s:]//g;
+    next unless /([0-9A-Fa-f]{24,40})/;
+    $duid=uc($1);
+    db_query("SELECT h.id,h.domain FROM hosts h, zones z " .
+         "WHERE z.server=$serverid AND h.zone=z.id " .
+         " AND h.duid = '$duid'",\@q);
+    foreach $qq (@q) {
+        if ($$qq[0] > 0) {
+            print "DUID=$duid $$qq[1] (id=$$qq[0])\n";
+            $delhash{$$qq[0]}++;
+        }
+        else {
+            print "not found\n";
+        }
     }
   }
 }

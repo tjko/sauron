@@ -1,11 +1,12 @@
 # Sauron::CGI::Utils.pm
 #
+# Copyright (c) Michal Kostenec <kostenec@civ.zcu.cz> 2013-2014.
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>  2003.
-# $Id$
+# $Id:$
 #
 package Sauron::CGI::Utils;
 require Exporter;
-use CGI qw/:standard *table -no_xhtml/;
+use CGI qw/:standard *table -utf8/;
 use Digest::MD5;
 use Sauron::CGIutil;
 use Sauron::BackEnd;
@@ -13,8 +14,10 @@ use Sauron::Util;
 use Sauron::Sauron;
 use strict;
 use vars qw($VERSION @ISA @EXPORT);
+use Sys::Syslog qw(:DEFAULT setlogsock);
+Sys::Syslog::setlogsock('unix');
 
-$VERSION = '$Id$ ';
+$VERSION = '$Id:$ ';
 
 @ISA = qw(Exporter); # Inherit from Exporter
 @EXPORT = qw(
@@ -44,8 +47,19 @@ our %host_types;
 %boolean_enum = (f=>'No',t=>'Yes');
 %host_types=(0=>'Any type',1=>'Host',2=>'Delegation',3=>'Plain MX',
 	     4=>'Alias',5=>'Printer',6=>'Glue record',7=>'AREC Alias',
-	     8=>'SRV record',9=>'DHCP only',10=>'zone',
+	     8=>'SRV record',9=>'DHCP only',10=>'Zone',
 	     101=>'Host reservation');
+
+
+sub write2log{
+  my $msg       = shift;
+  my $filename  = File::Basename::basename($0);
+
+  Sys::Syslog::openlog($filename, "cons,pid", "debug");
+  Sys::Syslog::syslog("info", "$msg");
+  Sys::Syslog::closelog();
+} # End of write2log
+
 
 
 sub chk_perms($$$$) {
@@ -59,6 +73,9 @@ sub chk_perms($$$$) {
   my $zoneid = $state->{zoneid};
 
   return 0 if ($state->{superuser} eq 'yes');
+
+use Data::Dumper;
+#alert2("-----$zoneid-----<br><pre>" . Dumper(%perms) . '</pre>');
 
   if ($type eq 'superuser') {
     return 1 if ($quiet);
@@ -86,7 +103,8 @@ sub chk_perms($$$$) {
       for $i (0..$#{$perms{hostname}}) {
 	$zid=$perms{hostname}[$i][0];
 	next if ($zid != -1 && $zid != $zoneid);
-	$re=$perms{hostname}[$i][1];	
+	$re=$perms{hostname}[$i][1];
+#	alert2("$zid $rule $re");
 	return 0 if ($rule =~ /$re/);
       }
 
@@ -105,20 +123,23 @@ sub chk_perms($$$$) {
     return 1;
   }
   elsif ($type eq 'ip') {
+
     @n=keys %{$perms{net}};
     return 0  if (@n < 1 && @{$perms{ipmask}} < 1);
-    $ip=ip2int($rule); #print "<br>ip=$rule ($ip)";
+    $ip = new Net::IP($rule)->intip(); #print "<br>ip=$rule ($ip)";
 
     for $i (0..$#n) {
-      $s=ip2int($perms{net}->{$n[$i]}[0]);
-      $e=ip2int($perms{net}->{$n[$i]}[1]);
+      $s= new Net::IP($perms{net}->{$n[$i]}[0])->intip();
+      $e= new Net::IP($perms{net}->{$n[$i]}[1])->intip();
       if (($s > 0) && ($e > 0)) {
 	#print "<br>$i $n[$i] $s,$e : $ip";
 	return 0 if (($s <= $ip) && ($ip <= $e));
       }
     }
+
     for $i (0..$#{$perms{ipmask}}) {
 	$re=$perms{ipmask}[$i];
+
 	#print p,"regexp='$re' '$rule'";
 	return 0 if (check_ipmask($re,$rule));
     }
@@ -144,7 +165,7 @@ sub chk_perms($$$$) {
   }
   elsif ($type eq 'flags') {
     return 0 if ($perms{flags}->{$rule});
-    alert1("Your are not authorized to add/modify: $rule") unless ($quiet);
+    alert1("You are not authorized to add/modify: $rule") unless ($quiet);
     return 1;
   }
 
@@ -172,6 +193,9 @@ sub make_cookie($$) {
   $ctx->add(rand 1000000);
   $val=$ctx->hexdigest;
 
+  my $tab = cookie(-name=>"sauronSessionId"); # ****
+  if ($tab =~ /^\d{6,10}$/) { $val = substr($tab . $val, 0, 32); } # ****
+
   undef %state;
   $state{auth}='no';
   #$state{'host'}=remote_host();
@@ -190,9 +214,8 @@ sub add_default_zones($$) {
 
   my($id,%zone,%host);
 
-
-  %zone=(name=>'localhost',type=>'M',reverse=>'f',server=>$serverid,
-	 ns=>[[0,'localhost.','']],ip=>[[0,'127.0.0.1','t','t','']]);
+  %zone=(name=>'localhost',type=>'M',comment=>'Default zone', reverse=>'f',server=>$serverid,
+     ns=>[[0,'localhost.','']],ip=>[[0,'::1','t','t',''],[0,'127.0.0.1','t','t','']]);
   print "Adding zone: $zone{name}...";
   if (($id=add_zone(\%zone)) < 0) {
     print "failed (zone already exists? $id)\n";
@@ -200,8 +223,8 @@ sub add_default_zones($$) {
     print "OK (id=$id)\n";
   }
 
-  %zone=(name=>'127.in-addr.arpa',type=>'M',reverse=>'t',server=>$serverid,
-	ns=>[[0,'localhost.','']]);
+  %zone=(name=>'127.in-addr.arpa',type=>'M',comment=>'Default zone', reverse=>'t',server=>$serverid,
+    ns=>[[0,'localhost.','']]);
   print "Adding zone: $zone{name}...";
   if (($id=add_zone(\%zone)) < 0) {
     print "failed (zone already exists? $id)\n";
@@ -209,8 +232,8 @@ sub add_default_zones($$) {
     print "OK (id=$id)\n";
   }
 
-  %zone=(name=>'0.in-addr.arpa',type=>'M',reverse=>'t',server=>$serverid,
-	ns=>[[0,'localhost.','']]);
+  %zone=(name=>'0.in-addr.arpa',type=>'M',comment=>'Default zone', reverse=>'t',server=>$serverid,
+    ns=>[[0,'localhost.','']]);
   print "Adding zone: $zone{name}...";
   if (($id=add_zone(\%zone)) < 0) {
     print "failed (zone already exists? $id)\n";
@@ -218,8 +241,8 @@ sub add_default_zones($$) {
     print "OK (id=$id)\n";
   }
 
-  %zone=(name=>'255.in-addr.arpa',type=>'M',reverse=>'t',server=>$serverid,
-	ns=>[[0,'localhost.','']]);
+  %zone=(name=>'255.in-addr.arpa',type=>'M',comment=>'Default zone', reverse=>'t',server=>$serverid,
+    ns=>[[0,'localhost.','']]);
   print "Adding zone: $zone{name}...";
   if (($id=add_zone(\%zone)) < 0) {
     print "failed (zone already exists? $id)\n";
@@ -227,7 +250,56 @@ sub add_default_zones($$) {
     print "OK (id=$id)\n";
   }
 
-}			
+  %zone=(name=>'0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.ip6.arpa',type=>'M', comment=>'Default zone', reverse=>'t',server=>$serverid,
+    ns=>[[0,'localhost.','']]);
+  print "Adding zone: $zone{name}...";
+  if (($id=add_zone(\%zone)) < 0) {
+    print "failed (zone already exists? $id)\n";
+  } else {
+    print "OK (id=$id)\n";
+  }
+
+  %zone=(name=>'d.f.ip6.arpa',type=>'M',comment=>'Default zone',reverse=>'t',server=>$serverid,ns=>[[0,'localhost.','']]);
+  print "Adding zone: $zone{name}...";
+  if (($id=add_zone(\%zone)) < 0) {
+    print "failed (zone already exists? $id)\n";
+  } else {
+    print "OK (id=$id)\n";
+  }
+
+  %zone=(name=>'8.e.f.ip6.arpa',type=>'M',comment=>'Default zone',reverse=>'t',server=>$serverid,ns=>[[0,'localhost.','']]);
+  print "Adding zone: $zone{name}...";
+  if (($id=add_zone(\%zone)) < 0) {
+    print "failed (zone already exists? $id)\n";
+  } else {
+    print "OK (id=$id)\n";
+  }
+
+  %zone=(name=>'9.e.f.ip6.arpa',type=>'M',comment=>'Default zone',reverse=>'t',server=>$serverid,ns=>[[0,'localhost.','']]);
+  print "Adding zone: $zone{name}...";
+  if (($id=add_zone(\%zone)) < 0) {
+    print "failed (zone already exists? $id)\n";
+  } else {
+    print "OK (id=$id)\n";
+  }
+
+  %zone=(name=>'a.e.f.ip6.arpa',type=>'M',comment=>'Default zone',reverse=>'t',server=>$serverid,ns=>[[0,'localhost.','']]);
+  print "Adding zone: $zone{name}...";
+  if (($id=add_zone(\%zone)) < 0) {
+    print "failed (zone already exists? $id)\n";
+  } else {
+    print "OK (id=$id)\n";
+  }
+
+  %zone=(name=>'b.e.f.ip6.arpa',type=>'M',comment=>'Default zone',reverse=>'t',server=>$serverid,ns=>[[0,'localhost.','']]);
+  print "Adding zone: $zone{name}...";
+  if (($id=add_zone(\%zone)) < 0) {
+    print "failed (zone already exists? $id)\n";
+  } else {
+    print "OK (id=$id)\n";
+  }
+
+}
 
 
 
@@ -334,7 +406,7 @@ sub edit_magic($$$$$$$) {
   }
 
   print h2("Edit $name:"),p,
-          startform(-method=>'POST',-action=>$selfurl),
+          start_form(-method=>'POST',-action=>$selfurl),
           hidden('menu',$menu),hidden('sub','Edit');
   form_magic($prefix,\%h,$form);
   print submit(-name=>$prefix . '_submit',-value=>'Apply'), "  ",
@@ -370,7 +442,7 @@ sub add_magic($$$$$$) {
   }
 
   print h2("New $name:"),p,
-          startform(-method=>'POST',-action=>$selfurl),
+          start_form(-method=>'POST',-action=>$selfurl),
           hidden('menu',$menu),hidden('sub',$prefix);
   form_magic($prefix,$data,$form);
   print submit(-name=>$prefix . '_submit',-value=>"Create $name")," ",
@@ -417,8 +489,9 @@ sub delete_magic($$$$$$$) {
   }
 
   print h2("Delete $name:"),p,
-          startform(-method=>'POST',-action=>$selfurl),
+          start_form(-method=>'POST',-action=>$selfurl),
           hidden('menu',$menu),hidden('sub','Delete'),
+          hidden('select_ip', scalar(param('select_ip'))),
           hidden($prefix . "_id",$id);
   print submit(-name=>$prefix . '_confirm',-value=>'Delete'),"  ",
         submit(-name=>$prefix . '_cancel',-value=>'Cancel'),end_form;

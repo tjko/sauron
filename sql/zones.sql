@@ -3,7 +3,7 @@
  * table to store zone specific data 
  * (zone usually have bunch of host table records linked to it)
  *
- * $Id$
+ * $Id:$
  */
 
 /** This table contains zone definitions of a server. **/
@@ -59,7 +59,8 @@ CREATE TABLE zones (
        parent	   INT4 DEFAULT -1, /* unused */
        rdate       INT4 DEFAULT 0,  /* last host removal date */
        transfer_source INET,  /* transfer-source (optional) */
+       transfer_source_v6 INET,  /* transfer-source IPv6 (optional) */
 
        CONSTRAINT  zones_key UNIQUE (name,server)
-) INHERITS(common_fields);
+) INHERITS(common_fields) WITH OIDS;
 

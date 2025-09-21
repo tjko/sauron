@@ -1,13 +1,13 @@
 # sample.pm -- sample sauron CGI interface plugin
 #
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>  2003.
-# $Id$
+# $Id:$
 #
 
 package Sauron::Plugins::sample;
 
 require Exporter;
-use CGI qw/:standard *table -no_xhtml/;
+use CGI qw/:standard *table -utf8/;
 use Sauron::DB;
 use Sauron::CGIutil;
 use Sauron::BackEnd;
@@ -16,7 +16,7 @@ use Sauron::CGI::Utils;
 use strict;
 use vars qw($VERSION @ISA @EXPORT);
 
-$VERSION = '$Id$ ';
+$VERSION = '$Id:$ ';
 
 @ISA = qw(Exporter); # Inherit from Exporter
 @EXPORT = qw(

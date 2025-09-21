@@ -1,22 +1,25 @@
-#!/usr/bin/perl -I/usr/local/sauron
+#!/usr/bin/perl -I/opt/sauron
 #
 # addgroup - utility to create users
 #
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000,2002.
-# $Id$
+# $Id:$
 #
 require 5;
 use Getopt::Long;
 use Sauron::DB;
 use Sauron::Util;
+use Sauron::BackEnd;
 use Sauron::Sauron;
 
 load_config();
 
-GetOptions("help|h","name=s","group=s");
+GetOptions("help|h","name=s","group=s","priv=s"); # priv 16.03.2017 TVu
+if (!$opt_priv) { $opt_priv = ''; }
 
 if ($opt_help || $opt_help > 0) {
-  print "syntax: $0 [--help] [--group=name] [--name=\"<groupname>\"]\n";
+  print "Syntax: $0 [--help] [--group=name] [--name=\"<groupname>\"] [--priv=name]\n";
+  print "--priv copies user privileges from an existing group\n"; # 16.03.2017 TVu
   exit(0);
 }
 
@@ -41,10 +44,20 @@ unless ($opt_name) {
   $i=1;
 }
 
+# 16.03.2017 TVu
+if ($i && !$opt_priv) {
+    print "Enter group to copy privileges from: ";
+    chomp ($opt_priv = <STDIN>);
+}
+if ($opt_priv) {
+    db_query("SELECT id FROM user_groups WHERE name='$opt_priv'",\@c);
+    fatal("Group $opt_priv does not exist!") if (!@c);
+}
 
 if ($i) { # ask confirmation only in interactive session...
   print "\t Groupname: $opt_group\n",
   "\t Description: $opt_name\n",
+  "\t Copy privileges from: $opt_priv\n", # 16.03.2017 TVu
   "Add this group [y/n]?";
 
   chomp ($t = <STDIN>);
@@ -54,11 +67,34 @@ if ($i) { # ask confirmation only in interactive session...
   }
 }
 
+db_begin();
 
 $res=db_exec("INSERT INTO user_groups " .
 	     "(name,comment) VALUES('$opt_group','$opt_name');");
 
 fatal("Cannot add group: " .  db_errormsg()) if ($res < 0);
+
+$sql = "select id from user_groups where name = '$opt_group';";
+db_query($sql, \@q);
+
+fatal("Cannot get group id: " .  db_errormsg()) if (!@q);
+
+# 16.03.2017 TVu
+if ($opt_priv) {
+    $sql = "insert into user_rights (type, ref, rtype, rref, rule) " .
+	"select 1, $q[0][0], rtype, rref, rule " .
+	"from user_rights " .
+	"where type = 1 and ref = $c[0][0];";
+    $res = db_exec($sql);
+    fatal("Cannot copy privileges: " .  db_errormsg()) if ($res < 0);
+}
+
+$res = update_history(-1, -1, 6,         # No UID. No SID. 6 = User group changes.
+		      'ADD: User group', # Action.
+		      "Group: $opt_group (login: " . getlogin(). ')', # Info
+		      $q[0][0]);         # Ref.
+if ($res) { fatal("Cannot update group history: $res"); }
+fatal("commit failed!") if (db_commit()<0);
 
 print "Group $opt_group added succesfully.\n";
 exit;

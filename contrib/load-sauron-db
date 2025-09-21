@@ -1,0 +1,105 @@
+#!/usr/bin/env bash
+#
+#
+# BFMI tool to replace sauron database from a dump file -- mesrik, 2015-2016
+#
+#
+export LANG=C
+
+prog="$(basename $0)"
+usage="Usage: $prog [-hfv] { sauron-psql.dump }"
+
+while getopts "hv" opt; do
+    case $opt in
+	h) cat <<-EOH 
+		$usage
+		
+		A simple tool to drop sauron db and reload 
+		another from the file. The script tries to
+		prevent most common errors happening.
+		
+		Options:
+		
+		-h       this help
+		-v       show version
+	
+		EOH
+	    exit
+	    ;;
+	v)  echo '$Id:$'
+            exit
+            ;;
+        *)  echo "$prog: invalid option: -$OPTARG" >&2
+            echo $usage
+            exit 1
+            ;;
+    esac
+done
+shift $((OPTIND-1))
+
+if [ $# -lt 1 ]; then
+    echo $usage
+    exit 1
+fi
+
+# does the file exist
+if [ ! -f $1 ]; then
+    echo "$prog: $1 does not exist."
+    exit 1
+fi
+
+dumpfile=$(readlink -e $1)
+
+# try to check that file is really a postgres dump file
+head $dumpfile | grep -c "^-- PostgreSQL database dump" >/dev/null
+if [ $? -eq 0 ]; then
+    # Safequard: 
+    #  Following builds thash, which is md5 hash value of
+    #  sorted Sauron database table names being used to
+    #  validate that provided file is really a sauron
+    #  database before continuing which first drops
+    #  database and then loads new replacing the old
+    #  from the very file that was provided. Then
+    #  thash is used against known thash values in
+    #  that case construct. 
+
+    thash=$(awk '/^CREATE TABLE / { print $3 }' $dumpfile  |\
+	    sort | openssl md5 -hex | sed 's/^(stdin)= //')
+    case "$thash"  in
+	"b100bc711d6d54af46d9dadeee96ee5f"|\
+	"6055e547748c3c0e0ebd616a5708ab61"|\
+	"7ffbc9f0be68e3c72226ef323bc2b736"|\
+	"add_known_thash_values_above") :
+	    ;;
+	*) cat  <<-EOF
+		$prog: load failure.
+		
+		Check carefully that $dumpfile is really 
+		a valid sauron postgresql dump file.
+		
+		If positive then update this script to include
+		also the new value: $thash
+		EOF
+	    exit 1
+	    ;;
+    esac
+    
+    sqlfile=$(mktemp ${TMPDIR:=/tmp}/$(basename $0).XXXXXX) || exit 1
+    cat <<-EOF >$sqlfile
+	\c template1 
+	drop database sauron;
+	CREATE DATABASE sauron WITH OWNER = sauron;
+	\c sauron
+	\i $dumpfile
+	\dt
+	EOF
+    chown postgres $sqlfile
+    su - postgres -c "psql sauron -f $sqlfile"
+    [ -f $sqlfile ] && rm -f $sqlfile 
+else
+    echo "$prog: $dumpfile is not psql dump file."
+    exit 1
+fi
+
+
+# eof

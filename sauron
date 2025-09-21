@@ -2,11 +2,13 @@
 #
 # sauron - generates BIND/DHCP/printer configuration files from database
 #
+# Copyright (c) Michal Kostenec <kostenec@civ.zcu.cz> 2013-2014.
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000-2005.
-# $Id$
+# $Id:$
 #
 require 5;
-use Net::Netmask;
+# use Net::Netmask;
+use NetAddr::IP; # For IPv6.
 use Getopt::Long;
 use MIME::Base64;
 use Crypt::RC5;
@@ -14,14 +16,14 @@ use Sauron::Util;
 use Sauron::DB;
 use Sauron::BackEnd;
 use Sauron::Sauron;
-
+use Net::IP qw(:PROC);
 load_config();
 
 $bind_conf=0;
 $dhcp_conf=0;
+$dhcp6_conf=0;
 $printer_conf=0;
 
-$dhcp2_mode = ($SAURON_DHCP2_MODE ? 1 : 0);
 
 %yes_no_enum = (D=>'',Y=>'yes',N=>'no');
 %check_names_enum = (D=>'',W=>'warn',F=>'fail',I=>'ignore');
@@ -55,7 +57,7 @@ sub expand_zonefile_path($$) {
     $tmp = substr($val,0,length($tag)-1);
     $path =~ s/$tag/$tmp/g;
   }
-  
+
   return $path;
 }
 
@@ -70,7 +72,7 @@ sub expand_dhcp_macro($$) {
 		$str =~ s/\%\{$k\}/$$var{$k}/ge;
 	    }
 	}
-    }		 
+    }
 
     return $str;
 }
@@ -79,7 +81,7 @@ sub clean_up() {
   my(@q,$i,$count,$t);
 
   print "Cleaning up database...\n";
-  print "(removing hosts that have been expired more than ",
+  print "(removing hosts that have been expired for more than ",
 	"$SAURON_REMOVE_EXPIRED_DELAY days)\n" if ($opt_verbose);
 
   fatal("SAURON_REMOVE_EXPIRED_DELAY not defined!")
@@ -89,6 +91,8 @@ sub clean_up() {
   db_query("SELECT h.id,h.expiration,h.domain,h.type " .
 	   "FROM hosts h, zones z " .
 	   "WHERE z.server=$serverid AND h.zone=z.id " .
+	   " AND (coalesce(z.expiration, 0) <= 0 OR coalesce(z.expiration, 0) > " .
+	   " extract(epoch from now())) " . # Exclude expired zones.
 	   " AND h.expiration > 0 AND h.expiration < $t " .
 	   "ORDER BY h.expiration",\@q);
   error(db_errormsg()) if (db_errormsg());
@@ -113,6 +117,8 @@ sub make_mail_notify_list() {
   db_query("SELECT h.id,h.domain,z.name,h.cdate,h.mdate,h.cuser,h.muser " .
 	   "FROM hosts h, zones z " .
 	   "WHERE h.zone=z.id AND z.server=$serverid " .
+	   " AND (coalesce(z.expiration, 0) <= 0 OR coalesce(z.expiration, 0) > " .
+	   " extract(epoch from now())) " . # Exclude expired zones.
 	   " AND (h.cdate > z.serial_date OR h.mdate > z.serial_date) ".
 	   "ORDER BY z.name,h.domain",\@q);
 
@@ -159,7 +165,7 @@ sub mail_notifications() {
 sub make_dns() {
   $tiny_file="data";
   $root_file="@";
-	
+
   $zones_only=($server{zones_only} eq 't' ? 1 : 0);
   $bind_filename=($zones_only ? 'named.zones':'named.conf');
 
@@ -170,7 +176,7 @@ sub make_dns() {
   make_mail_notify_list() if ($mailnotify_mode);
   print "Generating $bind_filename...\n" if ($bind_conf);
   print "Generating $tiny_file\n" if ($tiny_conf);
-  
+
   ##################################################
   # named.conf
 
@@ -192,14 +198,14 @@ if ($bind_conf) {
 	  print BINDFILE "$val\n";
       }
       print BINDFILE "\n";
-  } 
+  }
 
 
   unless ($zones_only) {
-    
+
     # key & acl section
-    print_keys_acls($server{named_flags_ac} ? 
-		    $server{masterserver} : 
+    print_keys_acls($server{named_flags_ac} ?
+		    $server{masterserver} :
 		    $serverid);
 
     # options section
@@ -210,15 +216,10 @@ if ($bind_conf) {
       if ($server{'pid_file'} ne '');
     print BINDFILE "\tdump-file \"$server{'dump_file'}\";\n"
       if ($server{'dump_file'} ne '');
-    if ($dhcp2_mode) {
-      print BINDFILE "\tstats-file \"$server{'stats_file'}\";\n"
-	if ($server{'stats_file'} ne '');
-    } else {
-      print BINDFILE "\tstatistics-file \"$server{'stats_file'}\";\n"
-	if ($server{'stats_file'} ne '');
-      print BINDFILE "\tmemstatistics-file \"$server{'memstats_file'}\";\n"
-	if ($server{'memstats_file'} ne '');
-    }
+    print BINDFILE "\tstatistics-file \"$server{'stats_file'}\";\n"
+      if ($server{'stats_file'} ne '');
+    print BINDFILE "\tmemstatistics-file \"$server{'memstats_file'}\";\n"
+      if ($server{'memstats_file'} ne '');
     print BINDFILE "\tnamed-xfer \"$server{'named_xfer'}\";\n"
       if ($server{'named_xfer'} ne '');
 
@@ -237,14 +238,25 @@ if ($bind_conf) {
     $val=$check_names_enum{$server{checknames_r}};
     print BINDFILE "\tcheck-names response $val;\n" if ($val ne '');
 
-    print BINDFILE "\n\ttransfer-source $server{transfer_source};\n"
-      if (is_cidr($server{transfer_source}));
+    print BINDFILE "\ttransfer-source $server{transfer_source};\n" if $server{transfer_source} ne '';
+    print BINDFILE "\ttransfer-source-v6 $server{transfer_source_v6};\n" if  $server{transfer_source_v6} ne '';
+
     if ($server{query_src_ip} || $server{query_src_port} > 0) {
       $val="address " .
            (is_cidr($server{query_src_ip}) ? $server{query_src_ip} : '*') .
            " port " .
 	   ($server{query_src_port} > 0 ? $server{query_src_port} : '*');
+
       print BINDFILE "\tquery-source $val;\n";
+    }
+
+    if ($server{query_src_ip_v6} || $server{query_src_port_v6} > 0) {
+      $val="address " .
+           (is_cidr($server{query_src_ip_v6}) ? $server{query_src_ip_v6} : '*') .
+           " port " .
+	   ($server{query_src_port_v6} > 0 ? $server{query_src_port_v6} : '*');
+
+        print BINDFILE "\tquery-source-v6 $val;\n";
     }
 
     print BINDFILE "\n";
@@ -258,7 +270,11 @@ if ($bind_conf) {
 
     print_cidr_list("listen-on ".
   	    ($server{listen_on_port}?"port $server{listen_on_port}":""),
-	    10,$serverid,"\t");
+	    10,$serverid,"\t", 4);
+
+    print_cidr_list("listen-on-v6 ".
+  	    ($server{listen_on_port_v6}?"port $server{listen_on_port_v6}":""),
+	    10,$serverid,"\t", 6);
 
     print BINDFILE "\tforward $forward_enum{$server{forward}};\n"
       if ($forward_enum{$server{forward}});
@@ -337,7 +353,8 @@ if ($bind_conf) {
     unless ($server{no_roots} eq 't') {
       undef @q;
       db_query("SELECT value,domain FROM root_servers " .
-	       "WHERE server=-1 AND type = 'A' ORDER BY value;",\@q);
+#	       "WHERE server=-1 AND type = 'A' ORDER BY value;",\@q);
+	       "WHERE server=-1 AND type ~ 'A(AAA)?' ORDER BY inet(value);",\@q); # For IPv6.
       fatal("empty $server{named_ca}") if (@q < 1);
       print "Generating $root_file file...\n";
       open(ROOTFILE, ">$root_file$tmp_extension")
@@ -349,15 +366,16 @@ if ($bind_conf) {
       print ROOTFILE "# created by: $user  $time_now\n";
       print ROOTFILE "#\n#\n";
       for $i (0..$#q) {
-	printf ROOTFILE "%-30s  # %s\n",$q[$i][0],$q[$i][1];
-      }
+#	printf ROOTFILE "%-30s  # %s\n",$q[$i][0],$q[$i][1];
+ 	printf ROOTFILE "%-39s  # %s\n",lc($q[$i][0]),$q[$i][1]; # For IPv6.
+     }
       print ROOTFILE "#\n#\n";
     close(ROOTFILE);
     }
 
     open(TINYDNSFILE,">$tiny_file$tmp_extension")
       || fatal("Cannot create $tiny_file$tmp_extension!");
-    $open_tmpfiles{$tiny_file . $tmp_extension}=$tiny_file; 
+    $open_tmpfiles{$tiny_file . $tmp_extension}=$tiny_file;
   }
 
   for($loopcounter=0; $loopcounter < $zones; $loopcounter++) {
@@ -407,12 +425,17 @@ if ($bind_conf) {
       if ($type eq 'master' || $type eq 'slave');
     print BINDFILE "\tforward $forward_enum{$zone{forward}};\n"
       if ($forward_enum{$zone{forward}} && $type eq 'forward');
-    ($transfer_source = $zone{transfer_src}) =~ s/\/32$//;
-    print BINDFILE "\ttransfer-source $transfer_source;\n"
-      if (is_cidr($zone{transfer_src}) && $loopcounter < $normalzones);
+
+    $zone{transfer_src} =~ s/\/32$//;
+    $transfer_source = $zone{transfer_src};
+    $zone{transfer_src_v6} =~ s/\/128$//;
+    $transfer_source6 = $zone{transfer_src_v6};
+
+    print BINDFILE "\ttransfer-source $transfer_source;\n" if ($transfer_source ne '' && $loopcounter < $normalzones);
+    print BINDFILE "\ttransfer-source-v6 $transfer_source6;\n" if ($transfer_source6 ne '' && $loopcounter < $normalzones);
 
     # allow_update
-    if (($type eq 'slave') && ($loopcounter >= $normalzones) && 
+    if (($type eq 'slave') && ($loopcounter >= $normalzones) &&
 	($subtype eq 'master')) {
       # omit allow-update for this zone in slave server configuration
     } else {
@@ -442,13 +465,23 @@ if ($bind_conf) {
 	for $j (0..(@q-1)) {
 	  $ip=$q[$j][0];
 	  $ip =~ s/\/32$//g;
-	  print BINDFILE " $ip; ";
+	  $ip =~ s/\/128$//g;
+	  print BINDFILE "\n\t\t\t\t$ip; ";
 	}
-	print BINDFILE " };\n";
+	print BINDFILE "\n\t};\n";
       } else {
 	fatal("no masters defined for slave zone: $zonename");
       }
     }
+
+    $zone{transfer_source} =~ s/\/\d{1,3}//;
+    $transfer_source = $zone{transfer_source};
+    $zone{transfer_source_v6} =~ s/\/\d{1,3}//;
+    $transfer_source6 = $zone{transfer_source_v6};
+
+
+    print BINDFILE "\ttransfer-source $transfer_source;\n" if $transfer_source ne '';
+    print BINDFILE "\ttransfer-source-v6 $transfer_source6;\n" if $transfer_source6 ne '';
 
     print BINDFILE "};\n\n\n";
 }
@@ -480,8 +513,14 @@ if ($bind_conf) {
     $class="\U$zone{'class'}";
     $class=~s/\s+$//g;
     $TTL=$server{'ttl'};
-    $TTL=$zone{'ttl'} if ($zone{ttl} > 0);
-    $ttl='';
+
+    if (defined($zone{'ttl'}) and $zone{'ttl'} >= 0) {
+	$TTL=$zone{'ttl'};
+	$ttl=$TTL;
+    } else {
+	$ttl='';
+    }
+
     $ttl_refresh = ($zone{refresh} ? $zone{refresh} : $server{refresh});
     $ttl_retry = ($zone{retry} ? $zone{retry} : $server{retry});
     $ttl_expire = ($zone{expire} ? $zone{expire} : $server{expire});
@@ -496,7 +535,10 @@ if ($bind_conf) {
       db_query("SELECT MAX(h.cdate),MAX(h.mdate),MAX(z.rdate) " .
 	       "FROM zones z JOIN hosts h ON h.zone=z.id " .
 	       " JOIN a_entries a ON a.host=h.id " .
-	       "WHERE z.server=$serverid AND a.ip << '$zone{reversenet}'",\@q);
+	       "WHERE z.server=$serverid " .
+	       " AND (coalesce(z.expiration, 0) <= 0 OR coalesce(z.expiration, 0) > " .
+	       " extract(epoch from now())) " . # Exclude expired zones.
+	       " AND a.ip << '$zone{reversenet}'",\@q);
       $hosts_mdate = $q[0][0] if ($q[0][0] > $hosts_mdate);
       $hosts_mdate = $q[0][1] if ($q[0][1] > $hosts_mdate);
       $hosts_mdate = $q[0][2] if ($q[0][2] > $hosts_mdate);
@@ -550,14 +592,14 @@ if ($bind_conf) {
     }
 
     foreach $i (1..$#{$zone{ns}}) {
-      printf ZONEFILE $ZFORMAT, '',$ttl,$class,'NS',$zone{ns}[$i][1] 
+      printf ZONEFILE $ZFORMAT, '',$ttl,$class,'NS',$zone{ns}[$i][1]
 	if ($bind_conf);
-      printf TINYDNSFILE "&$zonename\:\:$zone{ns}[$i][1]\:$ttl\:\:\n" 
+      printf TINYDNSFILE "&$zonename\:\:$zone{ns}[$i][1]\:$ttl\:\:\n"
 	if ($tiny_conf);
     }
 
     if ($rev eq 'f') {
-      print ZONEFILE ";\n; zone mail exchanges\n;\n" 
+      print ZONEFILE ";\n; zone mail exchanges\n;\n"
 	if ($bind_conf && @{$zone{mx}} > 1);
       for $i (1..$#{$zone{mx}}) {
 	($val=$zone{mx}[$i][2]) =~ s/\$DOMAIN/$zonename./g;
@@ -566,24 +608,24 @@ if ($bind_conf) {
 	  if ($bind_conf);
 	$dest = $val;
 	$dest .= ".$zonename." unless ($dest =~ /\.$/);
-        printf TINYDNSFILE "\@$zonename\:\:$dest\:$pri\:$ttl\:\:\n" 
+        printf TINYDNSFILE "\@$zonename\:\:$dest\:$pri\:$ttl\:\:\n"
 	  if ($tiny_conf);
       }
-      print ZONEFILE ";\n; contact info (server)\n;\n" 
+      print ZONEFILE ";\n; contact info (server)\n;\n"
 	if ($bind_conf && @{$server{txt}}>1);
       foreach $i (1..$#{$server{txt}}) {
 	($val=$server{txt}[$i][1]) =~ s/\"//g;
-	printf ZONEFILE $ZFORMAT, '',$ttl,$class,'TXT',"\"$val\"" 
+	printf ZONEFILE $ZFORMAT, '',$ttl,$class,'TXT',"\"$val\""
 	  if ($bind_conf);
 	($val=$zone{txt}[$i][1]) =~ s/\"//g;
 	($val=$zone{txt}[$i][1]) =~ s/:/\\072/g;
 	printf TINYDNSFILE "'$zonename\:$val\:$ttl\:\:\n" if ($tiny_conf);
       }
-      print ZONEFILE ";\n; contact info (zone)\n;\n" 
+      print ZONEFILE ";\n; contact info (zone)\n;\n"
 	if ($bind_conf && @{$zone{txt}} > 1);
       foreach $i (1..$#{$zone{txt}}) {
 	($val=$zone{txt}[$i][1]) =~ s/\"//g;
-	printf ZONEFILE $ZFORMAT, '',$ttl,$class,'TXT',"\"$val\"" 
+	printf ZONEFILE $ZFORMAT, '',$ttl,$class,'TXT',"\"$val\""
 	  if ($bind_conf);
 	($val=$zone{txt}[$i][1]) =~ s/\"//g;
 	($val=$zone{txt}[$i][1]) =~ s/:/\\072/g;
@@ -593,11 +635,15 @@ if ($bind_conf) {
       # zone A records
       if (@{$zone{ip}} > 1) {
 	print ZONEFILE ";\n; zone A record(s)\n;\n" if ($bind_conf);
-	for $i (1..$#{$zone{ip}}) {
+
+    for $i (1..$#{$zone{ip}}) {
 	  next unless ($zone{ip}[$i][3] =~ /^(t|true|1)$/);
 	  ($ip=$zone{ip}[$i][1]) =~ s/\/32$//;
+	  $ip =~ s/\/128$//;
+
 	  $ttl=''; # fixme
-	  printf ZONEFILE $ZFORMAT, '',$ttl,$class,'A',$ip if ($bind_conf);
+	  my $recA = (ip_is_ipv4($ip) ? 'A' : 'AAAA');
+      printf ZONEFILE $ZFORMAT, '',$ttl,$class,$recA,$ip if ($bind_conf);
 	  printf TINYDNSFILE "+$zonename\:$ip\:$ttl\:\:\n" if ($tiny_conf);
 	}
       }
@@ -605,11 +651,13 @@ if ($bind_conf) {
 
     # delegated zones
     undef @cnamedelegs;
-    undef %delegnets;
+    undef @delegnets; # For IPv6.
     undef @q;
     $delegation_mask='';
     db_query("SELECT a.domain,c.ns,a.ttl FROM hosts a,zones b,ns_entries c " .
 	     "WHERE c.ref=a.id AND a.zone=b.id AND c.type=2 AND a.type=2 " .
+	     " AND (coalesce(b.expiration, 0) <= 0 OR coalesce(b.expiration, 0) > " .
+	     " extract(epoch from now())) " . # Exclude expired zones.
 	     "AND b.id=$zoneid " .
 	     "ORDER BY a.domain,c.ns;",\@q);
     error(db_errormsg()) if (db_errormsg());
@@ -617,7 +665,7 @@ if ($bind_conf) {
       print ZONEFILE ";\n;\n; delegated zones\n;\n" if ($bind_conf);
       $domain='';
       for $i (0 .. $#q) {
-	print ZONEFILE ";\n" 
+	print ZONEFILE ";\n"
 	  if ($bind_conf && ($domain ne '') && ($domain ne $q[$i][0]));
 	$val = ($domain ne $q[$i][0] ? $q[$i][0] : '');
 	if ($rev eq 't') {
@@ -626,16 +674,22 @@ if ($bind_conf) {
 	    if ($4) {
 	      $dnet = arpa2cidr("$4.$zonename");
 	      fatal("invalid reverse delegation '$val'")
-		if ($dnet eq '0.0.0.0/0' || $dnet eq '');
+#		  if ($dnet eq '0.0.0.0/0' || $dnet eq '');
+		  if ($dnet eq '0.0.0.0/0'  or $dnet eq '' or # For IPv6.
+		      ipv6compress(cidr64ok($dnet) ? ipv64unmix($dnet) : $dnet) eq '::/0');
 	    }
 	    print "special (CNAME hack) delegation: $val\n" if ($opt_verbose);
 	  } elsif ($val) {
 	    $dnet = arpa2cidr("$val.$zonename");
 	    fatal("invalid reverse delegation '$val'")
-	      if ($dnet eq '0.0.0.0/0' || $dnet eq '');
+#		if ($dnet eq '0.0.0.0/0' || $dnet eq '');
+		if ($dnet eq '0.0.0.0/0'  or $dnet eq '' or # For IPv6.
+		    ipv6compress(cidr64ok($dnet) ? ipv64unmix($dnet) : $dnet) eq '::/0');
 	    #print "dnet: $dnet\n";
-	    $net = new Net::Netmask($dnet);
-	    $net->storeNetblock(\%delegnets);
+#	    $net = new Net::Netmask($dnet);
+#	    $net->storeNetblock(\%delegnets);
+# Can't be optimized. ****
+	    push @delegnets, new NetAddr::IP($dnet); # For IPv6;
 	  }
 	}
 	$domain=$q[$i][0];
@@ -650,7 +704,7 @@ if ($bind_conf) {
 	# Make sure ns is a fqdn.
 	$ns .= ".$zonename." unless ($ns =~ /\.$/);
 	$src = "$domain";
-	$src .= ".$zonename" unless ($src =~ /\.$/); 
+	$src .= ".$zonename" unless ($src =~ /\.$/);
 	printf TINYDNSFILE "&$src\:\:$ns\:$ttl\:\:\n" if ($tiny_conf);
       }
 	print ZONEFILE ";\n" if ($bind_conf);
@@ -671,16 +725,19 @@ if ($bind_conf) {
       db_query("SELECT a.ip,h.domain,h.ttl,z.name,h.expiration " .
 	       "FROM hosts h,zones z,a_entries a " .
 	       "WHERE z.server=$serverid AND h.zone=z.id " .
+	       " AND (coalesce(z.expiration, 0) <= 0 OR coalesce(z.expiration, 0) > " .
+	       " extract(epoch from now())) " . # Exclude expired zones.
 	       " AND (h.type=1 OR h.type=6 OR h.type=10) " .
 	       " AND a.host=h.id " .
 	       " AND a.reverse=true AND a.ip << '$zone{reversenet}' " .
 	       "ORDER BY a.ip,h.domain",\@q);
       error(db_errormsg()) if (db_errormsg());
       if (@q > 0) {
-	print ZONEFILE ";\n; reverse map for: $zone{reversenet}\n;\n"
+       print ZONEFILE ";\n; reverse map for: $zone{reversenet}\n;\n"
 	  if ($bind_conf);
 	for $i (0 .. $#q) {
-	  if (findNetblock($q[$i][0],\%delegnets)) {
+#	  if (findNetblock($q[$i][0],\%delegnets)) {
+	  if (is_in_netblock($q[$i][0],\@delegnets)) { # For IPv6.
 	    #print "SKIP: $q[$i][0]\n";
 	    next;
 	  }
@@ -741,23 +798,53 @@ if ($bind_conf) {
       # glue records needed for delgated zones
       undef @q;
       db_query("SELECT hosts.domain,a_entries.ip,hosts.ttl " .
-	       "FROM hosts,zones,a_entries " .
-	       "WHERE hosts.zone=zones.id AND hosts.id=a_entries.host " .
-	       "AND zones.id=$zoneid AND hosts.type=6 " .
+	       "FROM hosts,zones z,a_entries " .
+	       "WHERE hosts.zone=z.id AND hosts.id=a_entries.host " .
+	       " AND (coalesce(z.expiration, 0) <= 0 OR coalesce(z.expiration, 0) > " .
+	       " extract(epoch from now())) " . # Exclude expired zones.
+	       "AND z.id=$zoneid AND hosts.type=6 " .
 	       "ORDER BY hosts.domain;",\@q);
       error(db_errormsg()) if (db_errormsg());
       if (@q > 0) {
-	print ZONEFILE ";\n; Glue A records\n;\n" if ($bind_conf);
+	  print ZONEFILE ";\n; Glue A records\n;\n" if ($bind_conf);
+	  for $i (0 .. $#q) {
+	      $domain=$q[$i][0];
+	      $ip=$q[$i][1];
+	      $ip =~ s/\/\d{1,3}$//g;
+	      $ttl=$q[$i][2];
+	      $ttl='' unless ($ttl > 0);
+	      my $recA = (ip_is_ipv4($ip) ? 'A' : 'AAAA');
+	      $dname = ($dname{$domain} ? '' : $domain);
+	      printf ZONEFILE $ZFORMAT, $dname,$ttl,$class,$recA,$ip
+		  if ($bind_conf);
+	      printf TINYDNSFILE "+$dname\.$zonename\:$ip\:$ttl\:\:\n"
+		  if ($tiny_conf);
+	      $dname{$domain}++;
+	  }
+      }
+
+# Moved up before "MX only" domains to allow TXT records for them. # ** TVu 2020-06-16
+      ## txt hash
+      undef %txthash;
+      undef @q;
+      db_query("SELECT h.domain,t.txt FROM hosts h,zones z,txt_entries t " .
+	       "WHERE h.zone=z.id AND t.type=2 AND t.ref=h.id " .
+	       " AND (coalesce(z.expiration, 0) <= 0 OR coalesce(z.expiration, 0) > " .
+	       " extract(epoch from now())) " . # Exclude expired zones.
+#	       "AND h.type=1 AND z.id=$zoneid " .
+	       "AND (h.type=1 OR h.type=3 OR h.type=7) AND z.id=$zoneid " . # ** TVu 2020-06-16 +7 2020-11-02
+	       "ORDER BY h.domain;",\@q);
+      error(db_errormsg()) if (db_errormsg());
+      if (@q > 0) {
 	for $i (0 .. $#q) {
-	  $domain=$q[$i][0];
-	  $ip=$q[$i][1];
-	  $ip =~ s/\/\d{1,2}$//g;
-	  $ttl=$q[$i][2];
-	  $ttl='' unless ($ttl > 0);
-	  printf ZONEFILE $ZFORMAT, $domain,$ttl,$class,'A',$ip
-	    if ($bind_conf);
-	  printf TINYDNSFILE "+$domain\.$zonename\:$ip\:$ttl\:\:\n"
-	    if ($tiny_conf);
+	  $rec=$txthash{$q[$i][0]};
+	  if (!$rec) {
+	    $rec=[];
+	    $txthash{$q[$i][0]}=$rec;
+	  }
+	  $val=$q[$i][1];
+	  $val =~ s/\"//g;
+	  push @{$txthash{$q[$i][0]}}, $val;
 	}
       }
 
@@ -767,6 +854,8 @@ if ($bind_conf) {
       db_query("SELECT h.domain,m.pri,m.mx,h.ttl " .
 	       "FROM hosts h,zones z,mx_entries m,mx_templates r " .
 	       "WHERE h.zone=z.id AND h.mx=r.id AND m.ref=r.id AND m.type=3 " .
+	       " AND (coalesce(z.expiration, 0) <= 0 OR coalesce(z.expiration, 0) > " .
+	       " extract(epoch from now())) " . # Exclude expired zones.
 	       " AND h.type=3 AND h.mx > 0 AND z.id=$zoneid " .
 	       "ORDER BY h.domain,m.pri,m.mx;",\@q);
       error(db_errormsg()) if (db_errormsg());
@@ -775,12 +864,15 @@ if ($bind_conf) {
 	  if ($bind_conf);
 	$domain='';
 	for $i (0 .. $#q) {
-	  print ZONEFILE ";\n" if ($bind_conf && $domain ne '' && 
+	  print ZONEFILE ";\n" if ($bind_conf && $domain ne '' &&
 				   $domain ne $q[$i][0]);
 	  $val=($domain ne $q[$i][0] ? $q[$i][0] : '');
 	  $domain=$q[$i][0];
 	  $ttl=$q[$i][3];
 	  $ttl='' unless ($ttl > 0);
+
+	  $txt=$txthash{$domain}; # ** TVu 2020-06-16
+
 	  $pri = $q[$i][1];
 	  $q[$i][2] =~ s/\$DOMAIN/$domain/g;
 	  printf ZONEFILE $ZFORMAT, $val,$ttl,$class,'MX',
@@ -791,7 +883,18 @@ if ($bind_conf) {
 	  $dest .= ".$zonename." unless ($dest =~ /\.$/);
           printf TINYDNSFILE "\@$src\:\:$dest\:$pri\:$ttl\:\:\n"
 	    if ($tiny_conf);
-	  
+
+	  if ($val) { # ** TVu 2020-06-16
+	      for $k (0 .. $#{$txt}) {
+		  $val=$$txt[$k];
+		  $val =~ s/\"//g;
+		  printf ZONEFILE $ZFORMAT, '',$ttl,$class,'TXT',"\"$val\""
+		      if ($bind_conf);
+		  $val=~ s/:/\\072/g;
+		  printf TINYDNSFILE "'$zonename\:$val\:$ttl\:\:\n" if ($tiny_conf);
+	      }
+	  }
+
 	}
 	print ZONEFILE ";\n" if ($bind_conf);
       }
@@ -799,6 +902,8 @@ if ($bind_conf) {
       db_query("SELECT h.domain,m.pri,m.mx,h.ttl " .
 	       "FROM hosts h,zones z,mx_entries m " .
 	       "WHERE h.zone=z.id AND m.ref=h.id AND m.type=2 " .
+	       " AND (coalesce(z.expiration, 0) <= 0 OR coalesce(z.expiration, 0) > " .
+	       " extract(epoch from now())) " . # Exclude expired zones.
 	       " AND h.type=3 AND h.mx=-1 AND z.id=$zoneid " .
 	       "ORDER BY h.domain,m.pri,m.mx;",\@q);
       error(db_errormsg()) if (db_errormsg());
@@ -806,17 +911,32 @@ if ($bind_conf) {
 	print ZONEFILE ";\n;\n; MX only domains\n;\n" if ($bind_conf);
 	$domain='';
 	for $i (0 .. $#q) {
-	  print ZONEFILE ";\n" if ($bind_conf && $domain ne '' && 
+	  print ZONEFILE ";\n" if ($bind_conf && $domain ne '' &&
 				   $domain ne $q[$i][0]);
 	  $val=($domain ne $q[$i][0] ? $q[$i][0] : '');
 	  $domain=$q[$i][0];
 	  $ttl=$q[$i][3];
 	  $ttl='' unless ($ttl > 0);
+
+	  $txt=$txthash{$domain}; # ** TVu 2020-06-16
+
 	  $q[$i][2] =~ s/\$DOMAIN/$domain/g;
 	  printf ZONEFILE $ZFORMAT, $val,$ttl,$class,'MX',
 	                  "$q[$i][1] $q[$i][2]" if ($bind_conf);
 	  printf TINYDNSFILE "\@$val\.$zonename\:\:$q[$i][2]\:$q[$i][1]\:" .
 	                     "$ttl\:\:\n" if ($bind_conf);
+
+	  if ($val) { # ** TVu 2020-06-16
+	      for $k (0 .. $#{$txt}) {
+		  $val=$$txt[$k];
+		  $val =~ s/\"//g;
+		  printf ZONEFILE $ZFORMAT, '',$ttl,$class,'TXT',"\"$val\""
+		      if ($bind_conf);
+		  $val=~ s/:/\\072/g;
+		  printf TINYDNSFILE "'$zonename\:$val\:$ttl\:\:\n" if ($tiny_conf);
+	      }
+	  }
+
 	}
 	print ZONEFILE ";\n" if ($bind_conf);
       }
@@ -830,6 +950,8 @@ if ($bind_conf) {
       db_query("SELECT h.domain,w.proto,w.services FROM hosts h,zones z, " .
 	             "wks_templates r, wks_entries w " .
 	       "WHERE h.zone=z.id AND h.wks=r.id AND w.ref=r.id " .
+	       " AND (coalesce(z.expiration, 0) <= 0 OR coalesce(z.expiration, 0) > " .
+	       " extract(epoch from now())) " . # Exclude expired zones.
 	       "AND w.type=2 AND z.id=$zoneid AND h.type=1 " .
 	       "ORDER BY h.domain, w.proto;",\@q);
       error(db_errormsg()) if (db_errormsg());
@@ -837,7 +959,7 @@ if ($bind_conf) {
 	for $i (0 .. $#q) {
 	  $rec=$wkshash{$q[$i][0]};
 	  if (!$rec) {
-	    $rec=[]; 
+	    $rec=[];
 	    $wkshash{$q[$i][0]}=$rec;
 	  }
 	  $proto=$q[$i][1];
@@ -851,6 +973,8 @@ if ($bind_conf) {
       db_query("SELECT h.domain,w.proto,w.services " .
 	       "FROM hosts h,zones z,wks_entries w " .
 	       "WHERE z.id=$zoneid AND h.zone=z.id AND h.type=1 " .
+	       " AND (coalesce(z.expiration, 0) <= 0 OR coalesce(z.expiration, 0) > " .
+	       " extract(epoch from now())) " . # Exclude expired zones.
 	       " AND w.type=1 AND w.ref=h.id " .
 	       "ORDER BY h.domain,w.proto,w.services;",\@q);
       error(db_errormsg()) if (db_errormsg());
@@ -858,7 +982,7 @@ if ($bind_conf) {
 	for $i (0 .. $#q) {
 	  $rec=$wkshash2{$q[$i][0]};
 	  if (!$rec) {
-	    $rec=[]; 
+	    $rec=[];
 	    $wkshash2{$q[$i][0]}=$rec;
 	  }
 	  $proto=$q[$i][1];
@@ -875,6 +999,8 @@ if ($bind_conf) {
       db_query("SELECT r.id,m.pri,m.mx " .
 	       "FROM zones z,mx_templates r, mx_entries m " .
 	       "WHERE z.id=$zoneid AND r.zone=z.id " .
+	       " AND (coalesce(z.expiration, 0) <= 0 OR coalesce(z.expiration, 0) > " .
+	       " extract(epoch from now())) " . # Exclude expired zones.
 	       "AND m.ref=r.id AND m.type=3 " .
 	       "ORDER BY r.id,m.pri,m.mx;",\@q);
       error(db_errormsg()) if (db_errormsg());
@@ -894,6 +1020,8 @@ if ($bind_conf) {
       db_query("SELECT h.domain,m.pri,m.mx " .
 	       "FROM hosts h,zones z,mx_entries m " .
 	       "WHERE z.id=$zoneid AND h.zone=z.id AND h.type=1 " .
+	       " AND (coalesce(z.expiration, 0) <= 0 OR coalesce(z.expiration, 0) > " .
+	       " extract(epoch from now())) " . # Exclude expired zones.
 	       " AND m.type=2 AND m.ref=h.id " .
 	       "ORDER BY h.domain,m.pri,m.mx;",\@q);
       error(db_errormsg()) if (db_errormsg());
@@ -901,7 +1029,7 @@ if ($bind_conf) {
 	for $i (0 .. $#q) {
 	  $rec=$mxhash2{$q[$i][0]};
 	  if (!$rec) {
-	    $rec=[]; 
+	    $rec=[];
 	    $mxhash2{$q[$i][0]}=$rec;
 	  }
 	  push @{$mxhash2{$q[$i][0]}}, "$q[$i][1] $q[$i][2]";
@@ -909,42 +1037,30 @@ if ($bind_conf) {
       }
 
 
-      ## txt hash
-      undef %txthash;
-      undef @q;
-      db_query("SELECT h.domain,t.txt FROM hosts h,zones z,txt_entries t " .
-	       "WHERE h.zone=z.id AND t.type=2 AND t.ref=h.id " .
-	       "AND h.type=1 AND z.id=$zoneid " .
-	       "ORDER BY h.domain;",\@q);
-      error(db_errormsg()) if (db_errormsg());
-      if (@q > 0) {
-	for $i (0 .. $#q) {
-	  $rec=$txthash{$q[$i][0]};
-	  if (!$rec) {
-	    $rec=[];
-	    $txthash{$q[$i][0]}=$rec;
-	  }
-	  $val=$q[$i][1];
-	  $val =~ s/\"//g;
-	  push @{$txthash{$q[$i][0]}}, $val;
-	}
-      }
-
 
       # normal host entries
       undef @q;
-      undef %dnames;
+      my %dnscnts;
+      my $dns_index = 1;
+
+      my $ign_local = ($opt_ignorelocal ? "AND NOT (a.ip << '10.0.0.0/8') AND NOT (a.ip << '172.16.0.0/12') AND NOT (a.ip << '192.168.0.0/16')" : "");
+
       db_query("SELECT h.domain,a.ip,h.hinfo_hw,h.hinfo_sw,h.ttl,h.huser, " .
 	       " h.dept,h.location,h.info,h.mx,h.expiration " .
 	       "FROM hosts h, a_entries a, zones z " .
 	       "WHERE h.zone=z.id AND a.host=h.id " .
+	       " AND (coalesce(z.expiration, 0) <= 0 OR coalesce(z.expiration, 0) > " .
+	       " extract(epoch from now())) " . # Exclude expired zones.
 	       "AND z.id=$zoneid AND h.type=1 " .
-	       "AND a.forward=true AND h.domain <> '\@' " .
-	       "ORDER BY a.ip,h.domain;",\@q);
+	       "AND a.forward=true AND h.domain <> '\@' $ign_local " .
+	       #"ORDER BY a.ip,h.domain;",\@q);
+	       "ORDER BY h.domain, a.ip;",\@q);
       error(db_errormsg()) if (db_errormsg());
       if (@q > 0) {
-	print ZONEFILE ";\n;\n; A records\n;\n" if ($bind_conf);
-	for $i (0 .. $#q) {
+    print ZONEFILE ";\n;\n; A and AAAA records\n;\n" if ($bind_conf);
+    #Num of records for all hostnames (maybe slow for large installation)
+    $dnscnts{remove_origin($$_[0],$origin)}++ foreach (@q);
+    for $i (0 .. $#q) {
 	  #$domain=$q[$i][0];
 	  $domain=remove_origin($q[$i][0],$origin);
 	  if ($domain =~ /\.$/) {
@@ -959,8 +1075,9 @@ if ($bind_conf) {
 	    error("Skipping expired host: $q[$i][0]") if ($opt_verbose);
 	    next;
 	  }
+
 	  $ip=$q[$i][1];
-	  $ip =~ s/\/\d\d$//g;
+	  $ip =~ s/\/\d+$//g;
 	  $hinfo_hw=$q[$i][2];
 	  $hinfo_sw=$q[$i][3];
 	  $ttl=$q[$i][4];
@@ -974,21 +1091,18 @@ if ($bind_conf) {
 	  if ($q[$i][6]) { $info.=", " if ($info); $info.=$q[$i][6]; }
 	  if ($q[$i][7]) { $info.=" " if ($info); $info.=$q[$i][7]; }
 	  if ($q[$i][8]) { $info.=", " if ($info); $info.=$q[$i][8]; }
-	  if ($dnames{$domain}) {
-	    #error("duplicate A record $ip for $domain ($dnames{$domain}).");
-	    printf ZONEFILE $ZFORMAT, $domain,$ttl,$class,'A',$ip
-	      if ($bind_conf);
-	    printf ZONEFILE ";\n" if ($bind_conf);
-	    printf TINYDNSFILE "+$domain\.$zonename\:$ip\:$ttl\:\n"
-	      if ($tiny_conf);
-	    next;
-	  }
-	  $dnames{$domain}=$ip;
-	  printf ZONEFILE $ZFORMAT, $domain,$ttl,$class,'A',$ip
+
+      my $recA = (ip_is_ipv4($ip) ? 'A' : 'AAAA');
+
+
+      #No hostname for second and further
+      $dname = ($dns_index == 1 ? $domain : '');
+      printf ZONEFILE $ZFORMAT, $dname,$ttl,$class,$recA,$ip
 	    if ($bind_conf);
-	  printf TINYDNSFILE "+$domain\.$zonename\:$ip\:$ttl\:\:\n"
+	  printf TINYDNSFILE "+$dname\.$zonename\:$ip\:$ttl\:\:\n"
 	    if ($tiny_conf);
-	  unless ($server{named_flags_hinfo}) {
+    if (!$server{named_flags_hinfo} and ($dns_index == $dnscnts{$domain})) {
+    #if (!$server{named_flags_hinfo}) {
 	    printf ZONEFILE $ZFORMAT, '',$ttl,$class,'HINFO',
 	      "$hinfo_hw $hinfo_sw"  if ($bind_conf && $hinfo_hw ne '' &&
 					 $hinfo_sw ne '');
@@ -1011,7 +1125,9 @@ if ($bind_conf) {
 	      }
 	    }
 	  }
-	  if ($mx) {
+      #firstmx for eliminating duplication mx records
+	  if ($mx and !$firstmx{$domain}) {
+        $firstmx{$domain} = 1;
 	    for $k (0 .. $#{$mx}) {
 	      $val=$$mx[$k];
               $val =~ s/\$DOMAIN/$domain/g;
@@ -1043,10 +1159,13 @@ if ($bind_conf) {
               $info =~ s/:/\\072/g;
               printf TINYDNSFILE "'$zonename\:$val\:$info\:\:\n"
 		if ($tiny_conf);
-	    }	      
+	    }
 	  }
-	  print ZONEFILE ";\n" if ($bind_conf);
+	  print ZONEFILE ";\n" if ($bind_conf and $dns_index == $dnscnts{$domain});
+	  #print ZONEFILE ";\n" if ($bind_conf);
+	  $dns_index = ($dns_index < $dnscnts{$domain} ? ++$dns_index : 1);
 	}
+
       }
 
 
@@ -1056,6 +1175,8 @@ if ($bind_conf) {
 	       " b.expiration " .
 	       "FROM hosts a, hosts b,zones z, arec_entries r,a_entries ae " .
 	       "WHERE z.id=$zoneid AND a.type=7 AND a.zone=z.id " .
+	       " AND (coalesce(z.expiration, 0) <= 0 OR coalesce(z.expiration, 0) > " .
+	       " extract(epoch from now())) " . # Exclude expired zones.
 	       " AND r.host=a.id AND b.id=r.arec AND b.type=1 " .
 	       " AND ae.host=b.id AND ae.forward=true " .
 	       "ORDER BY a.domain;",\@q);
@@ -1088,10 +1209,12 @@ if ($bind_conf) {
 	  $ttl='' unless ($ttl > 0);
 	  $alias =~ s/\/\d{1,2}\s*$//g;
 	  if ($bind_conf) {
-            printf ZONEFILE $ZFORMAT, $domain,$ttl,$class,'A',$alias;
+	    # Oops, the address to check is in $alias not in $ip - mesrik, 2024
+            #my $recA = (ip_is_ipv4($ip) ? 'A' : 'AAAA');
+            my $recA = (ip_is_ipv4($alias) ? 'A' : 'AAAA');
+            printf ZONEFILE $ZFORMAT, $domain,$ttl,$class,$recA,$alias;
             printf ZONEFILE $ZFORMAT, '',$ttl,$class,'TXT',
 	                    "\"IP alias for $q[$i][1]\"";
-	    print ZONEFILE ";\n";
           }
 	  if ($tiny_conf) {
             printf TINYDNSFILE "+$domain\.$zonename\:$alias\:$ttl\:\n";
@@ -1099,6 +1222,19 @@ if ($bind_conf) {
 	    $text = "\"IP alias for $sfor\"";
 	    printf TINYDNSFILE "'$zonename\:$text\:$ttl\:\:\n";
 	  }
+
+# TXT for AREC.
+	  $txt=$txthash{$q[$i][0]}; # ** TVu 2020-11-02
+	  for $k (0 .. $#{$txt}) {
+	    $val=$$txt[$k];
+	    $val =~ s/\"//g;
+	    printf ZONEFILE $ZFORMAT, '',$ttl,$class,'TXT',"\"$val\""
+	      if ($bind_conf);
+            $val=~ s/:/\\072/g;
+            printf TINYDNSFILE "'$zonename\:$val\:$ttl\:\:\n" if ($tiny_conf);
+	  }
+	  print ZONEFILE ";\n" if ($bind_conf);
+
 	}
       }
 
@@ -1107,6 +1243,8 @@ if ($bind_conf) {
       db_query("SELECT a.domain,b.domain,a.ttl,a.expiration,b.expiration " .
 	       "FROM hosts a, hosts b,zones z " .
 	       "WHERE a.zone=z.id AND z.id=$zoneid " .
+	       " AND (coalesce(z.expiration, 0) <= 0 OR coalesce(z.expiration, 0) > " .
+	       " extract(epoch from now())) " . # Exclude expired zones.
 	       "AND a.type=4 AND a.alias=b.id AND b.type=1 " .
 	       "ORDER BY a.domain;",\@q);
       error(db_errormsg()) if (db_errormsg());
@@ -1147,6 +1285,8 @@ if ($bind_conf) {
       db_query("SELECT h.domain,h.cname_txt,h.ttl,h.expiration " .
                "FROM hosts h,zones z " .
 	       "WHERE h.zone=z.id AND z.id=$zoneid " .
+	       " AND (coalesce(z.expiration, 0) <= 0 OR coalesce(z.expiration, 0) > " .
+	       " extract(epoch from now())) " . # Exclude expired zones.
 	       "AND h.type=4 AND h.alias=-1 " .
 	       "ORDER BY h.domain;",\@q);
       error(db_errormsg()) if (db_errormsg());
@@ -1185,6 +1325,8 @@ if ($bind_conf) {
 	       " b.pri,b.weight,b.port,b.target " .
 	       "FROM hosts a, srv_entries b, zones z " .
 	       "WHERE a.zone=z.id AND z.id=$zoneid " .
+	       " AND (coalesce(z.expiration, 0) <= 0 OR coalesce(z.expiration, 0) > " .
+	       " extract(epoch from now())) " . # Exclude expired zones.
 	       "AND a.type=8 AND a.id=b.ref " .
 	       "ORDER BY a.domain,b.port,b.pri,b.weight,b.target;",\@q);
       error(db_errormsg()) if (db_errormsg());
@@ -1219,16 +1361,16 @@ if ($bind_conf) {
 	  # Weight: 200
 	  # Port: 80
 	  # Dest: dest.com
-	  # is 
+	  # is
           # ":test.com:33:\000\144\000\310\000\120\004dest\003com\000"
-	  
+
 	  $source = "$zonename" if ($domain eq '');
 	  $source = "$domain\.$zonename" if ($domain ne '');
 	  $octal_pri = sprintf("%o",$pri);
 	  $octal_weight = sprintf("%o",$weight);
 	  $octal_port = sprintf("%o",$port);
 	  $target =~ s/\./\\003/g;
-	  
+
           printf TINYDNSFILE "# CHECK SRV $domain\.$zonename $ttl $class " .
 	                     "$pri $weight $port $target\n" if ($tiny_conf);
           printf TINYDNSFILE "\:$source\:33\:\\000\\$octal_pri\\000\\".
@@ -1238,16 +1380,27 @@ if ($bind_conf) {
       }
     }
 
-    # custom zone file entries
-    if (@{$zone{zentries}} > 1) {
-      print ZONEFILE ";\n; Custom entries\n;\n" if ($bind_conf);
-      for $i (1..$#{$zone{zentries}}) {
-	print ZONEFILE $zone{zentries}[$i][1],"\n" if (bind_conf);
+    # New style custom zone file entries (multi-line groups). 2020-08-04 TVu
+    if (@{$zone{zentries_ta}} > 1) {
+      print ZONEFILE ";\n; Custom entries (new style)\n" if ($bind_conf);
+      for $i (1..$#{$zone{zentries_ta}}) {
+	print ZONEFILE ";\n",$zone{zentries_ta}[$i][1],"\n" if ($bind_conf);
 	# Nothing we can do for tinydns here I guess ..
       }
     }
+
+    # Old style custom zone file entries (individual lines).
+    # These may eventually be discarded.
+    if (@{$zone{zentries}} > 1) {
+      print ZONEFILE ";\n; Custom entries (old deprecated style)\n;\n" if ($bind_conf);
+      for $i (1..$#{$zone{zentries}}) {
+	print ZONEFILE $zone{zentries}[$i][1],"\n" if ($bind_conf);
+	# Nothing we can do for tinydns here I guess ..
+      }
+    }
+
     print ZONEFILE ";\n;\n; eof\n" if ($bind_conf);
-    
+
     close(ZONEFILE) if ($bind_conf);
 
     # validate zone file if --check specified
@@ -1276,9 +1429,9 @@ if ($bind_conf) {
 
     @args = split(/\s+/,$SAURON_NAMED_CHK_ARGS);
     push @args, $bind_filename . $tmp_extension;
-    print "run: $SAURON_NAMED_CHK_PROG " .join(' ',@args)."\n" 
+    print "run: $SAURON_NAMED_CHK_PROG " .join(' ',@args)."\n"
 	if ($opt_verbose);
-    $res = system($SAURON_NAMED_CHK_PROG,@args);
+    $res = system($SAURON_NAMED_CHK_PROG,@args); # ** Aiheuttaa virheen?
     fatal("named.conf validity check failed ($res)") if ($res);
   }
 
@@ -1300,25 +1453,28 @@ if ($bind_conf) {
 }
 
 
-sub print_cidr_list($$$$) {
-  my($name,$type,$ref,$hdr) = @_;
+sub print_cidr_list($$$$$) {
+  my($name,$type,$ref,$hdr,$family) = @_;
   my(@q,$j,$val,$com);
+
+  $family = ($family ? "AND family(c.ip)=$family" : "");
 
   db_query("SELECT c.mode,c.ip,c.acl,c.tkey,c.op,c.port,c.comment" .
            ",a.name,k.name " .
 	   "FROM cidr_entries c LEFT JOIN acls a ON c.acl=a.id " .
 	   " LEFT JOIN keys k ON c.tkey=k.id " .
-	   "WHERE c.type=$type AND c.ref=$ref " .
+	   "WHERE c.type=$type AND c.ref=$ref $family " .
 	   "ORDER BY c.id;",\@q);
 
     error(db_errormsg()) if (db_errormsg());
     if (@q > 0) {
       print BINDFILE "${hdr}${name} {\n";
       for $j (0..(@q-1)) {
-	my ($mode,$ip,$acl,$tkey,$op,$port,$comment,$aclname,$keyname) 
+	my ($mode,$ip,$acl,$tkey,$op,$port,$comment,$aclname,$keyname)
 	    = @{$q[$j]};
-	  
+
 	$ip =~ s/\/32\s*$//;
+	$ip =~ s/\/128\s*$//;
 	$com=($comment ? "  // $comment" : "");
 	$op=($op == 1 ? '!' : ' ');
 	$val='';
@@ -1326,11 +1482,11 @@ sub print_cidr_list($$$$) {
 	if ($mode == 0 && $ip) { $val=$ip; }
 	elsif ($mode == 1 && $aclname) { $val=$aclname; }
 	elsif ($mode == 2 && $keyname) { $val="key $keyname"; }
-	
-	# forward zones forwarders port 
-	if ($mode == 0 & $type == 12 && $port) { $val .= " port $port"; }
 
-	printf BINDFILE "$hdr\t%1s %-20s %s\n",$op,"$val;",$com
+	# forward zones forwarders port
+	if ($mode == 0 && $type == 12 && $port) { $val .= " port $port"; }
+
+	printf BINDFILE "$hdr\t%1s %-39s %s\n",$op,"$val;",$com # 20 -> 39 for IPv6.
 	  if ($val);
       }
       print BINDFILE "\t};\n";
@@ -1341,6 +1497,78 @@ sub print_cidr_list($$$$) {
 
 ######################################################################
 # DHCP
+
+
+sub print_dhcp_classes($$) {
+    my ($serverid, $opt_dhcpclass) = @_;
+
+    my (@dclasses, $hddc);
+
+    db_query("SELECT id,name,type FROM groups " .
+	     "WHERE server=$serverid AND (type=3 OR type=103) " .
+	     ($opt_dhcpclass ?
+	      " AND name=".db_encode_str($opt_dhcpclass)." " : "") .
+	     "ORDER BY name",\@dclasses);
+
+    # **** hack hack hack ****
+
+    if (@dclasses > 0 and "$server{name}" ne "ns2") {
+
+    #if (@dclasses > 0 ) {
+
+    # **** hack hack hack ****
+	print DHCPFILE "\n# (dynamic) classes\n\n";
+	for my $i (0..$#dclasses) {
+	    my @qq;
+	    db_query("SELECT h.ether,h.domain " .
+		     " FROM zones z JOIN hosts h ON z.id=h.zone " .
+		     " LEFT JOIN group_entries g ON h.id=g.host " .
+		     " WHERE z.server=$serverid AND h.ether NOTNULL " .
+		     " AND (coalesce(z.expiration, 0) <= 0 OR coalesce(z.expiration, 0) > " .
+		     " extract(epoch from now())) " . # Exclude expired zones.
+		     " AND (h.grp=$dclasses[$i][0] OR g.grp=$dclasses[$i][0]) " .
+		     " AND (h.expiration > EXTRACT(epoch FROM current_timestamp) OR h.expiration = 0 OR h.expiration ISNULL) " .
+		     " ORDER BY h.ether",\@qq);
+
+	    next unless(@qq);
+
+	    print DHCPFILE "\nclass \"$dclasses[$i][1]\" {\n";
+	    print DHCPFILE "\tmatch pick-first-value " .
+		"(option dhcp-client-identifier, hardware);\n"
+		if ($dclasses[$i][2] == 3);
+	    my @q;
+	    db_query("SELECT dhcp, comment FROM dhcp_entries " .
+		     "WHERE type=5 and ref=$dclasses[$i][0] ORDER BY id",\@q);
+	    for my $j (0..$#q) {
+		$q[$j][0].=';' unless ($q[$j][0] =~ /[;\{\}]\s*$/);
+		print DHCPFILE "\t$q[$j][0]\t #$q[$j][1]\n";
+	    }
+	    print DHCPFILE "}\n\n";
+
+	    # subclasses
+	    if ($dclasses[$i][2]== 3) {
+		my $lastmac;
+		for my $j (0..$#qq) {
+		    unless ($qq[$j][0] =~ /^[0-9A-F]{12}$/) {
+			#error("invalid ether for subclass: $q[$j][0]");
+			next;
+		    }
+		    next if ($qq[$j][0] eq $lastmac);
+		    print DHCPFILE "subclass \"$dclasses[$i][1]\" 1:" .
+			dhcpether($qq[$j][0]) . ";  # $qq[$j][1]\n";
+
+		    $hddc .= sprintf("host %s-%s { hardware ethernet %s; }\n", $qq[$j][1], $dclasses[$i][1], dhcpether($qq[$j][0]));
+		    $lastmac=$qq[$j][0];
+		}
+	    }
+
+	}
+	print DHCPFILE "\n";
+    }
+
+    return $hddc;
+}
+
 
 sub make_dhcp() {
   print "DHCP configuration\n";
@@ -1361,7 +1589,19 @@ sub make_dhcp() {
                  "# server: $server{name} -- $server{comment}\n#\n\n";
 
   $serverid=$server{masterserver} if ($server{masterserver} > 0);
-  goto print_dhcp_classes if ($opt_dhcpclass);
+
+  if ($opt_dhcpclass) {
+      print_dhcp_classes($serverid, $opt_dhcpclass);
+      close(DHCPFILE);
+      # remove $tmp_extension from generated file name
+      foreach $tmpfile (keys %open_tmpfiles) {
+	  print "rename: $tmpfile --> $open_tmpfiles{$tmpfile}\n" if ($opt_verbose);
+	  fatal("failed to rename tmpfile: $tmpfile")
+	      unless(rename($tmpfile,$open_tmpfiles{$tmpfile})==1);
+	  delete $open_tmpfiles{$tmpfile};
+      }
+      return;
+  }
 
 
   # failover stuff
@@ -1404,11 +1644,13 @@ sub make_dhcp() {
   undef @q;
   db_query("SELECT h.ether,a.ip FROM hosts h,zones z,a_entries a " .
 	   "WHERE z.server=$serverid AND h.zone=z.id AND a.host=h.id " .
-	   " AND h.ether NOTNULL;",\@q);
+	   " AND (coalesce(z.expiration, 0) <= 0 OR coalesce(z.expiration, 0) > " .
+	   " extract(epoch from now())) " . # Exclude expired zones.
+	   " AND h.ether NOTNULL AND family(a.ip) = 4;",\@q);
   error(db_errormsg()) if (db_errormsg());
   for $i (0..$#q) {
     unless ($q[$i][0] =~ /^[0-9A-F]{12}$/) {
-      error("Invalid ethernet address ($q[$i][0]) skipped");
+      error("Invalid MAC address ($q[$i][0]) skipped");
       next;
     }
     $etherhash{$q[$i][0]}=[] unless ($etherhash{$q[$i][0]});
@@ -1418,11 +1660,13 @@ sub make_dhcp() {
   undef @q;
   db_query("SELECT b.ether,c.ip FROM hosts a, hosts b, zones z, a_entries c ".
 	   "WHERE z.server=$serverid AND a.zone=z.id AND a.ether_alias=b.id ".
-	   " AND c.host=a.id;",\@q);
+	   " AND (coalesce(z.expiration, 0) <= 0 OR coalesce(z.expiration, 0) > " .
+	   " extract(epoch from now())) " . # Exclude expired zones.
+	   " AND c.host=a.id AND family(c.ip) = 4;",\@q);
   error(db_errormsg()) if (db_errormsg());
   for $i (0..$#q) {
     unless ($q[$i][0] =~ /^[0-9A-F]{12}$/) {
-      error("Invalid ethernet address ($q[$i][0]) skipped (ether_alias)");
+      error("Invalid MAC address ($q[$i][0]) skipped (ether_alias)");
       next;
     }
     $etherhash{$q[$i][0]}=[] unless ($etherhash{$q[$i][0]});
@@ -1432,82 +1676,55 @@ sub make_dhcp() {
 
   # host dhcp hash
   undef @q;
-  db_query("SELECT h.id,d.dhcp FROM hosts h,zones z,dhcp_entries d " .
+  db_query("SELECT h.id,d.dhcp,d.comment FROM hosts h,zones z,dhcp_entries d " .
 	   "WHERE z.server=$serverid AND h.zone=z.id AND d.type=3 " .
+	   " AND (coalesce(z.expiration, 0) <= 0 OR coalesce(z.expiration, 0) > " .
+	   " extract(epoch from now())) " . # Exclude expired zones.
 	   " AND d.ref=h.id ORDER BY h.id,d.id",\@q);
   for $i (0..$#q) {
     $dhcphosth{$q[$i][0]}=[] unless ($dhcphosth{$q[$i][0]});
+    $dhcphosthd{$q[$i][0]}=[] unless ($dhcphosthd{$q[$i][0]});
     push @{$dhcphosth{$q[$i][0]}}, $q[$i][1];
+    push @{$dhcphosthd{$q[$i][0]}}, $q[$i][2];
   }
 
+
+  # local entries 2020-07-20 TVu
+
+  undef @q;
+  db_query("SELECT d.dhcp, d.comment FROM dhcp_entries d " .
+	   "WHERE d.type=7 AND d.ref=$server{id} ORDER BY d.id",\@q);
+  print DHCPFILE "\n# local options\n\n" if (@q);
+  for $i (0..$#q) {
+      $q[$i][0].=';' unless ($q[$i][0] =~ /[;\{\}]\s*$/);
+      if($q[$i][1] ne '') {
+        print DHCPFILE "$q[$i][0]\t # $q[$i][1]\n";
+      }
+      else {
+        print DHCPFILE "$q[$i][0]\n";
+      }
+  }
+  print DHCPFILE "\n\n" if (@q);
 
   # global entries
 
   print DHCPFILE "\n# global options\n\n";
   undef @q;
-  db_query("SELECT d.dhcp FROM dhcp_entries d " .
+  db_query("SELECT d.dhcp, d.comment FROM dhcp_entries d " .
 	   "WHERE d.type=1 AND d.ref=$serverid ORDER BY d.id",\@q);
   for $i (0..$#q) {
       $q[$i][0].=';' unless ($q[$i][0] =~ /[;\{\}]\s*$/);
-    print DHCPFILE "$q[$i][0]\n";
+      if($q[$i][1] ne '') {
+        print DHCPFILE "$q[$i][0]\t # $q[$i][1]\n";
+      }
+      else {
+        print DHCPFILE "$q[$i][0]\n";
+      }
   }
   print DHCPFILE "\n\n";
 
-
-  # dynamic hosts (DHCP classes)
-  unless ($dhcp2_mode) {
-  print_dhcp_classes:
-    undef @dclasses;
-    db_query("SELECT id,name,type FROM groups " .
-	     "WHERE server=$serverid AND (type=3 OR type=103) " .
-	     ($opt_dhcpclass ?
-	      " AND name=".db_encode_str($opt_dhcpclass)." " : "") .
-	     "ORDER BY name",\@dclasses);
-    if (@dclasses > 0) {
-      print DHCPFILE "\n# (dynamic) classes\n\n";
-      for $i (0..$#dclasses) {
-	print DHCPFILE "\nclass \"$dclasses[$i][1]\" {\n";
-	print DHCPFILE "\tmatch pick-first-value " .
-	               "(option dhcp-client-identifier, hardware);\n"
-			 if ($dclasses[$i][2] == 3);
-	undef @q;
-	db_query("SELECT dhcp FROM dhcp_entries " .
-		 "WHERE type=5 and ref=$dclasses[$i][0] ORDER BY id",\@q);
-	for $j (0..$#q) {
-	    $q[$j][0].=';' unless ($q[$j][0] =~ /[;\{\}]\s*$/);
-	    print DHCPFILE "\t$q[$j][0]\n";
-	}
-	print DHCPFILE "}\n";
-
-	# subclasses
-	if ($dclasses[$i][2]== 3) {
-	  my $lastmac;
-	  undef @q;
-	  db_query("SELECT h.ether,h.domain " .
-		   "FROM zones z JOIN hosts h ON z.id=h.zone " .
-		   " LEFT JOIN group_entries g ON h.id=g.host " .
-		   "WHERE z.server=$serverid AND h.ether NOTNULL " .
-		   " AND (h.grp=$dclasses[$i][0] OR g.grp=$dclasses[$i][0]) " .
-		   "ORDER BY h.ether",\@q);
-	  for $j (0..$#q) {
-	    unless ($q[$j][0] =~ /^[0-9A-F]{12}$/) {
-	      #error("invalid ether for subclass: $q[$j][0]");
-	      next;
-	    }
-	    next if ($q[$j][0] eq $lastmac);
-	    print DHCPFILE "subclass \"$dclasses[$i][1]\" 1:" .
-	                   dhcpether($q[$j][0]) . ";  # $q[$j][1]\n";
-	    $lastmac=$q[$j][0];
-	  }
-	}
-
-      }
-      print DHCPFILE "\n";
-    }
-
-    goto dhcpd_conf_done if ($opt_dhcpclass);
-  }
-
+  #Host declaration for dyn. classes
+  my $hddc = print_dhcp_classes($serverid, $opt_dhcpclass);
 
   # check for dynamic IP pools
   undef @dpools;
@@ -1517,14 +1734,30 @@ sub make_dhcp() {
     $dpools_count=@dpools;
     print STDERR "Found $dpools_count dynamic IP pools\n" if ($opt_verbose);
     undef @dips;
+    #
+    # Fix: following changed to not generate dhcp entries of
+    #      reserved or expired hosts. I have already fixed this
+    #      earlier (2009-03-01 and submitted patch to tjko, but for
+    #      some reason was not merged and came to bite us again :/ )
+    #      - mesrik 2020-01-30
+    #
+    # db_query("SELECT g.id,a.ip,h.domain ".
+    # 	     "FROM hosts h, a_entries a, groups g ".
+    # 	     "WHERE a.host=h.id AND g.id=h.grp AND g.type=2 ".
+    # 	     " AND g.server=$serverid AND family(a.ip) = 4 ORDER BY a.ip,g.id",\@dips);
+
     db_query("SELECT g.id,a.ip,h.domain ".
 	     "FROM hosts h, a_entries a, groups g ".
-	     "WHERE a.host=h.id AND g.id=h.grp AND g.type=2 AND h.type=1".
+	     "WHERE a.host=h.id AND g.id=h.grp AND g.type=2 AND h.type=1" .
 	     " AND ( COALESCE(h.expiration,0) = 0 OR h.expiration > $time_now_ticks )".
-	     " AND g.server=$serverid ".
-             "ORDER BY a.ip,g.id",\@dips);
+	     " AND g.server=$serverid AND family(a.ip) = 4 ORDER BY a.ip,g.id",\@dips);
+
     $dpool_ip_count=@dips;
     print STDERR "Found $dpool_ip_count dynamic pool IPs\n" if ($opt_verbose);
+
+    for $l (0..$#dips) {
+	$nad2[$l] = new NetAddr::IP($dips[$l][1]) # Store NetAddr::IP objects for later use. ****
+    }
 
 
     undef %dpools_dhcp;
@@ -1539,38 +1772,45 @@ sub make_dhcp() {
 
   # net/subnet map
 
-  $net_map_mode=0;  # 0=use VLANs, 1=use networks
+  $net_map_mode=2;  # 0=use VLANs, 1=use networks, 2= use VLANs, pools in nets
 
   print DHCPFILE "\n# network map\n\n";
   undef @subnets;
   undef @nets;
   db_query("SELECT net,name,id,vlan " .
 	   "FROM nets WHERE server=$serverid AND no_dhcp=false " .
-	   "AND subnet=false AND dummy=false ORDER BY net",\@nets);
+	   "AND subnet=false AND dummy=false AND family(net) = 4 ORDER BY net",\@nets);
   if (@nets < 1) {
     fatal("No nets, that use DHCP, defined for this server!");
   }
   for $i (0 .. $#nets) {
+    $nad1[$i] = new NetAddr::IP($nets[$i][0]); # Store NetAddr::IP objects for later use. ****
     $net=$nets[$i][0];
     $netname=$nets[$i][1];
     $netname =~ s/\s+//g;
     if ($net_map_mode == 1) {
       print DHCPFILE "shared-network \"$netname\" {\n";
       undef @net_dhcp;
-      db_query("SELECT d.dhcp FROM dhcp_entries d " .
+      db_query("SELECT d.dhcp, d.comment FROM dhcp_entries d " .
 	       "WHERE d.type=4 AND d.ref=$nets[$i][2] ORDER BY d.id",
 	       \@net_dhcp);
-      for $j (0..$#net_dhcp) { 
+      for $j (0..$#net_dhcp) {
 	  $net_dhcp[$i][0].=';' unless ($net_dhcp[$i][0] =~ /[;\{\}]\s*$/);
-	  print DHCPFILE "\t$net_dhcp[$i][0]\n";
+          if($net_dhcp[$i][1] ne '') {
+            print DHCPFILE "\t$net_dhcp[$i][0]\t # $net_dhcp[$i][1]\n";
+          }
+          else {
+            print DHCPFILE "\t$net_dhcp[$i][0]\n";
+          }
       }
+
       print DHCPFILE "\n";
     }
 
     undef @q;
     db_query("SELECT net,id,name,vlan FROM nets " .
 	     "WHERE server=$serverid AND no_dhcp=false AND subnet=true " .
-	     "AND dummy=false AND net << '$net' ORDER BY net;",\@q);
+	     "AND dummy=false AND net << '$net' AND family(net) = 4 ORDER BY net;",\@q);
     if (@q < 1 ) {
       error("No subnets that use DHCP found") if ($net_map_mode==1);
       push @q, [$net,$nets[$i][2],$nets[$i][1],$nets[$i][3]];
@@ -1584,7 +1824,7 @@ sub make_dhcp() {
     }
   }
 
-  if ($net_map_mode == 0) {
+  if ($net_map_mode == 0 or $net_map_mode == 2 ) {
     # print network map using VLANs...
     undef %vlanhash;
     for $i (0..$#subnets) {
@@ -1599,12 +1839,17 @@ sub make_dhcp() {
       $netname = 'CHAOS' if ($vlan < 1 || $netname eq '');
       print DHCPFILE "shared-network \"$netname\" {\n";
       undef @vlan_dhcp;
-      db_query("SELECT d.dhcp FROM dhcp_entries d " .
+      db_query("SELECT d.dhcp, d.comment FROM dhcp_entries d " .
 	       "WHERE d.type=6 AND d.ref=$vlan ORDER BY d.id",\@vlan_dhcp);
       for $i (0..$#vlan_dhcp) {
 	$vlan_dhcp[$i][0].=';' unless ($vlan_dhcp[$i][0] =~ /[;\{\}]\s*$/);
-	print DHCPFILE "\t$vlan_dhcp[$i][0]\n";
-      }
+        if($vlan_dhcp[$i][1] ne '') {
+	        print DHCPFILE "\t$vlan_dhcp[$i][0]\t # $vlan_dhcp[$i][1]\n";
+        }
+        else {
+	        print DHCPFILE "\t$vlan_dhcp[$i][0]\n";
+        }
+     }
       undef @q;
       for $i (0..$#subnets) {
 	push ( @q, $subnets[$i])  if ($subnets[$i][3] eq $vlan);
@@ -1621,7 +1866,8 @@ sub make_dhcp() {
 
   undef @groups;
   db_query("SELECT id,name FROM groups WHERE server=$serverid AND " .
-	   "(type=1 OR type=3) " .
+	   #"(type=1 OR type=3) " .
+	   "type=1 " .
 	   "ORDER BY name;",\@groups);
   if (@groups < 1) {
     error("no groups found for this server");
@@ -1631,46 +1877,66 @@ sub make_dhcp() {
     db_query("SELECT h.grp,h.ether,a.ip,h.domain,z.name,h.id,h.expiration " .
 	     "FROM hosts h, zones z, a_entries a " .
 	     "WHERE h.zone=z.id AND a.host=h.id AND h.type=1 " .
+	     " AND (coalesce(z.expiration, 0) <= 0 OR coalesce(z.expiration, 0) > " .
+	     " extract(epoch from now())) " . # Exclude expired zones.
 	     "AND h.ether NOTNULL AND z.server=$serverid " .
-	     "AND h.grp>-1 " .
+	     "AND h.grp>-1 AND family(a.ip) = 4 " .
 	     "ORDER BY a.ip;",\@ghosts);
+
     if (@ghosts > 0) {
       for $i (0.. $#groups) {
 	$gid=$groups[$i][0];
 	$group=$groups[$i][1];
 	# $dhcp=db_decode_list_str($groups[$i][2]);
-	print DHCPFILE "group {  # $group\n";
-	undef @qqq;
+    undef @qqq;
 	undef @gperhost; # per host macro store
-	db_query("SELECT d.dhcp FROM dhcp_entries d " .
+	undef @qcount;
+
+    db_query("SELECT COUNT(h.id) " .
+             "FROM hosts h, a_entries a " .
+             "WHERE a.host=h.id AND grp = $gid AND family(a.ip) = 4 AND ether IS NOT NULL",\@qcount);
+    next unless $qcount[0][0];
+
+	db_query("SELECT d.dhcp, d.comment FROM dhcp_entries d " .
 		 "WHERE d.type=5 AND d.ref=$gid ORDER BY d.id",\@qqq);
-	for $k (0..$#qqq) {
+
+      print DHCPFILE "group {  # $group\n";
+
+      for $k (0..$#qqq) {
 	  $qqq[$k][0] =~ s/\\"/"/g;
 	  $qqq[$k][0].=';' unless ($qqq[$k][0] =~ /[;\{\}]\s*$/);
 
-	  # if includes %{macro} store it for later use and skip to next 
-	  if ($qqq[$k][0] =~ /\%\{\w+\}/) { 
-	      push(@gperhost,$qqq[$k][0]);    
+	  # if includes %{macro} store it for later use and skip to next
+	  if ($qqq[$k][0] =~ /\%\{\w+\}/) {
+	      push(@gperhost,$qqq[$k][0]);
 	      next;
 	  }
-
-	  print DHCPFILE "\t$qqq[$k][0]\n";
+      if($qqq[$k][1] ne '') {
+	    print DHCPFILE "\t$qqq[$k][0]\t #$qqq[$k][1]\n";
+      }
+      else {
+	    print DHCPFILE "\t$qqq[$k][0]\n";
+      }
 	}
 	print DHCPFILE "\t\n";
 
 	for $j (0 .. $#nets) {
-	  $net=new Net::Netmask($nets[$j][0]);
-	  print DHCPFILE "\t# net: " .$net->desc() . "\n";
+#	  $net=new Net::Netmask($nets[$j][0]);
+	  $net = $nad1[$j]; # Use stored objects. ****
+#	  print DHCPFILE "\t# net: " .$net->desc() . "\n";
+	  print DHCPFILE "\t# net: " .$net->cidr() . "\n";
 	  for $k (0 .. $#ghosts) {
 	    if (($ghosts[$k][6] > 0) && ($ghosts[$k][6] < $time_now_ticks)) {
-	      # error("expired host in DHCP: $ghosts[$k][3]");
+	      #error("expired host in DHCP: $ghosts[$k][3]");
 	      next;
 	    }
 	    $iplst=$etherhash{$ghosts[$k][1]};
 	    @{$iplst} = sort(@{$iplst}) if (@{$iplst}>1);
 	    $ip='';
 	    for $l (0..$#{$iplst}) {
-	      if ($net->match($$iplst[$l])) {
+#	      if ($net->match($$iplst[$l])) {
+# Can't be easily optimized.
+	      if ($net->contains(new NetAddr::IP($$iplst[$l]))) {
 		$ip.=", " if ($ip ne '');
 		$ip.=$$iplst[$l];
 	      }
@@ -1706,7 +1972,7 @@ sub make_dhcp() {
 		      unless (grep {/option\s+domain-name\s+/ } @{$dhcplst}
 			      and $adomain);
 	      }
-	      
+
 	      %dhcp_var = ();
 	      $dhcp_var{'domain'} = $adomain;
 	      $dhcp_var{'ether'}  = $ether;
@@ -1714,9 +1980,14 @@ sub make_dhcp() {
 	      $dhcp_var{'host'}   = $host;
 
 	      for $l (0..$#{$dhcplst}) {
-		  $$dhcplst[$l].=';' unless ($$dhcplst[$l] =~ /[;\{\}]\s*$/);
-		  print DHCPFILE "\t\t" . expand_dhcp_macro($$dhcplst[$l],\%dhcp_var)."\n";
-	      }
+		    $$dhcplst[$l].=';' unless ($$dhcplst[$l] =~ /[;\{\}]\s*$/);
+		    if(@{$dhcphosthd{$dhcpid}}[$l] ne '') {
+                print DHCPFILE "\t\t" . expand_dhcp_macro($$dhcplst[$l],\%dhcp_var)."\t#" . @{$dhcphosthd{$dhcpid}}[$l] ."\n";
+	        }
+            else {
+                print DHCPFILE "\t\t" . expand_dhcp_macro($$dhcplst[$l],\%dhcp_var) . "\n";
+            }
+          }
 	      print DHCPFILE "\t}\n";
 	    }
 	  }
@@ -1734,13 +2005,17 @@ sub make_dhcp() {
   db_query("SELECT h.grp,h.ether,a.ip,h.domain,z.name,h.id,h.expiration " .
 	   "FROM hosts h, zones z, a_entries a " .
 	   "WHERE h.zone=z.id AND a.host=h.id AND ( h.type=1 OR h.type=9 ) " .
+	   " AND (coalesce(z.expiration, 0) <= 0 OR coalesce(z.expiration, 0) > " .
+	   " extract(epoch from now())) " . # Exclude expired zones.
 	   "AND h.ether NOTNULL AND z.server=$serverid " .
-	   "AND h.grp<0 " .
+	   "AND h.grp<0 AND family(a.ip) = 4 " .
 	   "ORDER BY a.ip;",\@ghosts);
   if (@ghosts > 0 ) {
     for $j (0 .. $#nets) {
-      $net=new Net::Netmask($nets[$j][0]);
-      print DHCPFILE "# net: " .$net->desc() . "\n";
+#     $net=new Net::Netmask($nets[$j][0]);
+      $net = $nad1[$j]; # Use stored objects.
+#     print DHCPFILE "# net: " .$net->desc() . "\n";
+      print DHCPFILE "# net: " .$net->cidr() . "\n";
       for $k (0 .. $#ghosts) {
 	if (($ghosts[$k][6] > 0) && ($ghosts[$k][6] < $time_now_ticks)) {
 	  # error("expired host in DHCP: $ghosts[$k][3]");
@@ -1750,7 +2025,9 @@ sub make_dhcp() {
 	@{$iplst} = sort(@{$iplst}) if (@{$iplst}>1);
 	$ip='';
 	for $l (0..$#{$iplst}) {
-	  if ($net->match($$iplst[$l])) {
+#	  if ($net->match($$iplst[$l])) {
+# Can't be easily optimized. ****
+	  if ($net->contains(new NetAddr::IP($$iplst[$l]))) {
 	    $ip.=", " if ($ip ne '');
 	    $ip.=$$iplst[$l];
 	  }
@@ -1778,9 +2055,15 @@ sub make_dhcp() {
 	  }
 
 	  $dhcplst=$dhcphosth{$dhcpid};
+
 	  for $l (0..$#{$dhcplst}) {
 	      $$dhcplst[$l].=';' unless ($$dhcplst[$l] =~ /[;\{\}]\s*$/);
-	      print DHCPFILE "\t$$dhcplst[$l]\n";
+	      if(@{$dhcphosthd{$dhcpid}}[$l] ne '') {
+            print DHCPFILE "\t$$dhcplst[$l]\t #". @{$dhcphosthd{$dhcpid}}[$l] . "\n";
+          }
+          else {
+            print DHCPFILE "\t$$dhcplst[$l]\n";
+          }
 	  }
 	  print DHCPFILE "}\n";
 	}
@@ -1791,6 +2074,8 @@ sub make_dhcp() {
   undef @ghosts;
   undef %ethers;
 
+  print DHCPFILE "\n#Host declaration for dynamic classes\n";
+  print DHCPFILE $hddc;
 
   print DHCPFILE "\n# eof\n";
   close(DHCPFILE);
@@ -1803,14 +2088,561 @@ sub make_dhcp() {
 
     @args = split(/\s+/,$SAURON_DHCP_CHK_ARGS);
     push @args, "$dhcpd_conf_filename" . $tmp_extension;
-    print "run: $SAURON_DHCP_CHK_PROG " .join(' ',@args)."\n" 
+    print "run: $SAURON_DHCP_CHK_PROG " .join(' ',@args)."\n"
 	if ($opt_verbose);
     $res = system($SAURON_DHCP_CHK_PROG,@args);
     fatal("$dhcpd_conf_filename validity check failed ($res)") if ($res);
   }
 
 
- dhcpd_conf_done:
+  # remove $tmp_extension from generated file name
+  foreach $tmpfile (keys %open_tmpfiles) {
+    print "rename: $tmpfile --> $open_tmpfiles{$tmpfile}\n" if ($opt_verbose);
+    fatal("failed to rename tmpfile: $tmpfile")
+      unless(rename($tmpfile,$open_tmpfiles{$tmpfile})==1);
+    delete $open_tmpfiles{$tmpfile};
+  }
+
+}
+
+
+sub print_dhcp6_classes($$) {
+    my ($serverid, $opt_dhcpclass) = @_;
+
+    my (@dclasses, $hddc);
+
+    db_query("SELECT id,name,type FROM groups " .
+	     "WHERE server=$serverid AND (type=3 OR type=103) " .
+	     ($opt_dhcpclass ?
+	      " AND name=".db_encode_str($opt_dhcpclass)." " : "") .
+	     "ORDER BY name",\@dclasses);
+
+    if (@dclasses > 0) {
+	print DHCPFILE "\n# (dynamic) classes\n\n";
+	for my $i (0..$#dclasses) {
+	    my @qq;
+	    db_query("SELECT h.duid,h.domain " .
+		     " FROM zones z JOIN hosts h ON z.id=h.zone " .
+		     " LEFT JOIN group_entries g ON h.id=g.host " .
+		     " WHERE z.server=$serverid AND h.duid NOTNULL " .
+		     " AND (coalesce(z.expiration, 0) <= 0 OR coalesce(z.expiration, 0) > " .
+		     " extract(epoch from now())) " . # Exclude expired zones.
+		     " AND (h.grp=$dclasses[$i][0] OR g.grp=$dclasses[$i][0]) " .
+		     " AND (h.expiration > EXTRACT(epoch FROM current_timestamp) OR h.expiration = 0 OR h.expiration ISNULL) " .
+		     " ORDER BY h.duid",\@qq);
+
+	    next unless(@qq);
+
+	    print DHCPFILE "\nclass \"$dclasses[$i][1]\" {\n";
+	    my @q;
+	    db_query("SELECT dhcp, comment FROM dhcp_entries " .
+		     "WHERE type=15 and ref=$dclasses[$i][0] ORDER BY id",\@q);
+	    for my $j (0..$#q) {
+		$q[$j][0].=';' unless ($q[$j][0] =~ /[;\{\}]\s*$/);
+		if($q[$j][1] ne '') {
+		    print DHCPFILE "\t$q[$j][0]\t #$q[$j][1]\n";
+		}
+		else {
+		    print DHCPFILE "\t$q[$j][0]\n";
+		}
+	    }
+	    print DHCPFILE "}\n\n";
+
+	    # subclasses
+	    if ($dclasses[$i][2]== 3) {
+		my $lastduid;
+		for my $j (0..$#qq) {
+		    unless ($qq[$j][0] =~ /^[a-f0-9A-F]{24,40}$/) {
+			error("invalid duid for subclass: $qq[$j][0]");
+			next;
+		    }
+		    next if ($qq[$j][0] eq $lastduid);
+		    print DHCPFILE "subclass \"$dclasses[$i][1]\" ".  dhcpduid($qq[$j][0]) .  ";  # $qq[$j][1]\n";
+
+		    $hddc .= sprintf("host %s-%s { host-identifier option dhcp6.client-id %s; }\n", $qq[$j][1], $dclasses[$i][1], dhcpduid($qq[$j][0]));
+		    $lastduid=$qq[$j][0];
+		}
+	    }
+
+	}
+	print DHCPFILE "\n";
+    }
+
+    return $hddc;
+}
+
+
+sub make_dhcp6() {
+  print "DHCP6 configuration\n";
+  $time_now = localtime;
+
+  # dhcpd.conf
+  $dhcpd_conf_filename = ($opt_dhcpclass ? "$opt_dhcpclass.class6" :
+			  "dhcpd6.conf");
+  print "Generating $dhcpd_conf_filename...\n";
+
+  open(DHCPFILE,">$dhcpd_conf_filename$tmp_extension")
+    || fatal("Cannot create $dhcpd_conf_filename$tmp_extension!");
+  $open_tmpfiles{"$dhcpd_conf_filename" . $tmp_extension} =
+    "$dhcpd_conf_filename";
+  print DHCPFILE "# $dhcpd_conf_filename -- automagically generated ",
+                 "by Sauron v$VER\n";
+  print DHCPFILE "#               created by $user at $time_now\n#\n",
+                 "# server: $server{name} -- $server{comment}\n#\n\n";
+
+  $serverid=$server{masterserver} if ($server{masterserver} > 0);
+
+  if ($opt_dhcpclass) {
+      print_dhcp6_classes($serverid, $opt_dhcpclass);
+      close(DHCPFILE);
+      # remove $tmp_extension from generated file name
+      foreach $tmpfile (keys %open_tmpfiles) {
+	  print "rename: $tmpfile --> $open_tmpfiles{$tmpfile}\n" if ($opt_verbose);
+	  fatal("failed to rename tmpfile: $tmpfile")
+	      unless(rename($tmpfile,$open_tmpfiles{$tmpfile})==1);
+	  delete $open_tmpfiles{$tmpfile};
+      }
+      return;
+  }
+
+
+  # failover stuff
+  if ($failover_mode) {
+    $foserver=($failover_mode == 1 ? \%server : \%masterserver);
+    $fo_host=$server{hostname};
+    $fo_port=$fo_pport=$foserver->{df_port6};
+    $fo_mrd=$foserver->{df_max_delay6};
+    $fo_muu=$foserver->{df_max_uupdates6};
+    $fo_mclt=$foserver->{df_mclt6};
+    $fo_split=$foserver->{df_split6};
+    $fo_lbm=$foserver->{df_loadbalmax6};
+    if ($failover_mode == 1) {
+      undef @q;
+      db_query("SELECT hostname FROM servers " .
+	       "WHERE masterserver=$server{id}",\@q);
+      error("cannot find secondary failover peer!") unless ($q[0][0]);
+      $fo_peer=$q[0][0];
+    } else {
+      $fo_peer=$foserver->{hostname};
+    }
+    $fo_host =~ s/\.\s*$//;
+    $fo_peer =~ s/\.\s*$//;
+
+
+    print DHCPFILE "failover peer \"$failover_peer_name\" {\n",
+                   "\t".($failover_mode == 1 ? 'primary':'secondary').";\n",
+		   "\taddress $fo_host;\n",
+		   "\tport $fo_port;\n",
+		   "\tpeer address $fo_peer;\n",
+		   "\tpeer port $fo_pport;\n",
+		   "\tmax-response-delay $fo_mrd;\n",
+		   "\tmax-unacked-updates $fo_muu;\n",
+		   "\tmclt $fo_mclt;\n",
+		   ($failover_mode == 1 ? "\tsplit $fo_split;\n" : ''),
+		   "\tload balance max seconds $fo_lbm;\n}\n\n";
+  }
+
+  # duid hash
+  undef @q;
+  db_query("SELECT h.duid,a.ip FROM hosts h,zones z,a_entries a " .
+	   "WHERE z.server=$serverid AND h.zone=z.id AND a.host=h.id " .
+	   " AND (coalesce(z.expiration, 0) <= 0 OR coalesce(z.expiration, 0) > " .
+	   " extract(epoch from now())) " . # Exclude expired zones.
+	   " AND h.duid NOTNULL AND family(a.ip) = 6;",\@q);
+  error(db_errormsg()) if (db_errormsg());
+  for $i (0..$#q) {
+    unless ($q[$i][0] =~ /^[0-9A-Fa-f]{24,40}\s*$/) {
+      error("Invalid DUID ($q[$i][0]) skipped");
+      next;
+    }
+    $duidhash{$q[$i][0]}=[] unless ($duidhash{$q[$i][0]});
+    push @{$duidhash{$q[$i][0]}}, $q[$i][1];
+  }
+
+  # host dhcp hash
+  undef @q;
+  db_query("SELECT h.id,d.dhcp, d.comment FROM hosts h,zones z,dhcp_entries d " .
+	   "WHERE z.server=$serverid AND h.zone=z.id AND d.type=13 " .
+	   " AND (coalesce(z.expiration, 0) <= 0 OR coalesce(z.expiration, 0) > " .
+	   " extract(epoch from now())) " . # Exclude expired zones.
+	   " AND d.ref=h.id ORDER BY h.id,d.id",\@q);
+  for $i (0..$#q) {
+    $dhcphosth{$q[$i][0]}=[] unless ($dhcphosth{$q[$i][0]});
+    $dhcphosthd{$q[$i][0]}=[] unless ($dhcphosthd{$q[$i][0]});
+    push @{$dhcphosth{$q[$i][0]}}, $q[$i][1];
+    push @{$dhcphosthd{$q[$i][0]}}, $q[$i][2];
+  }
+
+
+  # local entries 2020-07-20 TVu
+
+  undef @q;
+  db_query("SELECT d.dhcp, d.comment FROM dhcp_entries d " .
+	   "WHERE d.type=17 AND d.ref=$server{id} ORDER BY d.id",\@q);
+  print DHCPFILE "\n# local options\n\n" if (@q);
+  for $i (0..$#q) {
+      $q[$i][0].=';' unless ($q[$i][0] =~ /[;\{\}]\s*$/);
+      if($q[$i][1] ne '') {
+        print DHCPFILE "$q[$i][0]\t# $q[$i][1]\n";
+      }
+      else {
+        print DHCPFILE "$q[$i][0]\n";
+      }
+  }
+  print DHCPFILE "\n\n" if (@q);
+
+  # global entries
+
+  print DHCPFILE "\n# global options\n\n";
+  undef @q;
+  db_query("SELECT d.dhcp, d.comment FROM dhcp_entries d " .
+	   "WHERE d.type=11 AND d.ref=$serverid ORDER BY d.id",\@q);
+  for $i (0..$#q) {
+      $q[$i][0].=';' unless ($q[$i][0] =~ /[;\{\}]\s*$/);
+      if($q[$i][1] ne '') {
+        print DHCPFILE "$q[$i][0]\t# $q[$i][1]\n";
+      }
+      else {
+        print DHCPFILE "$q[$i][0]\n";
+      }
+  }
+  print DHCPFILE "\n\n";
+
+  #Host declaration for dyn. classes
+  my $hddc = print_dhcp6_classes($serverid, $opt_dhcpclass);
+
+  # check for dynamic IP pools
+  undef @dpools;
+  db_query("SELECT id,name FROM groups WHERE server=$serverid AND type=2 ".
+	   "ORDER BY name",\@dpools);
+
+  if (@dpools > 0) {
+    $dpools_count=@dpools;
+    print STDERR "Found $dpools_count dynamic IPv6 pools\n" if ($opt_verbose);
+    undef @dips;
+    db_query("SELECT g.id,a.ip,h.domain ".
+	     "FROM hosts h, a_entries a, groups g ".
+	     "WHERE a.host=h.id AND g.id=h.grp AND g.type=2 ".
+	     " AND g.server=$serverid AND family(a.ip) = 6 ORDER BY a.ip,g.id",\@dips);
+    $dpool_ip_count=@dips;
+    print STDERR "Found $dpool_ip_count dynamic pool IPs\n" if ($opt_verbose);
+
+
+    undef %dpools_dhcp;
+    for $i (0..$#dpools) {
+      undef @q;
+      db_query("SELECT dhcp FROM dhcp_entries " .
+	       "WHERE type=15 AND ref=$dpools[$i][0] ORDER BY id",\@q);
+      $dpools_dhcp{$i}=[];
+      for $j (0..$#q) { push @{$dpools_dhcp{$i}}, $q[$j][0]; }
+    }
+  }
+
+  # net/subnet map
+  $net_map_mode= 2;  # 0=use VLANs, 1=use networks, 2= use VLANs, pools in nets
+
+  print DHCPFILE "\n# network map\n\n";
+  undef @subnets;
+  undef @nets;
+  db_query("SELECT net,name,id,vlan " .
+	   "FROM nets WHERE server=$serverid AND no_dhcp=false " .
+	   "AND subnet=false AND dummy=false AND family(net) = 6 ORDER BY net",\@nets);
+  if (@nets < 1) {
+    fatal("No nets, that use DHCP6, defined for this server!");
+  }
+  for $i (0 .. $#nets) {
+    $net=$nets[$i][0];
+    $netname=$nets[$i][1];
+    $netname =~ s/\s+//g;
+    if ($net_map_mode == 1) {
+      print DHCPFILE "shared-network \"$netname\" {\n";
+      undef @net_dhcp;
+      db_query("SELECT d.dhcp FROM dhcp_entries d " .
+	       "WHERE d.type=14 AND d.ref=$nets[$i][2] ORDER BY d.id",
+	       \@net_dhcp);
+      for $j (0..$#net_dhcp) {
+	  $net_dhcp[$i][0].=';' unless ($net_dhcp[$i][0] =~ /[;\{\}]\s*$/);
+	  print DHCPFILE "\t$net_dhcp[$i][0]\n";
+      }
+      print DHCPFILE "\n";
+    }
+
+    undef @q;
+    db_query("SELECT net,id,name,vlan FROM nets " .
+	     "WHERE server=$serverid AND no_dhcp=false AND subnet=true " .
+	     "AND dummy=false AND net << '$net' AND family(net) = 6 ORDER BY net;",\@q);
+
+    if (@q < 1 ) {
+      error("No subnets that use DHCP found") if ($net_map_mode==1);
+      push @q, [$net,$nets[$i][2],$nets[$i][1],$nets[$i][3]];
+    }
+
+    if ($net_map_mode == 1) {
+      print_subnets6();
+      print DHCPFILE "}\n\n"; # close bracket for shared-network
+    }
+    else {
+      push (@subnets,@q);
+    }
+  }
+
+  if ($net_map_mode == 0 or $net_map_mode == 2) {
+    # print network map using VLANs...
+    undef %vlanhash;
+    for $i (0..$#subnets) {
+      $vlanhash{$subnets[$i][3]}++;
+    }
+    undef @vlan_list_lst;
+    undef %vlan_list_hash;
+    get_vlan_list($serverid,\%vlan_list_hash,\@vlan_list_lst);
+    foreach $vlan (sort keys %vlanhash) {
+      $netname=$vlan_list_hash{$vlan};
+      $netname =~ s/\s//g;
+      $netname = 'CHAOS' if ($vlan < 1 || $netname eq '');
+      print DHCPFILE "shared-network \"$netname\" {\n";
+      undef @vlan_dhcp;
+      db_query("SELECT d.dhcp FROM dhcp_entries d " .
+	       "WHERE d.type=16 AND d.ref=$vlan ORDER BY d.id",\@vlan_dhcp);
+      for $i (0..$#vlan_dhcp) {
+	$vlan_dhcp[$i][0].=';' unless ($vlan_dhcp[$i][0] =~ /[;\{\}]\s*$/);
+	print DHCPFILE "\t$vlan_dhcp[$i][0]\n";
+      }
+      undef @q;
+      for $i (0..$#subnets) {
+	push ( @q, $subnets[$i])  if ($subnets[$i][3] eq $vlan);
+      }
+      print_subnets6();
+      print DHCPFILE "}\n\n";
+    }
+  }
+
+
+  # groups
+
+  print DHCPFILE "# groups\n\n";
+
+  undef @groups;
+  db_query("SELECT id,name FROM groups WHERE server=$serverid AND " .
+	   "type=1 " .
+	   "ORDER BY name;",\@groups);
+  if (@groups < 1) {
+    error("no groups found for this server");
+  }
+  else {
+    undef @ghosts;
+    db_query("SELECT h.grp,h.duid,a.ip,h.domain,z.name,h.id,h.expiration " .
+	     "FROM hosts h, zones z, a_entries a " .
+	     "WHERE h.zone=z.id AND a.host=h.id AND h.type=1 " .
+	     " AND (coalesce(z.expiration, 0) <= 0 OR coalesce(z.expiration, 0) > " .
+	     " extract(epoch from now())) " . # Exclude expired zones.
+	     "AND h.duid NOTNULL AND z.server=$serverid " .
+	     "AND h.grp>-1 AND family(a.ip) = 6 " .
+	     "ORDER BY a.ip;",\@ghosts);
+    if (@ghosts > 0) {
+      for $i (0.. $#groups) {
+	$gid=$groups[$i][0];
+	$group=$groups[$i][1];
+	# $dhcp=db_decode_list_str($groups[$i][2]);
+	undef @qqq;
+	undef @gperhost; # per host macro store
+    undef @qcount;
+
+    db_query("SELECT COUNT(h.id) " .
+             "FROM hosts h, a_entries a " .
+             "WHERE a.host=h.id AND grp = $gid AND family(a.ip) = 6 AND duid IS NOT NULL",\@qcount);
+    next unless $qcount[0][0];
+
+	db_query("SELECT d.dhcp, d.comment FROM dhcp_entries d " .
+		 "WHERE d.type=15 AND d.ref=$gid ORDER BY d.id",\@qqq);
+
+	print DHCPFILE "group {  # $group\n";
+
+	for $k (0..$#qqq) {
+	  $qqq[$k][0] =~ s/\\"/"/g;
+	  $qqq[$k][0].=';' unless ($qqq[$k][0] =~ /[;\{\}]\s*$/);
+
+	  # if includes %{macro} store it for later use and skip to next
+	  if ($qqq[$k][0] =~ /\%\{\w+\}/) {
+	      push(@gperhost,$qqq[$k][0]);
+	      next;
+	  }
+      if($qqq[$k][1] ne '') {
+	    print DHCPFILE "\t$qqq[$k][0]\t #$qqq[$k][1]\n";
+	  }
+      else {
+        print DHCPFILE "\t$qqq[$k][0]\n";
+      }
+    }
+	print DHCPFILE "\t\n";
+
+	for $j (0 .. $#nets) {
+	  $net = new Net::IP($nets[$j][0]);
+      print DHCPFILE "\t# net: " . ip_compress_address($net->ip(), 6) . "\n";
+	  for $k (0 .. $#ghosts) {
+	    if (($ghosts[$k][6] > 0) && ($ghosts[$k][6] < $time_now_ticks)) {
+	      # error("expired host in DHCP: $ghosts[$k][3]");
+	      next;
+	    }
+	    $iplst=$duidhash{$ghosts[$k][1]};
+	    @{$iplst} = sort(@{$iplst}) if (@{$iplst}>1);
+	    $ip='';
+	    for $l (0..$#{$iplst}) {
+            if ($net->overlaps(new Net::IP($$iplst[$l])) == $IP_B_IN_A_OVERLAP) {
+		$ip.=", " if ($ip ne '');
+		$ip.=$$iplst[$l];
+	      }
+	    }
+	    #print "IP '$ip'\n" if ($ip =~ /,/);
+	    if ($ghosts[$k][0]==$gid && ($ip ne '')) {
+	      $host=$ghosts[$k][3];
+	      $host.=".$ghosts[$k][4]" unless ($host =~ /\.$/);
+	      $host =~ s/\.$//;
+	      $duid= $ghosts[$k][1];
+	      #$dhcp=db_decode_list_str($ghosts[$k][5]);
+	      $dhcpid=$ghosts[$k][5];
+	      if ($duids{$duid}>0) {
+		    error("duplicate interface $ip for $duid ($host)");
+		    next;
+	      }
+	      $duids{$duid}++;
+	      print DHCPFILE "\thost $host {\n";
+	      print DHCPFILE "\t\tfixed-address6 $ip;\n";
+	      print DHCPFILE "\t\thost-identifier option dhcp6.client-id " . dhcpduid($duid) . ";\n";
+
+	      $dhcplst=$dhcphosth{$dhcpid};
+	      ($adomain=$host) =~ s/^[^\.]+\.//;
+	      $fqdn = $host;
+	      $host =~ s/\..*//g;
+	      $lookup = '/(filename|option\s+root-path)\s+/';
+	      foreach $l (@gperhost) {
+		  push @{$dhcplst},$l unless (grep {eval $lookup} @{$dhcplst});
+	      }
+
+	      if ($dhcp_auto_domainnames) {
+		  push(@{$dhcplst},"option dhcp6.name-servers \"$adomain\"")
+		      unless (grep {/option\s+dhcp6\.name-servers\s+/ } @{$dhcplst}
+			      and $adomain);
+	      }
+
+	      %dhcp_var = ();
+	      $dhcp_var{'domain'} = $adomain;
+	      $dhcp_var{'duid'}  = $duid;
+	      $dhcp_var{'fqdn'}   = $fqdn;
+	      $dhcp_var{'host'}   = $host;
+
+	      for $l (0..$#{$dhcplst}) {
+		  $$dhcplst[$l].=';' unless ($$dhcplst[$l] =~ /[;\{\}]\s*$/);
+		  #print DHCPFILE "\t\t" . expand_dhcp_macro($$dhcplst[$l],\%dhcp_var)."\n";
+            if(@{$dhcphosthd{$dhcpid}}[$l] ne '') {
+                print DHCPFILE "\t\t" . expand_dhcp_macro($$dhcplst[$l],\%dhcp_var)."\t#" . @{$dhcphosthd{$dhcpid}}[$l] ."\n";
+            }
+            else {
+                print DHCPFILE "\t\t" . expand_dhcp_macro($$dhcplst[$l],\%dhcp_var) . "\n";
+            }
+          }
+	      print DHCPFILE "\t}\n";
+	    }
+	  }
+	}
+	print DHCPFILE "}\n\n";
+      }
+    } else {
+      print "no hosts found for any groups!\n";
+    }
+  }
+
+  # not grouped hosts...
+  print DHCPFILE "\n# hosts not in any group\n\n";
+  undef @ghosts;
+  db_query("SELECT h.grp,h.duid,a.ip,h.domain,z.name,h.id,h.expiration " .
+	   "FROM hosts h, zones z, a_entries a " .
+	   "WHERE h.zone=z.id AND a.host=h.id AND ( h.type=1 OR h.type=9 ) " .
+	   " AND (coalesce(z.expiration, 0) <= 0 OR coalesce(z.expiration, 0) > " .
+	   " extract(epoch from now())) " . # Exclude expired zones.
+	   "AND h.duid NOTNULL AND z.server=$serverid " .
+	   "AND h.grp<0 AND family(a.ip) = 6 " .
+	   "ORDER BY a.ip;",\@ghosts);
+  if (@ghosts > 0 ) {
+    for $j (0 .. $#nets) {
+      $net=new Net::IP($nets[$j][0]);
+      print DHCPFILE "# net: " .$net->short() . "\n";
+      for $k (0 .. $#ghosts) {
+	if (($ghosts[$k][6] > 0) && ($ghosts[$k][6] < $time_now_ticks)) {
+	  # error("expired host in DHCP: $ghosts[$k][3]");
+	  next;
+	}
+	$iplst=$duidhash{$ghosts[$k][1]};
+	@{$iplst} = sort(@{$iplst}) if (@{$iplst}>1);
+	$ip='';
+	for $l (0..$#{$iplst}) {
+	  if ($net->overlaps(new Net::IP($$iplst[$l])) == $IP_B_IN_A_OVERLAP) {
+	    $ip.=", " if ($ip ne '');
+	    $ip.=$$iplst[$l];
+	  }
+	}
+	#print "IP '$ip'\n" if ($ip =~ /,/);
+	if ($ip ne '') {
+	  $host=$ghosts[$k][3];
+	  $host.=".$ghosts[$k][4]" unless ($host =~ /\.$/);
+	  $host =~ s/\.$//;
+	  $duid=$ghosts[$k][1];
+	  #$dhcp=db_decode_list_str($ghosts[$k][5]);
+	  $dhcpid=$ghosts[$k][5];
+	  if ($duids{$duid}>0) {
+	    #error("duplicate interface $ip for $duid ($host)");
+	    next;
+	  }
+	  $duids{$duid}++;
+	  print DHCPFILE "host $host {\n";
+	  print DHCPFILE "\tfixed-address6 $ip;\n";
+	  print DHCPFILE "\thost-identifier option dhcp6.client-id " . dhcpduid($duid) . ";\n";
+	  if ($dhcp_auto_domainnames) {
+	    ($adomain=$host) =~ s/^[^\.]+\.//;
+	    print DHCPFILE "\toption dhcp6.name-servers \"$adomain\";\n"
+	      if ($adomain);
+	  }
+
+	  $dhcplst=$dhcphosth{$dhcpid};
+
+      for $l (0..$#{$dhcplst}) {
+	      $$dhcplst[$l].=';' unless ($$dhcplst[$l] =~ /[;\{\}]\s*$/);
+	      if(@{$dhcphosthd{$dhcpid}}[$l] ne '') {
+            print DHCPFILE "\t$$dhcplst[$l]\t #" . @{$dhcphosthd{$dhcpid}}[$l] . "\n";
+	      }
+          else {
+            print DHCPFILE "\t$$dhcplst[$l]\n";
+          }
+      }
+	  print DHCPFILE "}\n";
+	}
+      }
+    }
+  }
+
+  undef @ghosts;
+  undef %duids;
+
+  print DHCPFILE "\n#Host declaration for dynamic classes\n";
+  print DHCPFILE $hddc;
+
+  print DHCPFILE "\n# eof\n";
+  close(DHCPFILE);
+
+  # if --check specified, validate dhcpd.conf
+  if ($opt_check && $SAURON_DHCP6_CHK_PROG) {
+    print "Validating $dhcpd_conf_filename...\n" if ($opt_verbose);
+    fatal("cannot run SAURON_DHCP6_CHK_PROG: $SAURON_DHCP6_CHK_PROG")
+      unless (-x $SAURON_DHCP6_CHK_PROG);
+
+    @args = split(/\s+/,$SAURON_DHCP6_CHK_ARGS);
+    push @args, "$dhcpd_conf_filename" . $tmp_extension;
+    print "run: $SAURON_DHCP6_CHK_PROG " .join(' ',@args)."\n"
+	if ($opt_verbose);
+    $res = system($SAURON_DHCP6_CHK_PROG,@args);
+    fatal("$dhcpd_conf_filename validity check failed ($res)") if ($res);
+  }
+
+
   # remove $tmp_extension from generated file name
   foreach $tmpfile (keys %open_tmpfiles) {
     print "rename: $tmpfile --> $open_tmpfiles{$tmpfile}\n" if ($opt_verbose);
@@ -1823,7 +2655,6 @@ sub make_dhcp() {
 
 
 
-
 sub print_subnets() {
   my(@qq,@qqq,$j,$k,$l,$router,$ssnet,$snet,$nmask,$dhcpid,$pri);
   my(@ranges,$lst,$s,$b,$e,$last_ip,$first_pool);
@@ -1831,28 +2662,38 @@ sub print_subnets() {
   for $k (0..$#dpools) { $ranges[$k]=[]; }
 
   db_query("SELECT ip,router FROM hosts,zones,a_entries " .
-	       "WHERE hosts.zone=zones.id AND a_entries.host=hosts.id " .
-	       "AND zones.server=$serverid AND router>0 " .
-	       ($net_map_mode == 1 ? "AND ip << '$net' " : "") .
-	       "ORDER BY ip,router;",\@qq);
+	   "WHERE hosts.zone=zones.id AND a_entries.host=hosts.id " .
+	   " AND (coalesce(zones.expiration, 0) <= 0 OR coalesce(zones.expiration, 0) > " .
+	   " extract(epoch from now())) " . # Exclude expired zones.
+	   "AND zones.server=$serverid AND router>0 AND family(ip) = 4 " .
+	   ($net_map_mode == 1 ? "AND ip << '$net' " : "") .
+	   "ORDER BY ip,router;",\@qq);
   error("No router interfaces found for net $net!") if (@qq < 1);
 
+  for $k (0 .. $#qq) {
+    $nad3[$k] = new NetAddr::IP($qq[$k][0]); # Store NetAddr::IP objects for later use. ****
+  }
+
   for $j (0 .. $#q) {
-    $ssnet = new Net::Netmask($q[$j][0]);
-    $snet = $ssnet->base();
+#   $ssnet = new Net::Netmask($q[$j][0]);
+    $ssnet = new NetAddr::IP($q[$j][0]);
+#   $snet = $ssnet->base();
+    $snet = $ssnet->addr();
     $nmask = $ssnet->mask();
     $dhcpid = $q[$j][1];
     print DHCPFILE "\t# $q[$j][2]\n";
     print DHCPFILE "\tsubnet $snet netmask $nmask {\n";
-
     $pri=999999; # should be enough 'cos priority range for a router 0-999
     $router='';
+
     for $k (0 .. $#qq) {
-      if ($ssnet->match($qq[$k][0]) && $pri > $qq[$k][1]) {
+#     if ($ssnet->match($qq[$k][0]) && $pri > $qq[$k][1]) {
+      if ($ssnet->contains($nad3[$k]) && $pri > $qq[$k][1]) { # Use stored objetcs. ****
 	$pri=$qq[$k][1];
 	$router=$qq[$k][0];
       }
     }
+
     unless ($router eq '') {
       $router =~ s/\/\d{1,2}\s*$//g;
       print DHCPFILE "\t\toption routers $router;\n";
@@ -1861,76 +2702,247 @@ sub print_subnets() {
     }
 
     undef @qqq;
-    db_query("SELECT d.dhcp FROM dhcp_entries d " .
+    db_query("SELECT d.dhcp, d.comment FROM dhcp_entries d " .
 	     "WHERE d.type=4 AND d.ref=$dhcpid ORDER BY d.id",\@qqq);
     for $k (0..$#qqq) {
 	$qqq[$k][0].=';' unless ($qqq[$k][0] =~ /[;\{\}]\s*$/);
-	print DHCPFILE "\t\t$qqq[$k][0]\n";
+	    if($qqq[$k][1] ne '') {
+            print DHCPFILE "\t\t$qqq[$k][0]\t # $qqq[$k][1]\n";
+        }
+        else {
+            print DHCPFILE "\t\t$qqq[$k][0]\n";
+        }
     }
 
-    print DHCPFILE "\t}\n";
+    print DHCPFILE "\t}\n" unless $net_map_mode == 2;
+
 
     # look for dynamic IP pools within this subnet
-    if ($dpools_count > 0) {
-      for $k (0..$#dpools) {
-	$lst=$ranges[$k];
-	$s=0;
-	for $l (0..$#dips) {
-	  if (($dips[$l][0]==$dpools[$k][0]) && $ssnet->match($dips[$l][1])) {
-	    #print "foo: $snet $dips[$l][1]\n";
-	    if ($s==0) { $s=1; $b=$dips[$l][1]; }
-	    elsif ($s==1 && (ip2int($dips[$l][1]) > ip2int($last_ip)+1) ) {
-		$e=$last_ip; 
-		push @{$lst}, "range " . ($b eq $e ? "$b" : "$b $e") .";";
-		print STDERR "dynamic range $b - $e ($dpools[$k][1])\n"
-		    if ($opt_verbose);
-		$b=$dips[$l][1];
+    #
+    # FIXME - mesrik
+    #
+    # **** hack hack hack ****
+
+    if ($dpools_count > 0 and "$server{name}" ne "ns2") {
+    # if ($dpools_count > 0) {
+
+    # **** hack hack hack ****
+
+	for $k (0..$#dpools) {
+	    $lst = $ranges[$k];
+	    $s = 0;
+	    $last_ip = ''; # ** 2018-10-03 TVu
+	    for $l (0..$#dips) {
+#               if (($dips[$l][0] == $dpools[$k][0]) && $ssnet->match($dips[$l][1])) {
+		if (($dips[$l][0] == $dpools[$k][0]) &&
+		    $ssnet->contains($nad2[$l])) { # Use stored objetcs. ****
+# Host belongs to this dynamic pool.
+		    #print "foo: $snet $dips[$l][1]\n";
+		    if ($s == 0) {
+# First host in this dynamic pool.
+			$s = 1;
+			$b = $dips[$l][1];
+#                   } elsif ($s == 1 && (ip2int($dips[$l][1]) > ip2int($last_ip) + 1) ) {
+# Subtraction between two objects is used; adding a constant to an object
+# does not work in this context, because hostmask has zero length.
+		    } elsif ($s == 1 && $last_ip && new NetAddr::IP($dips[$l][1]) - # ** 2018-10-03 TVu
+			     new NetAddr::IP($last_ip) > 1) {
+# One or more addresses missing between two hosts, which belong to dynamic pools.
+# Output previous pool.
+			$e = $last_ip;
+			$line = "range " . ($b eq $e ? "$b" : "$b $e") .";";
+			if ($net_map_mode == 2) {
+			    print DHCPFILE "\t\tpool {\n\t\t\t$line\n";
+			    for $x (0..$#{$dpools_dhcp{$k}}) {
+				print DHCPFILE "\t\t\t${$dpools_dhcp{$k}}[$x];\n";
+			    }
+			    print DHCPFILE "\t\t}\n";
+			} else {
+			    push @{$lst}, $line;
+			}
+			print STDERR "dynamic range $b - $e ($dpools[$k][1])\n" if ($opt_verbose);
+			$b = $dips[$l][1];
+		    }
+		    $last_ip = $dips[$l][1]; # Last processed host in a dynamic pool.
+		} else {
+# Output previous dynamic pool, if current host does not belong to one.
+		    if ($s == 1) {
+			$e = $last_ip;
+			$line = "range " . ($b eq $e ? "$b" : "$b $e") .";";
+			if ($net_map_mode == 2) {
+			    print DHCPFILE "\t\tpool {\n\t\t\t$line\n";
+			    for $x (0..$#{$dpools_dhcp{$k}}) {
+				print DHCPFILE "\t\t\t${$dpools_dhcp{$k}}[$x];\n";
+			    }
+			    print DHCPFILE "\t\t}\n";
+			} else {
+			    push @{$lst}, $line;
+			}
+			print STDERR "dynamic range $b - $e ($dpools[$k][1])\n" if ($opt_verbose);
+		    }
+		    $s = 0;
+		}
 	    }
-	    $last_ip=$dips[$l][1];
-	  } else {
-	    if ($s==1) { 
-	      $e=$last_ip; 
-	      push @{$lst}, "range " . ($b eq $e ? "$b" : "$b $e") .";";
-	      print STDERR "dynamic range $b - $e ($dpools[$k][1])\n"
-		if ($opt_verbose);
+# Output last dynamic pool, if last host belongs to one.
+	    if ($s == 1) {
+		$e = $last_ip;
+		$line = "range " . ($b eq $e ? "$b" : "$b $e") .";";
+		if ($net_map_mode == 2) {
+		    print DHCPFILE "\t\tpool {\n\t\t\t$line\n";
+                    for $x (0..$#{$dpools_dhcp{$k}}) {
+                        print DHCPFILE "\t\t\t${$dpools_dhcp{$k}}[$x];\n";
+                    }
+		    print DHCPFILE "\t\t}\n";
+		} else {
+		    push @{$lst}, $line;
+		}
+		print STDERR "dynamic range $b - $e ($dpools[$k][1])\n" if ($opt_verbose);
 	    }
-	    $s=0;
-	  }
 	}
-	if ($s==1) { 
-	  $e=$last_ip; 
-	  push @{$lst}, "range " . ($b eq $e ? "$b" : "$b $e") .";";
-	  print STDERR "dynamic range $b - $e ($dpools[$k][1])\n" 
-	    if ($opt_verbose);
-	}
-      }
     }
+    print DHCPFILE "\t}\n" if $net_map_mode == 2;
   }
 
-  unless ($dhcp2_mode) {
-    $first_pool=1;
-    for $j (0..$#dpools) {
-      $lst=$ranges[$j];
-      next unless (@{$lst} > 0);
-      print DHCPFILE "\n\t# dynamic IP pools\n\n" if ($first_pool);
-      $first_pool=0;
-      print DHCPFILE "\tpool {  # $dpools[$j][1]\n";
-      if ($failover_mode) {
-	print DHCPFILE "\t\tfailover peer \"$failover_peer_name\";\n",
-	               "\t\tdeny dynamic bootp clients;\n";
-      }
-      for $k (0..$#{$dpools_dhcp{$j}}) {
-	print DHCPFILE "\t\t${$dpools_dhcp{$j}}[$k];\n";
-      }
-      for $k (0..$#{$lst}) {
-	print DHCPFILE "\t\t$$lst[$k]\n";
-      }
-      print DHCPFILE "\t}\n\n";
+  $first_pool=1;
+  for $j (0..$#dpools) {
+    $lst=$ranges[$j];
+    next unless (@{$lst} > 0);
+    print DHCPFILE "\n\t# dynamic IP pools\n\n" if ($first_pool);
+    $first_pool=0;
+    print DHCPFILE "\tpool {  # $dpools[$j][1]\n";
+    if ($failover_mode) {
+      print DHCPFILE "\t\tfailover peer \"$failover_peer_name\";\n",
+	"\t\tdeny dynamic bootp clients;\n";
     }
+    for $k (0..$#{$dpools_dhcp{$j}}) {
+      print DHCPFILE "\t\t${$dpools_dhcp{$j}}[$k];\n";
+    }
+    for $k (0..$#{$lst}) {
+      print DHCPFILE "\t\t$$lst[$k]\n";
+    }
+    print DHCPFILE "\t}\n\n";
   }
 
 }
 
+sub print_subnets6() {
+  my(@qq,@qqq,$j,$k,$l,$router,$ssnet,$snet,$nmask,$dhcpid,$pri);
+  my(@ranges,$lst,$s,$b,$e,$last_ip,$first_pool);
+
+  for $k (0..$#dpools) { $ranges[$k]=[]; }
+
+  db_query("SELECT ip,router FROM hosts,zones,a_entries " .
+	   "WHERE hosts.zone=zones.id AND a_entries.host=hosts.id " .
+	   " AND (coalesce(zones.expiration, 0) <= 0 OR coalesce(zones.expiration, 0) > " .
+	   " extract(epoch from now())) " . # Exclude expired zones.
+	   "AND zones.server=$serverid AND router>0 AND family(ip) = 6 " .
+	   ($net_map_mode == 1 ? "AND ip << '$net' " : "") .
+	   "ORDER BY ip,router;",\@qq);
+  #error("No router interfaces found for net $net!") if (@qq < 1);
+
+  for $j (0 .. $#q) {
+    $ssnet = new Net::IP($q[$j][0]);
+    $snet = $ssnet->ip();
+    $dhcpid = $q[$j][1];
+    print DHCPFILE "\t# $q[$j][2]\n";
+    print DHCPFILE "\tsubnet6 " . ip_compress_address($snet,6) . "/" . $ssnet->prefixlen() . " {\n";
+
+    $pri=999999; # should be enough 'cos priority range for a router 0-999
+    $router='';
+    for $k (0 .. $#qq) {
+      if (($ssnet->overlaps(new Net::IP($qq[$k][0])) == $IP_B_IN_A_OVERLAP) && $pri > $qq[$k][1]) {
+	$pri=$qq[$k][1];
+	$router=$qq[$k][0];
+      }
+    }
+
+    undef @qqq;
+    db_query("SELECT d.dhcp, d.comment FROM dhcp_entries d " .
+	     "WHERE d.type=4 AND d.ref=$dhcpid ORDER BY d.id",\@qqq);
+
+    for $k (0..$#qqq) {
+	$qqq[$k][0].=';' unless ($qqq[$k][0] =~ /[;\{\}]\s*$/);
+        if($qqq[$k][1] ne '') {
+            print DHCPFILE "\t\t$qqq[$k][0]\t # $qqq[$k][1]\n";
+        }
+        else {
+            print DHCPFILE "\t\t$qqq[$k][0]\n";
+        }
+
+    }
+
+    print DHCPFILE "\t}\n" unless $net_map_mode == 2;
+
+    # look for dynamic IP pools within this subnet
+    if ($dpools_count > 0) {
+      for $k (0..$#dpools) {
+        $lst=$ranges[$k];
+        $s=0;
+        for $l (0..$#dips) {
+          if (($dips[$l][0]==$dpools[$k][0]) && $ssnet->overlaps(new Net::IP($dips[$l][1])) == $IP_B_IN_A_OVERLAP) {
+            if ($s==0) { $s=1; $b=$dips[$l][1]; }
+            elsif ($s==1 && ((new Net::IP($dips[$l][1]))->intip() > (new Net::IP($last_ip))->intip() + 1) ) {
+                $e=$last_ip;
+                $line = "range6 " . ($b eq $e ? "$b" : "$b $e") .";";
+                if ($net_map_mode == 2) {
+                    print DHCPFILE "\t\tpool6 {\n\t\t\t$line\n";
+                    for $x (0..$#{$dpools_dhcp{$k}}) {
+                        print DHCPFILE "\t\t\t${$dpools_dhcp{$k}}[$x];\n";
+                    }
+                    print DHCPFILE "\t\t}\n";
+                }
+                else {
+                    push @{$lst}, $line;
+                }
+
+                print STDERR "dynamic range $b - $e ($dpools[$k][1])\n" if ($opt_verbose);
+                $b=$dips[$l][1];
+                }
+
+                $last_ip=$dips[$l][1];
+            }
+            else {
+               if ($s==1) {
+                  $e=$last_ip;
+                  $line = "range6 " . ($b eq $e ? "$b" : "$b $e") .";";
+                  if ($net_map_mode == 2) {
+                    print DHCPFILE "\t\tpool6 {\n\t\t\t$line\n";
+                    for $x (0..$#{$dpools_dhcp{$k}}) {
+                        print DHCPFILE "\t\t\t${$dpools_dhcp{$k}}[$x];\n";
+                    }
+                    print DHCPFILE "\t\t}\n";
+                  }
+                  else {
+                      push @{$lst}, $line;
+                  }
+
+                  print STDERR "dynamic range $b - $e ($dpools[$k][1])\n" if ($opt_verbose);
+                }
+                $s=0;
+            }
+        }
+
+        if ($s==1) {
+            $e=$last_ip;
+            $line = "range6 " . ($b eq $e ? "$b" : "$b $e") .";";
+            if ($net_map_mode == 2) {
+                    print DHCPFILE "\t\tpool6 {\n\t\t\t$line\n";
+                    for $x (0..$#{$dpools_dhcp{$k}}) {
+                        print DHCPFILE "\t\t\t${$dpools_dhcp{$k}}[$x];\n";
+                    }
+                    print DHCPFILE "\t\t}\n";
+            }
+            else
+            {
+                push @{$lst}, $line;
+            }
+            print STDERR "dynamic range $b - $e ($dpools[$k][1])\n" if ($opt_verbose);
+        }
+      }
+    }
+    print DHCPFILE "\t}\n" if $net_map_mode == 2;
+  }
+}
 
 sub print_keys_acls($) {
   my($serverid) = @_;
@@ -1947,22 +2959,22 @@ sub print_keys_acls($) {
       # count references to keys
       db_query("SELECT tkey FROM cidr_entries WHERE tkey > 0",\@reflist);
       for $i (0..$#reflist) { $refs{$reflist[$i][0]}++; }
-  
+
       # mark keys that are not referenced
       my $keycount=0;
-      for $i (0..$#keys) { 
+      for $i (0..$#keys) {
 	  unless ($refs{$keys[$i][0]}) { $keys[$i][0]=0; }
 	  else { $keycount++; }
       }
 
       if ($keycount > 0) {
-      
+
 	  fatal("Encrypted keys used, but SAURON_KEY not defined!")
 	      unless ($SAURON_KEY);
 
 	  # print referenced keys
 	  print BINDFILE "// Keys\n\n";
-	  for $i (0..$#keys) { 
+	  for $i (0..$#keys) {
 	      my $id = $keys[$i][0];
 	      next unless ($id > 0);
 
@@ -1970,7 +2982,7 @@ sub print_keys_acls($) {
 	      my $algorithm = $algorithm_enum{$keys[$i][2]};
 	      my $key = $keys[$i][5];
 	      my $comment = $keys[$i][6];
-    
+
 	      unless ($name) {
 		  error("Skipping key with empty name (id=$id)");
 		  next;
@@ -1994,7 +3006,7 @@ sub print_keys_acls($) {
 		   ($comment ? "\t# $comment\n" : ''),
                    "\talgorithm $algorithm;\n",
 		   "\tsecret \"$dkey\";\n",
-		   
+
 		   "};\n\n";
 	      $dkey=$key;
 	      $keyhash{$id}=1;
@@ -2003,7 +3015,7 @@ sub print_keys_acls($) {
   }
 
   # get ACLs...
-  
+
   my(@acls,%aclhash);
   db_query("SELECT id,name,comment FROM acls " .
 	   "WHERE server=$serverid ORDER BY id",\@acls);
@@ -2015,7 +3027,7 @@ sub print_keys_acls($) {
   # print ACLs...
   for $i (0..$#acls) {
     my($id,$name,$comment) = @{$acls[$i]};
-    
+
     print BINDFILE "acl \"$name\" {\n";
     print BINDFILE "\t  // $comment\n" if ($comment);
     $aclhash{$name}=1;
@@ -2037,12 +3049,12 @@ sub print_keys_acls($) {
 
       if ($mode == 0 && $cidr) {
 	$cidr =~ s/\/32$//;
-	printf BINDFILE "\t%1s %-20s %s\n",$op,"$cidr;",$comment;
+	printf BINDFILE "\t%1s %-39s %s\n",$op,"$cidr;",$comment;
       } elsif ($mode == 1 && $acl > 0) {
 	if (($acl >= $id || not $aclhash{$aclname}) && $aclref != -1) {
 	  error("Skipping invalid reference to ACL $aclname in ACL: $name");
 	} elsif ($aclname) {
-	  printf BINDFILE "\t%1s %-20s %s\n",$op,"$aclname;",$comment;
+	  printf BINDFILE "\t%1s %-39s %s\n",$op,"$aclname;",$comment;
 	} else {
 	  error("Skipping missing ACL reference ($acl) in ACL: $name");
 	}
@@ -2051,13 +3063,13 @@ sub print_keys_acls($) {
 	  error("Skipping reference to unknown key: $keyname (id=$tkey) " .
 		"in ACL: $name");
 	} else {
-	  printf BINDFILE "\t%1s %-20s %s\n",$op,"key $keyname;",$comment;
+	  printf BINDFILE "\t%1s %-39s %s\n",$op,"key $keyname;",$comment;
 	}
       } else {
 	error("Invalid entry (id=$rid) in acl: $name");
       }
     }
-    
+
     print BINDFILE "};\n\n";
   }
 
@@ -2094,9 +3106,9 @@ sub make_printcap() {
 
 $VER = sauron_version();
 
-$result=GetOptions("help|h","all|a","bind|b","dhcp|d","printer|p","mail",
-		   "updateserial","noupdateserial","verbose","dhcp2","clean",
-		   "check","dhcpclass=s","dhcpvlans=s","tinydns|t");
+$result=GetOptions("help|h","all|a","bind|b","dhcp|d","dhcp6","printer|p","mail",
+		   "updateserial","noupdateserial","verbose","clean",
+		   "check","dhcpclass=s","tinydns|t", "ignorelocal|i");
 
 if ($opt_help || @ARGV < 1 || $result < 1) {
     print "syntax: $0 [--help] [options] <servername> [<target directory>]\n";
@@ -2105,15 +3117,15 @@ if ($opt_help || @ARGV < 1 || $result < 1) {
       "\t--bind               generate BIND (named) configuration files\n",
       "\t--tinydns            generate DJBDNS (tinydns) configuration files\n",
       "\t--dhcp               generate DHCP (dhcpd) configuration files\n",
+      "\t--dhcp6              generate DHCPv6 (dhcpd) configuration files\n",
       "\t--clean              cleanup expired records and vacuum database\n",
       "\t--printer            generate PRINTER (lpd) configuration files\n\n",
       "\t--updateserial       force serial update on master zones\n\n",
+      "\t--ignorelocal        force ignore RFC1918 subnets\n\n",
       "\t--check              check validity of generated dhcp.conf,named.conf,\n",
       "\t                     and zone files\n\n",
-      "\t--dhcp2              enable DHCPv2 compatibilty mode\n",
       "\t--dhcpclass=<name>   generate only <name>.class file that contains\n",
       "\t\t\t     given dhcp class declaration\n",
-#     "\t--dhcpvlans=<regexp> generate DHCP configuration for given VLANs\n\n",
       "\t--mail               enable email notification sending\n\n";
     print "" if ($opt_help);
     exit(1);
@@ -2122,19 +3134,19 @@ if ($opt_help || @ARGV < 1 || $result < 1) {
 $opt_verbose=($opt_verbose ? 1 : 0);
 $opt_clean=($opt_clean ? 1 : 0);
 $opt_dhcp=($opt_dhcp ? 1 : 0);
+$opt_dhcp6=($opt_dhcp6 ? 1 : 0);
 $opt_bind=($opt_bind ? 1 : 0);
 $opt_tinydns=($opt_tinydns ? 1 : 0);
 $opt_printer=($opt_printer ? 1 : 0);
-$opt_dhcp2=($opt_dhcp2 ? 1 : 0);
 $opt_updateserial=($opt_updateserial ? 1 : 0);
 $opt_noupdateserial=($opt_noupdateserial ? 1 : 0);
 $opt_check=($opt_check ? 1 : 0);
-
+$opt_ignorelocal = ($opt_ignorelocal ? 1 : 0);
+$dhcp6_conf=1 if ($opt_dhcp6 || $opt_all);
 $dhcp_conf=1 if ($opt_dhcp || $opt_all);
 $bind_conf=1 if ($opt_bind || $opt_all);
 $tiny_conf=1 if ($opt_tinydns || $opt_all);
 $printer_conf=1 if ($opt_printer || $opt_all);
-$dhcp2_mode=1 if ($opt_dhcp2);
 
 $servername = $ARGV[0];
 if (@ARGV > 1) {
@@ -2150,7 +3162,7 @@ $host =~ s/\n//g;
 
 fatal("target directory is a file! ($targetdir)") if (-f $targetdir);
 fatal("target directory does not exists ($targetdir)") if (! -d $targetdir);
-fatal("no permissions to target directory!") 
+fatal("no permissions to target directory!")
 	unless (-r $targetdir && -x $targetdir && -w $targetdir);
 fatal("--check option used but SAURON_NAMED_CHK_PROG not configured!")
   if ($opt_check && $bind_conf && ! $SAURON_NAMED_CHK_PROG);
@@ -2158,21 +3170,23 @@ fatal("--check option used but SAURON_ZONE_CHK_PROG not configured!")
   if ($opt_check && $bind_conf && ! $SAURON_ZONE_CHK_PROG);
 fatal("--check option used but SAURON_DHCP_CHK_PROG not configured!")
   if ($opt_check && $dhcp_conf && ! $SAURON_DHCP_CHK_PROG);
+fatal("--check option used but SAURON_DHCP6_CHK_PROG not configured!")
+  if ($opt_check && $dhcp6_conf && ! $SAURON_DHCP6_CHK_PROG);
 fatal("cannot find/execute SAURON_NAMED_CHK_PROG: $SAURON_NAMED_CHK_PROG")
   if ($opt_check && $bind_conf && ! -x $SAURON_NAMED_CHK_PROG);
 fatal("cannot find/execute SAURON_ZONE_CHK_PROG: $SAURON_ZONE_CHK_PROG")
   if ($opt_check && $bind_conf && ! -x $SAURON_ZONE_CHK_PROG);
 fatal("cannot find/execute SAURON_DHCP_CHK_PROG: $SAURON_DHCP_CHK_PROG")
   if ($opt_check && $dhcp_conf && ! -x $SAURON_DHCP_CHK_PROG);
+fatal("cannot find/execute SAURON_DHCP6_CHK_PROG: $SAURON_DHCP6_CHK_PROG")
+  if ($opt_check && $dhcp6_conf && ! -x $SAURON_DHCP6_CHK_PROG);
 fatal("--dhcpclass can only be used with --dhcp option")
   if ($opt_dhcpclass && not $opt_dhcp);
-fatal("--dhcpvlans can only be used with --dhcp option")
-  if ($opt_dhcpvlans && not $opt_dhcp);
+
 
 print "server name: $servername\n",
       "target directory: $targetdir\n" if ($opt_verbose);
 
-print "DHCP v2 compatibility mode enabled\n" if ($dhcp2_mode);
 chdir($targetdir) || fatal("Cannot change to directory '$targetdir'!");
 
 $mailnotify_mode = ($opt_mail ? 1 : 0);
@@ -2184,6 +3198,22 @@ print "Email notification sending: " .
       ($mailnotify_mode ? 'enabled':'disabled') . "\n" if ($opt_verbose);
 
 db_connect();
+
+# Generate configuration files in a transaction, which is isolated from other
+# activity in such a way that it always sees a snapshot of the database as it was
+# when the transaction started, except for changes made in this transaction.
+# This would not be achieved by a simple transaction alone. TVu 02 Dec 2015
+eval {
+    db_begin();
+    db_exec('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;');
+    db_ignore_begin_and_commit(1); # Don't let subroutines use transactions.
+};
+if ($@) {
+    print $@ . "\n";
+    my $msg = db_errormsg();
+    print $msg . "\n" if ($msg);
+    die('Unable to start or isolate transaction');
+}
 
 $time_now_ticks = time;
 
@@ -2198,7 +3228,9 @@ error("Primary zone-file path is not relative pathname " .
 $dhcp_auto_domainnames = $server{dhcp_flags_ad};
 $failover_mode = ($server{dhcp_flags_fo} ? 1 : 0);
 
-$zonelist = get_zone_list($serverid,0,0);
+# 2022-08-10 mesrik: add no_expired arg
+#$zonelist = get_zone_list($serverid,0,0);
+$zonelist = get_zone_list($serverid,0,0,1);
 undef %zonelist_hash;
 foreach $zone (@{$zonelist}) { $zonelist_hash{$$zone[0]}=$zone; }
 
@@ -2210,12 +3242,14 @@ if ($server{masterserver} > 0) {
     if (get_server($server{masterserver},\%masterserver));
   push @{master_server_ips}, [$masterserver{hostaddr}];
 
-  $zonelist2 = get_zone_list($server{masterserver},0,0);
+  # 2022-08-10 mesrik: add no_expired arg
+  #$zonelist2 = get_zone_list($server{masterserver},0,0);
+  $zonelist2 = get_zone_list($server{masterserver},0,0,1);
   # add selected zones from master server to slave...
   foreach $zone (@{$zonelist2}) {
     #print "zone: $$zone[0]\n";
     if ($zonelist_hash{$$zone[0]}) {
-      print "skipping duplicate zone from master ($$zone[0])\n"	
+      print "skipping duplicate zone from master ($$zone[0])\n"
 	if ($opt_verbose);
       next;
     }
@@ -2225,12 +3259,10 @@ if ($server{masterserver} > 0) {
 
   $dhcp_auto_domainnames = $masterserver{dhcp_flags_ad};
 
-  # disable dynamic addresses unless failover protocol is enabled...
-  if ($masterserver{dhcp_flags_fo}) { $failover_mode=2; }
-  else {
-    $dhcp2_mode=1;
-    print "disabling dynamic pools for slave\n";
+  if ($masterserver{dhcp_flags_fo}) {
+    $failover_mode=2;
   }
+
 }
 $zones = @{$zonelist};
 
@@ -2240,6 +3272,29 @@ clean_up() if ($opt_clean);
 make_dns() if ($bind_conf || $tiny_conf);
 make_printcap() if ($printer_conf);
 make_dhcp() if ($dhcp_conf);
+make_dhcp6() if ($dhcp6_conf);
+
+# Pause script for test purposes.
+#$| = 1;
+#print "Press ENTER to exit ($servername):";
+#<STDIN>;
+
+# Catch error if commit fails. This happens if this transaction changed
+# somwthing that was also changed by some other process while this trans-
+# action was being processed, which is quite unlikely, but this can cause
+# confusion, since new configurations have already been created and possibly
+# deployed, but any updates to configuration serial numbers get cancelled.
+eval {
+    db_ignore_begin_and_commit(0); # Allow commit again.
+    db_commit();
+};
+if ($@) {
+    print $@ . "\n";
+    my $msg = db_errormsg();
+    print $msg . "\n" if ($msg);
+    eval { db_rollback(); };
+    die('Unable to commit transaction');
+}
 
 exit(0);
 

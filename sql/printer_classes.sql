@@ -1,6 +1,6 @@
 /* printer_classes table creation
  *
- * $Id$
+ * $Id:$
  */
 
 /** Global table to store printer classes (printcap stuff)
@@ -11,5 +11,5 @@ CREATE TABLE printer_classes (
        name	    TEXT UNIQUE NOT NULL CHECK(name <> ''), /* class name */
 
        comment	    TEXT 
-) INHERITS(common_fields);
+) INHERITS(common_fields) WITH OIDS;
 
