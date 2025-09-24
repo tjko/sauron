@@ -15,8 +15,10 @@ use Sauron::Util;
 use Sauron::UtilDhcp;
 use Sauron::BackEnd;
 use Sauron::Sauron;
+use Sauron::SetupIO;
 use Net::IP;
 
+set_encoding();
 load_config();
 
 ##############################

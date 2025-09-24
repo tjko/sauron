@@ -13,12 +13,14 @@ use Sauron::DB;
 use Sauron::BackEnd;
 use Sauron::Sauron;
 use Sauron::Util;
+use Sauron::SetupIO;
 use Pod::Usage;
 use File::Temp qw/ tempfile tempdir /;
 use Term::ReadLine;
 use strict;
 use warnings;
 
+set_encoding();
 load_config();
 
 # Local variables.

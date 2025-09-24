@@ -10,6 +10,7 @@ require Exporter;
 use NetAddr::IP; # For IPv6;
 use Sauron::DB;
 use Sauron::Util;
+use Sauron::SetupIO;
 use Sys::Syslog qw(:DEFAULT setlogsock);
 Sys::Syslog::setlogsock('unix');
 use Net::IP qw (:PROC);
@@ -178,7 +179,7 @@ sub write2log
   my $filename  = File::Basename::basename($0);
 
   Sys::Syslog::openlog($filename, "cons,pid", "debug");
-  Sys::Syslog::syslog("info", "$msg");
+  Sys::Syslog::syslog("info", encode_str("$msg"));
   Sys::Syslog::closelog();
 } # End of write2log
 

@@ -16,7 +16,10 @@ use Sauron::Util;
 use Sauron::DB;
 use Sauron::BackEnd;
 use Sauron::Sauron;
+use Sauron::SetupIO;
 use Net::IP qw(:PROC);
+
+set_encoding();
 load_config();
 
 $bind_conf=0;

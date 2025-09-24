@@ -7,13 +7,13 @@
 package Sauron::Sauron;
 require Exporter;
 use Sauron::Util;
+use Sauron::SetupIO;
 use MIME::Base64 qw(decode_base64);
 use strict;
 use vars qw($VERSION $CONF_FILE_PATH @ISA @EXPORT);
 
 $VERSION = '$Id:$ ';
 $CONF_FILE_PATH = '__CONF_FILE_PATH__';
-
 
 @ISA = qw(Exporter); # Inherit from Exporter
 @EXPORT = qw(
@@ -25,15 +25,10 @@ $CONF_FILE_PATH = '__CONF_FILE_PATH__';
 	     print_browser_config
 	    );
 
-# A hack adapted from following page, mesrik - 2024
-# - https://stackoverflow.com/questions/627661/how-can-i-output-utf-8-from-perl
-binmode(STDOUT, ":utf8");          #treat as if it is UTF-8
-binmode(STDIN, ":encoding(utf8)"); #actually check if it is UTF-8
 
 sub sauron_version() {
   return "0.9.0 (beta)"; # current Sauron version
 }
-
 
 sub set_defaults() {
   undef $main::CONFIG_FILE;

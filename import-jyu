@@ -29,7 +29,9 @@ use Sauron::Util;
 use Sauron::UtilZone;
 use Sauron::BackEnd;
 use Sauron::Sauron;
+use Sauron::SetupIO;
 
+set_encoding();
 load_config();
 
 ##############################

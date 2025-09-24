@@ -9,7 +9,9 @@ require 5;
 use Getopt::Long;
 use Sauron::Util;
 use Sauron::Sauron;
+use Sauron::SetupIO;
 
+set_encoding();
 load_config();
 
 $MAXLINES = 100;

@@ -1,5 +1,7 @@
 0.9.0 (beta)
-
+	- Added Sauron::SetupIO module for correct encoding settings,
+	  sets encoding transport layers according to system settings
+	  (locale for STDIN, STDOUT, STDERR) using Encode::Locale [svamberg]
  - Increased maximum login length to 321 characters to allow storage 
 	  of eduPersonUniqueId according to RFC4512. [svamberg]
 	- Removed 'WITH OIDS' from SQL table creation; not supported since 

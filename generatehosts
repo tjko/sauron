@@ -13,8 +13,10 @@ use Sauron::DB;
 use Sauron::Util;
 use Sauron::BackEnd;
 use Sauron::Sauron;
+use Sauron::SetupIO;
 use Net::IP qw(:PROC);
 
+set_encoding();
 load_config();
 
 #######################################################################
