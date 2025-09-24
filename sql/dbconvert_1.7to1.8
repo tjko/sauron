@@ -1,0 +1,13 @@
+/* convert Sauron database format from 1.7 to 1.8 */
+/* (this requires PostgreSQL v7.3 or later) */
+
+
+/* resize user login */
+ALTER TABLE common_fields ALTER COLUMN cuser TYPE CHAR(321);
+
+/* resize user login */
+ALTER TABLE common_fields ALTER COLUMN muser TYPE CHAR(321);
+
+UPDATE settings SET value='1.8' where setting='dbversion';
+
+/* eof */
