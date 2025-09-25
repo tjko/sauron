@@ -13,6 +13,7 @@ use Sauron::BackEnd;
 use Sauron::Sauron;
 use Sauron::Util;
 use Sauron::CGI::Utils;
+use Sauron::SetupIO;
 use strict;
 use vars qw($VERSION @ISA @EXPORT);
 use Sys::Syslog qw(:DEFAULT setlogsock);
@@ -30,7 +31,7 @@ sub write2log{
   my $filename  = File::Basename::basename($0);
 
   Sys::Syslog::openlog($filename, "cons,pid", "debug");
-  Sys::Syslog::syslog("info", "$msg");
+  Sys::Syslog::syslog("info", encode_str("$msg"));
   Sys::Syslog::closelog();
 } # End of write2log
 

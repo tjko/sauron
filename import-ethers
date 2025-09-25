@@ -12,7 +12,9 @@ use Getopt::Long;
 use Sauron::DB;
 use Sauron::Util;
 use Sauron::Sauron;
+use Sauron::SetupIO;
 
+set_encoding();
 load_config();
 
 ###################################################################

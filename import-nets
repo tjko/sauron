@@ -10,7 +10,9 @@ use Sauron::DB;
 use Sauron::BackEnd;
 use Sauron::Util;
 use Sauron::Sauron;
+use Sauron::SetupIO;
 
+set_encoding();
 $|=1;
 load_config();
 

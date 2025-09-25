@@ -14,6 +14,7 @@ use Sauron::BackEnd;
 use Sauron::Util;
 use Sauron::Sauron;
 use Sauron::CGI::Utils;
+use Sauron::SetupIO;
 use Sys::Syslog qw(:DEFAULT setlogsock);
 Sys::Syslog::setlogsock('unix');
 use Net::IP qw(:PROC);
@@ -33,7 +34,7 @@ sub write2log{
   my $filename  = File::Basename::basename($0);
 
   Sys::Syslog::openlog($filename, "cons,pid", "debug");
-  Sys::Syslog::syslog("info", "$msg");
+  Sys::Syslog::syslog("info", encode_str("$msg"));
   Sys::Syslog::closelog();
 } # End of write2log
 
@@ -348,7 +349,7 @@ my %new_host_form = (
   {ftype=>2, tag=>'srv_l', name=>'SRV entries', fields=>5,len=>[5,5,5,30,20],
 
 #  maxlen=>[5,5,5,400,10], dot=>1,
-
+/
 # Dot (.) allowed to superuser. 2020-08-10 TVu
    maxlen=>[5,5,5,400,80], dot=>check_perms('superuser','',1) ? 0 : 1,
 

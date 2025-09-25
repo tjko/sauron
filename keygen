@@ -14,6 +14,7 @@ use Sauron::BackEnd;
 use Digest::MD5;
 use MIME::Base64;
 use Crypt::RC5;
+use Sauron::SetupIO;
 
 my %KEY_ALGORITHMS = ( 
 		       0=>'reserved',
@@ -24,6 +25,7 @@ my %KEY_ALGORITHMS = (
 		       157=>'HMAC-MD5'
 		      );
 
+set_encoding();
 load_config();
 
 GetOptions("help|h","setmasterkey:s","add:s","del:s","regen:s","list:s",

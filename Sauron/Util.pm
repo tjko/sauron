@@ -6,6 +6,7 @@
 #
 package Sauron::Util;
 require Exporter;
+use Sauron::SetupIO;
 use Time::Local 'timelocal_nocheck';
 use Digest::MD5;
 # use Net::Netmask;
@@ -21,7 +22,7 @@ sub write2log{
   my $filename  = File::Basename::basename($0);
 
   Sys::Syslog::openlog($filename, "cons,pid", "debug");
-  Sys::Syslog::syslog("info", "$msg");
+  Sys::Syslog::syslog("info", encode_str("$msg"));
   Sys::Syslog::closelog();
 } # End of write2log
 

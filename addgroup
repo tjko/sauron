@@ -11,7 +11,9 @@ use Sauron::DB;
 use Sauron::Util;
 use Sauron::BackEnd;
 use Sauron::Sauron;
+use Sauron::SetupIO;
 
+set_encoding();
 load_config();
 
 GetOptions("help|h","name=s","group=s","priv=s"); # priv 16.03.2017 TVu

@@ -11,7 +11,9 @@ use Sauron::DB;
 use Sauron::BackEnd;
 use Sauron::Util;
 use Sauron::Sauron;
+use Sauron::SetupIO;
 
+set_encoding();
 load_config();
 
 GetOptions("help|h","mac","duid","ip","host","commit");

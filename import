@@ -15,8 +15,10 @@ use Sauron::Util;
 use Sauron::UtilZone;
 use Sauron::BackEnd;
 use Sauron::Sauron;
+use Sauron::SetupIO;
 use Net::IP qw(:PROC);
 
+set_encoding();
 load_config();
 
 # if these are not defined, then values are taken from first master zone
