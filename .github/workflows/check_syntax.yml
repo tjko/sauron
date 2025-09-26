@@ -22,6 +22,7 @@ jobs:
         env:
           # Nastavíme PERL5LIB na kořen checkoutnutého repozitáře
           PERL5LIB: ${{ github.workspace }}
+        shell: bash
         run: |
           set -e
           echo "PERL5LIB=$PERL5LIB"
