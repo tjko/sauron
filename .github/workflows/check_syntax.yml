@@ -13,8 +13,9 @@ jobs:
       - name: Install dependencies
         run: |
           apt-get update
-          DEBIAN_FRONTEND=noninteractive apt-get install -y findutils git make gcc
-          DEBIAN_FRONTEND=noninteractive apt-get install -y perl libcgi-pm-perl libdbd-pg-perl libdbi-perl libnet-dns-perl libnet-ip-perl libnetaddr-ip-perl libnet-netmask-perl libtext-table-perl libcryptx-perl libjson-perl libjson-maybexs-perl libpath-tiny-perl 
+          DEBIAN_FRONTEND=noninteractive apt install -y findutils git make gcc
+          DEBIAN_FRONTEND=noninteractive apt install -y perl libcgi-pm-perl libdbd-pg-perl libdbi-perl libnet-dns-perl libnet-ip-perl libnetaddr-ip-perl libnet-netmask-perl libtext-table-perl libcryptx-perl libjson-perl libjson-maybexs-perl libpath-tiny-perl
+          dpkg -l
 
       - name: Checkout code
         uses: actions/checkout@v4
