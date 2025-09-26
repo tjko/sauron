@@ -70,7 +70,7 @@ my $db_ignore_begin_and_commit_flag = 0;
 
 sub db_connect2() {
 
-  my $dsn = ($main::DB_DSN ? $main:DB_DSN : '');
+  my $dsn = ($main::DB_DSN ? $main::DB_DSN : '');
   $dsn .= " user=$main::DB_USER" if ($main::DB_USER);
   $dsn .= " password=$main::DB_PASSWORD" if ($main::DB_PASSWORD);
 
