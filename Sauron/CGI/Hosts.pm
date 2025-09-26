@@ -349,7 +349,6 @@ my %new_host_form = (
   {ftype=>2, tag=>'srv_l', name=>'SRV entries', fields=>5,len=>[5,5,5,30,20],
 
 #  maxlen=>[5,5,5,400,10], dot=>1,
-/
 # Dot (.) allowed to superuser. 2020-08-10 TVu
    maxlen=>[5,5,5,400,80], dot=>check_perms('superuser','',1) ? 0 : 1,
 
