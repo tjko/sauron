@@ -1,0 +1,31 @@
+name: Syntax Check
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    container:
+      image: debian:stable
+    steps:
+      - name: Install dependencies
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y findutils git perl gcc libcgi-pm-perl libdbd-pg-perl libdbi-perl libnet-dns-perl libnet-ip-perl libnetaddr-ip-perl libnet-netmask-perl libtext-table-perl libcryptx-perl libjson-perl libjson-maybexs-perl libpath-tiny-perl make
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check Perl syntax in .pl and .pm files
+        env:
+          # Nastavíme PERL5LIB na kořen checkoutnutého repozitáře
+          PERL5LIB: ${{ github.workspace }}
+        run: |
+          set -e
+          echo "PERL5LIB=$PERL5LIB"
+          find . -type f \( -name "*.pl" -o -name "*.pm" \) -print0 | while IFS= read -r -d '' file; do
+            echo "Checking $file"
+            perl -c "$file"
+          done
