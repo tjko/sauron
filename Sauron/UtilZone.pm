@@ -127,7 +127,7 @@ sub process_zonefile($$$$) {
 	unless ($class =~ /^(IN|CS|CH|HS)$/);
 
     # type
-    unless ($type =~ /^(SOA|A|AAAA|PTR|CNAME|MX|NS|TXT|HINFO|WKS|MB|MG|MD|MF|MINFO|MR|AFSDB|ISDN|RP|RT|X25|PX|SRV|NAPTR)$/) {
+    unless ($type =~ /^(SOA|A|AAAA|PTR|CNAME|MX|NS|TXT|HINFO|WKS|MB|MG|MD|MF|MINFO|MR|AFSDB|ISDN|RP|RT|X25|PX|SRV|NAPTR|CAA)$/) {
       if ($ext_flag > 0) {
 	unless ($type =~ /^(DHCP|ALIAS|AREC|ROUTER|PRINTER|BOOTP|INFO|ETHER2?|GROUP|BOOTP|MUUTA[0-9]|TYPE|SERIAL|PCTCP)$/) {
 	  print STDERR "$filename($.): unsupported RR type '$type'\n";
@@ -153,6 +153,7 @@ sub process_zonefile($$$$) {
 	      TXT => [],
 	      HINFO => ['',''],
 	      WKS => [],
+              CAA => [],
 
 	      RP => [],
 	      SRV => [],
@@ -238,6 +239,11 @@ sub process_zonefile($$$$) {
       $line[1] =~ s/(\s+|^\"|\"$)//g;
       $rec->{HINFO}[0]=$line[0];
       $rec->{HINFO}[1]=$line[1];
+    }
+    elsif ($type eq 'CAA') {
+      fatal("$filename($.): invalid CAA record: $fline ($line[0],$line[1],$line[2])")
+        unless ($line[0]=~/^[01]$/ && $line[1]=~/^[a-zA-Z0-9]+$/ && $line[2] ne '');
+      push @{$rec->{CAA}}, "$line[0] $line[1] $line[2]";
     }
     elsif ($type eq 'WKS') {
       shift @line; # get rid of IP
@@ -356,7 +362,7 @@ sub process_zonedns($$$$) {
 	$ttl = $rr->ttl;
 
 	next unless ($class eq 'IN');
-	unless ($type =~ /^(SOA|A|PTR|CNAME|MX|NS|TXT|HINFO|SRV|WKS)$/) {
+	unless ($type =~ /^(SOA|A|PTR|CNAME|MX|NS|TXT|HINFO|SRV|WKS|CAA)$/) {
 	    $ucount++;
 	    print "Skipping: " . $rr->string . "\n" if ($verbose);
 	    next;
@@ -374,6 +380,7 @@ sub process_zonedns($$$$) {
 		NS => [],
 		TXT => [],
 		HINFO => ['',''],
+                CAA => [],
 		WKS => [],
 		SRV => []
 	      };
@@ -416,6 +423,9 @@ sub process_zonedns($$$$) {
 	    $rec->{HINFO}[0] = $rr->cpu;
 	    $rec->{HINFO}[1] = $rr->os;
 	}
+        elsif ($type eq 'CAA') {
+            push @{$rec->{CAA}}, join(" ",($rr->flags,$rr->tag,$rr->value));
+        }
 	elsif ($type eq 'SRV') {
 	    push @{$rec->{SRV}}, join(" ",($rr->priority,$rr->weight,
 					   $rr->port,$rr->target . '.'));
