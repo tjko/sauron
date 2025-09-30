@@ -21,7 +21,7 @@ REQUIREMENTS
 		- Digest::HMAC module
 		- Digest::SHA1 module
 		- MIME::Base64
-		- Crypt::RC5
+		- Crypt::Cipher::RC5
 		- Text::Table;
  	- PostgresSQL [15.10 or newer  recommended]
 	  (or add support to your favorite db yourself :)
