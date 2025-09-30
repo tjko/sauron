@@ -17,6 +17,7 @@ use Sauron::SetupIO;
 use Pod::Usage;
 use File::Temp qw/ tempfile tempdir /;
 use Term::ReadLine;
+use open ':locale';
 use strict;
 use warnings;
 
