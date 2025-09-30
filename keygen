@@ -15,6 +15,7 @@ use Digest::MD5;
 use MIME::Base64;
 use Crypt::Cipher::RC5;
 use Sauron::SetupIO;
+use open ':locale';
 
 my %KEY_ALGORITHMS = ( 
 		       0=>'reserved',

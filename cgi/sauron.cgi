@@ -19,6 +19,7 @@ use Sauron::Sauron;
 use Data::Dumper;
 #use strict;
 use warnings;;
+use open ':locale';
 
 $CGI::DISABLE_UPLOADS = 1; # no uploads
 $CGI::POST_MAX = 100000; # max 100k posts

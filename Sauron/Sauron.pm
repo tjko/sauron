@@ -11,6 +11,7 @@ use Sauron::SetupIO;
 use MIME::Base64 qw(decode_base64);
 use strict;
 use vars qw($VERSION $CONF_FILE_PATH @ISA @EXPORT);
+use open ':locale';
 
 $VERSION = '$Id:$ ';
 $CONF_FILE_PATH = '__CONF_FILE_PATH__';

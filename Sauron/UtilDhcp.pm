@@ -10,6 +10,7 @@ use IO::File;
 use Sauron::Util;
 use strict;
 use vars qw($VERSION @ISA @EXPORT);
+use open ':locale';
 
 $VERSION = '$Id:$ ';
 

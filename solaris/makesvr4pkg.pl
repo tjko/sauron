@@ -7,6 +7,7 @@
 #
 use File::Path;
 use Getopt::Long;
+use open ':locale';
 
 my @SYS_DIRS = qw#
     /etc 

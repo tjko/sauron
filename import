@@ -17,6 +17,7 @@ use Sauron::BackEnd;
 use Sauron::Sauron;
 use Sauron::SetupIO;
 use Net::IP qw(:PROC);
+use open ':locale';
 
 set_encoding();
 load_config();

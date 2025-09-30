@@ -13,6 +13,7 @@ use Sauron::Util;
 use Sauron::BackEnd;
 use Sauron::Sauron;
 use Sauron::SetupIO;
+use open ':locale';
 
 set_encoding();
 load_config();
