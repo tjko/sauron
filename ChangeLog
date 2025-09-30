@@ -7,6 +7,7 @@
 	- Removed 'WITH OIDS' from SQL table creation; not supported since 
 	  version 12. [svamberg]
 	- change libcrypt-cb5-perl to libcryptx-perl [svamberg]
+	- add import CAA records into Custom zone file entries [svamberg]
 
 0.8.5
 
