@@ -9,6 +9,7 @@
 	- change libcrypt-cb5-perl to libcryptx-perl [svamberg]
 	- add import CAA records into Custom zone file entries [svamberg]
 	- import of multiple TXT zone records [svamberg]
+	- add import DS records into Custom zone file entries [svamberg]
 
 0.8.5
 

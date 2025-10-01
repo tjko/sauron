@@ -212,6 +212,16 @@ foreach $host (sort keys %zonedata) {
 	push @gluelist, $1;
       }
     }
+    if (@{$rec->{DS}} > 0) {
+      foreach $tmp (@{$rec->{DS}}) {
+        $res = add_record("txt_entries",
+			  { type=>12,
+			    ref=>$zoneid,
+			    txt=>"$host2 $rec->{TTL} IN DS $tmp"
+			  });
+        fatal("Failed to insert DS record:\n   $host2 $rec->{TTL} IN DS $tmp") if ($res < 0);
+      }
+    }
   }
 
   fatal("empty hostname adfter stripping origin: $host") unless ($host2);
