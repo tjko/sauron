@@ -188,6 +188,18 @@ foreach $host (sort keys %zonedata) {
   $hosttype=8 if (@{$rec->{SRV}} > 0);
 
   if ($hosttype == 0) {
+    if (@{$rec->{TXT}} > 0) {
+      foreach $tmp (@{$rec->{TXT}}) {
+        $res = add_record("txt_entries",
+                          { type=>12,
+                            ref=>$zoneid,
+                            txt=>"$host2 $rec->{TTL} IN TXT \"$tmp\""
+                          });
+        fatal("Failed to insert TXT record:\n   $host2 $rec->{TTL} IN TXT \"$tmp\"") if ($res < 0);
+      }
+      next;
+    }
+
     print STDERR "Ignoring unknown host entry: $host\n";
     delete $zonedata{$host};
     next;
