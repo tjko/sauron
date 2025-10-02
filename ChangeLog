@@ -10,6 +10,8 @@
 	- add import CAA records into Custom zone file entries [svamberg]
 	- import of multiple TXT zone records [svamberg]
 	- add import DS records into Custom zone file entries [svamberg]
+	- the left menu displays only the items that the user has the right
+	  to access [svamberg]
 
 0.8.5
 
