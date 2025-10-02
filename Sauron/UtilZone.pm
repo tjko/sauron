@@ -128,7 +128,7 @@ sub process_zonefile($$$$) {
 	unless ($class =~ /^(IN|CS|CH|HS)$/);
 
     # type
-    unless ($type =~ /^(SOA|A|AAAA|PTR|CNAME|MX|NS|TXT|HINFO|WKS|MB|MG|MD|MF|MINFO|MR|AFSDB|ISDN|RP|RT|X25|PX|SRV|NAPTR|CAA)$/) {
+    unless ($type =~ /^(SOA|A|AAAA|PTR|CNAME|MX|NS|TXT|HINFO|WKS|MB|MG|MD|MF|MINFO|MR|AFSDB|ISDN|RP|RT|X25|PX|SRV|NAPTR|CAA|DS)$/) {
       if ($ext_flag > 0) {
 	unless ($type =~ /^(DHCP|ALIAS|AREC|ROUTER|PRINTER|BOOTP|INFO|ETHER2?|GROUP|BOOTP|MUUTA[0-9]|TYPE|SERIAL|PCTCP)$/) {
 	  print STDERR "$filename($.): unsupported RR type '$type'\n";
@@ -155,6 +155,7 @@ sub process_zonefile($$$$) {
 	      HINFO => ['',''],
 	      WKS => [],
               CAA => [],
+              DS => [],
 
 	      RP => [],
 	      SRV => [],
@@ -242,9 +243,14 @@ sub process_zonefile($$$$) {
       $rec->{HINFO}[1]=$line[1];
     }
     elsif ($type eq 'CAA') {
-      fatal("$filename($.): invalid CAA record: $fline ($line[0],$line[1],$line[2])")
+      fatal("$filename($.): invalid CAA record: $fline")
         unless ($line[0]=~/^[01]$/ && $line[1]=~/^[a-zA-Z0-9]+$/ && $line[2] ne '');
       push @{$rec->{CAA}}, "$line[0] $line[1] $line[2]";
+    }
+    elsif ($type eq 'DS') {
+      fatal("$filename($.): invalid DS record: $fline")
+        unless ($line[0]=~/^\d+$/ && $line[1]=~/^\d+$/ && $line[2]=~/^\d+$/ && $line[3]=~/^[0-9A-Fa-f]+$/);
+      push @{$rec->{DS}}, "$line[0] $line[1] $line[2] $line[3]";
     }
     elsif ($type eq 'WKS') {
       shift @line; # get rid of IP
@@ -363,7 +369,7 @@ sub process_zonedns($$$$) {
 	$ttl = $rr->ttl;
 
 	next unless ($class eq 'IN');
-	unless ($type =~ /^(SOA|A|PTR|CNAME|MX|NS|TXT|HINFO|SRV|WKS|CAA)$/) {
+	unless ($type =~ /^(SOA|A|PTR|CNAME|MX|NS|TXT|HINFO|SRV|WKS|CAA|DS)$/) {
 	    $ucount++;
 	    print "Skipping: " . $rr->string . "\n" if ($verbose);
 	    next;
@@ -382,6 +388,7 @@ sub process_zonedns($$$$) {
 		TXT => [],
 		HINFO => ['',''],
                 CAA => [],
+                DS => [],
 		WKS => [],
 		SRV => []
 	      };
@@ -427,6 +434,9 @@ sub process_zonedns($$$$) {
         elsif ($type eq 'CAA') {
             push @{$rec->{CAA}}, join(" ",($rr->flags,$rr->tag,$rr->value));
         }
+        elsif ($type eq 'DS') {
+            push @{$rec->{DS}}, join(" ",($rr->keytag,$rr->algorithm,$rr->digtype,$rr->digest));
+	}
 	elsif ($type eq 'SRV') {
 	    push @{$rec->{SRV}}, join(" ",($rr->priority,$rr->weight,
 					   $rr->port,$rr->target . '.'));
