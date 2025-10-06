@@ -20,6 +20,7 @@ DROP TABLE mx_entries;
 DROP TABLE txt_entries;
 DROP TABLE wks_entries;
 DROP TABLE srv_entries;
+DROP TABLE sshfp_entries;
 DROP TABLE arec_entries;
 /* DROP TABLE host_info; */
 DROP TABLE utmp;
@@ -55,6 +56,7 @@ DROP SEQUENCE mx_entries_id_seq;
 DROP SEQUENCE txt_entries_id_seq;
 DROP SEQUENCE wks_entries_id_seq;
 DROP SEQUENCE srv_entries_id_seq;
+DROP SEQUENCE sshfp_entries_id_seq;
 DROP SEQUENCE arec_entries_id_seq;
 /* DROP SEQUENCE host_info_id_seq; */
 DROP SEQUENCE users_id_seq;

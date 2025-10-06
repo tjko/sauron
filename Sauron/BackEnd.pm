@@ -1942,7 +1942,9 @@ sub get_host($$) {
   get_array_field("srv_entries",6,"id,pri,weight,port,target,comment",
 		  "Priority,Weight,Port,Target",
 		  "type=1 AND ref=$id ORDER BY port,pri,weight",$rec,'srv_l');
-
+  get_array_field("sshfp_entries",6,"id,algorithm,hashtype,fingerprint,comment",
+		  "Algorithm,Type,Fingerprint",
+		  "type=1 AND ref=$id ORDER BY algorithm,hashtype,fingerprint",$rec,'sshfp_l');
 # Get CNAME aliases.
   get_array_field("hosts",5,"0,id,domain,type,1","Domain,cname",
 	          "type=4 AND alias=$id ORDER BY domain",$rec,'alias_l');
@@ -2114,6 +2116,10 @@ sub update_host($) {
 			"pri,weight,port,target,comment,type,ref",
 			'srv_l',$rec,"1,$id");
   if ($r < 0) { db_rollback(); return -18; }
+  $r=update_array_field("sshfp_entries",5,
+			"algorithm,hashtype,fingerprint,comment,type,ref",
+			'sshfp_l',$rec,"1,$id");
+  if ($r < 0) { db_rollback(); return -19; }
 
   $r=update_array_field("a_entries",4,"ip,reverse,forward,host",
 			'ip',$rec,"$id");
@@ -2209,6 +2215,10 @@ sub delete_host($) {
   $res=db_exec("DELETE FROM srv_entries WHERE type=1 AND ref=$id;");
   if ($res < 0) { db_rollback(); return -11; }
 
+  # sshfp_entries
+  $res=db_exec("DELETE FROM sshfp_entries WHERE type=1 AND ref=$id;");
+  if ($res < 0) { db_rollback(); return -13; }
+
   # group_entries
   $res=db_exec("DELETE FROM group_entries WHERE host=$id;");
   if ($res < 0) { db_rollback(); return -12; }
@@ -2286,6 +2296,11 @@ sub add_host($) {
 			 'srv_l',$rec,'type,ref',"1,$id");
   if ($res < 0) { db_rollback(); return -6; }
 
+  # SSHFPs
+  $res = add_array_field('sshfp_entries','algorithm,hashtype,fingerprint,comment',
+			 'sshfp_l',$rec,'type,ref',"1,$id");
+  if ($res < 0) { db_rollback(); return -9; }
+
   # ARECs
   if ($rec->{type}==7) {
     $res=db_exec("INSERT INTO arec_entries (host,arec) VALUES($id,$a_id);");
@@ -2307,7 +2322,7 @@ sub add_host($) {
 sub get_host_types() {
     return (0 => 'Any type', 1 => 'Host', 2 => 'Delegation', 3 => 'Plain MX',
 	    4 => 'Alias', 5 => 'Printer', 6 => 'Glue record', 7 => 'AREC Alias',
-	    8 => 'SRV record', 9 => 'DHCP only', 10 => 'Zone',
+	    8 => 'SRV record', 9 => 'DHCP only', 10 => 'Zone', 11=>'SSHFP only',
 	    101 => 'Host reservation');
 }
 
