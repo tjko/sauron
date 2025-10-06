@@ -49,7 +49,7 @@ our %host_types;
 %boolean_enum = (f=>'No',t=>'Yes');
 %host_types=(0=>'Any type',1=>'Host',2=>'Delegation',3=>'Plain MX',
 	     4=>'Alias',5=>'Printer',6=>'Glue record',7=>'AREC Alias',
-	     8=>'SRV record',9=>'DHCP only',10=>'Zone',
+	     8=>'SRV record',9=>'DHCP only',10=>'Zone',11=>'SSHFP only',
 	     101=>'Host reservation');
 
 
