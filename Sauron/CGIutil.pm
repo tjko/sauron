@@ -901,9 +901,9 @@ sub form_magic($$$) {
           else {
 	      print "<TD>",textfield(-name=>$n,-size=>${$rec->{len}}[$k-1],
 				     -maxlength=>$maxlen,-value=>scalar(param($n)));
+   	      print "<FONT size=-1 color=\"red\"><BR>",
+                     form_check_field($rec,param($n),$k),"</FONT></TD>";
 	  }
-	  print "<FONT size=-1 color=\"red\"><BR>",
-                form_check_field($rec,param($n),$k),"</FONT></TD>";
         }
         print td("<FONT size=-2>",checkbox(-label=>'Delete',
 		     -name=>$p2."_del",-checked=>scalar(param($p2."_del"))),
