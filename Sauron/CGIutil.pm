@@ -502,12 +502,16 @@ sub form_check_form($$$) {
 	next if (param($p."_".$j."_del") eq 'on'); # skip if 'delete' checked
 	for $k (1..$f) {
 # Remove unnecessary whitespace from indexed input fields.
-# **	    if ($rec->{rows}
-	    param($p."_".$j."_".$k,
-		  remove_whitespace(param($p."_".$j."_".$k),
-				    $rec->{'whitesp'}[$k-1] || ''));
-	    return 2
-		if (form_check_field($rec,param($p."_".$j."_".$k),$k) ne '');
+# **	  if ($rec->{rows}
+	  param($p."_".$j."_".$k,
+	        remove_whitespace(param($p."_".$j."_".$k),
+				  $rec->{'whitesp'}[$k-1] || ''));
+          $tmp=param($p."_".$j."_".$k);
+          if ($rec->{type}[$k-1] eq 'enum') {
+            $tmp=param($p."_".$j."_".$k."_enum") if ($tmp eq '');
+          }
+	  return 2
+	    if (form_check_field($rec,$tmp,$k) ne '');
 	}
       }
 
@@ -536,6 +540,9 @@ sub form_check_form($$$) {
 	    $$new[$f+1]=2;
 	    for $k (1..$f) {
 	      $tmp=param($p2."_".$k);
+              if ($rec->{type}[$k-1] eq 'enum') {
+                $tmp=param($p2."_".$k."_enum") if ($tmp eq '');
+              }
 	      $tmp=($tmp eq 'on' ? 't':'f') if ($type==5 && $k>1);
 	      $$new[$k]=$tmp;
 	    }
@@ -545,6 +552,9 @@ sub form_check_form($$$) {
 	      if (param($p2."_".$k) ne $$list[$ind][$k]) {
 		$$list[$ind][$f+1]=1;
 		$tmp=param($p2."_".$k);
+                if ($rec->{type}[$k-1] eq 'enum') {
+                  $tmp=param($p2."_".$k."_enum") if ($tmp eq '');
+                }
 		$tmp=($tmp eq 'on' ? 't':'f') if ($type==5 && $k>1);
 		$$list[$ind][$k]=$tmp;
 		#print p,"$p2 modified record (field $k)";
@@ -594,6 +604,47 @@ sub form_check_form($$$) {
   return 0;
 }
 
+sub form_field_enum($$$$) {
+  my ($rec, $n, $k, $update) = @_;
+  my (@lst, %lsth);
+  my $rec_enum = $rec->{enum}[$k-1];
+  my $len=${$rec->{len}}[$k-1];
+  my $maxlen=${$rec->{maxlen}}[$k-1];
+  $maxlen=${$rec->{len}}[$k-1] unless ($maxlen > 0);
+
+  for my $enum_key (sort keys %$rec_enum) {
+    push @lst, $enum_key;
+    $lsth{$enum_key} = "$enum_key $rec_enum->{$enum_key}";
+  }
+  if (defined $rec->{addempty}) {
+    if ($rec->{addempty}[$k-1] > 0) {
+      push @lst, '';
+    } elsif  ($rec->{addempty}[$k-1] < 0) {
+      unshift @lst, '';
+    }
+    $lsth{''} = '';
+  }
+  if (defined $lsth{param($n)} && (param($n) ne '')) {
+    param($n."_enum",param($n));
+    param($n,'');
+  }
+  print "<TD>",
+    popup_menu(
+      -name=>$n."_enum",
+      -values=>\@lst,
+      -value=>param($n."_enum") ? param($n."_enum") : $lst[0],
+      -labels=>\%lsth),
+    " ",
+    textfield(-name=>$n,-size=>$len,-maxlength=>$maxlen,-value=>param($n));
+  if ($update > 0) {
+    my $tmp=param($n);
+    $tmp=param($n."_enum") if ($tmp eq '');
+    print "<FONT size=-1 color=\"red\"><BR>",
+      form_check_field($rec,$tmp,$k),
+      "</FONT>";
+  }
+  print "</TD>";
+}
 
 
 #####################################################################
@@ -834,6 +885,7 @@ sub form_magic($$$) {
 	print "<TR>",hidden(-name=>$p2."_id",scalar(param($p2."_id")));
 	for $k (1..$rec->{fields}) {
 	  $n=$p2."_".$k;
+          $len=${$rec->{len}}[$k-1];
 	  $maxlen=${$rec->{maxlen}}[$k-1];
 	  $maxlen=${$rec->{len}}[$k-1] unless ($maxlen > 0);
 
@@ -842,15 +894,16 @@ sub form_magic($$$) {
 				    -rows => $rec->{rows},
 				    -columns => ${$rec->{len}}[$k-1],
 				    -value => scalar(param($n)));
-	  } else {
-
+	  } 
+          elsif ($rec->{type}[$k-1] == 'enum' && exists $rec->{enum} && $rec->{enum}[$k-1]) {
+              form_field_enum($rec, $n, $k, 1);
+          }
+          else {
 	      print "<TD>",textfield(-name=>$n,-size=>${$rec->{len}}[$k-1],
 				     -maxlength=>$maxlen,-value=>scalar(param($n)));
-
+   	      print "<FONT size=-1 color=\"red\"><BR>",
+                     form_check_field($rec,param($n),$k),"</FONT></TD>";
 	  }
-
-	  print "<FONT size=-1 color=\"red\"><BR>",
-                form_check_field($rec,param($n),$k),"</FONT></TD>";
         }
         print td("<FONT size=-2>",checkbox(-label=>'Delete',
 		     -name=>$p2."_del",-checked=>scalar(param($p2."_del"))),
@@ -863,19 +916,23 @@ sub form_magic($$$) {
 	$n=$prefix."_".$rec->{tag}."_".$j."_".$k;
 	$maxlen=${$rec->{maxlen}}[$k-1];
 	$maxlen=${$rec->{len}}[$k-1] unless ($maxlen > 0);
+        $len=${$rec->{len}}[$k-1];
 
 	if (${$rec->{type}}[$k-1] eq 'area') { # 2020-07-30 TVu
 	    print td(textarea(-name=>$n,
 			      -rows => $rec->{rows},
 			      -columns => ${$rec->{len}}[$k-1],
 			      -value => scalar(param($n))));
-	} else {
-
+	} 
+        elsif ($rec->{type}[$k-1] == 'enum' && exists $rec->{enum} && $rec->{enum}[$k-1]) {
+            # enum field in added record
+            form_field_enum($rec, $n, $k, 0);
+        }
+        else {
+            # normal field in added record
 	    print td(textfield(-name=>$n,-size=>${$rec->{len}}[$k-1],
 			       -maxlength=>$maxlen,-value=>scalar(param($n))));
-
 	}
-
       }
       print td(submit(-name=>$prefix."_".$rec->{tag}."_add",-value=>'Add'));
 
@@ -1378,6 +1435,7 @@ sub display_form($$) {
       for $j (1..$#{$a}) {
 	print "<TR>";
 	for $k (1..$rec->{fields}) {
+          my $len = defined $rec->{len} ? $rec->{len}[$k-1] : 0;
 	  $val=$$a[$j][$k];
 	  $val =~ s/\/32$// if ($rec->{type}[$k-1] eq 'ip');
 	  $val =~ s/\/128$// if ($rec->{type}[$k-1] eq 'ip');
@@ -1385,8 +1443,29 @@ sub display_form($$) {
 	  $val =~ s/^( +)/'&nbsp;' x (length($1) * 2)/gem # 2020-07-30 TVu
 	      if ($rec->{type}[$k-1] eq 'area');
 	  $val =~ s/\n/<br>/g if ($rec->{type}[$k-1] eq 'area'); # 2020-07-30 TVu
-	  $val='&nbsp;' if ($val eq '');
-	  print td($val);
+
+
+          if ($len && $rec->{type}[$k-1] == 'enum' && exists $rec->{enum} && $rec->{enum}[$k-1]) {
+            # tune width for enum field
+            my $rec_enum = $rec->{enum}[$k-1];
+            my $value_len = 0;
+            for my $enum_key (%$rec_enum) {
+              $value_len = length($rec_enum->{$enum_key}) if (length($rec_enum->{$enum_key}) > $value_len);
+            }
+            if (defined $rec_enum->{$val}) {
+              $val = "$val $rec_enum->{$val}";
+              $len = $len + 1 + $value_len;
+            }
+          }
+	  
+          $val='&nbsp;' if ($val eq '');
+          if ($len) {
+            # specified width
+	    print "<TD style=\"max-width: ${len}ch; width: ${len}ch; overflow-wrap: anywhere; word-break: break-all;\">$val</TD>\n";
+          }
+          else {
+            print td($val);
+          }
 	}
 	print "</TR>";
       }
