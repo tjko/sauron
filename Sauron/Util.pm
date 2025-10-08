@@ -32,8 +32,10 @@ $VERSION = '$Id:$ ';
 
 @ISA = qw(Exporter); # Inherit from Exporter
 @EXPORT = qw(
+             valid_base64
 	     valid_domainname_check
 	     valid_domainname
+             valid_hex
 	     valid_texthandle
              cidr4ok
              cidr6ok
@@ -82,7 +84,14 @@ $VERSION = '$Id:$ ';
          dhcpduid
 	    );
 
+sub valid_base64($) {
+  my($base64)= @_;
 
+  return 1
+    if ($base64 =~ /^[a-zA-Z0-9\/\+=]*$/);
+
+  return 0;
+}
 
 # returns nonzero in case given domainname is valid
 sub valid_domainname_check($$) {
@@ -181,6 +190,15 @@ sub valid_domainname($) {
   my($domain) = @_;
 
   return valid_domainname_check($domain,0);
+}
+
+sub valid_hex($) {
+  my($hex)= @_;
+
+  return 1
+    if ($hex =~ /^[a-fA-F0-9]*$/);
+
+  return 0;
 }
 
 sub valid_texthandle($) {

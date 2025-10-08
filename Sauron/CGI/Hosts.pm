@@ -44,6 +44,21 @@ my $hinfo_addempty_mode = (defined($main::SAURON_HINFO_MODE) ?
 			   $main::SAURON_HINFO_MODE : 1);
 my $chr_group;
 
+my %sshfp_algorithms=(
+    0=>'reserved',
+    1=>'RSA',
+    2=>'DSA',
+    3=>'ECDSA',
+    4=>'Ed25519',
+    6=>'Ed448'
+);
+
+my %sshfp_types=(
+    0=>'reserved',
+    1=>'SHA-1',
+    2=>'SHA-256'
+);
+
 my %host_form = (
  data=>[
   {ftype=>0, name=>'Host' },
@@ -163,6 +178,10 @@ my %host_form = (
   {ftype=>2, tag=>'dhcp_l6', name=>'DHCPv6 entries', no_empty=>1, whitesp=>['N','P'],
    type=>['text','text'], fields=>2,len=>[50,20], maxlen=>[200,80],
    empty=>[0,1],elabels=>['DHCP','comment'], iff=>['type','[15]']},
+  {ftype=>2, tag=>'sshfp_l', name=>'SSHFP entries', no_empty=>1, fields=>4,len=>[2,2,60,10],
+   empty=>[0,0,0,1],elabels=>['Algorithm','Hashtype','Fingerprint','comment'],
+   type=>['enum','enum','hex','text'], enum=>[\%sshfp_algorithms, \%sshfp_types, undef, undef],
+   iff=>['type','1'],maxlen=>[5,5,1024,10],addempty=>[-1,-1,0,0]},
   {ftype=>0, name=>'Aliases', no_edit=>1, iff=>['type','1']},
   {ftype=>8, tag=>'alias_l', name=>'Aliases', fields=>3, iff=>['type','1']},
   {ftype=>0, name=>'SRV records', no_edit=>1, iff=>['type','8']},
@@ -355,6 +374,12 @@ my %new_host_form = (
    empty=>[0,0,0,0,1],elabels=>['Priority','Weight','Port','Target','Comment'],
    type=>['priority','priority','priority','fqdn','text'],
    iff=>['type','8']},
+
+  {ftype=>0, name=>'SSHFP records', iff=>['type','1']},
+  {ftype=>2, tag=>'sshfp_l', name=>'SSHFP entries', fields=>4,len=>[2,2,60,10],
+   empty=>[0,0,0,1],elabels=>['Algorithm','Hashtype','Fingerprint','comment'],
+   type=>['enum','enum','hex','text'], enum=>[\%sshfp_algorithms, \%sshfp_types, undef, undef],
+   iff=>['type','1'],maxlen=>[5,5,1024,10],addempty=>[-1,-1,0,0]},
 
   {ftype=>0, name=>'Record info', iff=>['type','[147]']},
   {ftype=>1, name=>'Expiration date', tag=>'expiration', len=>30,
@@ -566,6 +591,10 @@ sub restricted_add_host($) {
   if ($rec->{type} == 7 && check_perms('flags','AREC',1)) {
     alert1("You don't have permission to add AREC Aliases");
     return -107;
+  }
+  if ($rec->{type} == 11 && check_perms('flags','SSHFP',1)) {
+    alert1("You don't have permission to add SSHFP records");
+    return -108;
   }
 
   return add_host($rec);
@@ -1982,7 +2011,7 @@ sub menu_handler {
     $data{zone}=$zoneid;
     $data{router}=0;
     $data{grp}=-1; $data{mx}=-1; $data{wks}=-1;
-    $data{mx_l}=[]; $data{ns_l}=[]; $data{printer_l}=[]; $data{srv_l}=[];
+    $data{mx_l}=[]; $data{ns_l}=[]; $data{printer_l}=[]; $data{srv_l}=[]; $data{sshfp_l}=[];
     $data{subgroups}=[];
     $data{dept}=$perms->{defdept} if ($perms->{defdept});
     $data{expiration}=time()+$perms->{elimit}*86400 if ($perms->{elimit} > 0);
@@ -2000,6 +2029,7 @@ sub menu_handler {
       elsif ($type==6) { return if check_perms('flags','GLUE'); }
       elsif ($type==8) { return if check_perms('flags','SRV'); }
       elsif ($type==9) { return if check_perms('flags','DHCP'); }
+      elsif ($type==11) { return if check_perms('flags','SSHFP'); }
       elsif ($type==101) {
 	if (check_perms('level',$main::ALEVEL_RESERVATIONS,1) &&
 	    check_perms('flags','RESERV',1)) {
