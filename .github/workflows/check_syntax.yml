@@ -25,6 +25,7 @@ jobs:
         shell: bash
         run: |
           set -e
+          (cd Sauron; ln -s DB-DBI.pm DB.pm)
           echo "PERL5LIB=$PERL5LIB"
           find . -type f \( -name "*.pl" -o -name "*.pm" \) -print0 | while IFS= read -r -d '' file; do
             echo "Checking $file"
