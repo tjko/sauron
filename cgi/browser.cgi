@@ -99,6 +99,9 @@ load_browser_config();
   {ftype=>2, tag=>'printer_l', name=>'PRINTER entries', no_empty=>1,
    type=>['text','text'], fields=>2,len=>[40,20], empty=>[0,1], 
    elabels=>['PRINTER','comment'], iff=>['type','[15]']},
+  {ftype=>2, tag=>'sshfp_l', name=>'SSHFP', type=>['int','int','hex','text'],
+   fields=>4, no_empty=>1,
+   len=>[5,5,80,15], empty=>[0,0,0,1], elabels=>['Algorithm','Type','Fingerprint','comment'], iff=>['type','1']},
 
   {ftype=>0, name=>'Aliases', no_edit=>1, iff=>['type','1']},
   {ftype=>8, tag=>'alias_l', name=>'Aliases', fields=>3, iff=>['type','1']},
