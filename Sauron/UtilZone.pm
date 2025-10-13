@@ -248,9 +248,10 @@ sub process_zonefile($$$$) {
       push @{$rec->{CAA}}, "$line[0] $line[1] $line[2]";
     }
     elsif ($type eq 'DS') {
+      my $digest = join '', @line[3..$#line];
       fatal("$filename($.): invalid DS record: $fline")
-        unless ($line[0]=~/^\d+$/ && $line[1]=~/^\d+$/ && $line[2]=~/^\d+$/ && $line[3]=~/^[0-9A-Fa-f]+$/);
-      push @{$rec->{DS}}, "$line[0] $line[1] $line[2] $line[3]";
+        unless ($line[0]=~/^\d+$/ && $line[1]=~/^\d+$/ && $line[2]=~/^\d+$/ && $digest=~/^[0-9A-Fa-f]+$/);
+      push @{$rec->{DS}}, "$line[0] $line[1] $line[2] $digest";
     }
     elsif ($type eq 'WKS') {
       shift @line; # get rid of IP
