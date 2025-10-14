@@ -186,7 +186,6 @@ foreach $host (sort keys %zonedata) {
   $hosttype=2 if ($nslist && $host2 ne '@');
   $hosttype=3 if ($nslist eq '' && @{$rec->{A}} < 1 && @{$rec->{AAAA}} < 1 && @{$rec->{MX}} > 0);
   $hosttype=8 if (@{$rec->{SRV}} > 0);
-
   if ($hosttype == 0) {
     if (@{$rec->{TXT}} > 0) {
       foreach $tmp (@{$rec->{TXT}}) {
@@ -249,11 +248,10 @@ foreach $host (sort keys %zonedata) {
     # print "AAAA=",$rec->{AAAA}->[$k],"\n";
     push @ip_l, [0,$rec->{AAAA}->[$k],'true','true'];
   }
-  undef $ns_l;
+  undef @ns_l;
   for $k (0..$#{$rec->{NS}}) {
     push @ns_l, [0,$rec->{NS}->[$k],''];
   }
-
   $res = add_host({zone=>$zoneid,
 		   type=>$hosttype,
 		   class=>$class,
