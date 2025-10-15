@@ -249,7 +249,7 @@ foreach $host (sort keys %zonedata) {
     # print "AAAA=",$rec->{AAAA}->[$k],"\n";
     push @ip_l, [0,$rec->{AAAA}->[$k],'true','true'];
   }
-  undef $ns_l;
+  undef @ns_l;
   for $k (0..$#{$rec->{NS}}) {
     push @ns_l, [0,$rec->{NS}->[$k],''];
   }
