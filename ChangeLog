@@ -14,6 +14,7 @@
 	  to access [svamberg]
 	- add sshfp support [valtri, svamberg]
 	- Generic support for enum types in record list [svamberg, valtri]
+	- add import SSHFP records [svamberg, valtri]
 
 0.8.5
 
