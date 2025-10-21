@@ -473,7 +473,7 @@ sub add_rights($)
   elsif ($type==12) {
     $tmp =~ s/^\s+|\s+$//g;
     fatal("invalid field and/or mode '$tmp'")
-      unless ($tmp =~ /^(huser|dept|location|info|ether|asset_id|model|serial|misc)\=(1|0)$/);
+      unless ($tmp =~ /^(huser|dept|location|info|ether|duid|asset_id|model|serial|misc)\=(1|0)$/);
     $mode=$1;
     $ref=$2;
   }

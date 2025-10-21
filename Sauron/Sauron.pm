@@ -92,6 +92,7 @@ sub set_defaults() {
   $main::SAURON_RHF{location} = 0; # Location
   $main::SAURON_RHF{info}     = 1; # [Extra] Info
   $main::SAURON_RHF{ether}    = 0; # Ether
+  $main::SAURON_RHF{duid}     = 0; # DUID
   $main::SAURON_RHF{asset_id} = 1; # Asset ID
   $main::SAURON_RHF{model}    = 1; # Model
   $main::SAURON_RHF{serial}   = 1; # Serial

@@ -147,6 +147,7 @@ $DB_PASSWORD = "bar";
 # $SAURON_RHF{location} = 0; # Location
 # $SAURON_RHF{info}     = 1; # [Extra] Info
 # $SAURON_RHF{ether}    = 0; # Ether
+# $SAURON_RHF{duid}     = 0; # DUID
 # $SAURON_RHF{asset_id} = 1; # Asset ID
 # $SAURON_RHF{model}    = 1; # Model
 # $SAURON_RHF{serial}   = 1; # Serial
