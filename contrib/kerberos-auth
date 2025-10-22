@@ -17,9 +17,9 @@
 # uncomment to explicitly specify kerberos realm to kinit
 # $REALM = 'FOO.BAR';
 
-$KINIT = '/usr/kerberos/bin/kinit';
-$KDESTROY = '/usr/kerberos/bin/kdestroy';
-$TMPDIR = '/var/tmp';
+$KINIT = '/usr/bin/kinit';
+$KDESTROY = '/usr/bin/kdestroy';
+$TMPDIR = '/tmp';
 
 #######################################################################
 
