@@ -256,7 +256,7 @@ sub process_zonefile($$$$) {
     }
     elsif ($type eq 'SSHFP') {
       fatal("$filename($.): invalid SSHFP record: $fline")
-        unless ($line[0]=~/^\d+$/ && $line[1]=~/^\d+$/ && $line[2]=~/^[0-9a-f]+$/);
+        unless ($line[0]=~/^\d+$/ && $line[1]=~/^\d+$/ && $line[2]=~/^[0-9A-Fa-f]+$/);
       push @{$rec->{SSHFP}}, "$line[0] $line[1] $line[2]";
     }
     elsif ($type eq 'WKS') {
