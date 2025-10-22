@@ -1,0 +1,77 @@
+#!/usr/bin/perl
+#
+# addzone - utility to add zone
+#
+# Copyright (c) Michal Svamberg <svamberg@cesnet.cz> 2025.
+#
+require 5;
+use Getopt::Long;
+use Sauron::DB;
+use Sauron::Util;
+use Sauron::BackEnd;
+use Sauron::Sauron;
+use Sauron::SetupIO;
+use strict;
+use warnings;
+
+set_encoding();
+load_config();
+
+my $user = (getpwuid($<))[0];
+set_muser($user);
+
+our ($opt_reverse, $opt_type, $opt_help);
+my $result = GetOptions("help|h", "reverse", "type=s");
+
+if ($opt_help || @ARGV < 1 || $result < 1) {
+  print "syntax: $0 <server> <zone> [options]\n\n",
+        "\t<server>\t target server\n",
+        "\t<zone>\t\t you can use CIDR for reverse domain\n",
+        "options:\n",
+        "\t--reverse\t adding as reverse zone\n",
+        "\t--type\t\t type of zone: Master, Forward, Hint, Slave (default 'M')\n",
+        "\t\t\t used first letter: M = Master (case sensitive)\n",
+  print "\n" if ($opt_help);
+  exit(0);
+}
+
+db_connect();
+
+my $server=$ARGV[0];
+my $zone=$ARGV[1];
+$opt_reverse = ($opt_reverse ? 1 : 0);
+$opt_type = ($opt_type ? $opt_type : 'M');
+$opt_type =~ s/^(\w).*$/$1/;
+
+my $serverid=get_server_id($server);
+fatal("cannot find server '$server'") unless ($serverid > 0);
+
+fatal("zone type '$opt_type' is not correct, see help)") unless ($opt_type =~ m/^[MFHS]$/);
+
+my %data = ();
+$data{server} = $serverid;
+$data{name} = $zone;
+$data{type} = $opt_type;
+
+if ($opt_reverse == 1) {
+  $data{reverse} = 't';
+  # For reverse zone, change cidr to in-addr.arpa or ip6.arpa format name. TVu
+  if (is_cidr($data{name}) && $data{name} =~ /\/\d{1,3}$/) {
+    $data{name} = cidr2arpa($data{name});
+  }
+  my $new_net=arpa2cidr($data{name});
+  fatal("Invalid name $data{name} for reverse zone!") if $new_net eq '0.0.0.0/0';
+  $data{reversenet}=$new_net;
+}
+
+my $zoneid=get_zone_id($data{name},$data{server});
+fatal("zone '$zone' exists") if ($zoneid > 0);
+
+my $res=add_zone(\%data);
+fatal("Adding Zone record failed! Result code=$res") if $res < 0;
+
+print "Zone '$data{name}' was added.\n";
+
+exit 0
+
+

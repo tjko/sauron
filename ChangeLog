@@ -16,7 +16,7 @@
 	- Generic support for enum types in record list [svamberg, valtri]
 	- add import SSHFP records [svamberg, valtri]
 	- add import NAPTR records into Cusom zone file entries [svamberg]
-
+	- add script 'addzone' for creating new zone [svamberg] 
 
 0.8.5
 
