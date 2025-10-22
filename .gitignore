@@ -21,4 +21,11 @@ modgroup
 config.log
 config.status
 
+# after instalation (./configure ; make)
+Makefile
+config.h
+doc/tables.html
+doc/tables.sgml
+
+
 # eof
