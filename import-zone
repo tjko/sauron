@@ -269,6 +269,10 @@ foreach $host (sort keys %zonedata) {
   for $k (0..$#{$rec->{SSHFP}}) {
     push @sshfp_l, [0,split(' ', $rec->{SSHFP}->[$k]),''];
   }
+  undef @srv_l;
+  for $k (0..$#{$rec->{SRV}}) {
+    push @srv_l, [0,split(' ', $rec->{SRV}->[$k]),''];
+  }
 
   $res = add_host({zone=>$zoneid,
 		   type=>$hosttype,
@@ -282,6 +286,7 @@ foreach $host (sort keys %zonedata) {
 		   ttl=>$host_ttl,
 		   txt_l=>\@txt_l,
 		   ns_l=>\@ns_l,
+                   srv_l=>\@srv_l,
 		   ip=>\@ip_l
 		  });
 
