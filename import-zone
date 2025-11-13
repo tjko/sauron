@@ -287,6 +287,7 @@ foreach $host (sort keys %zonedata) {
 		   txt_l=>\@txt_l,
 		   ns_l=>\@ns_l,
                    srv_l=>\@srv_l,
+                   sshfp_l=>\@sshfp_l,
 		   ip=>\@ip_l
 		  });
 
