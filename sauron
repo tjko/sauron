@@ -1147,14 +1147,19 @@ if ($bind_conf) {
 		if ($tiny_conf);
 	    }
 	  }
-	  for $k (0 .. $#{$txt}) {
-	    $val=$$txt[$k];
-	    $val =~ s/\"//g;
-	    printf ZONEFILE $ZFORMAT, '',$ttl,$class,'TXT',"\"$val\""
-	      if ($bind_conf);
-            $val=~ s/:/\\072/g;
-            printf TINYDNSFILE "'$zonename\:$val\:$ttl\:\:\n" if ($tiny_conf);
-	  }
+
+          #firsttxt for eliminating duplication txt records
+          if ($txt and !$firsttxt{$domain}) {
+            $firsttxt{$domain} = 1;
+	    for $k (0 .. $#{$txt}) {
+	      $val=$$txt[$k];
+	      $val =~ s/\"//g;
+	      printf ZONEFILE $ZFORMAT, '',$ttl,$class,'TXT',"\"$val\""
+	        if ($bind_conf);
+              $val=~ s/:/\\072/g;
+              printf TINYDNSFILE "'$zonename\:$val\:$ttl\:\:\n" if ($tiny_conf);
+	    }
+          }
 	  $info =~ s/\"//g;
 	  if ($zone{txt_auto_generation}) {
             if ($info ne '') {

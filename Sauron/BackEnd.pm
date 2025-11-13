@@ -2291,6 +2291,11 @@ sub add_host($) {
 			 'type,ref',"2,$id");
   if ($res < 0) { db_rollback(); return -5; }
 
+  # TXTs
+  $res = add_array_field('txt_entries','txt,comment','txt_l',$rec,
+			 'type,ref',"2,$id");
+  if ($res < 0) { db_rollback(); return -5; }
+
   # SRVs
   $res = add_array_field('srv_entries','pri,weight,port,target,comment',
 			 'srv_l',$rec,'type,ref',"1,$id");

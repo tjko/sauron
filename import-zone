@@ -243,11 +243,10 @@ foreach $host (sort keys %zonedata) {
   $mx=($mxhash{$mxlist} ? $mxhash{$mxlist} : -1);
   $host_ttl=(($rec->{TTL} > 0 && $rec->{TTL} ne $ttl) ? $rec->{TTL}:'');
 
-  $extrainfo='';
   undef @txt_l;
   if (@{$rec->{TXT}} > 0) {
-    $extrainfo=$rec->{TXT}->[0];
-    for $k (1..$#{$rec->{TXT}}) {
+    print Dumper($rec);
+    for $k (0..$#{$rec->{TXT}}) {
       push @txt_l, [0,$rec->{TXT}->[$k],''];
     }
   }
@@ -278,7 +277,6 @@ foreach $host (sort keys %zonedata) {
 		   mx=>$mx,
 		   hinfo_hw=>$rec->{HINFO}[0],
 		   hinfo_sw=>$rec->{HINFO}[1],
-		   info=>$extrainfo,
 		   ttl=>$host_ttl,
 		   txt_l=>\@txt_l,
 		   ns_l=>\@ns_l,
