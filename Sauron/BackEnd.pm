@@ -1940,7 +1940,7 @@ sub get_host($$) {
   get_array_field("printer_entries",3,"id,printer,comment","PRINTER,Comments",
 		  "type=2 AND ref=$id ORDER BY printer",$rec,'printer_l');
   get_array_field("srv_entries",6,"id,pri,weight,port,target,comment",
-		  "Priority,Weight,Port,Target",
+		  "Priority,Weight,Port,Target,Comments",
 		  "type=1 AND ref=$id ORDER BY port,pri,weight",$rec,'srv_l');
   get_array_field("sshfp_entries",6,"id,algorithm,hashtype,fingerprint,comment",
 		  "Algorithm,Type,Fingerprint",
