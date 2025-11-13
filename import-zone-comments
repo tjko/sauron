@@ -539,28 +539,26 @@ sub import_comments($$$) {
   #print "$data\n";
   #print "$$data->{records}\n";
 
+  $blcomment='';
   for my $i (0 .. $#{$$data->{records}}) {
     $rec = $$data->{records}->[$i];
 
     next if $$rec{type} eq 'directive';
+
     if ($$rec{type} eq 'comment') {
-      $blcomment = $blcomment ? "$blcomment; $$rec{comment}" : $$rec{comment};
+      $blcomment = $blcomment ? "$blcomment; $$rec{text}" : $$rec{text};
       next;
     }
     if ($$rec{type} eq 'blank') {
-      undef $blcomment; # end of block
+      $blcomment = ''; # end of block
       next;    
     }
+    
     next unless ($$rec{comment} or $blcomment); # blokovy ani radkovy komentar
 
     #print "$i: $$rec{type} $$rec{owner} -> $$rec{class} -> $$rec{rtype}\n"; 
     $comment = db_encode_str($$rec{comment} ? $$rec{comment} : $blcomment);
     
-    if ($$rec{owner} eq 'graylog-ee') {
-      print "$i: $$rec{type} $$rec{owner} -> $$rec{class} -> $$rec{rtype}\n"; 
-      print "$comment\n";
-      exit 0;
-    }
     if ($$rec{rtype} =~ /^(A|AAAA)$/ and $$rec{owner}) {
       $sql = qq{
           UPDATE hosts
@@ -602,9 +600,9 @@ sub import_comments($$$) {
       my $host_id = get_host_id($zoneid, $$rec{owner});
       $sql = qq{
         UPDATE sshfp_entries
-           SET comment        = $comment
-         WHERE ref            = '$host_id'
-           AND algorithm      = '$sshfp_alg'
+           SET comment     = $comment
+         WHERE ref         = '$host_id'
+           AND algorithm   = '$sshfp_alg'
            AND hashtype    = '$sshfp_ht'
            AND fingerprint = '$sshfp_fp'
            AND (comment IS NULL OR comment = '')
@@ -612,8 +610,25 @@ sub import_comments($$$) {
       db_exec($sql) unless $opt_noop;
       print "db_exec: $sql\n" if $opt_verbose;
     }
+    elsif ($$rec{rtype} eq 'SRV' and $$rec{owner}) {
+      my ($srv_priority, $srv_weight, $srv_port, $srv_target) = split /\s+/, $$rec{rdata};
+      my $host_id = get_host_id($zoneid, $$rec{owner});
+      $sql = qq{
+        UPDATE srv_entries
+           SET comment = $comment
+         WHERE ref     = '$host_id'
+           AND type    = '1'
+           AND pri     = '$srv_priority'
+           AND weight  = '$srv_weight'
+           AND port    = '$srv_port'
+           AND target  = '$srv_target'
+           AND (comment IS NULL OR comment = '')
+      };
+      db_exec($sql) unless $opt_noop;
+      print "db_exec: $sql\n" if $opt_verbose;
+    }
     # tabulka hosts: delegation (2), MX (3), glue (6), SRV (8)
-    # tabulka zoneentries, SSHFP, ...
+    # tabulka zoneentries, ...
     else {
       print "unknown record $i: $$rec{owner} $$rec{class} $$rec{rtype} $$rec{rdata}\n";
     }
