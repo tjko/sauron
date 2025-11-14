@@ -1578,6 +1578,13 @@ sub delete_zone($) {
 	       "WHERE h.zone=$id AND a.type=1 AND a.ref=h.id)");
   if ($res < 0) { db_rollback(); return -15; }
 
+  # srv_entries
+  print "<BR>Deleting SSHFP entries...\n";
+  $res=db_exec("DELETE FROM sshfp_entries WHERE id IN ( " .
+	       "SELECT a.id FROM sshfp_entries a, hosts h " .
+	       "WHERE h.zone=$id AND a.type=1 AND a.ref=h.id)");
+  if ($res < 0) { db_rollback(); return -15; }
+
   # arec_entries
   print "<BR>Deleting (sub)group entries...\n";
   $res=db_exec("DELETE FROM group_entries WHERE id IN ( " .
