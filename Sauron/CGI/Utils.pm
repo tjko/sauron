@@ -48,8 +48,9 @@ our %host_types;
 %yes_no_enum = (D=>'Default',Y=>'Yes', N=>'No');
 %boolean_enum = (f=>'No',t=>'Yes');
 %host_types=(0=>'Any type',1=>'Host',2=>'Delegation',3=>'Plain MX',
-	     4=>'Alias',5=>'Printer',6=>'Glue record',7=>'AREC Alias',
-	     8=>'SRV record',9=>'DHCP only',10=>'Zone',11=>'SSHFP only',
+	     4=>'Alias',5=>'Printer',6=>'Glue',7=>'AREC Alias',
+	     8=>'SRV',9=>'DHCP',10=>'Zone',11=>'SSHFP',
+             12=>'TLSA',
 	     101=>'Host reservation');
 
 
