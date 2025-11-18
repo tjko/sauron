@@ -2223,17 +2223,17 @@ sub delete_host($) {
 
   # sshfp_entries
   $res=db_exec("DELETE FROM sshfp_entries WHERE type=1 AND ref=$id;");
-  if ($res < 0) { db_rollback(); return -13; }
+  if ($res < 0) { db_rollback(); return -15; }
 
   # tlsa_entries
   $res=db_exec("DELETE FROM tlsa_entries WHERE type=1 AND ref=$id;");
-  if ($res < 0) { db_rollback(); return -13; }
+  if ($res < 0) { db_rollback(); return -16; }
 
   # group_entries
   $res=db_exec("DELETE FROM group_entries WHERE host=$id;");
   if ($res < 0) { db_rollback(); return -12; }
 
-  # Note that -13 and -14 are already in use!
+  # Note that -13, -14, -15 and -16 are already in use!
 
   $res=db_exec("DELETE FROM hosts WHERE id=$id;");
   if ($res < 0) { db_rollback(); return -50; }
