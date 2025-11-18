@@ -38,7 +38,7 @@ load_config();
 
                 sql/DEFAULTS.sql sql/misc.sql sql/copy_tables.sql
 		sql/hinfo_hw.sql sql/hinfo_sw.sql
-		sql/sshfp_entries.sql
+		sql/sshfp_entries.sql sql/tlsa_entries.sql
 
                @;
 
