@@ -1151,32 +1151,27 @@ if ($bind_conf) {
           #firsttxt for eliminating duplication txt records
           if ($txt and !$firsttxt{$domain}) {
             $firsttxt{$domain} = 1;
-	    for $k (0 .. $#{$txt}) {
-	      $val=$$txt[$k];
-	      $val =~ s/\"//g;
-	      printf ZONEFILE $ZFORMAT, '',$ttl,$class,'TXT',"\"$val\""
-	        if ($bind_conf);
+            for $k (0 .. $#{$txt}) {
+              $val=$$txt[$k];
+              $val =~ s/\"//g;
+              printf ZONEFILE $ZFORMAT, '',$ttl,$class,'TXT',"\"$val\"" if ($bind_conf);
               $val=~ s/:/\\072/g;
               printf TINYDNSFILE "'$zonename\:$val\:$ttl\:\:\n" if ($tiny_conf);
-	    }
+            }
           }
-	  $info =~ s/\"//g;
-	  if ($zone{txt_auto_generation}) {
+          $info =~ s/\"//g;
+          if ($zone{txt_auto_generation}) {
             if ($info ne '') {
-              printf ZONEFILE $ZFORMAT, '',$ttl,$class,'TXT',"\"$info\""
-	        if ($bind_conf);
+              printf ZONEFILE $ZFORMAT, '',$ttl,$class,'TXT',"\"$info\"" if ($bind_conf);
               $info =~ s/:/\\072/g;
-              printf TINYDNSFILE "'$zonename\:$val\:$info\:\:\n"
-		if ($tiny_conf);
-	    }
-	  }
-	  print ZONEFILE ";\n" if ($bind_conf and $dns_index == $dnscnts{$domain});
-	  #print ZONEFILE ";\n" if ($bind_conf);
-	  $dns_index = ($dns_index < $dnscnts{$domain} ? ++$dns_index : 1);
-	}
-
+              printf TINYDNSFILE "'$zonename\:$val\:$info\:\:\n" if ($tiny_conf);
+            }
+          }
+          print ZONEFILE ";\n" if ($bind_conf and $dns_index == $dnscnts{$domain});
+          #print ZONEFILE ";\n" if ($bind_conf);
+          $dns_index = ($dns_index < $dnscnts{$domain} ? ++$dns_index : 1);
+        }
       }
-
 
       # aliases (A records)
       undef @q;
