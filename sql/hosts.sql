@@ -26,6 +26,7 @@ CREATE TABLE hosts (
 					9=dhcp only,
 					10=zone,
 					11=sshfp entry,
+					12=tlsa entry,
 					101=host reservation
 					*/
        

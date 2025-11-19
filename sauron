@@ -1432,6 +1432,53 @@ if ($bind_conf) {
       }
     }
 
+    # TLSA records
+    undef @q;
+    db_query("SELECT a.domain,a.ttl,a.expiration," .
+                   " b.usage,b.selector,b.matching_type,b.association_data " .
+                   "FROM hosts a, tlsa_entries b, zones z " .
+                   "WHERE a.zone=z.id AND z.id=$zoneid " .
+                   "AND (a.type=1 or a.type=12) AND a.id=b.ref AND b.type=1 " .
+                   "ORDER BY " .
+                     "a.domain,b.usage,b.selector,b.matching_type,b.association_data;",\@q);
+    error(db_errormsg()) if (db_errormsg());
+    if (@q > 0) {
+      print ZONEFILE ";\n;\n; TLSA records\n;\n" if ($bind_conf);
+      for $i (0 .. $#q) {
+        $domain=remove_origin($q[$i][0],$origin);
+	if ($domain =~ /\.$/) {
+          error("Out-of-zone TLSA record skipped: $q[$i][0]");
+          next;
+        }
+        if ($domain =~ /\.($delegation_mask)$/) {
+          error("TLSA in delegated zone skipped: $q[$i][0]");
+          next;
+        }
+        if (($q[$i][2] > 0) && ($q[$i][2] < $time_now_ticks)) {
+          error("Skipping expired TLSA record: $q[$i][0]");
+          next;
+        }
+        $ttl=$q[$i][1];
+        $ttl='' unless ($ttl > 0);
+        $usage=($q[$i][3] > 0 ? $q[$i][3] : 0);
+        $selector=($q[$i][4] > 0 ? $q[$i][4] : 0);
+        $matching_type=($q[$i][5] > 0 ? $q[$i][5] : 0);
+        $association_data=$q[$i][6];
+
+        printf ZONEFILE $ZFORMAT, $domain,$ttl,$class,'TLSA',
+              "$usage $selector $matching_type $association_data" if ($bind_conf);
+
+        # tinydns tlsa, based https://der-dakon.net/blog/2014/07/06/dane-tinydns.html 
+        my $tinydns_record = sprintf("\\%03o\\%03o\\%03o", $usage, $selector, $matching_type);
+        for (my $j = 0; $j < length($association_data); $j += 2) {
+	  $tinydns_record .= sprintf("\\%03o", hex substr($association_data, $j, 2));
+        }
+        printf TINYDNSFILE ":%s:52:%s:%s\n", $domain, $tinydns_record, $ttl if ($tiny_conf);
+      }
+    }
+
+
+
     # New style custom zone file entries (multi-line groups). 2020-08-04 TVu
     if (@{$zone{zentries_ta}} > 1) {
       print ZONEFILE ";\n; Custom entries (new style)\n" if ($bind_conf);

@@ -187,6 +187,7 @@ foreach $host (sort keys %zonedata) {
   $hosttype=2 if ($nslist && $host2 ne '@');
   $hosttype=3 if ($nslist eq '' && @{$rec->{A}} < 1 && @{$rec->{AAAA}} < 1 && @{$rec->{MX}} > 0);
   $hosttype=8 if (@{$rec->{SRV}} > 0);
+  $hosttype=12 if (@{$rec->{TLSA}} > 0);
 
   if ($hosttype == 0) {
     if (@{$rec->{TXT}} > 0) {
@@ -268,6 +269,14 @@ foreach $host (sort keys %zonedata) {
   for $k (0..$#{$rec->{SSHFP}}) {
     push @sshfp_l, [0,split(' ', $rec->{SSHFP}->[$k]),''];
   }
+  undef @tlsa_l;
+  for $k (0..$#{$rec->{TLSA}}) {
+    push @tlsa_l, [0,split(' ', $rec->{TLSA}->[$k]),''];
+  }
+  undef @srv_l;
+  for $k (0..$#{$rec->{SRV}}) {
+    push @srv_l, [0,split(' ', $rec->{SRV}->[$k]),''];
+  }
 
   $res = add_host({zone=>$zoneid,
 		   type=>$hosttype,
@@ -280,7 +289,9 @@ foreach $host (sort keys %zonedata) {
 		   ttl=>$host_ttl,
 		   txt_l=>\@txt_l,
 		   ns_l=>\@ns_l,
+                   srv_l=>\@srv_l,
                    sshfp_l=>\@sshfp_l,
+                   tlsa_l=>\@tlsa_l,
 		   ip=>\@ip_l
 		  });
 

@@ -59,11 +59,29 @@ my %sshfp_types=(
     2=>'SHA-256'
 );
 
+my %tlsa_usage=(
+    0=>'PKIX-TA',
+    1=>'PKIX-EE',
+    2=>'DANE-TA',
+    3=>'DANE-EE'
+);
+
+my %tlsa_selector=(
+    0=>'Full certificate',
+    1=>'SubjectPublicKeyInfo'
+);
+
+my %tlsa_matching_type=(
+    0=>'No hash',
+    1=>'SHA-256',
+    2=>'SHA-512'
+);
+
 my %host_form = (
  data=>[
   {ftype=>0, name=>'Host' },
   {ftype=>1, tag=>'domain', name=>'Hostname', type=>'domain', maxlen=>400,
-   conv=>'L', len=>64, iff=>['type','([^82]|101)']},
+   conv=>'L', len=>64, iff=>['type','(?:[13-7]|9|[1-9]\d+)']}, # all types without 2, 8
   {ftype=>4, tag=>'fqdn', name=>'FQDN', title=>'Fully Qualified Domain Name'}, # ****
   {ftype=>1, tag=>'domain', name=>'Hostname (delegation)', type=>'zonename',
    len=>64,conv=>'L', iff=>['type','[2]']},
@@ -181,7 +199,7 @@ my %host_form = (
   {ftype=>2, tag=>'sshfp_l', name=>'SSHFP entries', no_empty=>1, fields=>4,len=>[2,2,60,10],
    empty=>[0,0,0,1],elabels=>['Algorithm','Hashtype','Fingerprint','comment'],
    type=>['enum','enum','hex','text'], enum=>[\%sshfp_algorithms, \%sshfp_types, undef, undef],
-   iff=>['type','1'],maxlen=>[5,5,1024,10],addempty=>[-1,-1,0,0]},
+   iff=>['type','1'],maxlen=>[5,5,1024,100],addempty=>[-1,-1,0,0]},
   {ftype=>0, name=>'Aliases', no_edit=>1, iff=>['type','1']},
   {ftype=>8, tag=>'alias_l', name=>'Aliases', fields=>3, iff=>['type','1']},
   {ftype=>0, name=>'SRV records', no_edit=>1, iff=>['type','8']},
@@ -191,6 +209,14 @@ my %host_form = (
    empty=>[0,0,0,0,1],elabels=>['Priority','Weight','Port','Target','Comment'],
    type=>['priority','priority','priority','fqdn','text'],
    iff=>['type','8']},
+
+  {ftype=>0, name=>'TLSA records', no_edit=>1, iff=>['type','12']},
+  {ftype=>2, tag=>'tlsa_l', name=>'TLSA entries', fields=>5,len=>[2,2,2,60,10],
+   empty=>[0,0,0,0,1], maxlen=>[5,5,5,65535,100],addempty=>[-1,-1,-1,0,0],
+   elabels=>['Usage','Selector','Matching Type','Association Data','Comment'],
+   type=>['enum','enum','enum','hex','text'],
+   enum=>[\%tlsa_usage, \%tlsa_selector, \%tlsa_matching_type, undef, undef],
+   iff=>['type','12']},
 
   {ftype=>0, name=>'Record info', no_edit=>0},
   {ftype=>4, name=>'Record created', tag=>'cdate_str', no_edit=>1},
@@ -294,7 +320,7 @@ my %new_host_form = (
   {ftype=>0, name=>'New record' },
   {ftype=>4, tag=>'type', name=>'Type', type=>'enum', enum=>\%host_types},
   {ftype=>1, tag=>'domain', name=>'Hostname', type=>'domain', len=>64, maxlen=>400,
-   conv=>'L', iff=>['type','[^82]']},
+   conv=>'L', iff=>['type','(?!101$)(?:[13-7]|9|[1-9]\d+)']}, # any types without 2, 8, 101
   {ftype=>1, tag=>'domain', name=>'Hostname (reservation)', maxlen=>400,
    type=>'domain', len=>64, maxlen=>400, conv=>'L', iff=>['type','101']},
   {ftype=>1, tag=>'domain', name=>'Hostname (SRV)', type=>'srvname', len=>64,
@@ -366,14 +392,20 @@ my %new_host_form = (
 
   {ftype=>0, name=>'SRV records', no_edit=>1, iff=>['type','8']},
   {ftype=>2, tag=>'srv_l', name=>'SRV entries', fields=>5,len=>[5,5,5,30,20],
-
 #  maxlen=>[5,5,5,400,10], dot=>1,
 # Dot (.) allowed to superuser. 2020-08-10 TVu
    maxlen=>[5,5,5,400,80], dot=>check_perms('superuser','',1) ? 0 : 1,
-
    empty=>[0,0,0,0,1],elabels=>['Priority','Weight','Port','Target','Comment'],
    type=>['priority','priority','priority','fqdn','text'],
    iff=>['type','8']},
+
+  {ftype=>0, name=>'TLSA records', no_edit=>1, iff=>['type','12']},
+  {ftype=>2, tag=>'tlsa_l', name=>'TLSA entries', fields=>5,len=>[2,2,2,60,10],
+   empty=>[0,0,0,0,1], maxlen=>[5,5,5,65535,100],addempty=>[-1,-1,-1,0,0],
+   elabels=>['Usage','Selector','Matching Type','Association Data','Comment'],
+   type=>['enum','enum','enum','hex','text'],
+   enum=>[\%tlsa_usage, \%tlsa_selector, \%tlsa_matching_type, undef, undef],
+   iff=>['type','12']},
 
   {ftype=>0, name=>'SSHFP records', iff=>['type','1']},
   {ftype=>2, tag=>'sshfp_l', name=>'SSHFP entries', fields=>4,len=>[2,2,60,10],
@@ -595,6 +627,10 @@ sub restricted_add_host($) {
   if ($rec->{type} == 11 && check_perms('flags','SSHFP',1)) {
     alert1("You don't have permission to add SSHFP records");
     return -108;
+  }
+  if ($rec->{type} == 12 && check_perms('flags','TLSA',1)) {
+    alert1("You don't have permission to add TLSA records");
+    return -109;
   }
 
   return add_host($rec);
@@ -2011,7 +2047,7 @@ sub menu_handler {
     $data{zone}=$zoneid;
     $data{router}=0;
     $data{grp}=-1; $data{mx}=-1; $data{wks}=-1;
-    $data{mx_l}=[]; $data{ns_l}=[]; $data{printer_l}=[]; $data{srv_l}=[]; $data{sshfp_l}=[];
+    $data{mx_l}=[]; $data{ns_l}=[]; $data{printer_l}=[]; $data{srv_l}=[]; $data{sshfp_l}=[]; $data{tlsa_l}=[];
     $data{subgroups}=[];
     $data{dept}=$perms->{defdept} if ($perms->{defdept});
     $data{expiration}=time()+$perms->{elimit}*86400 if ($perms->{elimit} > 0);
@@ -2030,6 +2066,7 @@ sub menu_handler {
       elsif ($type==8) { return if check_perms('flags','SRV'); }
       elsif ($type==9) { return if check_perms('flags','DHCP'); }
       elsif ($type==11) { return if check_perms('flags','SSHFP'); }
+      elsif ($type==12) { return if check_perms('flags','TLSA'); }
       elsif ($type==101) {
 	if (check_perms('level',$main::ALEVEL_RESERVATIONS,1) &&
 	    check_perms('flags','RESERV',1)) {
