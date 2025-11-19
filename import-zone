@@ -246,7 +246,7 @@ foreach $host (sort keys %zonedata) {
 
   undef @txt_l;
   if (@{$rec->{TXT}} > 0) {
-    print Dumper($rec);
+    #print Dumper($rec);
     for $k (0..$#{$rec->{TXT}}) {
       push @txt_l, [0,$rec->{TXT}->[$k],''];
     }
