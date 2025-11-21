@@ -9,7 +9,7 @@
 	- change libcrypt-cb5-perl to libcryptx-perl [svamberg]
 	- add import CAA records into Custom zone file entries [svamberg]
 	- import of multiple TXT zone records [svamberg]
-	- add import DS records into Custom zone file entries [svamberg]
+	- add import DS records into Delegation forms [svamberg]
 	- the left menu displays only the items that the user has the right
 	  to access [svamberg]
 	- add sshfp support [valtri, svamberg]
