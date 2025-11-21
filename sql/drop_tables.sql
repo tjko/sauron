@@ -22,6 +22,7 @@ DROP TABLE wks_entries;
 DROP TABLE srv_entries;
 DROP TABLE sshfp_entries;
 DROP TABLE tlsa_entries;
+DROP TABLE ds_entries;
 DROP TABLE arec_entries;
 /* DROP TABLE host_info; */
 DROP TABLE utmp;
