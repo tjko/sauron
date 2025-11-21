@@ -610,6 +610,22 @@ sub import_comments($$$) {
       db_exec($sql) unless $opt_noop;
       print "db_exec: $sql\n" if $opt_verbose;
     }
+    elsif ($$rec{rtype} eq 'DS' and $$rec{owner}) {
+      my ($ds_key_tag,$ds_algorithm,$ds_digest_type,$ds_digest) = split /\s+/, $$rec{rdata};
+      my $host_id = get_host_id($zoneid, $$rec{owner});
+      $sql = qq{
+        UPDATE ds_entries
+           SET comment     = $comment
+         WHERE ref         = '$host_id'
+           AND key_tag     = '$ds_key_tag'
+           AND algorithm   = '$ds_algorithm'
+           AND digest_type = '$ds_digest_type'
+           AND digest      = '$ds_digest'
+           AND (comment IS NULL OR comment = '')
+      };
+      db_exec($sql) unless $opt_noop;
+      print "db_exec: $sql\n" if $opt_verbose;
+    }
     elsif ($$rec{rtype} eq 'SRV' and $$rec{owner}) {
       my ($srv_priority, $srv_weight, $srv_port, $srv_target) = split /\s+/, $$rec{rdata};
       my $host_id = get_host_id($zoneid, $$rec{owner});
