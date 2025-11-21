@@ -18,6 +18,7 @@
 	- add import NAPTR records into Cusom zone file entries [svamberg]
 	- add script 'addzone' for creating new zone [svamberg]
 	- add TLSA support [svamberg]
+	- add script compare-zones.pl to comparing two zone files [svamberg]
 
 0.8.5
 
