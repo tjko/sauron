@@ -1578,6 +1578,13 @@ sub delete_zone($) {
 	       "WHERE h.zone=$id AND a.type=1 AND a.ref=h.id)");
   if ($res < 0) { db_rollback(); return -15; }
 
+  # srv_entries
+  print "<BR>Deleting SSHFP entries...\n";
+  $res=db_exec("DELETE FROM sshfp_entries WHERE id IN ( " .
+	       "SELECT a.id FROM sshfp_entries a, hosts h " .
+	       "WHERE h.zone=$id AND a.type=1 AND a.ref=h.id)");
+  if ($res < 0) { db_rollback(); return -15; }
+
   # arec_entries
   print "<BR>Deleting (sub)group entries...\n";
   $res=db_exec("DELETE FROM group_entries WHERE id IN ( " .
@@ -1945,6 +1952,9 @@ sub get_host($$) {
   get_array_field("sshfp_entries",6,"id,algorithm,hashtype,fingerprint,comment",
 		  "Algorithm,Type,Fingerprint",
 		  "type=1 AND ref=$id ORDER BY algorithm,hashtype,fingerprint",$rec,'sshfp_l');
+  get_array_field("tlsa_entries",6,"id,usage,selector,matching_type,association_data,comment",
+		  "Usage,Selector,Matching Type,Asociation Data,Comments",
+		  "type=1 AND ref=$id ORDER BY usage,selector,matching_type,association_data",$rec,'tlsa_l');
 # Get CNAME aliases.
   get_array_field("hosts",5,"0,id,domain,type,1","Domain,cname",
 	          "type=4 AND alias=$id ORDER BY domain",$rec,'alias_l');
@@ -2120,24 +2130,27 @@ sub update_host($) {
 			"algorithm,hashtype,fingerprint,comment,type,ref",
 			'sshfp_l',$rec,"1,$id");
   if ($r < 0) { db_rollback(); return -19; }
-
+  $r=update_array_field("tlsa_entries",6,
+			"usage,selector,matching_type,association_data,comment,type,ref",
+			'tlsa_l',$rec,"1,$id");
+  if ($r < 0) { db_rollback(); return -20; }
   $r=update_array_field("a_entries",4,"ip,reverse,forward,host",
 			'ip',$rec,"$id");
-  if ($r < 0) { db_rollback(); return -20; }
+  if ($r < 0) { db_rollback(); return -21; }
 
   if ($rec->{type}==7) {
     $r=update_array_field("arec_entries",2,"arec,host",
 			  'alias_a',$rec,"$id");
-    if ($r < 0) { db_rollback(); return -21; }
+    if ($r < 0) { db_rollback(); return -22; }
   }
 
   $r=update_array_field("group_entries",2,"grp,host",
 			'subgroups',$rec,"$id");
-  if ($r < 0) { db_rollback(); return -22; }
+  if ($r < 0) { db_rollback(); return -23; }
 
   $r=update_array_field("dhcp_entries",3,"dhcp,comment,type,ref",
 			'dhcp_l6',$rec,"13,$id");
-  if ($r < 0) { db_rollback(); return -23; }
+  if ($r < 0) { db_rollback(); return -24; }
 
   return db_commit();
 }
@@ -2217,13 +2230,17 @@ sub delete_host($) {
 
   # sshfp_entries
   $res=db_exec("DELETE FROM sshfp_entries WHERE type=1 AND ref=$id;");
-  if ($res < 0) { db_rollback(); return -13; }
+  if ($res < 0) { db_rollback(); return -15; }
+
+  # tlsa_entries
+  $res=db_exec("DELETE FROM tlsa_entries WHERE type=1 AND ref=$id;");
+  if ($res < 0) { db_rollback(); return -16; }
 
   # group_entries
   $res=db_exec("DELETE FROM group_entries WHERE host=$id;");
   if ($res < 0) { db_rollback(); return -12; }
 
-  # Note that -13 and -14 are already in use!
+  # Note that -13, -14, -15 and -16 are already in use!
 
   $res=db_exec("DELETE FROM hosts WHERE id=$id;");
   if ($res < 0) { db_rollback(); return -50; }
@@ -2291,6 +2308,11 @@ sub add_host($) {
 			 'type,ref',"2,$id");
   if ($res < 0) { db_rollback(); return -5; }
 
+  # TXTs
+  $res = add_array_field('txt_entries','txt,comment','txt_l',$rec,
+			 'type,ref',"2,$id");
+  if ($res < 0) { db_rollback(); return -5; }
+
   # SRVs
   $res = add_array_field('srv_entries','pri,weight,port,target,comment',
 			 'srv_l',$rec,'type,ref',"1,$id");
@@ -2299,6 +2321,11 @@ sub add_host($) {
   # SSHFPs
   $res = add_array_field('sshfp_entries','algorithm,hashtype,fingerprint,comment',
 			 'sshfp_l',$rec,'type,ref',"1,$id");
+  if ($res < 0) { db_rollback(); return -9; }
+
+  # TLSAs
+  $res = add_array_field('tlsa_entries','usage,selector,matching_type,association_data,comment',
+			 'tlsa_l',$rec,'type,ref',"1,$id");
   if ($res < 0) { db_rollback(); return -9; }
 
   # ARECs
@@ -2321,8 +2348,9 @@ sub add_host($) {
 # TVu 02.04.2014.
 sub get_host_types() {
     return (0 => 'Any type', 1 => 'Host', 2 => 'Delegation', 3 => 'Plain MX',
-	    4 => 'Alias', 5 => 'Printer', 6 => 'Glue record', 7 => 'AREC Alias',
-	    8 => 'SRV record', 9 => 'DHCP only', 10 => 'Zone', 11=>'SSHFP only',
+	    4 => 'Alias', 5 => 'Printer', 6 => 'Glue', 7 => 'AREC Alias',
+	    8 => 'SRV', 9 => 'DHCP only', 10 => 'Zone', 11=>'SSHFP only',
+            12 => 'TLSA only',
 	    101 => 'Host reservation');
 }
 

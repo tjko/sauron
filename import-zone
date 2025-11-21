@@ -187,6 +187,7 @@ foreach $host (sort keys %zonedata) {
   $hosttype=2 if ($nslist && $host2 ne '@');
   $hosttype=3 if ($nslist eq '' && @{$rec->{A}} < 1 && @{$rec->{AAAA}} < 1 && @{$rec->{MX}} > 0);
   $hosttype=8 if (@{$rec->{SRV}} > 0);
+  $hosttype=12 if (@{$rec->{TLSA}} > 0);
 
   if ($hosttype == 0) {
     if (@{$rec->{TXT}} > 0) {
@@ -243,11 +244,10 @@ foreach $host (sort keys %zonedata) {
   $mx=($mxhash{$mxlist} ? $mxhash{$mxlist} : -1);
   $host_ttl=(($rec->{TTL} > 0 && $rec->{TTL} ne $ttl) ? $rec->{TTL}:'');
 
-  $extrainfo='';
   undef @txt_l;
   if (@{$rec->{TXT}} > 0) {
-    $extrainfo=$rec->{TXT}->[0];
-    for $k (1..$#{$rec->{TXT}}) {
+    #print Dumper($rec);
+    for $k (0..$#{$rec->{TXT}}) {
       push @txt_l, [0,$rec->{TXT}->[$k],''];
     }
   }
@@ -269,6 +269,14 @@ foreach $host (sort keys %zonedata) {
   for $k (0..$#{$rec->{SSHFP}}) {
     push @sshfp_l, [0,split(' ', $rec->{SSHFP}->[$k]),''];
   }
+  undef @tlsa_l;
+  for $k (0..$#{$rec->{TLSA}}) {
+    push @tlsa_l, [0,split(' ', $rec->{TLSA}->[$k]),''];
+  }
+  undef @srv_l;
+  for $k (0..$#{$rec->{SRV}}) {
+    push @srv_l, [0,split(' ', $rec->{SRV}->[$k]),''];
+  }
 
   $res = add_host({zone=>$zoneid,
 		   type=>$hosttype,
@@ -278,11 +286,12 @@ foreach $host (sort keys %zonedata) {
 		   mx=>$mx,
 		   hinfo_hw=>$rec->{HINFO}[0],
 		   hinfo_sw=>$rec->{HINFO}[1],
-		   info=>$extrainfo,
 		   ttl=>$host_ttl,
 		   txt_l=>\@txt_l,
 		   ns_l=>\@ns_l,
+                   srv_l=>\@srv_l,
                    sshfp_l=>\@sshfp_l,
+                   tlsa_l=>\@tlsa_l,
 		   ip=>\@ip_l
 		  });
 

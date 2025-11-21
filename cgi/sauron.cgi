@@ -135,6 +135,7 @@ $debug_mode = $SAURON_DEBUG_MODE;
 		      ['Add DHCP entry','sub=add&type=9',['flags','DHCP']],
 		      ['Add printer','sub=add&type=5',['flags','PRINTER']],
 		      ['Add SRV rec.','sub=add&type=8',['flags','SRV']],
+		      ['Add TLSA rec.','sub=add&type=12',['flags','TLSA']],
 		      [],
 		      ['Add reservation','sub=add&type=101',['flags','RESERV']]
 		     ],
