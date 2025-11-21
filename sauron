@@ -656,7 +656,7 @@ sub make_dns() {
     undef @delegnets; # For IPv6.
     undef @q;
     $delegation_mask='';
-    db_query("SELECT a.domain,c.ns,a.ttl FROM hosts a,zones b,ns_entries c " .
+    db_query("SELECT a.domain,c.ns,a.ttl,a.id FROM hosts a,zones b,ns_entries c " .
              "WHERE c.ref=a.id AND a.zone=b.id AND c.type=2 AND a.type=2 " .
              " AND (coalesce(b.expiration, 0) <= 0 OR coalesce(b.expiration, 0) > " .
              " extract(epoch from now())) " . # Exclude expired zones.
@@ -703,13 +703,40 @@ sub make_dns() {
           $delegation_mask .= $val;
         }
         printf ZONEFILE $ZFORMAT, $val,$ttl,$class,'NS',$ns if ($bind_conf);
+
         # Make sure ns is a fqdn.
         $ns .= ".$zonename." unless ($ns =~ /\.$/);
         $src = "$domain";
         $src .= ".$zonename" unless ($src =~ /\.$/);
         printf TINYDNSFILE "&$src\:\:$ns\:$ttl\:\:\n" if ($tiny_conf);
-      }
-        print ZONEFILE ";\n" if ($bind_conf);
+
+
+        # printing DS records (at end of 'NS' records)
+        if ($q[$i][0] ne $q[$i+1][0]) {
+					# has delegation any DS record?
+					db_query("SELECT a.key_tag,a.algorithm,a.digest_type,a.digest FROM ds_entries a " .
+							 "WHERE a.ref=$q[$i][3] " .
+							 "ORDER BY a.key_tag,a.algorithm,a.digest_type,a.digest;",\@q_ds);
+					error(db_errormsg()) if (db_errormsg());
+					for $j (0 .. $#q_ds) {
+						printf ZONEFILE $ZFORMAT, '', $ttl, $class, 'DS', "$q_ds[$j][0] $q_ds[$j][1] $q_ds[$j][2] $q_ds[$j][3]" if ($bind_conf);
+
+						# key‑tag is 16‑bit; split to high‑byte / low‑byte
+						my $kt_hi = ($q_ds[$j][0] >> 8) & 0xFF;
+						my $kt_lo = $q_ds[$j][0] & 0xFF;
+
+						$ds_rr_data .= sprintf("\\%03o\\%03o\\%03o\\%03o",
+                            $kt_hi, $kt_lo, $q_ds[$j][1], $q_ds[$j][2]);
+
+						# digest (hex -> bajts -> \ooo)
+						for (my $k = 0; $k < length($q_ds[$j][3]); $k += 2) {
+								$ds_rr_data .= sprintf("\\%03o", hex substr($q_ds[$j][3], $k, 2));
+						}
+           printf TINYDNSFILE ":%s:%d:%s:\n", $src, 43, $ds_rr_data if ($tiny_conf);
+          }
+        }
+      } 
+      print ZONEFILE ";\n" if ($bind_conf);
     }
 
     $delegation_mask =~ s/\./\\\./g;

@@ -80,7 +80,8 @@ SQL_TABLES =	sql/common.sql \
 		sql/history.sql sql/lastlog.sql sql/news.sql \
 		sql/vlans.sql sql/vmps.sql sql/group_entries.sql \
 		sql/keys.sql sql/acls.sql sql/leases.sql \
-		sql/sshfp_entries.sql sql/tlsa_entries.sql
+		sql/sshfp_entries.sql sql/tlsa_entries.sql \
+		sql/ds_entries.sql
 
 
 SQL_MISC =      sql/DEFAULTS.sql sql/misc.sql sql/copy_tables.sql \
