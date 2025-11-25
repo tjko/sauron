@@ -19,7 +19,7 @@ use Sauron::SetupIO;
 use Parse::RecDescent;
 use Encode qw( encode is_utf8 decode );
 
-use Data::Dumper; # debug
+#use Data::Dumper; # debug
 
 
 use strict;
@@ -46,7 +46,7 @@ GetOptions(
     'help|h'    => \$opt_help,
     'verbose|v' => \$opt_verbose,
     'noop|n'    => \$opt_noop,
-) or die "Chyba při parsování parametrů!\n";
+) or die "Error parsing parameters!\n";
 
 if ($opt_help || @ARGV < 2) {
     print "syntax: $0 [options] <servername> <zone> [<zone file>]\n";
@@ -91,14 +91,14 @@ my $grammar = <<'GRAMMAR';
 # ------------------------------------------------------------
 #   DNS zone file – grammar for Parse::RecDescent
 # ------------------------------------------------------------
-# <skip> a <autotree> **musí** být na první řádce!
+# <skip> a <autotree> **must** be at first lines!
 <skip: qr/[ \t]*/>          # only spaces and tabs, NOT \r or \n
-<autotree: 1>               # vracíme reference, ne kopie
+<autotree: 1>               # We return references, not copies
 {
-    # Globální proměnné, které parser používá během zpracování
+    # Global variables used by the parser during processing
     my $zone        = { records => [] };
     my $prev_owner  = '';
-    my $origin      = '';        # poslední $ORIGIN (pro @)
+    my $origin      = '';        # last $ORIGIN (for @)
 
     sub _push { push @{ $zone->{records} }, $_[0] }
 }
@@ -112,7 +112,7 @@ line:   blank_line
     |   rr_line
     { $return = $item[1] }
 # ------------------------------------------------------------
-#  Prázdný řádek (pouze bílé znaky nebo koncový znak)
+#  Blank line (only white characters or end character)
 # ------------------------------------------------------------
 blank_line:
         ws(?) eol               { _push({ type=>'blank', line_nr => $thisline }); $return = undef }
@@ -124,17 +124,17 @@ empty_line:
 comment_line:
         comment ws(?) eol      {
             my $txt = $item[1];
-            $txt =~ s/^\s*;//;          # odebereme úvodní ;
-            $txt =~ s/\s+$//;           # a koncové mezery
+            $txt =~ s/^\s*;//;          # Remove the initial semicolon (;)
+            $txt =~ s/\s+$//;           # and trailing spaces
             _push({ type=>'comment', text=>$txt, line_nr => $thisline });
             $return = $item[1];
         }
 
 comment:    /;[^\n]*/    { 
             $return = $item[1] ; 
-            $return =~ s/^;// ; # odebereme uvodni ;
-            $return =~ s/^\s*//; # odebereme uvodni mezery
-            $return =~ s/\s*$//; # odebereme koncove mezery 
+            $return =~ s/^;// ;  # remove initial semicolon 
+            $return =~ s/^\s*//; # remove initial spaces
+            $return =~ s/\s*$//; # remove trailing spaces
         }
 
 # ---------------------------  DIRECTIVE --------------------
@@ -178,7 +178,7 @@ rr_line:
 
 rr:
         owner(?) ttl(?) class(?) type rdata ws(?) comment(?) {
-            # Pokud není explicitní owner, použijeme předchozí
+            # If there is no explicit owner, use the previous one
             my $owner = $item[1][0];
             $owner = $prev_owner unless $owner;
             $prev_owner = $owner if $owner;
@@ -202,14 +202,14 @@ rr:
 owner:
         ownername ...type_exists  {
             my $val = $item[1];
-            # seznam povolených tříd – stejný jako CLASS
+            # list of allowed classes – same as CLASS
             my %classes = map { $_ => 1 } qw( IN CH HS );
             if ( $classes{$val} ) {
-                # třída byla zadána místo owneru -> odmítneme
+                # The class was assigned instead of the owner -> we will reject it.
                 $::RD_HINT && warn "owner '$val' looks like a CLASS – rejected\n";
-                # vrátíme undef a tím "reject"
+                # we return undef and thus "reject"
                 $return = undef;
-                # (alternativně můžete $parser->reject; nebo die)
+                # (alternatively, you can use $parser->reject; or die)
             }
             else {
                 $return = $val;
@@ -311,50 +311,52 @@ ws:         /[ \t]+/
 
 eol:        /\r?\n/
 
-# token_until_comment_or_newline – vše až do ; nebo konce řádku,
-#   zachováme ale i počáteční mezery (budou oříznuty níže)
+# token_until_comment_or_newline - everything up to ; or the 
+# end of the line, but we also preserve the leading spaces 
+# (they will be trimmed below)
 token_until_comment_or_newline:
-        # 1. buď celý uvozovkový řetězec (může obsahovat ;), 
-        # 2. nebo libovolný znak, který není středník
+        # 1. either the entire quotation string (may contain ;), 
+        # 2. or any character that is not a semicolon
         /(?:"([^"\\]|\\.)*"|[^;\n])+/ {
             my $t = $item[1];
-            $t =~ s/^\s+//;      # odstraňte úvodní mezery
-            $t =~ s/\s+$//;      # a koncové mezery
+            $t =~ s/^\s+//;      # remove initial spaces
+            $t =~ s/\s+$//;      # and trailing spaces
             $return = $t;
         }
 
 GRAMMAR
 
 # -------------------------------------------------------------
-#  Funkce – načte a parsuje zónový soubor
+#  reads and parses the zone file
 # -------------------------------------------------------------
 sub load_zone_file($$) {
     my ($path, $ast) = @_;
 
     my $parser = Parse::RecDescent->new($grammar)
-        or die "Nelze vytvořit parser (pravděpodobně chyba v gramatice)";
+        or die "Unable to create parser (grammar error)";
 
     open my $fh, '<:encoding(UTF-8)', $path
-        or die encode('UTF-8',"Nelze otevřít $path: $!");
+        or die encode('UTF-8',"Unable to open file $path: $!");
 
     local $/ = undef;
     my $text = <$fh>;
     close $fh;
     
-    # NEPOTREBUJEME SOA ZAZNAM
+    # We don't need an SOA record for parsing RR, 
+    # we'll turn it into a comment.
     comment_soa(\$text);
 
-    # konvert from multi-line to one-line format
+    # convert multi-line records to single-line
     compress_zone(\$text);
 
-    # odstranění BOM (pokud existuje)
+    # remove BOM (Byte Order Mark) if present
     $text =~ s/^\x{FEFF}//;
 
-    # ujistíme se, že $text je interně UTF‑8
+    # make sure $text is internally UTF‑8
     $text = decode('UTF-8',$text) unless is_utf8($text);
     #print Dumper($text);
 
-    $. = 0;                            # reset čítače řádků
+    $. = 0;                            # reset line counter
     $$ast = $parser->file($text);
     unless ($ast) {
         my $msg = sprintf "Parse error in %s (at line %d )", $path, $.;
@@ -366,38 +368,41 @@ sub load_zone_file($$) {
 # ------------------------------------------------------------
 # compress_dns_zone( $ref_to_zone )
 #
-#  $ref_to_zone – reference na řetězec, který obsahuje celý
-#                 obsah DNS zónového souboru (může mít
-#                 konce řádků \n nebo \r\n).
+#  $ref_to_zone - reference to a string that contains the 
+#                 entire contents of the DNS zone file 
+#                 (may have line endings \n or \r\n).
 #
-#  Funkce najde všechny záznamy, které jsou rozděleny do
-#  více řádků pomocí kulatých závorek ‘( … )’ a přetvoří je
-#  na jediný řádek.  Počet fyzických řádků, které byl
-#  odstraněn, je uveden jako komentář „; converted from X
-#  lines to 1 line“.
+#  The function finds all records that are split into
+#  multiple lines using parentheses ‘( … )’ and converts them
+#  into a single line.  The number of physical lines that have been
+#  removed is indicated as a comment "; converted from X
+#  lines to 1 line".
 #
-#  Funkce mění řetězec *in‑place* a zároveň ho vrací.
+#  The function modifies the string *in-place* and 
+#  returns it at the same time.
+#
 # ------------------------------------------------------------
 sub compress_zone($) {
     my ($zone_ref) = @_;
     
-    # Původní obsah rozdělíme na řádky (podporujeme i \r\n)
+    # We will divide the original content into lines (we also support \r\n)
     my @orig = split /\r?\n/, ${$zone_ref};
             
-    my @out;               # výstupní řádky
-    my @buffer;            # řádky aktuálního multiline‑bloku
-    my $line_cnt = 0;      # počet řádků v bufferu
-    my $inside   = 0;      # jsme uvnitř ( ... ) ?
+    my @out;               # output lines
+    my @buffer;            # lines of the current 
+    my $line_cnt = 0;      # number of lines in the buffer
+    my $inside   = 0;      # are we inside ( ... ) ?
             
     foreach my $raw (@orig) {
-        # Odstraníme koncové mezery – komentáře necháme,
-        # protože mohou být na konci řádku za závorkou.
+        # Remove trailing spaces – leave comments,
+        # because they may be at the end of the line after the parentheses.
         my $line = $raw;
     
-        # Pokud právě nejsme v blocích a řádek neobsahuje '(' → normální řádek
+        # If we are not currently in blocks and 
+        # the line does not contain '(' => normal line
         if ( !$inside ) {
             if ( $line =~ /\(/ && $line !~ /\)/ ) {
-                # začátek multiline záznamu ( '(' bez odpovídající ')')
+                # beginning of multiline record: '(' without a corresponding ')'
                 $inside   = 1;
                 @buffer   = ($line);
                 $line_cnt = 1;    
@@ -409,123 +414,114 @@ sub compress_zone($) {
             }
         }
 
-        # ----- uvnitř multiline bloku -----
+        # ----- inside multiline block -----
         push @buffer, $line;
         $line_cnt++;
 
-        # Konec bloku?
+        # End of block?
         if ( $line =~ /\)/ ) {
             # -------------------------------------------------
-            # Sestavíme jeden řádek
+            # We will assemble one line
             # -------------------------------------------------
-            my $joined = join ' ', @buffer;               # spojíme s mezerou
-            $joined =~ s/\s*\(\s*/ /;                       # odstraníme '('
-            $joined =~ s/\s*\)\s*/ /;                       # odstraníme ')'
+            my $joined = join ' ', @buffer;                 # join with space
+            $joined =~ s/\s*\(\s*/ /;                       # remove '('
+            $joined =~ s/\s*\)\s*/ /;                       # remove ')'
 
-            my $total = () = $joined =~ /"/g;             # spocitat vsechny uvozovky
+            my $total = () = $joined =~ /"/g;             # count all quotation marks
             my $i = 0;
-            $joined =~ s/"/ ++$i == 1 || $i == $total ? '"' : '' /eg; # odstraneni vnitrnich uvozovek
+            $joined =~ s/"/ ++$i == 1 || $i == $total ? '"' : '' /eg; # remove internal quotation marks
 
-            $joined =~ s/\s+/ /g;                          # zmenšíme mezery
-            $joined =~ s/^\s+|\s+$//g;                     # ořízneme konce
+            $joined =~ s/\s+/ /g;                          # reduce spacing
+            $joined =~ s/^\s+|\s+$//g;                     # trim ends
 
-            # Přidáme informativní komentář (tolik radku, kolik bylo zkraceni
+            # Add an informative comment (as many lines as were shortened)
             if ($line_cnt > 0) {
                 $joined .= "\n; converted from multi-line" for 1 .. $line_cnt;
             }
             push @out, $joined;
 
-            # Reset směru – připravíme se na další záznam
+            # prepare for next entry
             $inside   = 0;
             @buffer   = ();
             $line_cnt = 0;
         }
-        # pokud není ještě konec, jen pokračujeme ve sbírání
+        # if it's not the end yet, just continue collecting
     }
 
-    # Pokud soubor končí uvnitř neuzavřeného bloku, necháme jej tak,
-    # ale přidáme obsah bufferu beze změny (nedetekováno jako
-    # správný multiline).
+    # If the file ends inside an unclosed block, we leave it as is,
+    # but add the buffer contents unchanged (not detected as
+    # a valid multiline).
     if ($inside) {
         push @out, @buffer;
     }
 
-    # Spojíme řádky zpět do jediného řetězce (originální zakončení \n)
+    # We join the lines back into a single string (original \n ending)
     ${$zone_ref} = join "\n", @out;
 }
 
 #=====================================================================
 # comment_soa( $ref_to_string )
 #
-#   $ref_to_string – reference na celý obsah zónového souboru
+#   $ref_to_string - reference to the entire contents of the zone file
+# 
+#   The function goes through the lines, finds all possible SOA 
+#   entries, and adds a semicolon before each line of the SOA block 
+#   (leaving the original indentation). It works directly on the 
+#   reference, so there is no unnecessary copying of large strings.
 #
-#   Funkce projde řádky, najde všechna možná zápisy SOA a před
-#   každým řádkem SOA‑bloku přidá středník (ponechá původní odsazení).
-#   Pracuje přímo na referenci, takže se neprovádí zbytečné kopírování
-#   velkých řetězců.
-#
-#   Návratová hodnota – reference na (stejný) řetězec s úpravou.
+#   Return value - reference to the (same) string with modifications.
 #=====================================================================
 sub comment_soa($) {
-    my ($r_txt) = @_;                     # reference na vstupní text
-    my @lines = split /\n/, $$r_txt;      # pracujeme po řádcích
+    my ($r_txt) = @_;                     # reference to the input text
+    my @lines = split /\n/, $$r_txt;      # we work line by line
 
-    my $in_soa       = 0;                  # jsme uvnitř blokového SOA?
-    my $paren_depth  = 0;                  # hloubka závorek u blokového SOA
+    my $in_soa       = 0;                  # Are we inside the block SOA?
+    my $paren_depth  = 0;                  # depth of parentheses in block SOA
 
     for my $i (0 .. $#lines) {
         my $line = $lines[$i];
 
-        # ------------------------------
-        # 1) Řádky, které už jsou komentované, necháme beze změny
-        # ------------------------------
+        # We leave lines that are already commented unchanged
         if ( $line =~ /^\s*;/ ) {
             next;
         }
 
-        # ------------------------------
-        # 2) Pokud ještě nejsme v SOA‑bloku a řádek obsahuje slovo SOA
-        # ------------------------------
+        # If we are not yet in a SOA block and the line contains the word SOA
         unless ($in_soa) {
             if ( $line =~ /\bSOA\b/i ) {
 
-                # zakomentovat tento řádek (zachovat odsazení)
+                # comment out this line (keep the indentation)
                 $line =~ s/^(\s*)/$1;/;
                 $lines[$i] = $line;
 
-                # Zjistíme, jestli SOA začíná blokem v závorkách
+                # We check whether SOA starts with a block in brackets
                 if ( $line =~ /\(/ && $line !~ /\)/ ) {
                     $in_soa       = 1;
-                    $paren_depth = 1;          # první '(' nalezen
+                    $paren_depth = 1;          # first '(' found
                 }
-                next;                           # další řádek už bude zpracován v kroku 3
+                next;      
             }
         }
 
-        # ------------------------------
-        # 3) Jsme uvnitř blokového SOA → každé řádky zakomentovat
-        # ------------------------------
+        # We are inside the block SOA => comment out each line
         if ($in_soa) {
             $line =~ s/^(\s*)/$1;/;
             $lines[$i] = $line;
-
-            # aktualizace hloubky závorek (aby funkce zvládla i
-            # případ, kdy jsou v SOA další '(' a ')')
+            # update the depth of parentheses (so that the function can also handle
+            # cases where there are additional '(' and ')')
             $paren_depth++ while $line =~ /\(/g;
             $paren_depth-- while $line =~ /\)/g;
 
-            # když se vrátíme na nulu, blok skončil
+            # when we return to zero, end the block
             $in_soa = 0 if $paren_depth <= 0;
             next;
         }
 
-        # ------------------------------
-        # 4) Ostatní řádky – ponecháme beze změny
-        # ------------------------------
+        # 4) Other lines - leave unchanged
         $lines[$i] = $line;
     }
 
-    # Sestavíme řetězec zpět (ponecháme původní konce řádků)
+    # Reassemble the string (leave the original line breaks)
     $$r_txt = join "\n", @lines;
 }
 
@@ -643,8 +639,7 @@ sub import_comments($$$) {
       db_exec($sql) unless $opt_noop;
       print "db_exec: $sql\n" if $opt_verbose;
     }
-    # tabulka hosts: delegation (2), MX (3), glue (6), SRV (8)
-    # tabulka zoneentries, ...
+    # TODO: table hosts: delegation (2), MX (3), glue (6), SRV (8)
     else {
       print "unknown record $i: $$rec{owner} $$rec{class} $$rec{rtype} $$rec{rdata}\n";
     }
@@ -669,8 +664,6 @@ import_comments(\$zonedata,$serverid,$zonename);
 
 print "All done.\n";
 exit(0);
-
-
 
 # eof
 
