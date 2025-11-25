@@ -1933,6 +1933,10 @@ sub get_host($$) {
 
   get_array_field("ns_entries",3,"id,ns,comment","NS,Comments",
 		  "type=2 AND ref=$id ORDER BY ns",$rec,'ns_l');
+  get_array_field("ds_entries",6,"id,key_tag,algorithm,digest_type,digest,comment",
+                  "Key tag,Algorithm,Digest type,Digest,Comments",
+		  "type=2 AND ref=$id ORDER BY key_tag,algorithm,digest_type,digest",
+                  $rec,'ds_l');
   get_array_field("wks_entries",4,"id,proto,services,comment",
 		  "Proto,Services,Comments",
 		  "type=1 AND ref=$id ORDER BY proto,services",$rec,'wks_l');
@@ -2106,6 +2110,9 @@ sub update_host($) {
 
   $r=update_array_field("ns_entries",3,"ns,comment,type,ref",
 			'ns_l',$rec,"2,$id");
+  if ($r < 0) { db_rollback(); return -11; }
+  $r=update_array_field("ds_entries",6,"key_tag,algorithm,digest_type,digest,comment,type,ref",
+			'ds_l',$rec,"2,$id");
   if ($r < 0) { db_rollback(); return -12; }
   $r=update_array_field("wks_entries",4,"proto,services,comment,type,ref",
 			'wks_l',$rec,"1,$id");
@@ -2303,20 +2310,26 @@ sub add_host($) {
 			 'type,ref',"2,$id");
   if ($res < 0) { db_rollback(); return -4; }
 
+  # DSs (in Delegation form)
+  $res = add_array_field('ds_entries','key_tag,algorithm,digest_type,digest,comment','ds_l',
+                         $rec,
+			 'type,ref',"2,$id");
+  if ($res < 0) { db_rollback(); return -5; }
+
   # PRINTERs
   $res = add_array_field('printer_entries','printer,comment','printer_l',$rec,
 			 'type,ref',"2,$id");
-  if ($res < 0) { db_rollback(); return -5; }
+  if ($res < 0) { db_rollback(); return -6; }
 
   # TXTs
   $res = add_array_field('txt_entries','txt,comment','txt_l',$rec,
 			 'type,ref',"2,$id");
-  if ($res < 0) { db_rollback(); return -5; }
+  if ($res < 0) { db_rollback(); return -7; }
 
   # SRVs
   $res = add_array_field('srv_entries','pri,weight,port,target,comment',
 			 'srv_l',$rec,'type,ref',"1,$id");
-  if ($res < 0) { db_rollback(); return -6; }
+  if ($res < 0) { db_rollback(); return -8; }
 
   # SSHFPs
   $res = add_array_field('sshfp_entries','algorithm,hashtype,fingerprint,comment',
@@ -2326,20 +2339,20 @@ sub add_host($) {
   # TLSAs
   $res = add_array_field('tlsa_entries','usage,selector,matching_type,association_data,comment',
 			 'tlsa_l',$rec,'type,ref',"1,$id");
-  if ($res < 0) { db_rollback(); return -9; }
+  if ($res < 0) { db_rollback(); return -10; }
 
   # ARECs
   if ($rec->{type}==7) {
     $res=db_exec("INSERT INTO arec_entries (host,arec) VALUES($id,$a_id);");
-    if ($res < 0) { db_rollback(); return -7; }
+    if ($res < 0) { db_rollback(); return -11; }
   }
 
   # subgroups
   $res = add_array_field('group_entries','grp',
 			 'subgroups',$rec,'host',"$id");
-  if ($res < 0) { db_rollback(); return -8; }
+  if ($res < 0) { db_rollback(); return -12; }
 
-  return -10 if (db_commit() < 0);
+  return -20 if (db_commit() < 0);
   return $id;
 }
 

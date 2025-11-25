@@ -77,6 +77,28 @@ my %tlsa_matching_type=(
     2=>'SHA-512'
 );
 
+my %ds_algorithm=(
+    1=>'RSAMD5',
+    3=>'DSA',
+    5=>'RSASHA1',
+    6=>'DSA-NSEC3-SHA1',
+    7=>'RSASHA1-NSEC3-SHA1',
+    8=>'RSASHA256',
+   10=>'RSASHA512',
+   12=>'ECC-GOST',
+   13=>'ECDSAP256SHA256',
+   14=>'ECDSAP384SHA384',
+   15=>'ED25519',
+   16=>'ED448 '
+);
+
+my %ds_digest_type=(
+    1=>'SHA-1',
+    2=>'SHA-256',
+    3=>'GOST R 34.11-94',
+    4=>'SHA-384'
+);
+
 my %host_form = (
  data=>[
   {ftype=>0, name=>'Host' },
@@ -169,6 +191,13 @@ my %host_form = (
   {ftype=>2, tag=>'ns_l', name=>'Name servers (NS)', type=>['domain','text'],
    fields=>2, maxlen=>[400,80],
    len=>[50,20], empty=>[0,1], elabels=>['NS','comment'], iff=>['type','2']},
+  {ftype=>2, tag=>'ds_l', name=>'DS entries', fields=>5,len=>[5,2,2,60,10],
+   empty=>[0,0,0,0,1], maxlen=>[5,3,3,65535,100],addempty=>[-1,-1,-1,0,0],
+   elabels=>['Key tag','Algorithm','Digest type','Digest','Comment'],
+   type=>['int','enum','enum','hex','text'],
+   enum=>[undef, \%ds_algorithm, \%ds_digest_type, undef, undef],
+   iff=>['type','2']},
+
   {ftype=>2, tag=>'wks_l', name=>'WKS', no_empty=>1, whitesp=>['','P','P'],
    type=>['text','text','text'], fields=>3, len=>[10,37,20], empty=>[0,0,1],
    elabels=>['Protocol','Services','Comment'], iff=>['type','1'], maxlen=>[10,400,80]},
@@ -344,6 +373,12 @@ my %new_host_form = (
   {ftype=>2, tag=>'ns_l', name=>'Name servers (NS)', type=>['domain','text'],
    fields=>2, maxlen=>[400,80],
    len=>[50,20], empty=>[0,1], elabels=>['NS','comment'], iff=>['type','2']},
+  {ftype=>2, tag=>'ds_l', name=>'DS entries', fields=>5, len=>[5,2,2,60,10],
+   empty=>[0,0,0,0,1], maxlen=>[5,3,3,65535,100],addempty=>[-1,-1,-1,0,0],
+   elabels=>['Key tag','Algorithm','Digest type','Digest','Comment'],
+   type=>['int','enum','enum','hex','text'],
+   enum=>[undef, \%ds_algorithm, \%ds_digest_type, undef, undef],
+   iff=>['type','2']},
   {ftype=>2, tag=>'printer_l', name=>'PRINTER entries',
    type=>['text','text'], fields=>2,len=>[50,20], empty=>[0,1],
    elabels=>['PRINTER','Comment'], iff=>['type','5']},
@@ -442,6 +477,12 @@ my %restricted_new_host_form = (
   {ftype=>2, tag=>'ns_l', name=>'Name servers (NS)', type=>['text','text'],
    fields=>2, maxlen=>[400,80],
    len=>[50,20], empty=>[0,1], elabels=>['NS','comment'], iff=>['type','2']},
+  {ftype=>2, tag=>'ds_l', name=>'DS entries', fields=>5,len=>[5,2,2,60,10],
+   empty=>[0,0,0,0,1], maxlen=>[5,3,3,65535,100],addempty=>[-1,-1,-1,0,0],
+   elabels=>['Key tag','Algorithm','Digest type','Digest','Comment'],
+   type=>['int','enum','enum','hex','text'],
+   enum=>[undef, \%ds_algorithm, \%ds_digest_type, undef, undef],
+   iff=>['type','2']},
   {ftype=>2, tag=>'printer_l', name=>'PRINTER entries',
    type=>['text','text'], fields=>2,len=>[50,20], empty=>[0,1],
    elabels=>['PRINTER','Comment'], iff=>['type','5']},
@@ -2047,7 +2088,7 @@ sub menu_handler {
     $data{zone}=$zoneid;
     $data{router}=0;
     $data{grp}=-1; $data{mx}=-1; $data{wks}=-1;
-    $data{mx_l}=[]; $data{ns_l}=[]; $data{printer_l}=[]; $data{srv_l}=[]; $data{sshfp_l}=[]; $data{tlsa_l}=[];
+    $data{mx_l}=[]; $data{ns_l}=[]; $data{printer_l}=[]; $data{srv_l}=[]; $data{sshfp_l}=[]; $data{tlsa_l}=[]; $data{ds_l}=[];
     $data{subgroups}=[];
     $data{dept}=$perms->{defdept} if ($perms->{defdept});
     $data{expiration}=time()+$perms->{elimit}*86400 if ($perms->{elimit} > 0);

@@ -225,16 +225,6 @@ foreach $host (sort keys %zonedata) {
 	push @gluelist, $1;
       }
     }
-    if (@{$rec->{DS}} > 0) {
-      foreach $tmp (@{$rec->{DS}}) {
-        $res = add_record("txt_entries",
-			  { type=>12,
-			    ref=>$zoneid,
-			    txt=>"$host2 $rec->{TTL} IN DS $tmp"
-			  });
-        fatal("Failed to insert DS record:\n   $host2 $rec->{TTL} IN DS $tmp") if ($res < 0);
-      }
-    }
   }
 
   fatal("empty hostname adfter stripping origin: $host") unless ($host2);
@@ -246,7 +236,6 @@ foreach $host (sort keys %zonedata) {
 
   undef @txt_l;
   if (@{$rec->{TXT}} > 0) {
-    #print Dumper($rec);
     for $k (0..$#{$rec->{TXT}}) {
       push @txt_l, [0,$rec->{TXT}->[$k],''];
     }
@@ -264,6 +253,10 @@ foreach $host (sort keys %zonedata) {
   undef @ns_l;
   for $k (0..$#{$rec->{NS}}) {
     push @ns_l, [0,$rec->{NS}->[$k],''];
+  }
+  undef @ds_l;
+  for $k (0..$#{$rec->{DS}}) {
+    push @ds_l, [0,split(' ', $rec->{DS}->[$k]),''];
   }
   undef @sshfp_l;
   for $k (0..$#{$rec->{SSHFP}}) {
@@ -289,13 +282,14 @@ foreach $host (sort keys %zonedata) {
 		   ttl=>$host_ttl,
 		   txt_l=>\@txt_l,
 		   ns_l=>\@ns_l,
+		   ds_l=>\@ds_l,
                    srv_l=>\@srv_l,
                    sshfp_l=>\@sshfp_l,
                    tlsa_l=>\@tlsa_l,
 		   ip=>\@ip_l
 		  });
 
-  fatal("failed to insert host record for: $host ") if ($res < 0);
+  fatal("failed to insert host record for: $host (rc: $res)") if ($res < 0);
   $rec->{ID}=$res;
 }
 
