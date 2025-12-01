@@ -1,0 +1,669 @@
+#!/usr/bin/perl -I/opt/sauron
+#
+# import-zone-comments - imports DNS comments from zone file 
+# Copyright (c) Michal Švamberg <svamberg@cesnet.cz> 2025.
+# $Id:$
+#
+# Imports only comments listed after the record. 
+# Does not import comments in the SOA block.
+
+require 5;
+# use Net::Netmask;
+use Getopt::Long;
+use Sauron::DB;
+use Sauron::Util;
+use Sauron::UtilZone;
+use Sauron::BackEnd;
+use Sauron::Sauron;
+use Sauron::SetupIO;
+use Parse::RecDescent;
+use Encode qw( encode is_utf8 decode );
+
+#use Data::Dumper; # debug
+
+
+use strict;
+use warnings;
+
+#$::RD_TRACE  = 1; # debug 
+#$::RD_HINT   = 1; # debug 
+
+set_encoding();
+load_config();
+
+my ($servername, $serverid, $zoneid, $zonename, $zonefile, $user, $zonedata);
+
+sub load_zone_file($$);
+sub comment_soa($);
+sub compress_zone($);
+sub import_comments($$$);
+
+my $opt_help    = 0;
+my $opt_verbose = 0;
+my $opt_noop    = 0;
+
+GetOptions(
+    'help|h'    => \$opt_help,
+    'verbose|v' => \$opt_verbose,
+    'noop|n'    => \$opt_noop,
+) or die "Error parsing parameters!\n";
+
+if ($opt_help || @ARGV < 2) {
+    print "syntax: $0 [options] <servername> <zone> [<zone file>]\n";
+    print "options:\n",
+       "\t--verbose\t\tdisplay more detailed progress reports\n",
+       "\t--noop\t\trun without changes in database\n".
+       "\t--help\t\t\tdisplay this help\n\n";
+    print "" if ($opt_help);
+    exit(1);
+}
+
+$servername = shift;
+$zonename = shift;
+$zonefile = shift;
+$user = (getpwuid($<))[0];
+
+
+fatal("cannot read zone file: $zonefile") if ( $zonefile && ! -r $zonefile);
+
+set_muser($user);
+db_connect();
+
+$serverid=get_server_id($servername);
+fatal("cannot find server: $servername") unless ($serverid > 0);
+
+fatal("invalid zone name: $zonename") unless (valid_domainname($zonename));
+$zonename =~ s/\.$//;
+#$origin = $zonename . '.';
+
+$zoneid=get_zone_id($zonename,$serverid);
+fatal("cannot find zone: $zonename on $servername") unless ($zoneid > 0);
+
+
+fatal("import of 'reverse' zones not supported")
+    if ($zonename =~ /\.(ip6|in-addr)\.arpa\.?$/);
+
+# -------
+# Grammar
+# -------
+
+my $grammar = <<'GRAMMAR';
+# ------------------------------------------------------------
+#   DNS zone file – grammar for Parse::RecDescent
+# ------------------------------------------------------------
+# <skip> a <autotree> **must** be at first lines!
+<skip: qr/[ \t]*/>          # only spaces and tabs, NOT \r or \n
+<autotree: 1>               # We return references, not copies
+{
+    # Global variables used by the parser during processing
+    my $zone        = { records => [] };
+    my $prev_owner  = '';
+    my $origin      = '';        # last $ORIGIN (for @)
+
+    sub _push { push @{ $zone->{records} }, $_[0] }
+}
+# ---------------------------  START  -----------------------
+file:   line(s)               { $return = $zone }
+# ---------------------------  LINES  -----------------------
+line:   blank_line
+    |   empty_line
+    |   comment_line
+    |   directive_line
+    |   rr_line
+    { $return = $item[1] }
+# ------------------------------------------------------------
+#  Blank line (only white characters or end character)
+# ------------------------------------------------------------
+blank_line:
+        ws(?) eol               { _push({ type=>'blank', line_nr => $thisline }); $return = undef }
+
+empty_line: 
+        /^\s*(?:\r?\n|$)/  { $return = { type=>'empty', raw=>$item[1], line_nr => $thisline }; }
+
+# ---------------------------  COMMENT -----------------------
+comment_line:
+        comment ws(?) eol      {
+            my $txt = $item[1];
+            $txt =~ s/^\s*;//;          # Remove the initial semicolon (;)
+            $txt =~ s/\s+$//;           # and trailing spaces
+            _push({ type=>'comment', text=>$txt, line_nr => $thisline });
+            $return = $item[1];
+        }
+
+comment:    /;[^\n]*/    { 
+            $return = $item[1] ; 
+            $return =~ s/^;// ;  # remove initial semicolon 
+            $return =~ s/^\s*//; # remove initial spaces
+            $return =~ s/\s*$//; # remove trailing spaces
+        }
+
+# ---------------------------  DIRECTIVE --------------------
+directive_line:
+        directive ws(?) eol           { $return = $item[1] }
+
+directive:
+        origin_directive
+    |   ttl_directive
+
+origin_directive:
+        /\$ORIGIN/ domain'.' comment(?) {
+            $origin = $item[2]->{name} . '.';
+            my $rec = {
+                type      => 'directive',
+                directive => 'ORIGIN',
+                value     => $origin,
+                comment   => $item[3] ? $item[3] : undef,
+                line_nr   => $thisline,
+            };
+            _push($rec);
+            $return = $rec;
+        }
+
+ttl_directive:
+        /\$TTL/ number comment(?) {
+            my $rec = {
+                type      => 'directive',
+                directive => 'TTL',
+                value     => $item[2],
+                comment   => $item[3] ? $item[3] : undef,
+                line_nr   => $thisline,
+            };
+            _push($rec);
+            $return = $rec;
+        }
+
+# ---------------------------  RESOURCE RECORD -------------
+rr_line:
+        rr ws(?) eol                { $return = $item[1] }
+
+rr:
+        owner(?) ttl(?) class(?) type rdata ws(?) comment(?) {
+            # If there is no explicit owner, use the previous one
+            my $owner = $item[1][0];
+            $owner = $prev_owner unless $owner;
+            $prev_owner = $owner if $owner;
+
+            my $rec = {
+                type    => 'rr',
+                owner   => $owner,
+                ttl     => $item[2][0],
+                class   => $item[3][0] ? $item[3][0] : 'IN',
+                rtype   => $item[4],
+                rdata   => $item[5],
+                comment => $item[7][0] ? $item[7][0] : undef,
+                line_nr => $thisline,
+            };
+            _push($rec);
+            $return = $rec;
+        }
+     | <error>
+
+# ---------------------------  TOKENS -----------------------
+owner:
+        ownername ...type_exists  {
+            my $val = $item[1];
+            # list of allowed classes – same as CLASS
+            my %classes = map { $_ => 1 } qw( IN CH HS );
+            if ( $classes{$val} ) {
+                # The class was assigned instead of the owner -> we will reject it.
+                $::RD_HINT && warn "owner '$val' looks like a CLASS – rejected\n";
+                # we return undef and thus "reject"
+                $return = undef;
+                # (alternatively, you can use $parser->reject; or die)
+            }
+            else {
+                $return = $val;
+            }
+        }
+    |   '@'                          { $return = $origin }   
+
+
+ttl:        number              { $return = $item[1] }
+
+# ---------------------------  RDATA -----------------------
+rdata:
+        mx_rdata
+    |   srv_rdata
+    |   naptr_rdata
+    |   caa_rdata
+    |   txt_rdata
+    |   generic_rdata       { $return = $item[1] }
+
+# ---- MX ----------------------------------------------------
+mx_rdata:
+        'MX' ws number ws name {
+            $return = { pref=>$item[3], exchange=>$item[5] };
+        }
+
+# ---- SRV ---------------------------------------------------
+srv_rdata:
+        'SRV' ws number ws number ws number ws name {
+            $return = {
+                priority => $item[3],
+                weight   => $item[5],
+                port     => $item[7],
+                target   => $item[9],
+            };
+        }
+
+# ---- NAPTR -------------------------------------------------
+naptr_rdata:
+        'NAPTR' ws number ws number ws quoted_string ws quoted_string ws quoted_string ws name {
+            $return = {
+                order       => $item[3],
+                pref        => $item[5],
+                flags       => $item[7],
+                service     => $item[9],
+                regexp      => $item[11],
+                replacement => $item[13],
+            };
+        }
+
+# ---- CAA ---------------------------------------------------
+caa_rdata:
+        'CAA' ws number ws caa_tag ws quoted_string {
+            $return = {
+                flags => $item[3],
+                tag   => $item[5],
+                value => $item[7],
+            };
+        }
+
+caa_tag:    /issue|issuewild|iodef|issuemail/
+
+# ---- TXT ---------------------------------------------------
+txt_rdata:
+        'TXT' ws quoted_string(s?) {
+            $return = join('', @{$item[3]});
+        }
+
+# ---- generic (A, AAAA, CNAME, …) ---------------------------
+generic_rdata:
+        token_until_comment_or_newline   { $return = $item[1] }
+
+# ---------------------------  HELPERS -----------------------
+name:       /[A-Za-z0-9\-_]+(?:\.[A-Za-z0-9\-_]+)*/   { $return = $item[1] }
+ownername:  name'.'     { $return = $item[1] }
+      |     '*.'name    { $return = $item[1] }
+      |     '*.'name'.' { $return = $item[1] }
+      |     name        { $return = $item[1] }
+
+domain:     name
+
+number:     /\d+/                                   { $return = $item[1] }
+
+class:      /IN|CH|HS/                              { $return = $item[1] }
+
+type:       /(A|AAAA|NS|CNAME|SOA|MX|TXT|SRV|NAPTR|CAA|PTR|SPF|SSHFP|TLSA|DS|DNSKEY|RRSIG|NSEC|NSEC3|NSEC3PARAM)[\s\n]/ { $return = $item[1]; $return =~ s/\s+$// }
+type_exists:       /.*(A|AAAA|NS|CNAME|SOA|MX|TXT|SRV|NAPTR|CAA|PTR|SPF|SSHFP|TLSA|DS|DNSKEY|RRSIG|NSEC|NSEC3|NSEC3PARAM)\s+/ 
+                                                    { $return = $item[1] }
+
+quoted_string:
+        /"([^"\\]|\\.)*"/ {
+            my $s = $item[1];
+            $s =~ s/^"//; $s =~ s/"$//;
+            $s =~ s/\\([\\"])/$1/g;               # od‑escapování \" a \\
+            $return = $s;
+        }
+
+
+ws:         /[ \t]+/
+
+eol:        /\r?\n/
+
+# token_until_comment_or_newline - everything up to ; or the 
+# end of the line, but we also preserve the leading spaces 
+# (they will be trimmed below)
+token_until_comment_or_newline:
+        # 1. either the entire quotation string (may contain ;), 
+        # 2. or any character that is not a semicolon
+        /(?:"([^"\\]|\\.)*"|[^;\n])+/ {
+            my $t = $item[1];
+            $t =~ s/^\s+//;      # remove initial spaces
+            $t =~ s/\s+$//;      # and trailing spaces
+            $return = $t;
+        }
+
+GRAMMAR
+
+# -------------------------------------------------------------
+#  reads and parses the zone file
+# -------------------------------------------------------------
+sub load_zone_file($$) {
+    my ($path, $ast) = @_;
+
+    my $parser = Parse::RecDescent->new($grammar)
+        or die "Unable to create parser (grammar error)";
+
+    open my $fh, '<:encoding(UTF-8)', $path
+        or die encode('UTF-8',"Unable to open file $path: $!");
+
+    local $/ = undef;
+    my $text = <$fh>;
+    close $fh;
+    
+    # We don't need an SOA record for parsing RR, 
+    # we'll turn it into a comment.
+    comment_soa(\$text);
+
+    # convert multi-line records to single-line
+    compress_zone(\$text);
+
+    # remove BOM (Byte Order Mark) if present
+    $text =~ s/^\x{FEFF}//;
+
+    # make sure $text is internally UTF‑8
+    $text = decode('UTF-8',$text) unless is_utf8($text);
+    #print Dumper($text);
+
+    $. = 0;                            # reset line counter
+    $$ast = $parser->file($text);
+    unless ($ast) {
+        my $msg = sprintf "Parse error in %s (at line %d )", $path, $.;
+        die $msg;
+    }
+}
+
+
+# ------------------------------------------------------------
+# compress_dns_zone( $ref_to_zone )
+#
+#  $ref_to_zone - reference to a string that contains the 
+#                 entire contents of the DNS zone file 
+#                 (may have line endings \n or \r\n).
+#
+#  The function finds all records that are split into
+#  multiple lines using parentheses ‘( … )’ and converts them
+#  into a single line.  The number of physical lines that have been
+#  removed is indicated as a comment "; converted from X
+#  lines to 1 line".
+#
+#  The function modifies the string *in-place* and 
+#  returns it at the same time.
+#
+# ------------------------------------------------------------
+sub compress_zone($) {
+    my ($zone_ref) = @_;
+    
+    # We will divide the original content into lines (we also support \r\n)
+    my @orig = split /\r?\n/, ${$zone_ref};
+            
+    my @out;               # output lines
+    my @buffer;            # lines of the current 
+    my $line_cnt = 0;      # number of lines in the buffer
+    my $inside   = 0;      # are we inside ( ... ) ?
+            
+    foreach my $raw (@orig) {
+        # Remove trailing spaces – leave comments,
+        # because they may be at the end of the line after the parentheses.
+        my $line = $raw;
+    
+        # If we are not currently in blocks and 
+        # the line does not contain '(' => normal line
+        if ( !$inside ) {
+            if ( $line =~ /\(/ && $line !~ /\)/ ) {
+                # beginning of multiline record: '(' without a corresponding ')'
+                $inside   = 1;
+                @buffer   = ($line);
+                $line_cnt = 1;    
+                next;
+            }
+            else {
+                push @out, $line;
+                next;
+            }
+        }
+
+        # ----- inside multiline block -----
+        push @buffer, $line;
+        $line_cnt++;
+
+        # End of block?
+        if ( $line =~ /\)/ ) {
+            # -------------------------------------------------
+            # We will assemble one line
+            # -------------------------------------------------
+            my $joined = join ' ', @buffer;                 # join with space
+            $joined =~ s/\s*\(\s*/ /;                       # remove '('
+            $joined =~ s/\s*\)\s*/ /;                       # remove ')'
+
+            my $total = () = $joined =~ /"/g;             # count all quotation marks
+            my $i = 0;
+            $joined =~ s/"/ ++$i == 1 || $i == $total ? '"' : '' /eg; # remove internal quotation marks
+
+            $joined =~ s/\s+/ /g;                          # reduce spacing
+            $joined =~ s/^\s+|\s+$//g;                     # trim ends
+
+            # Add an informative comment (as many lines as were shortened)
+            if ($line_cnt > 0) {
+                $joined .= "\n; converted from multi-line" for 1 .. $line_cnt;
+            }
+            push @out, $joined;
+
+            # prepare for next entry
+            $inside   = 0;
+            @buffer   = ();
+            $line_cnt = 0;
+        }
+        # if it's not the end yet, just continue collecting
+    }
+
+    # If the file ends inside an unclosed block, we leave it as is,
+    # but add the buffer contents unchanged (not detected as
+    # a valid multiline).
+    if ($inside) {
+        push @out, @buffer;
+    }
+
+    # We join the lines back into a single string (original \n ending)
+    ${$zone_ref} = join "\n", @out;
+}
+
+#=====================================================================
+# comment_soa( $ref_to_string )
+#
+#   $ref_to_string - reference to the entire contents of the zone file
+# 
+#   The function goes through the lines, finds all possible SOA 
+#   entries, and adds a semicolon before each line of the SOA block 
+#   (leaving the original indentation). It works directly on the 
+#   reference, so there is no unnecessary copying of large strings.
+#
+#   Return value - reference to the (same) string with modifications.
+#=====================================================================
+sub comment_soa($) {
+    my ($r_txt) = @_;                     # reference to the input text
+    my @lines = split /\n/, $$r_txt;      # we work line by line
+
+    my $in_soa       = 0;                  # Are we inside the block SOA?
+    my $paren_depth  = 0;                  # depth of parentheses in block SOA
+
+    for my $i (0 .. $#lines) {
+        my $line = $lines[$i];
+
+        # We leave lines that are already commented unchanged
+        if ( $line =~ /^\s*;/ ) {
+            next;
+        }
+
+        # If we are not yet in a SOA block and the line contains the word SOA
+        unless ($in_soa) {
+            if ( $line =~ /\bSOA\b/i ) {
+
+                # comment out this line (keep the indentation)
+                $line =~ s/^(\s*)/$1;/;
+                $lines[$i] = $line;
+
+                # We check whether SOA starts with a block in brackets
+                if ( $line =~ /\(/ && $line !~ /\)/ ) {
+                    $in_soa       = 1;
+                    $paren_depth = 1;          # first '(' found
+                }
+                next;      
+            }
+        }
+
+        # We are inside the block SOA => comment out each line
+        if ($in_soa) {
+            $line =~ s/^(\s*)/$1;/;
+            $lines[$i] = $line;
+            # update the depth of parentheses (so that the function can also handle
+            # cases where there are additional '(' and ')')
+            $paren_depth++ while $line =~ /\(/g;
+            $paren_depth-- while $line =~ /\)/g;
+
+            # when we return to zero, end the block
+            $in_soa = 0 if $paren_depth <= 0;
+            next;
+        }
+
+        # 4) Other lines - leave unchanged
+        $lines[$i] = $line;
+    }
+
+    # Reassemble the string (leave the original line breaks)
+    $$r_txt = join "\n", @lines;
+}
+
+# ---------------
+# import_comments
+# ---------------
+sub import_comments($$$) {
+  my ($data, $server, $zone) = shift @_;
+  my ($rec, $res, $ret, $sql, $comment, $blcomment);
+
+  #print "$data\n";
+  #print "$$data->{records}\n";
+
+  $blcomment='';
+  for my $i (0 .. $#{$$data->{records}}) {
+    $rec = $$data->{records}->[$i];
+
+    next if $$rec{type} eq 'directive';
+
+    if ($$rec{type} eq 'comment') {
+      $blcomment = $blcomment ? "$blcomment; $$rec{text}" : $$rec{text};
+      next;
+    }
+    if ($$rec{type} eq 'blank') {
+      $blcomment = ''; # end of block
+      next;    
+    }
+    
+    next unless ($$rec{comment} or $blcomment); # blokovy ani radkovy komentar
+
+    #print "$i: $$rec{type} $$rec{owner} -> $$rec{class} -> $$rec{rtype}\n"; 
+    $comment = db_encode_str($$rec{comment} ? $$rec{comment} : $blcomment);
+    
+    if ($$rec{rtype} =~ /^(A|AAAA)$/ and $$rec{owner}) {
+      $sql = qq{
+          UPDATE hosts
+             SET info = $comment
+           WHERE zone   = '$zoneid'
+             AND domain = '$$rec{owner}'
+             AND type   = '1'
+             AND (info IS NULL OR info = '')
+      };
+      print "db_exec: $sql\n" if $opt_verbose;
+      db_exec($sql) unless $opt_noop;
+    }
+    elsif ($$rec{rtype} eq 'CNAME' and $$rec{owner}) {
+      $sql = qq{
+          UPDATE hosts
+             SET info = $comment
+           WHERE zone   = '$zoneid'
+             AND domain = '$$rec{owner}'
+             AND type   = '4'
+             AND (info IS NULL OR info = '')
+      };
+      db_exec($sql) unless $opt_noop;
+      print "db_exec: $sql\n" if $opt_verbose;
+    }
+    elsif ($$rec{rtype} eq 'TXT' and $$rec{owner} =~ /\w+\._domainkey/) {
+      $sql = qq{
+          UPDATE txt_entries
+             SET comment = $comment
+           WHERE type    = '12'
+             AND ref     = '$zoneid'
+             AND txt  like '$$rec{owner} %'
+             AND (comment IS NULL OR comment = '')
+      };
+      db_exec($sql) unless $opt_noop;
+      print "db_exec: $sql\n" if $opt_verbose;
+    }
+    elsif ($$rec{rtype} eq 'SSHFP' and $$rec{owner}) {
+      my ($sshfp_alg, $sshfp_ht, $sshfp_fp) = split /\s+/, $$rec{rdata};
+      my $host_id = get_host_id($zoneid, $$rec{owner});
+      $sql = qq{
+        UPDATE sshfp_entries
+           SET comment     = $comment
+         WHERE ref         = '$host_id'
+           AND algorithm   = '$sshfp_alg'
+           AND hashtype    = '$sshfp_ht'
+           AND fingerprint = '$sshfp_fp'
+           AND (comment IS NULL OR comment = '')
+      };
+      db_exec($sql) unless $opt_noop;
+      print "db_exec: $sql\n" if $opt_verbose;
+    }
+    elsif ($$rec{rtype} eq 'DS' and $$rec{owner}) {
+      my ($ds_key_tag,$ds_algorithm,$ds_digest_type,$ds_digest) = split /\s+/, $$rec{rdata};
+      my $host_id = get_host_id($zoneid, $$rec{owner});
+      $sql = qq{
+        UPDATE ds_entries
+           SET comment     = $comment
+         WHERE ref         = '$host_id'
+           AND key_tag     = '$ds_key_tag'
+           AND algorithm   = '$ds_algorithm'
+           AND digest_type = '$ds_digest_type'
+           AND digest      = '$ds_digest'
+           AND (comment IS NULL OR comment = '')
+      };
+      db_exec($sql) unless $opt_noop;
+      print "db_exec: $sql\n" if $opt_verbose;
+    }
+    elsif ($$rec{rtype} eq 'SRV' and $$rec{owner}) {
+      my ($srv_priority, $srv_weight, $srv_port, $srv_target) = split /\s+/, $$rec{rdata};
+      my $host_id = get_host_id($zoneid, $$rec{owner});
+      $sql = qq{
+        UPDATE srv_entries
+           SET comment = $comment
+         WHERE ref     = '$host_id'
+           AND type    = '1'
+           AND pri     = '$srv_priority'
+           AND weight  = '$srv_weight'
+           AND port    = '$srv_port'
+           AND target  = '$srv_target'
+           AND (comment IS NULL OR comment = '')
+      };
+      db_exec($sql) unless $opt_noop;
+      print "db_exec: $sql\n" if $opt_verbose;
+    }
+    # TODO: table hosts: delegation (2), MX (3), glue (6), SRV (8)
+    else {
+      print "unknown record $i: $$rec{owner} $$rec{class} $$rec{rtype} $$rec{rdata}\n";
+    }
+  }
+
+  return 0;
+}
+
+
+# --------------------
+# Main code - continue
+# --------------------
+
+load_zone_file($zonefile, \$zonedata);
+
+#print Dumper($zonedata);
+print "Number of loaded records: $#{$$zonedata{records}}\n";
+
+
+import_comments(\$zonedata,$serverid,$zonename);
+
+
+print "All done.\n";
+exit(0);
+
+# eof
+
