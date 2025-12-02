@@ -639,7 +639,45 @@ sub import_comments($$$) {
       db_exec($sql) unless $opt_noop;
       print "db_exec: $sql\n" if $opt_verbose;
     }
-    # TODO: table hosts: delegation (2), MX (3), glue (6), SRV (8)
+    elsif ($$rec{rtype} eq 'CAA') {
+      my ($caa_flags, $caa_tag, $caa_value) = split /\s+/, $$rec{rdata};
+      $sql = qq{
+        UPDATE txt_entries
+           SET comment = $comment
+         WHERE ref     = '$zoneid'
+           AND txt     like '% CAA %$caa_flags %$caa_tag %$caa_value'
+           AND type     = '12'
+           AND (comment IS NULL OR comment = '')
+      };
+      db_exec($sql) unless $opt_noop;
+      print "db_exec: $sql\n" if $opt_verbose;
+    }
+    elsif ($$rec{rtype} eq 'NS' and $$rec{owner}) {
+      my $host_id = get_host_id($zoneid, $$rec{owner});
+      $sql = qq{
+        UPDATE ns_entries
+           SET comment = $comment
+         WHERE ref     = '$host_id'
+           AND type    = 2
+           AND ns      = '$$rec{rdata}'
+           AND (comment IS NULL OR comment = '')
+      };
+      db_exec($sql) unless $opt_noop;
+      print "db_exec: $sql\n" if $opt_verbose;
+    }
+    elsif ($$rec{rtype} eq 'NS') {  # zone record
+      my $host_id = get_host_id($zoneid, $$rec{owner});
+      $sql = qq{
+        UPDATE ns_entries
+           SET comment = $comment
+         WHERE ref     = '' <<<< ZONERECORD from HOSTS
+           AND type    = 2
+           AND ns      = '$$rec{rdata}'
+           AND (comment IS NULL OR comment = '')
+      };
+      db_exec($sql) unless $opt_noop;
+      print "db_exec: $sql\n" if $opt_verbose;
+    }
     else {
       print "unknown record $i: $$rec{owner} $$rec{class} $$rec{rtype} $$rec{rdata}\n";
     }
