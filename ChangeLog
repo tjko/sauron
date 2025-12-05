@@ -19,6 +19,7 @@
 	- add script 'addzone' for creating new zone [svamberg]
 	- add TLSA support [svamberg]
 	- add script compare-zones.pl to comparing two zone files [svamberg]
+	- Added mask support for reverse zones [svamberg]
 
 0.8.5
 
