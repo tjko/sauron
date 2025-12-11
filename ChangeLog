@@ -22,6 +22,7 @@
 	- Added mask support for reverse zones [svamberg]
 	- Add a check for the existence of a reverse zone when adding
 	  a new host. A warning will appear after submitting the form. [svamberg]
+	- Allow import nets without VLAN definition [svamberg]
 
 0.8.5
 

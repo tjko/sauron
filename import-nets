@@ -211,9 +211,11 @@ for $i (0..$#data) {
   print "".($id>0?"Updating":"Creating")." net: $net ($name,\"$descr\",$dhcp,",
         "$vlan)...\n";
 
-  fatal("cannot find VLAN id for vlan: $vlan (shouldn't happen)")
-    unless ($vlans{$vlan} && $vlans{$vlan}[2] > 0);
-  $vlanid=$vlans{$vlan}[2];
+  if ($opt_vlan or $opt_vlanno or $opt_vlandesc) {
+    fatal("cannot find VLAN id for vlan: $vlan (shouldn't happen)")
+      unless ($vlans{$vlan} && $vlans{$vlan}[2] > 0);
+    $vlanid=$vlans{$vlan}[2];
+  }
 
   undef %net;
   $net{server}=$serverid;
@@ -221,7 +223,7 @@ for $i (0..$#data) {
   $net{netname}=$name;
   $net{name}=$descr if ($descr);
   $net{no_dhcp}=($dhcp eq 't' ? 'f':'t');
-  $net{vlan}=$vlanid;
+  $net{vlan}=$vlanid if $vlan;
 
   if ($id > 0) {
     $net{id}=$id;
