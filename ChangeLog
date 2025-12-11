@@ -20,6 +20,7 @@
 	- add TLSA support [svamberg]
 	- add script compare-zones.pl to comparing two zone files [svamberg]
 	- Added mask support for reverse zones [svamberg]
+	- allow import nets without VLAN definition [svamberg]
 
 0.8.5
 
