@@ -36,6 +36,7 @@ $VERSION = '$Id:$ ';
 
 	     alert1
 	     alert2
+	     warning1
 	     html_error
 	     html_error2
 	    );
@@ -1689,6 +1690,10 @@ sub alert2($) {
   print "<H3><FONT color=\"red\">$msg</FONT></H3>";
 }
 
+sub warning1($) {
+  my($msg)=@_;
+  print "<H2><FONT color=\"orange\">$msg</FONT></H2>";
+}
 
 sub html_error($) {
   my($msg)=@_;

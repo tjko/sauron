@@ -680,8 +680,20 @@ sub make_dns() {
                   if ($dnet eq '0.0.0.0/0'  or $dnet eq '' or # For IPv6.
                       ipv6compress(cidr64ok($dnet) ? ipv64unmix($dnet) : $dnet) eq '::/0');
             }
-            print "special (CNAME hack) delegation: $val\n" if ($opt_verbose);
-          } elsif ($val) {
+            print "special range (CNAME hack) delegation: $val\n" if ($opt_verbose);
+          }
+          elsif ($val =~ /(\d+\/\d+)(\.(\S+))?/) {
+            push @cnamedelegs, [$1,'',$3,$val];
+            if ($4) {
+              $dnet = arpa2cidr("$4.$zonename");
+              fatal("invalid reverse delegation '$val'")
+#                 if ($dnet eq '0.0.0.0/0' || $dnet eq '');
+                  if ($dnet eq '0.0.0.0/0'  or $dnet eq '' or # For IPv6.
+                      ipv6compress(cidr64ok($dnet) ? ipv64unmix($dnet) : $dnet) eq '::/0');
+            }
+            print "special mask (CNAME hack) delegation: $val\n" if ($opt_verbose);
+          }
+          elsif ($val) {
             $dnet = arpa2cidr("$val.$zonename");
             fatal("invalid reverse delegation '$val'")
 #               if ($dnet eq '0.0.0.0/0' || $dnet eq '');

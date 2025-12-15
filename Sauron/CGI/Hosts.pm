@@ -2216,6 +2216,17 @@ sub menu_handler {
 			   "ADD: $host_types{$data{type}} ",
 			   "domain: $data{domain}",$res);
 	    print h2("Host added successfully");
+
+            # check if exists revers zone
+            db_query("SELECT COUNT(name) " .
+                     "FROM zones " .
+                     "WHERE reverse=true " .
+                     " AND server=$serverid " .
+                     " AND '$data{ip}' << reversenet", \@q);
+            if ($q[0][0] == 0) {
+              warning1("There is no reverse zone for this IP address. It will not be possible to create a PTR record.");
+            }
+
 	    param('h_id',$res);
 	    show_host_record($state,$perms);
 	    return;
