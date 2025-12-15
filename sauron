@@ -1493,6 +1493,40 @@ sub make_dns() {
       }
     }
 
+    # TXT records
+    undef @q;
+    db_query("SELECT a.domain,a.ttl,a.expiration,b.txt " .
+                   "FROM hosts a, txt_entries b, zones z " .
+                   "WHERE a.zone=z.id AND z.id=$zoneid " .
+                   "AND a.type=13 AND a.id=b.ref AND b.type=2 " .
+                   "ORDER BY a.domain,b.txt;",\@q);
+    error(db_errormsg()) if (db_errormsg());
+    if (@q > 0) {
+      print ZONEFILE ";\n;\n; TXT records\n;\n" if ($bind_conf);
+      for $i (0 .. $#q) {
+        $domain=remove_origin($q[$i][0],$origin);
+        if ($domain =~ /\.$/) {
+          error("Out-of-zone TXT record skipped: $q[$i][0]");
+          next;
+        }
+        if ($domain =~ /\.($delegation_mask)$/) {
+          error("TXT in delegated zone skipped: $q[$i][0]");
+          next;
+        }
+        if (($q[$i][2] > 0) && ($q[$i][2] < $time_now_ticks)) {
+          error("Skipping expired TXT record: $q[$i][0]");
+          next;
+        }
+        $ttl=$q[$i][1];
+        $ttl='' unless ($ttl > 0);
+        $val=$q[$i][3];
+        $val =~ s/\"//g;
+        printf ZONEFILE $ZFORMAT, $domain,$ttl,$class,'TXT',"\"$val\"" 
+            if ($bind_conf);
+        $val=~ s/:/\\072/g;
+        printf TINYDNSFILE "'$zonename\:$val\:$ttl\:\:\n" if ($tiny_conf);
+      }
+    }
 
 
     # New style custom zone file entries (multi-line groups). 2020-08-04 TVu

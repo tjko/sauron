@@ -19,6 +19,7 @@
 	- add script 'addzone' for creating new zone [svamberg]
 	- add TLSA support [svamberg]
 	- add script compare-zones.pl to comparing two zone files [svamberg]
+	- add TXT record (typical for DMARC) [svamberg]
 
 0.8.5
 
