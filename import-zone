@@ -188,7 +188,7 @@ foreach $host (sort keys %zonedata) {
   $hosttype=3 if ($nslist eq '' && @{$rec->{A}} < 1 && @{$rec->{AAAA}} < 1 && @{$rec->{MX}} > 0);
   $hosttype=8 if (@{$rec->{SRV}} > 0);
   $hosttype=12 if (@{$rec->{TLSA}} > 0);
-  $hosttype=13 if (@{$rec->{TXT}} > 0);
+  $hosttype=13 if ((@{$rec->{TXT}} > 0) and $hosttype == 0);
   $hosttype=14 if (@{$rec->{NAPTR}} > 0);
 
   if ($hosttype == 0) {
@@ -225,13 +225,6 @@ foreach $host (sort keys %zonedata) {
   $mx=($mxhash{$mxlist} ? $mxhash{$mxlist} : -1);
   $host_ttl=(($rec->{TTL} > 0 && $rec->{TTL} ne $ttl) ? $rec->{TTL}:'');
 
-  undef @txt_l;
-  if (@{$rec->{TXT}} > 0) {
-    for $k (0..$#{$rec->{TXT}}) {
-      push @txt_l, [0,$rec->{TXT}->[$k],''];
-    }
-  }
-
   undef @ip_l;
   for $k (0..$#{$rec->{A}}) {
     # print "A=",$rec->{A}->[$k],"\n";
@@ -259,7 +252,7 @@ foreach $host (sort keys %zonedata) {
   }
   undef @txt_l;
   for $k (0..$#{$rec->{TXT}}) {
-    push @txt_l, [0,split(' ', $rec->{TXT}->[$k]),''];
+    push @txt_l, [0,$rec->{TXT}->[$k],''];
   }
   undef @srv_l;
   for $k (0..$#{$rec->{SRV}}) {
@@ -283,8 +276,7 @@ foreach $host (sort keys %zonedata) {
                    tlsa_l=>\@tlsa_l,
                    txt_l=>\@txt_l,
 		   ip=>\@ip_l
-		  });
-
+		});
   fatal("failed to insert host record for: $host (rc: $res)") if ($res < 0);
   $rec->{ID}=$res;
 }

@@ -684,7 +684,7 @@ sub import_comments($$$) {
       $sql = qq{
         UPDATE ns_entries
            SET comment = $comment
-         WHERE ref     = '' <<<< ZONERECORD from HOSTS
+         WHERE ref     = '$host_id'
            AND type    = 2
            AND ns      = '$$rec{rdata}'
            AND (comment IS NULL OR comment = '')

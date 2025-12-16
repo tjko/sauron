@@ -1942,8 +1942,6 @@ sub get_host($$) {
 		  "type=1 AND ref=$id ORDER BY proto,services",$rec,'wks_l');
   get_array_field("mx_entries",4,"id,pri,mx,comment","Priority,MX,Comments",
 		  "type=2 AND ref=$id ORDER BY pri,mx",$rec,'mx_l');
-  get_array_field("txt_entries",3,"id,txt,comment","TXT,Comments",
-		  "type=2 AND ref=$id ORDER BY id",$rec,'txt_l');
   get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comments",
 		  "type=3 AND ref=$id ORDER BY id",$rec,'dhcp_l');
   get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comments",
@@ -2123,9 +2121,6 @@ sub update_host($) {
   $r=update_array_field("mx_entries",4,"pri,mx,comment,type,ref",
 			'mx_l',$rec,"2,$id");
   if ($r < 0) { db_rollback(); return -14; }
-  $r=update_array_field("txt_entries",3,"txt,comment,type,ref",
-			'txt_l',$rec,"2,$id");
-  if ($r < 0) { db_rollback(); return -15; }
   $r=update_array_field("dhcp_entries",3,"dhcp,comment,type,ref",
 			'dhcp_l',$rec,"3,$id");
   if ($r < 0) { db_rollback(); return -16; }
@@ -2144,7 +2139,7 @@ sub update_host($) {
 			"usage,selector,matching_type,association_data,comment,type,ref",
 			'tlsa_l',$rec,"1,$id");
   if ($r < 0) { db_rollback(); return -20; }
-  $r=update_array_field("txt_entries",6,
+  $r=update_array_field("txt_entries",3,
 			"txt,comment,type,ref",
 			'txt_l',$rec,"1,$id");
   if ($r < 0) { db_rollback(); return -21; }
@@ -2331,11 +2326,6 @@ sub add_host($) {
   $res = add_array_field('printer_entries','printer,comment','printer_l',$rec,
 			 'type,ref',"2,$id");
   if ($res < 0) { db_rollback(); return -6; }
-
-  # TXTs
-  $res = add_array_field('txt_entries','txt,comment','txt_l',$rec,
-			 'type,ref',"2,$id");
-  if ($res < 0) { db_rollback(); return -7; }
 
   # SRVs
   $res = add_array_field('srv_entries','pri,weight,port,target,comment',
