@@ -2141,7 +2141,7 @@ sub update_host($) {
   if ($r < 0) { db_rollback(); return -20; }
   $r=update_array_field("txt_entries",3,
 			"txt,comment,type,ref",
-			'txt_l',$rec,"1,$id");
+			'txt_l',$rec,"2,$id");
   if ($r < 0) { db_rollback(); return -21; }
   $r=update_array_field("a_entries",4,"ip,reverse,forward,host",
 			'ip',$rec,"$id");
