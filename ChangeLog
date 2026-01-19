@@ -23,6 +23,7 @@
 	- Add a check for the existence of a reverse zone when adding
 	  a new host. A warning will appear after submitting the form. [svamberg]
 	- Allow import nets without VLAN definition [svamberg]
+	- add TXT record (typical for DMARC) [svamberg]
 
 0.8.5
 

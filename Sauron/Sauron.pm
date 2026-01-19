@@ -174,6 +174,9 @@ sub print_config() {
 
   print "LOOPBACK_NET=",$main::LOOPBACK_NET,"\n";
   print "LOOPBACK_ZONE=",$main::LOOPBACK_ZONE,"\n";
+
+  print "TTL_MIN_SEC=",$main::TTL_MIN_SEC,"\n";
+  print "TTL_MAX_SEC=",$main::TTL_MAX_SEC,"\n";
 }
 
 

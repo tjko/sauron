@@ -1942,8 +1942,6 @@ sub get_host($$) {
 		  "type=1 AND ref=$id ORDER BY proto,services",$rec,'wks_l');
   get_array_field("mx_entries",4,"id,pri,mx,comment","Priority,MX,Comments",
 		  "type=2 AND ref=$id ORDER BY pri,mx",$rec,'mx_l');
-  get_array_field("txt_entries",3,"id,txt,comment","TXT,Comments",
-		  "type=2 AND ref=$id ORDER BY id",$rec,'txt_l');
   get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comments",
 		  "type=3 AND ref=$id ORDER BY id",$rec,'dhcp_l');
   get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comments",
@@ -1954,11 +1952,14 @@ sub get_host($$) {
 		  "Priority,Weight,Port,Target,Comments",
 		  "type=1 AND ref=$id ORDER BY port,pri,weight",$rec,'srv_l');
   get_array_field("sshfp_entries",6,"id,algorithm,hashtype,fingerprint,comment",
-		  "Algorithm,Type,Fingerprint",
+		  "Algorithm,Type,Fingerprint,Comments",
 		  "type=1 AND ref=$id ORDER BY algorithm,hashtype,fingerprint",$rec,'sshfp_l');
   get_array_field("tlsa_entries",6,"id,usage,selector,matching_type,association_data,comment",
 		  "Usage,Selector,Matching Type,Asociation Data,Comments",
 		  "type=1 AND ref=$id ORDER BY usage,selector,matching_type,association_data",$rec,'tlsa_l');
+  get_array_field("txt_entries",3,"id,txt,comment",
+		  "Text,Comments",
+		  "type=2 AND ref=$id ORDER BY txt",$rec,'txt_l');
 # Get CNAME aliases.
   get_array_field("hosts",5,"0,id,domain,type,1","Domain,cname",
 	          "type=4 AND alias=$id ORDER BY domain",$rec,'alias_l');
@@ -2120,9 +2121,6 @@ sub update_host($) {
   $r=update_array_field("mx_entries",4,"pri,mx,comment,type,ref",
 			'mx_l',$rec,"2,$id");
   if ($r < 0) { db_rollback(); return -14; }
-  $r=update_array_field("txt_entries",3,"txt,comment,type,ref",
-			'txt_l',$rec,"2,$id");
-  if ($r < 0) { db_rollback(); return -15; }
   $r=update_array_field("dhcp_entries",3,"dhcp,comment,type,ref",
 			'dhcp_l',$rec,"3,$id");
   if ($r < 0) { db_rollback(); return -16; }
@@ -2141,23 +2139,27 @@ sub update_host($) {
 			"usage,selector,matching_type,association_data,comment,type,ref",
 			'tlsa_l',$rec,"1,$id");
   if ($r < 0) { db_rollback(); return -20; }
+  $r=update_array_field("txt_entries",3,
+			"txt,comment,type,ref",
+			'txt_l',$rec,"2,$id");
+  if ($r < 0) { db_rollback(); return -21; }
   $r=update_array_field("a_entries",4,"ip,reverse,forward,host",
 			'ip',$rec,"$id");
-  if ($r < 0) { db_rollback(); return -21; }
+  if ($r < 0) { db_rollback(); return -22; }
 
   if ($rec->{type}==7) {
     $r=update_array_field("arec_entries",2,"arec,host",
 			  'alias_a',$rec,"$id");
-    if ($r < 0) { db_rollback(); return -22; }
+    if ($r < 0) { db_rollback(); return -23; }
   }
 
   $r=update_array_field("group_entries",2,"grp,host",
 			'subgroups',$rec,"$id");
-  if ($r < 0) { db_rollback(); return -23; }
+  if ($r < 0) { db_rollback(); return -24; }
 
   $r=update_array_field("dhcp_entries",3,"dhcp,comment,type,ref",
 			'dhcp_l6',$rec,"13,$id");
-  if ($r < 0) { db_rollback(); return -24; }
+  if ($r < 0) { db_rollback(); return -25; }
 
   return db_commit();
 }
@@ -2243,6 +2245,10 @@ sub delete_host($) {
   $res=db_exec("DELETE FROM tlsa_entries WHERE type=1 AND ref=$id;");
   if ($res < 0) { db_rollback(); return -16; }
 
+  # txt_entries
+  $res=db_exec("DELETE FROM txt_entries WHERE type=2 AND ref=$id;");
+  if ($res < 0) { db_rollback(); return -17; }
+
   # group_entries
   $res=db_exec("DELETE FROM group_entries WHERE host=$id;");
   if ($res < 0) { db_rollback(); return -12; }
@@ -2321,11 +2327,6 @@ sub add_host($) {
 			 'type,ref',"2,$id");
   if ($res < 0) { db_rollback(); return -6; }
 
-  # TXTs
-  $res = add_array_field('txt_entries','txt,comment','txt_l',$rec,
-			 'type,ref',"2,$id");
-  if ($res < 0) { db_rollback(); return -7; }
-
   # SRVs
   $res = add_array_field('srv_entries','pri,weight,port,target,comment',
 			 'srv_l',$rec,'type,ref',"1,$id");
@@ -2339,6 +2340,11 @@ sub add_host($) {
   # TLSAs
   $res = add_array_field('tlsa_entries','usage,selector,matching_type,association_data,comment',
 			 'tlsa_l',$rec,'type,ref',"1,$id");
+  if ($res < 0) { db_rollback(); return -10; }
+
+  # TXTs
+  $res = add_array_field('txt_entries','txt,comment',
+			 'txt_l',$rec,'type,ref',"2,$id");
   if ($res < 0) { db_rollback(); return -10; }
 
   # ARECs
@@ -2363,7 +2369,7 @@ sub get_host_types() {
     return (0 => 'Any type', 1 => 'Host', 2 => 'Delegation', 3 => 'Plain MX',
 	    4 => 'Alias', 5 => 'Printer', 6 => 'Glue', 7 => 'AREC Alias',
 	    8 => 'SRV', 9 => 'DHCP only', 10 => 'Zone', 11=>'SSHFP only',
-            12 => 'TLSA only',
+            12 => 'TLSA only', 13 => 'TXT',
 	    101 => 'Host reservation');
 }
 

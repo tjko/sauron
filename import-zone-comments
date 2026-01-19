@@ -579,13 +579,27 @@ sub import_comments($$$) {
       db_exec($sql) unless $opt_noop;
       print "db_exec: $sql\n" if $opt_verbose;
     }
-    elsif ($$rec{rtype} eq 'TXT' and $$rec{owner} =~ /\w+\._domainkey/) {
+    elsif ($$rec{rtype} eq 'TXT' and $$rec{owner} =~ /\w+/) {
+      # TXT in zone entries 
       $sql = qq{
           UPDATE txt_entries
              SET comment = $comment
            WHERE type    = '12'
              AND ref     = '$zoneid'
              AND txt  like '$$rec{owner} %'
+             AND (comment IS NULL OR comment = '')
+      };
+      db_exec($sql) unless $opt_noop;
+      print "db_exec: $sql\n" if $opt_verbose;
+
+      # TXT for host
+      my $host_id = get_host_id($zoneid, $$rec{owner});
+      $sql = qq{
+          UPDATE txt_entries
+             SET comment = $comment
+           WHERE type    = '2'
+             AND ref     = '$host_id'
+             AND txt     = '$$rec{rdata}'
              AND (comment IS NULL OR comment = '')
       };
       db_exec($sql) unless $opt_noop;
@@ -670,7 +684,7 @@ sub import_comments($$$) {
       $sql = qq{
         UPDATE ns_entries
            SET comment = $comment
-         WHERE ref     = '' <<<< ZONERECORD from HOSTS
+         WHERE ref     = '$host_id'
            AND type    = 2
            AND ns      = '$$rec{rdata}'
            AND (comment IS NULL OR comment = '')

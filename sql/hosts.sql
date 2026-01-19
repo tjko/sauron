@@ -27,6 +27,8 @@ CREATE TABLE hosts (
 					10=zone,
 					11=sshfp entry,
 					12=tlsa entry,
+					13=txt entry,
+					14=naptr entry,
 					101=host reservation
 					*/
        

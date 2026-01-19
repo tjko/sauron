@@ -187,7 +187,7 @@ my %host_form = (
   {ftype=>6, tag=>'mx', name=>'MX template', iff=>['type','[13]']},
   {ftype=>7, tag=>'wks', name=>'WKS template', iff=>['type','1']},
 
-  {ftype=>0, name=>'Host specific',iff=>['type','[12]']},
+  {ftype=>0, name=>'Host specific',iff=>['type','(?:13|1|2|3|7)']},
   {ftype=>2, tag=>'ns_l', name=>'Name servers (NS)', type=>['domain','text'],
    fields=>2, maxlen=>[400,80],
    len=>[50,20], empty=>[0,1], elabels=>['NS','comment'], iff=>['type','2']},
@@ -210,7 +210,7 @@ my %host_form = (
    whitesp=>['P','P'], fields=>2, maxlen=>[253, 80],
 #  len=>[40,15], empty=>[0,1], elabels=>['TXT','comment'], iff=>['type','1']},
 #  len=>[50,20], empty=>[0,1], elabels=>['TXT','comment'], iff=>['type','[13]']},
-   len=>[50,20], empty=>[0,1], elabels=>['TXT','comment'], iff=>['type','[137]']},
+   len=>[50,20], empty=>[0,1], elabels=>['TXT','comment'], iff=>['type','(?:13|1|3|7)']},
 # TVu 2020-06-17 Changed '1' to [13] on previous line. For future: Changing to [134]
 # will allow TXT records for CNAME aliases, including static aliases, which is not
 # permitted by current rules.
