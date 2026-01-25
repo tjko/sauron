@@ -256,9 +256,10 @@ sub process_zonefile($$$$) {
       push @{$rec->{DS}}, "$line[0] $line[1] $line[2] $digest";
     }
     elsif ($type eq 'SSHFP') {
+      my $sshfp_fp = join('', @line[2 .. $#line]);
       fatal("$filename($.): invalid SSHFP record: $fline")
-        unless ($line[0]=~/^\d+$/ && $line[1]=~/^\d+$/ && $line[2]=~/^[0-9A-Fa-f]+$/);
-      push @{$rec->{SSHFP}}, "$line[0] $line[1] $line[2]";
+        unless ($line[0]=~/^\d+$/ && $line[1]=~/^\d+$/ && $sshfp_fp=~/^[0-9A-Fa-f]+$/);
+      push @{$rec->{SSHFP}}, "$line[0] $line[1] $sshfp_fp";
     }
     elsif ($type eq 'TLSA') {
       fatal("$filename($.): invalid TLSA record: $fline")
