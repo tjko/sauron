@@ -670,8 +670,7 @@ sub net_ip_list($) {
 # remove_origin($domain,$origin) - strip origin from domain
 sub remove_origin($$) {
   my($domain,$origin) = @_;
-
-  $domain="\L$domain" unless ($domain eq "\$DOMAIN");
+  $domain="\L$domain" unless ($domain =~ /^\$DOMAIN(\..*)?$/);
   $origin="\L$origin";
   $origin =~ s/\./\\\./g;
   #print "before: $domain $origin\n";
