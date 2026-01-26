@@ -24,6 +24,7 @@
 	  a new host. A warning will appear after submitting the form. [svamberg]
 	- Allow import nets without VLAN definition [svamberg]
 	- add TXT record (typical for DMARC) [svamberg]
+	- Fixed generating long TXT records for bind [svamberg]
 
 0.8.5
 
