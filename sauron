@@ -17,6 +17,7 @@ use Sauron::DB;
 use Sauron::BackEnd;
 use Sauron::Sauron;
 use Sauron::SetupIO;
+use Sauron::UtilZone;
 use Net::IP qw(:PROC);
 use open ':locale';
 
@@ -27,7 +28,6 @@ $bind_conf=0;
 $dhcp_conf=0;
 $dhcp6_conf=0;
 $printer_conf=0;
-
 
 %yes_no_enum = (D=>'',Y=>'yes',N=>'no');
 %check_names_enum = (D=>'',W=>'warn',F=>'fail',I=>'ignore');
@@ -617,7 +617,9 @@ sub make_dns() {
         if ($bind_conf && @{$server{txt}}>1);
       foreach $i (1..$#{$server{txt}}) {
         ($val=$server{txt}[$i][1]) =~ s/\"//g;
-        printf ZONEFILE $ZFORMAT, '',$ttl,$class,'TXT',"\"$val\""
+        $padding = length(sprintf $ZFORMAT, '',$ttl,$class,'TXT','');
+        printf ZONEFILE $ZFORMAT, '',$ttl,$class,'TXT',
+          bind_fmt_long_data("$val", $padding)
           if ($bind_conf);
         ($val=$zone{txt}[$i][1]) =~ s/\"//g;
         ($val=$zone{txt}[$i][1]) =~ s/:/\\072/g;
@@ -627,7 +629,9 @@ sub make_dns() {
         if ($bind_conf && @{$zone{txt}} > 1);
       foreach $i (1..$#{$zone{txt}}) {
         ($val=$zone{txt}[$i][1]) =~ s/\"//g;
-        printf ZONEFILE $ZFORMAT, '',$ttl,$class,'TXT',"\"$val\""
+        $padding = length(sprintf $ZFORMAT, '',$ttl,$class,'TXT', '');
+        printf ZONEFILE $ZFORMAT, '',$ttl,$class,'TXT',
+          bind_fmt_long_data("$val", $padding)
           if ($bind_conf);
         ($val=$zone{txt}[$i][1]) =~ s/\"//g;
         ($val=$zone{txt}[$i][1]) =~ s/:/\\072/g;
@@ -929,7 +933,9 @@ sub make_dns() {
               for $k (0 .. $#{$txt}) {
                   $val=$$txt[$k];
                   $val =~ s/\"//g;
-                  printf ZONEFILE $ZFORMAT, '',$ttl,$class,'TXT',"\"$val\""
+                  $padding = length(sprintf ZONEFILE $ZFORMAT, '',$ttl,$class,'TXT','');
+                  printf ZONEFILE $ZFORMAT, '',$ttl,$class,'TXT',
+                      bind_fmt_long_data("$val", $padding)
                       if ($bind_conf);
                   $val=~ s/:/\\072/g;
                   printf TINYDNSFILE "'$zonename\:$val\:$ttl\:\:\n" if ($tiny_conf);
@@ -971,7 +977,9 @@ sub make_dns() {
               for $k (0 .. $#{$txt}) {
                   $val=$$txt[$k];
                   $val =~ s/\"//g;
-                  printf ZONEFILE $ZFORMAT, '',$ttl,$class,'TXT',"\"$val\""
+                  $padding = length(sprintf $ZFORMAT, '',$ttl,$class,'TXT','');
+                  printf ZONEFILE $ZFORMAT, '',$ttl,$class,'TXT',
+                      bind_fmt_long_data("$val", $padding)
                       if ($bind_conf);
                   $val=~ s/:/\\072/g;
                   printf TINYDNSFILE "'$zonename\:$val\:$ttl\:\:\n" if ($tiny_conf);
@@ -1189,7 +1197,10 @@ sub make_dns() {
             for $k (0 .. $#{$txt}) {
               $val=$$txt[$k];
               $val =~ s/\"//g;
-              printf ZONEFILE $ZFORMAT, '',$ttl,$class,'TXT',"\"$val\"" if ($bind_conf);
+              $padding = length(sprintf $ZFORMAT, '',$ttl,$class,'TXT','');
+              printf ZONEFILE $ZFORMAT, '',$ttl,$class,'TXT',
+                bind_fmt_long_data("$val", $padding)
+                if ($bind_conf);
               $val=~ s/:/\\072/g;
               printf TINYDNSFILE "'$zonename\:$val\:$ttl\:\:\n" if ($tiny_conf);
             }
@@ -1197,7 +1208,10 @@ sub make_dns() {
           $info =~ s/\"//g;
           if ($zone{txt_auto_generation}) {
             if ($info ne '') {
-              printf ZONEFILE $ZFORMAT, '',$ttl,$class,'TXT',"\"$info\"" if ($bind_conf);
+              $padding = length(sprintf $ZFORMAT, '',$ttl,$class,'TXT','');
+              printf ZONEFILE $ZFORMAT, '',$ttl,$class,'TXT',
+                bind_fmt_long_data("$info", $padding)
+                if ($bind_conf);
               $info =~ s/:/\\072/g;
               printf TINYDNSFILE "'$zonename\:$val\:$info\:\:\n" if ($tiny_conf);
             }
@@ -1267,7 +1281,9 @@ sub make_dns() {
          for $k (0 .. $#{$txt}) {
            $val=$$txt[$k];
            $val =~ s/\"//g;
-           printf ZONEFILE $ZFORMAT, '',$ttl,$class,'TXT',"\"$val\""
+           $padding = length(sprintf $ZFORMAT, '',$ttl,$class,'TXT','');
+           printf ZONEFILE $ZFORMAT, '',$ttl,$class,'TXT',
+             bind_fmt_long_data("$val", $padding)
              if ($bind_conf);
            $val=~ s/:/\\072/g;
            printf TINYDNSFILE "'$zonename\:$val\:$ttl\:\:\n" if ($tiny_conf);
@@ -1533,7 +1549,10 @@ sub make_dns() {
         $ttl='' unless ($ttl > 0);
         $val=$q[$i][3];
         $val =~ s/\"//g;
-        printf ZONEFILE $ZFORMAT, $domain,$ttl,$class,'TXT',"\"$val\"" 
+
+        $padding = length(sprintf $ZFORMAT, $domain, $ttl, $class, '');
+        printf ZONEFILE $ZFORMAT, $domain,$ttl,$class,'TXT', 
+            bind_fmt_long_data("$val", $padding) 
             if ($bind_conf);
         $val=~ s/:/\\072/g;
         printf TINYDNSFILE "'$zonename\:$val\:$ttl\:\:\n" if ($tiny_conf);
