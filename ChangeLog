@@ -25,6 +25,8 @@
 	- Allow import nets without VLAN definition [svamberg]
 	- add TXT record (typical for DMARC) [svamberg]
 	- Fixed generating long TXT records for bind [svamberg]
+	- Added the option to hide individual form items according to the 
+	  $SAURON_HIDE_FORM_FIELDS configuration option. [svamberg]
 
 0.8.5
 
