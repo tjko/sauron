@@ -189,11 +189,16 @@ $DB_PASSWORD = "bar";
 #
 # $SAURON_HINFO_MODE = 1;
 
-# Set this to hide individual form items. It is not used to restrict permissions, 
-# but only to simplify the form visually, with other items being filled in with 
-# default values. Groups are written as regexp without anchors, and all those 
+# Set this to hide individual form items. It is not used to restrict permissions,
+# but only to simplify the form visually, with other items being filled in with
+# default values. Groups are written as regexp without anchors, and all those
 # that match the regexp are applied. This hiding does not apply to superusers.
-
+#
+# Items marked in the code (Sauron/CGI/*.pm) with the parameter "hide=>'false'"
+# can never be hidden (typically the 'grp' tag in search form). Conversely,
+# if an item is marked "hide=>'true'", it will always be hidden (it will not be
+# part of the form).
+#
 # structure and commands for listing items
 # $SAURON_HIDE_FORM_FIELDS = {
 #   '<group_name_as_regexp>' => {  #  ./modgroup --list 

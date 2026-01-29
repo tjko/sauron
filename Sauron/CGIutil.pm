@@ -53,9 +53,14 @@ our $formduid = undef;
 our $zonename;
 
 sub is_hidden_form_field($) {
-  my ($tag) = @_;
+  my $rec = shift @_;
+  my $tag = $rec->{tag};
   return 0 if $tag =~/^$/;
   return 0 if (%main::state{superuser} eq 'yes');  # superuser is always permitted
+  if (exists $rec->{hide} && defined $rec->{hide}) {
+    return 0 if $rec->{hide} eq 'false';
+    return 1 if $rec->{hide} eq 'true';
+  }
   my (@q, $group, $rtag);
   my $module=(split /::/, (caller(1))[0])[-1];
 
@@ -63,15 +68,15 @@ sub is_hidden_form_field($) {
            "WHERE g.id=r.rref AND r.rtype=0 AND r.type=2 AND r.ref=$main::state{uid} " .
            " ORDER BY g.id;",\@q);
 
-  #print "<pre>" . Dumper (@{$q[0]}) . "</pre>\n";
+  #print "<pre>" . Dumper (\@q) . "</pre>\n";
   return 0 if (scalar(@{$q[0]}) == 0); # user is not listed in any group
 
-  foreach my $group (@{$q[0]}) {
+  foreach my $group (map { @$_ } @q) { # array of array into simple array
     # read the list of tags for each group, if this tag is missing, set false
-    #print "<pre>" . Dumper($SAURON_HIDE_FORM_FIELDS) . "</pre>\n";
-    #print "<pre>group: $group\nmodule: $module\n</pre>";
+    #print "<pre>" . Dumper($main::SAURON_HIDE_FORM_FIELDS) . "</pre>\n";
+    #print "<pre>uid: $main::state{uid}\ngroup: $group\nmodule: $module\n</pre>";
 
-    # ktere regexpy matchuji skupinu
+    # which regexps match the group
     foreach my $matching_group (grep { $group =~ /^$_$/ } keys %{$main::SAURON_HIDE_FORM_FIELDS}) {
       if (exists $main::SAURON_HIDE_FORM_FIELDS->{$matching_group}->{$module}) {
 
@@ -81,7 +86,7 @@ sub is_hidden_form_field($) {
       }
     }
   }
-  # return false (it is not restricted)
+  # return false (this tag is not hidden)
   return 0;
 }
 
@@ -827,7 +832,7 @@ sub form_magic($$$) {
     }
     next if ($rec->{no_edit});
 
-    next if is_hidden_form_field($rec->{tag});
+    next if is_hidden_form_field($rec);
 
     print "<TR ".($form->{bgcolor}?" bgcolor=\"$form->{bgcolor}\" ":'').">";
 

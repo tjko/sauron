@@ -569,7 +569,7 @@ my %browse_hosts_form=(
   {ftype=>0, name=>'Search scope' },
   {ftype=>3, tag=>'type', name=>'Record type', type=>'enum',
    enum=>\%host_types},
-  {ftype=>10, tag=>'grp', name=>'Group' },
+  {ftype=>10, tag=>'grp', name=>'Group', hide=>'false'},
   {ftype=>3, tag=>'net', name=>'Subnet', type=>'list', listkeys=>'nets_k',
    list=>'nets'},
   {ftype=>1, tag=>'cidr', name=>'CIDR (block) or IP', type=>'cidr',
