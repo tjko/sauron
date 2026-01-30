@@ -194,10 +194,9 @@ $DB_PASSWORD = "bar";
 # default values. Groups are written as regexp without anchors, and all those
 # that match the regexp are applied. This hiding does not apply to superusers.
 #
-# Items marked in the code (Sauron/CGI/*.pm) with the parameter "hide=>'false'"
+# Items marked in the code (Sauron/CGI/*.pm) with the parameter "hide=>0"
 # can never be hidden (typically the 'grp' tag in search form). Conversely,
-# if an item is marked "hide=>'true'", it will always be hidden (it will not be
-# part of the form).
+# if an item is marked "hide=>1", it will always be hidden unless required.
 #
 # Required fields (with "empty=>0" as RHF) will never be hidden.
 #
