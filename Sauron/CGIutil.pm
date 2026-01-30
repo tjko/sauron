@@ -61,6 +61,7 @@ sub is_hidden_form_field($) {
     return 0 if $rec->{hide} eq 'false';
     return 1 if $rec->{hide} eq 'true';
   }
+  return 0 if (exists $rec->{empty} && $rec->{empty} == 0); # do not hide mandatory items
   my (@q, $group, $rtag);
   my $module=(split /::/, (caller(1))[0])[-1];
 

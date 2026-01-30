@@ -199,6 +199,8 @@ $DB_PASSWORD = "bar";
 # if an item is marked "hide=>'true'", it will always be hidden (it will not be
 # part of the form).
 #
+# Required fields (with "empty=>0" as RHF) will never be hidden.
+#
 # structure and commands for listing items
 # $SAURON_HIDE_FORM_FIELDS = {
 #   '<group_name_as_regexp>' => {  #  ./modgroup --list 
