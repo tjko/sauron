@@ -61,7 +61,7 @@ sub is_hidden_form_field($) {
   if (exists $rec->{hide} && defined $rec->{hide}) {
     return $rec->{hide};
   }
-  my (@q, $group, $rtag);
+  my (@q, $group);
   my $module=(split /::/, (caller(1))[0])[-1];
 
   db_query("SELECT g.name FROM user_groups g, user_rights r " .
