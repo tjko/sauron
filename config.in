@@ -189,6 +189,37 @@ $DB_PASSWORD = "bar";
 #
 # $SAURON_HINFO_MODE = 1;
 
+# Set this to hide individual form items. It is not used to restrict permissions,
+# but only to simplify the form visually, with other items being filled in with
+# default values. Groups are written as regexp without anchors, and all those
+# that match the regexp are applied. This hiding does not apply to superusers.
+#
+# Items marked in the code (Sauron/CGI/*.pm) with the parameter "hide=>0"
+# can never be hidden (typically the 'grp' tag in search form). Conversely,
+# if an item is marked "hide=>1", it will always be hidden unless required.
+#
+# Required fields (with "empty=>0" as RHF) will never be hidden.
+#
+# structure and commands for listing items
+# $SAURON_HIDE_FORM_FIELDS = {
+#   '<group_name_as_regexp>' => {  #  ./modgroup --list 
+#     '<perl_package_name>' => [   #  grep ^package /usr/local/sauron/Sauron/CGI/*.pm
+#        '<tag_name>',             #  grep 'tag=>' /usr/local/sauron/Sauron/CGI/*.pm
+#        '<tag_name>'
+#       ]
+#    }
+# };
+
+# an example:
+#$SAURON_HIDE_FORM_FIELDS = {
+#  '.*_editors' => {
+#    'Hosts' => [ 'expiration', 'sshfp_l' ],
+#    'Zones' => [ 'dummy' ]
+#  }
+#};
+
+
+
 # CGI interface plugins
 #
 # plugins consist of a defition file (.conf) and actual Perl module (.pm)
