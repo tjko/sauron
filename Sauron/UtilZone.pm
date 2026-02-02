@@ -515,7 +515,7 @@ sub bind_fmt_long_data($$) {
 
   # Converting text to a sequence of bytes (DNS operates with bytes)
   my $bytes = encode('UTF-8', $data); 
-  print "$data\n";
+  #print "$data\n";
   my @chunks;
   while (length $bytes) {
     # If <=255 remains, the entire remainder goes as the last piece
