@@ -5,26 +5,44 @@ use Getopt::Long qw(GetOptions);
 use Net::DNS::ZoneFile;
 use Digest::MD5 qw(md5_hex);
 
-my ($z1_file, $z2_file, $ignore_soa, $ignore_ns, $verbose);
+my ($z1_file, $z2_file, $opt_origin, $ignore_soa, @ignore, $ignore_ns, $opt_help);
 GetOptions(
-    'zone1=s'    => \$z1_file,
-    'zone2=s'    => \$z2_file,
-    'ignore-soa'=> \$ignore_soa,
-    'ignore-ns' => \$ignore_ns,
-) or die "Bad options\n";
+    'zone1|1=s'    => \$z1_file,
+    'zone2|2=s'    => \$z2_file,
+    'origin|o=s'   => \$opt_origin,
+    'ignore-soa|s' => \$ignore_soa,
+    'ignore|i=s@'  => \@ignore,
+    'ignore_ns|n'  => \$ignore_ns,
+    'help|h'       => \$opt_help
+) or die "Bad options, use --help\n";
+
+if ($opt_help){
+    print "Compare two zone files\n";
+    print "Syntax: $0 --zone1 <file> --zone2 <file> [OPTIONS] \n";
+    print "\nOptions:\n",
+      "\t-1, --zone1 <file>  first zone file to compare\n",
+      "\t-2, --zone2 <file>  second zone file to compare\n",
+      "\t-o, --origin <name> define \$ORIGIN if not defined (with a period at the end)\n",
+      "\t-s, --ignore-soa    skip SOA record\n",
+      "\t-i, --ignore <type> skip this record type (use multiple)\n",
+      "\t-n, --ignore_ns     skip NS records in ORIGIN domain\n",
+      "\t-h, --help          this help\n";
+    exit(1);
+}
 
 die "Both zone files required\n" unless $z1_file && $z2_file;
 
 sub load {
     my ($file) = @_;
-    my $zf = Net::DNS::ZoneFile->new($file);
+    my $zf = Net::DNS::ZoneFile->new($file, $opt_origin);
     my %rec;
 
     while (my $rr = $zf->read) {
         # $rr je objekt Net::DNS::RR
         my $type = $rr->type;
         next if $ignore_soa && $type eq 'SOA';
-        next if $ignore_ns && $type eq 'NS' && $rr->name eq $zf->origin;
+        next if grep("$type", @ignore);
+        next if ($ignore_ns && $type eq $ignore_ns && $rr->name eq $zf->origin);
 
         my $key = join('|', $rr->name, $type, $rr->class);
         my $content = join(' ', $rr->ttl, $rr->rdstring);
