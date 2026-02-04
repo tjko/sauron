@@ -575,7 +575,7 @@ my %browse_hosts_form=(
   {ftype=>1, tag=>'cidr', name=>'CIDR (block) or IP', type=>'cidr',
    len=>43, empty=>1},
   {ftype=>1, tag=>'domain', name=>'Domain pattern (regexp)', type=>'text',
-   len=>40, empty=>1, anydomain=>1},
+   len=>40, empty=>1, anydomain=>1, htmlenc=>''},
   {ftype=>0, name=>'Options' },
   {ftype=>3, tag=>'order', name=>'Sort order', type=>'enum',
    enum=>{1=>'by hostname',2=>'by IP'}},
@@ -590,9 +590,9 @@ my %browse_hosts_form=(
   {ftype=>3, tag=>'stype', name=>'Search field', type=>'enum',
    enum=>\%browse_search_fields},
   {ftype=>1, tag=>'pattern',name=>'Pattern (regexp)',type=>'text',len=>40,
-   whitesp=>'P', empty=>1},
+   whitesp=>'P', empty=>1, htmlenc=>''},
   {ftype=>1, tag=>'search_txt', name=>'TXT (regexp)', type=>'text', len=>40, # TVu 2020-11-03
-   whitesp=>'P', empty=>1, maxlen=>80, title=>'If you use TXT and choose ' .
+   whitesp=>'P', empty=>1, maxlen=>80, htmlenc=>'', title=>'If you use TXT and choose ' .
        '"Any type", only types "Host", "Plain MX" and "AREC Alias" can ' .
        'be found, since only they can have TXT records. If you choose ' .
        'one of these three types, TXT is used to limit the search. If ' .

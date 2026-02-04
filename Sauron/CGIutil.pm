@@ -12,6 +12,7 @@ use Sauron::DB;
 use Sauron::Util;
 use Sauron::BackEnd;
 use Net::IP qw(:PROC);
+use HTML::Entities;
 # use Data::Dumper;
 
 use strict;
@@ -464,6 +465,19 @@ sub form_check_form($$$) {
     }
 
     #print "<br>check $p,$type";
+
+# Remove HTML entities, disable Stored XSS attack
+    if ($rec->{type} eq 'text' or $rec->{type} eq 'textarea') {
+      if (exists $rec->{htmlenc}) {
+        # is non-empty?
+        if ( length $rec->{htmlenc} ) {
+          $val = encode_entities($val, $rec->{htmlenc});
+        }
+      }
+      else {
+        $val = encode_entities($val, '<>');
+      }
+    }
 
 #   if ($type == 1) {
     if ($type == 1 || $tag eq 'cname_txt' && $data->{'static_alias'}) { # 2020-12-17 TVu

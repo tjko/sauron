@@ -27,6 +27,7 @@
 	- Fixed generating long TXT records for bind [svamberg]
 	- Added the option to hide individual form items according to the 
 	  $SAURON_HIDE_FORM_FIELDS configuration option. [svamberg]
+	- Fix Stored XSS attack [svamberg]
 
 0.8.5
 

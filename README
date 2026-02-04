@@ -24,6 +24,7 @@ REQUIREMENTS
 		- Crypt::Cipher::RC5
 		- Text::Table
                 - Parse::RecDescent # only for import-zone-comments
+                - HTML::Entities
  	- PostgresSQL [15.10 or newer  recommended]
 	  (or add support to your favorite db yourself :)
 	- www-server (Apache or any other www-server with CGI support)
