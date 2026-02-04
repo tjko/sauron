@@ -14,6 +14,7 @@ use Sauron::Sauron;
 use Sauron::Util;
 use Sauron::CGI::Utils;
 use Sauron::SetupIO;
+use HTML::Entities;
 use strict;
 use vars qw($VERSION @ISA @EXPORT);
 use Sys::Syslog qw(:DEFAULT setlogsock);
@@ -320,7 +321,7 @@ sub display_zone($$)
     #display selected zone info
     my $zoneid=get_zone_id($zone,$serverid);
     if ($zoneid < 1) {
-      print h3("Cannot select zone '$zone'!"),p;
+      print h3("Cannot select zone '" . encode_entities($zone) . "'!"),p;
       select_zone($state,$perms);
       return;
     }

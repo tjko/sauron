@@ -16,6 +16,7 @@ use Sauron::BackEnd;
 use Sauron::CGIutil;
 use Sauron::CGI::Utils;
 use Sauron::Sauron;
+use HTML::Entities;
 use Data::Dumper;
 #use strict;
 use warnings;;
@@ -386,7 +387,7 @@ elsif ($menuref=$menus{$menu}) {
     exit(0) if (param('csv'));
   }
 }
-else { print p,"Unknown menu '$menu'"; }
+else { print p,"Unknown menu '" . encode_entities($menu) . "'"; }
 
 
 if ($debug_mode) {
