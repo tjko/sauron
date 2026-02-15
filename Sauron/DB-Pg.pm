@@ -107,9 +107,40 @@ sub db_exec($) {
 }
 
 
-sub db_query($$) {
-  my ($sqlstr,$aref) = @_;
+sub _pg_literal {
+    my ($val) = @_;
+
+    return 'NULL' unless defined $val;
+
+    if ( ref $val eq 'ARRAY' ) {
+        my @parts = map { _pg_literal($_) } @$val;   # recursion
+        return '(' . join( ', ', @parts ) . ')';
+    }
+
+    $val =~ s/'/''/g;
+    # standard_conforming_strings = off (for postgresql < 9)
+    # $val =~ s/\\/\\\\/g;
+    return "'$val'";
+}
+
+
+sub db_query($$;@) {
+  my ($sqlstr,$aref,@bind) = @_;
   my ($result, $status, $i, $j);
+
+  # replace placeholders by binding values with escaping
+  if (@bind) {
+    my $ph_cnt = () = $sqlstr =~ /\?/g;
+    if ($ph_cnt != @bind) {
+      $db_last_error_msg = sprintf
+        "The number of bind parameters (%d) does not match the number of placeholders (%d)",
+        scalar @bind, $ph_cnt;
+      return -1;
+    }
+
+    my $i = 0;
+    $sqlstr =~ s/\?/_pg_literal($bind[$i++])/ge;
+  }
 
   undef @{$aref};
 
@@ -122,7 +153,6 @@ sub db_query($$) {
       }
     }
   }
-
 }
 
 

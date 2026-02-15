@@ -627,7 +627,7 @@ sub menu_handler {
       undef @q;
       db_query("SELECT l.uid,l.date,l.ldate,l.host,u.username " .
 	       "FROM lastlog l, users u " .
-	       "WHERE l.uid=u.id AND l.sid=$session_id;",\@q);
+	       "WHERE l.uid=u.id AND l.sid=?;",\@q, [$session_id]);
       if (@q > 0) {
 	print "<TABLE bgcolor=\"#ccccff\" width=\"99%\" cellspacing=1>",
               "<TR bgcolor=\"#aaaaff\">",th("SID"),th("User"),th("Login"),
