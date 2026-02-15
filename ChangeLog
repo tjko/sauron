@@ -28,6 +28,10 @@
 	- Added the option to hide individual form items according to the 
 	  $SAURON_HIDE_FORM_FIELDS configuration option. [svamberg]
 	- Fix Stored XSS attack [svamberg]
+	- Removed unused options $SAURON_BGCOLOR and $SAURON_FGCOLOR [svamberg]
+	- Add $SAURON_TOPMENU_BGCOLOR and $SAURON_TOPMENU_FONTCOLOR
+	  for customizing top menu. [svamberg]
+	- Unified appearance of the top menu (ON/OFF frames) [svamberg]
 
 0.8.5
 

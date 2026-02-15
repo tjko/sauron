@@ -734,39 +734,43 @@ sub login_auth() {
 sub top_menu($) {
   my($mode)=@_;
   my($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst,$i);
+  my $bgcolor = $SAURON_TOPMENU_BGCOLOR || '#002d5f';
+  my $fontcolor = $SAURON_TOPMENU_FONTCOLOR || 'white';
 
   ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime(time);
 
   if ($frame_mode) {
-    print '<TABLE border="0" cellspacing="0" width="100%">',
-          '<TR bgcolor="#002d5f"><TD rowspan=2>',
+    print '<TABLE bgcolor="' . $bgcolor . '" border="0" cellspacing="0" width="100%">',
+          '<TR><TD rowspan=2>',
           '<a href="https://github.com/tjko/sauron/" target="sauron">',
           '<IMG src="' .$SAURON_ICON_PATH .
 	  '/logo.png" width="80" height="70" border="0" alt=""></a></TD>',
-          '<TD colspan=2><FONT size=+2 color="white">Sauron</WHITE></TD></TR>',
-	  '<TR bgcolor="#002d5f" align="left" valign="center">',
-          '<TD><FONT color="white">';
-  } else {
-    print '<a href="https://github.com/tjko/sauron/" target="sauron">',
-          '<IMG src="' .$SAURON_ICON_PATH .
-          '/logo.png" width="80" height="70" border="0" alt=""></a>';
-
-    print '<TABLE border="0" cellspacing="0" width="100%">';
-
-    print '<TR bgcolor="#002d5f" align="left" valign="center">',
-      '<TD width="15%" height="24">',
-      '<FONT color="white">&nbsp;Sauron </FONT></TD>',
-      '<TD height="24"><FONT color="white">';
+          '<TD colspan=2><FONT size=+2 color="' . $fontcolor . '">Sauron</WHITE></TD></TR>',
+	  '<TR align="left" valign="center">',
+          '<TD><FONT color="' . $fontcolor  . '">';
+  }
+  else {
+    print '<TABLE bgcolor="' . $bgcolor . '" border="0" cellspacing="0" width="100%">',
+          '  <TR>',
+          '    <TD rowspan="2">',
+          '      <A href="https://github.com/tjko/sauron/" target="sauron">',
+          '        <IMG src="' .$SAURON_ICON_PATH . '/logo.png"',
+          '             width="80" height="70" border="0" alt=""></A></TD>',
+          '    <TD colspan="2">',
+          '      <FONT size=+2 color="' . $fontcolor . '">Sauron</FONT></TD>',
+          '  </TR>',
+          '  <TR>',
+          '    <TD><FONT color="' . $fontcolor . '">';
   }
 
   for $i (0..$#menulist) {
     print
-	"<A HREF=\"$s_url?$menulist[$i][1]\"><FONT size=-1 color=\"#ffffff\">",
+	"<A HREF=\"$s_url?$menulist[$i][1]\"><FONT size=-1 color=\"$fontcolor\">",
 	"$menulist[$i][0]</FONT></A>";
     print " | " if ($i < $#menulist);
   }
 
-  print  "<TD align=\"right\"><FONT color=\"#ffffff\">";
+  print  "<TD align=\"right\"><FONT color=\"$fontcolor\">";
   if ($frame_mode) { print "$SERVER_ID &nbsp;"; }
   else {
     printf "%s &nbsp; &nbsp; %d.%d.%d %02d:%02d ",
@@ -775,8 +779,8 @@ sub top_menu($) {
 
 # Warn users if web interface will soon be closed.
   if ($SAURON_TEMP_LOCK == 1 && !is_superuser()) {
-      print '</td><tr><td colspan=3><center><font color="#ffffff"><h3>Please log ' .
-	  'out from Sauron &ndash; maintenance break imminent!</h3></font></center>';
+      print '</td><tr><td colspan=3><center><font color="' . $fontcolor . '"><h3>Please ' .
+       'log out from Sauron &ndash; maintenance break imminent!</h3></font></center>';
   }
 
   print "</FONT></TD></TR></TABLE>";
