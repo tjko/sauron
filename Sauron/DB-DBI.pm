@@ -109,8 +109,8 @@ sub db_exec($) {
 }
 
 
-sub db_query($$) {
-  my ($sqlstr,$aref) = @_;
+sub db_query($$;@) {
+  my ($sqlstr,$aref, @bind_vals) = @_;
   my ($sth,@row,$types,$i);
 
   undef @{$aref};
@@ -120,7 +120,7 @@ sub db_query($$) {
     return -1;
   }
 
-  unless ($sth->execute()) {
+  unless ($sth->execute(@bind_vals)) {
     $db_last_error_msg=$dbh->errstr;
     return -2;
   }

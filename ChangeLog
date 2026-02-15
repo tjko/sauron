@@ -28,6 +28,8 @@
 	- Added the option to hide individual form items according to the 
 	  $SAURON_HIDE_FORM_FIELDS configuration option. [svamberg]
 	- Fix Stored XSS attack [svamberg]
+	- Fix SQL injection in session_id param [svamberg]
+	- Add support placeholders and binding values to db_query() [svamberg]
 
 0.8.5
 
