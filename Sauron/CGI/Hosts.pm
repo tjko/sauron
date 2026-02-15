@@ -208,13 +208,7 @@ my %host_form = (
 
   {ftype=>2, tag=>'txt_l', name=>'TXT', type=>['text','text'],
    whitesp=>['P','P'], fields=>2, maxlen=>[253, 80],
-#  len=>[40,15], empty=>[0,1], elabels=>['TXT','comment'], iff=>['type','1']},
-#  len=>[50,20], empty=>[0,1], elabels=>['TXT','comment'], iff=>['type','[13]']},
    len=>[50,20], empty=>[0,1], elabels=>['TXT','comment'], iff=>['type','(?:13|1|3|7)']},
-# TVu 2020-06-17 Changed '1' to [13] on previous line. For future: Changing to [134]
-# will allow TXT records for CNAME aliases, including static aliases, which is not
-# permitted by current rules.
-# TVu 2020-11-02 Added type 7 (AREC aliases).
 
   {ftype=>2, tag=>'printer_l', name=>'PRINTER entries', no_empty=>1,
    type=>['text','text'], fields=>2,len=>[50,20], empty=>[0,1],
@@ -434,13 +428,16 @@ my %new_host_form = (
    type=>['priority','priority','priority','fqdn','text'],
    iff=>['type','8']},
 
-  {ftype=>0, name=>'TLSA records', no_edit=>1, iff=>['type','12']},
   {ftype=>2, tag=>'tlsa_l', name=>'TLSA entries', fields=>5,len=>[2,2,2,60,10],
    empty=>[0,0,0,0,1], maxlen=>[5,5,5,65535,100],addempty=>[-1,-1,-1,0,0],
    elabels=>['Usage','Selector','Matching Type','Association Data','Comment'],
    type=>['enum','enum','enum','hex','text'],
    enum=>[\%tlsa_usage, \%tlsa_selector, \%tlsa_matching_type, undef, undef],
    iff=>['type','12']},
+
+  {ftype=>2, tag=>'txt_l', name=>'TXT entries', type=>['text','text'],
+   whitesp=>['P','P'], fields=>2, maxlen=>[253, 80],
+   len=>[50,20], empty=>[0,1], elabels=>['TXT','comment'], iff=>['type','13']},
 
   {ftype=>0, name=>'SSHFP records', iff=>['type','1']},
   {ftype=>2, tag=>'sshfp_l', name=>'SSHFP entries', fields=>4,len=>[2,2,60,10],
@@ -2088,7 +2085,7 @@ sub menu_handler {
     $data{zone}=$zoneid;
     $data{router}=0;
     $data{grp}=-1; $data{mx}=-1; $data{wks}=-1;
-    $data{mx_l}=[]; $data{ns_l}=[]; $data{printer_l}=[]; $data{srv_l}=[]; $data{sshfp_l}=[]; $data{tlsa_l}=[]; $data{ds_l}=[];
+    $data{mx_l}=[]; $data{ns_l}=[]; $data{printer_l}=[]; $data{srv_l}=[]; $data{sshfp_l}=[]; $data{tlsa_l}=[]; $data{ds_l}=[]; $data{txt_l}=[];
     $data{subgroups}=[];
     $data{dept}=$perms->{defdept} if ($perms->{defdept});
     $data{expiration}=time()+$perms->{elimit}*86400 if ($perms->{elimit} > 0);

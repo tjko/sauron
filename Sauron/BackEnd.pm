@@ -2345,18 +2345,18 @@ sub add_host($) {
   # TXTs
   $res = add_array_field('txt_entries','txt,comment',
 			 'txt_l',$rec,'type,ref',"2,$id");
-  if ($res < 0) { db_rollback(); return -10; }
+  if ($res < 0) { db_rollback(); return -11; }
 
   # ARECs
   if ($rec->{type}==7) {
     $res=db_exec("INSERT INTO arec_entries (host,arec) VALUES($id,$a_id);");
-    if ($res < 0) { db_rollback(); return -11; }
+    if ($res < 0) { db_rollback(); return -12; }
   }
 
   # subgroups
   $res = add_array_field('group_entries','grp',
 			 'subgroups',$rec,'host',"$id");
-  if ($res < 0) { db_rollback(); return -12; }
+  if ($res < 0) { db_rollback(); return -13; }
 
   return -20 if (db_commit() < 0);
   return $id;
