@@ -37,6 +37,7 @@ $VERSION = '$Id:$ ';
 	     valid_domainname
              valid_hex
 	     valid_texthandle
+             cidrok
              cidr4ok
              cidr6ok
              cidr64ok
