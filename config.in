@@ -235,8 +235,8 @@ $DB_PASSWORD = "bar";
 # uncomment to enable compatibilty with DHCP v2.0 ...
 # $SAURON_DCHP2_MODE = 1;
 
-# $SAURON_BGCOLOR="white";
-# $SAURON_FGCOLOR="black";
+#$SAURON_TOPMENU_BGCOLOR="#002d5f"; # default: #002d5f
+#$SAURON_TOPMENU_FONTCOLOR="white"; # default: white
 
 # $LOOPBACK_NET = "127.0.0.0/24";
 # $LOOPBACK_ZONE = "loopback.";

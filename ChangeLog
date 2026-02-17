@@ -30,6 +30,10 @@
 	- Fix Stored XSS attack [svamberg]
 	- Fix SQL injection in session_id param [svamberg]
 	- Add support placeholders and binding values to db_query() [svamberg]
+	- Removed unused options $SAURON_BGCOLOR and $SAURON_FGCOLOR [svamberg]
+	- Add $SAURON_TOPMENU_BGCOLOR and $SAURON_TOPMENU_FONTCOLOR
+	  for customizing top menu. [svamberg]
+	- Unified appearance of the top menu (ON/OFF frames) [svamberg]
 
 0.8.5
 
