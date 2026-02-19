@@ -4075,12 +4075,17 @@ sub update_history($$$$$$) {
 }
 
 
-sub fix_utmp($) {
-  my($timeout) = @_;
+sub fix_utmp($$) {
+  my($timeout, $check_zero) = @_;
   my($i,$t,@q);
 
   $t=time - $timeout;
-  db_query("SELECT cookie,uid,sid FROM utmp WHERE last < $t;",\@q);
+  if ($check_zero) {
+    db_query("SELECT cookie,uid,sid FROM utmp WHERE last < $t and last != 0;",\@q);
+  } else {
+    db_query("SELECT cookie,uid,sid FROM utmp WHERE last < $t;",\@q);
+  }
+
   if (@q > 0) {
     for $i (0..$#q) {
       update_lastlog($q[$i][1],$q[$i][2],3,'','');
