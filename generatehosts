@@ -19,50 +19,9 @@ use Net::IP qw(:PROC);
 set_encoding();
 load_config();
 
-#######################################################################
-
-#sub tag_expand($) {
-#  my($str) = @_;
-#  my($i2,$i3,$i4,$ip1,$ip2,$ip3,$ip4);
-
-#  return '' if ($str =~ /^\s*$/);
-
-#  $i1=$i+$seq_start;
-#  $i2=sprintf("%02d",$i1);
-#  $i3=sprintf("%03d",$i1);
-#  $i4=sprintf("%04d",$i1);
-
-#  if ($ip =~ /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/) {
-#    $ip1=sprintf("%03d",$1);
-#    $ip2=sprintf("%03d",$2);
-#    $ip3=sprintf("%03d",$3);
-#    $ip4=sprintf("%03d",$4);
-#    $str=~ s/:IP1:/$ip1/g;
-#    $str=~ s/:IP2:/$ip2/g;
-#    $str=~ s/:IP3:/$ip3/g;
-#    $str=~ s/:IP4:/$ip4/g;
-#  }
-#  elsif ($ip =~ /^([0-9a-fA-F]{4}\:){4}([0-9a-fA-F]{4})\:([0-9a-fA-F]{4})\:([0-9a-fA-F]{4})\:([0-9a-fA-F]{4})$/) {
-#    $ip1=sprintf("%04s",$2);
-#    $ip2=sprintf("%04s",$3);
-#    $ip3=sprintf("%04s",$4);
-#    $ip4=sprintf("%04s",$5);
-#    $str=~ s/:IP1:/$ip1/g;
-#    $str=~ s/:IP2:/$ip2/g;
-#    $str=~ s/:IP3:/$ip3/g;
-#    $str=~ s/:IP4:/$ip4/g;
-#  }
-
-#  $str =~ s/:N:/$i1/g;
-#  $str =~ s/:N2:/$i2/g;
-#  $str =~ s/:N3:/$i3/g;
-#  $str =~ s/:N4:/$i4/g;
-#  return $str;
-#}
-
 sub tag_expand($) {
   my($str) = @_;
-  my($i1,$i2,$i3,$i4,$i_ip,$ip1,$ip2,$ip3,$ip4);
+  my($i1,$i2,$i3,$i4,$h1,$h2,$h3,$h4,$i_ip,$ip1,$ip2,$ip3,$ip4);
 
   return '' if ($str =~ /^\s*$/);
 
@@ -91,10 +50,21 @@ sub tag_expand($) {
   $i2=sprintf("%02d",$i1);
   $i3=sprintf("%03d",$i1);
   $i4=sprintf("%04d",$i1);
+
+  $h1=sprintf("%x",$i1);
+  $h2=sprintf("%02x",$i1);
+  $h3=sprintf("%03x",$i1);
+  $h4=sprintf("%04x",$i1);
+
   $str =~ s/:N:/$i1/gi;
   $str =~ s/:N2:/$i2/gi;
   $str =~ s/:N3:/$i3/gi;
   $str =~ s/:N4:/$i4/gi;
+
+  $str =~ s/:H:/$h1/g;
+  $str =~ s/:H2:/$h2/g;
+  $str =~ s/:H3:/$h3/g;
+  $str =~ s/:H4:/$h4/g;
 
   die('Invalid tag in hostname') if ($str =~ /:/);
 
@@ -117,45 +87,37 @@ if ($opt_help || @ARGV < 5) {
 	"\t--verbose\t\tproduce more verbose output\n",
 	"\t--seqstart=<n>\t\tstart sequence numbering from n\n",
 	"\t--group=<name>\t\tassign new hosts to given group\n",
-	"\t--info=<user>:<dept>:<location>:<extra>\n\n",
+	"\t--info=<user>:<dept>:<location>:<extra>\n",
 	"\t--commit\t\tcommit changes (w/o this no changes are made)\n",
-	"\nhostname should include tag(s):\n",
-	"\t:IPn:\t\tfor IPv4, nth octet of current IP address; n = 1..4\n",
-	"\t:IPn:\t\tfor IPv6, nth quartet of current IP address; n = 1..8\n",
-	"\t:N:\t\tsequence number\n",
-	"\t:Nn:\t\tn-digit sequence number, left padded with zeros; n = 2..4\n",
-	"\n";
-  print "" if ($opt_help);
-  exit(0);
-}
-
-if ($opt_help || @ARGV < 5) {
-  print "syntax: $0 <server> <zone> <hostname> <starting-IP> <count>\n\n",
-        "options:\n",
-	"\t--noreverse\t\tdo not add reverse records\n",
-	"\t--outofzone\t\tallow out of zone records\n",
-	"\t--verbose\t\tproduce more verbose output\n",
-	"\t--seqstart=<n>\t\tstart sequence numbering from n\n",
-	"\t--group=<name>\t\tassign new hosts to given group\n",
-	"\t--info=<user>:<dept>:<location>:<extra>\n\n",
-	"\t--commit\t\tcommit changes (w/o this no changes are made)\n",
-	"\nIPv4 tags:\n",
-    "\n",
+	"\n",
+	"IPv4 tags:\n",
 	"\t:IP1:\t\tfirst octet of current IP-number\n",
 	"\t:IP2:\t\tsecond octet of current IP-number\n",
 	"\t:IP3:\t\tthird octet of current IP-number\n",
 	"\t:IP4:\t\tfourth octet of current IP-number\n",
-	"\t:N:\t\tsequence number\n",
 	"\n",
-    "\nIPv6 tags:\n",
-    "\n",
-	"\t:IP1:\t\tfifth hextet of current IP-number\n",
-	"\t:IP2:\t\tsixth hextet of current IP-number\n",
-	"\t:IP3:\t\tseventh hextet of current IP-number\n",
-	"\t:IP4:\t\teighth hextet of current IP-number\n",
+        "IPv6 tags:\n",
+	"\t:IP1:\t\tfirst hextet of current IP-number\n",
+	"\t:IP2:\t\tsecond hextet of current IP-number\n",
+	"\t:IP3:\t\tthird hextet of current IP-number\n",
+	"\t:IP4:\t\tfourth hextet of current IP-number\n",
+	"\t:IP5:\t\tfifth hextet of current IP-number\n",
+	"\t:IP6:\t\tsixth hextet of current IP-number\n",
+	"\t:IP7:\t\tseventh hextet of current IP-number\n",
+	"\t:IP8:\t\teighth hextet of current IP-number\n",
+        "\n",
+	"Common tags:\n",
 	"\t:N:\t\tsequence number\n",
-	"\n";
-
+	"\t:N2:\t\tsequence number\n",
+	"\t:N3:\t\tsequence number\n",
+	"\t:N4:\t\tsequence number\n",
+	"\t:H:\t\tsequence number in hexa\n",
+	"\t:H2:\t\tsequence number in hexa\n",
+	"\t:H3:\t\tsequence number in hexa\n",
+	"\t:H4:\t\tsequence number in hexa\n",
+	"\n",
+        "example for two host test010 (1.1.1.10) and test011 (1.1.1.11):\n",
+        "\t$0 example.com foo.bar test:IP4: 1.1.1.10 2\n";
   print "" if ($opt_help);
   exit(0);
 }
