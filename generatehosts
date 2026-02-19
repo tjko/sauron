@@ -79,26 +79,6 @@ if ($opt_help || @ARGV < 5) {
 	"\t--group=<name>\t\tassign new hosts to given group\n",
 	"\t--info=<user>:<dept>:<location>:<extra>\n\n",
 	"\t--commit\t\tcommit changes (w/o this no changes are made)\n",
-	"\nhostname should include tag(s):\n",
-	"\t:IPn:\t\tfor IPv4, nth octet of current IP address; n = 1..4\n",
-	"\t:IPn:\t\tfor IPv6, nth quartet of current IP address; n = 1..8\n",
-	"\t:N:\t\tsequence number\n",
-	"\t:Nn:\t\tn-digit sequence number, left padded with zeros; n = 2..4\n",
-	"\n";
-  print "" if ($opt_help);
-  exit(0);
-}
-
-if ($opt_help || @ARGV < 5) {
-  print "syntax: $0 <server> <zone> <hostname> <starting-IP> <count>\n\n",
-        "options:\n",
-	"\t--noreverse\t\tdo not add reverse records\n",
-	"\t--outofzone\t\tallow out of zone records\n",
-	"\t--verbose\t\tproduce more verbose output\n",
-	"\t--seqstart=<n>\t\tstart sequence numbering from n\n",
-	"\t--group=<name>\t\tassign new hosts to given group\n",
-	"\t--info=<user>:<dept>:<location>:<extra>\n\n",
-	"\t--commit\t\tcommit changes (w/o this no changes are made)\n",
 	"\nIPv4 tags:\n",
     "\n",
 	"\t:IP1:\t\tfirst octet of current IP-number\n",
