@@ -5,22 +5,62 @@ on:
   pull_request:
 
 jobs:
-  syntax:
+  install:
     runs-on: ubuntu-latest
     container:
-      image: debian:stable
+     image: debian:stable
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: saurondb               # same as GitLab variable
+          POSTGRES_USER: sauronuser
+          # The password is built from a project‑seed secret + two random numbers.
+          # GitHub secrets are referenced as ${{ secrets.<NAME> }}.
+          POSTGRES_PASSWORD: "${{ secrets.PROJECT_SEED }}.${{ github.run_id }}.${{ github.run_number }}"
+        ports: [5432:5432]                   # expose to the job container
+    env:
+      # Same names as in the GitLab job – they are automatically
+      # exported for every step that runs inside the container.
+      POSTGRES_DB: saurondb
+      POSTGRES_USER: sauronuser
+      POSTGRES_PASSWORD: "${{ secrets.PROJECT_SEED }}.${{ github.run_id }}.${{ github.run_number }}"
     steps:
-      - name: Install dependencies
-        run: |
-          apt-get update
-          DEBIAN_FRONTEND=noninteractive apt install -y findutils git make gcc perl libcgi-pm-perl libdbd-pg-perl libdbi-perl libnet-dns-perl libnet-ip-perl libnetaddr-ip-perl libnet-netmask-perl libtext-table-perl libcryptx-perl libjson-perl libjson-maybexs-perl libpath-tiny-perl libpg-perl
 
-      - name: Checkout code
+      # Checkout the repository
+      - name: Checkout repository
         uses: actions/checkout@v4
+
+      # Cache the two files that are downloaded in the script
+      - name: Cache named.root & ieee‑oui.txt
+        uses: actions/cache@v4
+        with:
+          path: |
+            named.root
+            ieee-oui.txt
+          key: cache-root-oui-${{ runner.os }}-${{ hashFiles('**/*.yml') }}
+          restore-keys: |
+            cache-root-oui-${{ runner.os }}-
+
+      # Install the system packages that the GitLab job installs
+      - name: Install APT packages + CPAN module
+        run: |
+          set -e
+          apt-get update -qq
+          DEBIAN_FRONTEND=noninteractive apt install -y \
+            file findutils grep coreutils git make gcc wget \
+            postgresql postgresql-client \
+            perl libcgi-pm-perl libdbd-pg-perl libdbi-perl \
+            libnet-dns-perl libnet-ip-perl libnetaddr-ip-perl \
+            libnet-netmask-perl libtext-table-perl \
+            libcryptx-perl libjson-perl libjson-maybexs-perl \
+            libpath-tiny-perl libpg-perl libparse-recdescent-perl \
+            libdate-manip-perl
+        shell: bash
 
       - name: Check Perl syntax in .pl and .pm files
         env:
-          # Nastavíme PERL5LIB na kořen checkoutnutého repozitáře
+          # Set PERL5LIB to root of git repository
           PERL5LIB: ${{ github.workspace }}
         shell: bash
         run: |
@@ -31,4 +71,107 @@ jobs:
             echo "Checking $file"
             perl -c "$file"
           done
+          # scripts without .pl in root of git repository
+          find . -maxdepth 1  -type f -exec file --mime-type {} + | grep perl | cut -d: -f1 |  while read -r file; do
+            echo "Checking $file"
+            perl -c "$file"
+          done
+
+      # -------------------------------------------------
+      # Waiting for PostgreSQL
+      # -------------------------------------------------
+      - name: Wait for PostgreSQL to become ready
+        run: |
+          for i in {1..12}; do
+            if pg_isready -h postgres -p 5432 -U "$POSTGRES_USER" -d "$POSTGRES_DB" > /dev/null 2>&1; then
+              echo "PostgreSQL is ready."
+              exit 0
+            fi
+            echo "Waiting for PostgreSQL... ($i/12)"
+            sleep 5
+          done
+          echo "PostgreSQL failed to start within an acceptable time."
+          exit 1
+        shell: bash
+
+      # Run main installation
+      - name: Configure, compile & install Sauron
+        run: |
+          set -euxo pipefail
+          ./configure
+          make install
+          echo "export PERL5LIB=/usr/local/sauron" > /etc/profile.d/sauron.sh
+          . /etc/profile.d/sauron.sh
+
+          # -----------------------------------------------------------------
+          # Adjust the config file (same sed‑magic as in the GitLab CI)
+          # -----------------------------------------------------------------
+          f=/usr/local/etc/sauron/config
+          sed -i "s/\(\$DB_DSN\s*=\s*\).*/\1\"dbi:Pg:dbname=$POSTGRES_DB;host=postgres\";/" "$f"
+          sed -i "s/\(\$DB_USER\s*=\s*\).*/\1\"$POSTGRES_USER\";/" "$f"
+          sed -i "s/\(\$DB_PASSWORD\s*=\s*\).*/\1\"$POSTGRES_PASSWORD\";/" "$f"
+
+          # -----------------------------------------------------------------
+          # Initialise the DB
+          # -----------------------------------------------------------------
+          echo y | /usr/local/sauron/createtables
+          cat > init.sql <<'EOF'
+          INSERT INTO servers (name, hostname, hostmaster) VALUES ('example', 'sauron.example.com','hostmaster.example.com.');
+          INSERT INTO nets (server, net, netname, vlan, subnet) VALUES (1, INET '10.10.0.0/16', 'net', 1, false);
+          INSERT INTO nets (server, net, netname, vlan, subnet) VALUES (1, INET '2001:db8::/32', 'net6', 1, false);
+          EOF
+          /usr/local/sauron/runsql ./init.sql
+          /usr/local/sauron/status
+
+          # -----------------------------------------------------------------
+          # Download and import the DNS root hints and MAC‑OUI file (cache step)
+          # -----------------------------------------------------------------
+          test -s named.root || (rm -fv named.root && wget 'ftp://ftp.rs.internic.net/domain/named.root')
+          /usr/local/sauron/import-roots default ./named.root
+
+          test -s ieee-oui.txt || (rm -fv ieee-oui.txt && wget -O ./ieee-oui.txt 'https://standards-oui.ieee.org/oui/oui.txt')
+          /usr/local/sauron/import-ethers ./ieee-oui.txt
+
+          # -----------------------------------------------------------------
+          # Run a series of Sauron commands (exactly as in GitLab CI)
+          # -----------------------------------------------------------------
+          /usr/local/sauron/import-zone example middle.earth test/middle.earth.zone
+          /usr/local/sauron/generatehosts example middle.earth 'test0:N:' '2001:db8::1:1' 5 --commit --info ':DEP::'
+
+          /usr/local/sauron/import-dhcp --global example test/dhcpd.conf
+
+          # -----------------------------------------------------------------
+          # Dump the DB for later inspection / artifact
+          # -----------------------------------------------------------------
+          PGUSER="$POSTGRES_USER" PGPASSWORD="$POSTGRES_PASSWORD" PGHOST=postgres \
+            pg_dump -Fp "$POSTGRES_DB" > sauron-example.sql
+
+          # -----------------------------------------------------------------
+          # Generate configuration files
+          # -----------------------------------------------------------------
+          mkdir -p gen
+          #PERLDB_OPTS="NonStop AutoTrace" perl -d -I/usr/local/sauron /usr/local/sauron/sauron --verbose --bind example ./gen
+          /usr/local/sauron/sauron --verbose --bind example ./gen
+          /usr/local/sauron/sauron --verbose --dhcp example ./gen
+          /usr/local/sauron/sauron --verbose --dhcp6 example ./gen
+
+        env:
+          # make the variables from the job environment available to this step
+          POSTGRES_DB: ${{ env.POSTGRES_DB }}
+          POSTGRES_USER: ${{ env.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
+        shell: bash
+
+      # -------------------------------------------------
+      # Upload the artefacts so they are available for download
+      # -------------------------------------------------
+      - name: Upload generated artefacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sauron-test-artifacts
+          path: |
+            gen/*.conf
+            gen/*.zone
+            gen/named.ca
+            sauron-example.sql
 
