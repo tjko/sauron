@@ -3694,7 +3694,7 @@ sub get_key($$) {
 
   return -100 if (get_record("keys",
                       "type,ref,name,keytype,nametype,protocol,algorithm,".
-                      "mode,keysize,strength,publickey,secretkey,comments,".
+                      "mode,keysize,strength,publickey,secretkey,comment,".
 		      "cdate,cuser,mdate,muser", $id,$rec,"id"));
 
   add_std_fields($rec);
