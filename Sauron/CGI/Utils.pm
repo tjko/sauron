@@ -12,10 +12,12 @@ use Sauron::CGIutil;
 use Sauron::BackEnd;
 use Sauron::Util;
 use Sauron::Sauron;
+use Sauron::SetupIO;
 use strict;
 use vars qw($VERSION @ISA @EXPORT);
 use Sys::Syslog qw(:DEFAULT setlogsock);
 Sys::Syslog::setlogsock('unix');
+use open ':locale';
 
 $VERSION = '$Id:$ ';
 
@@ -46,8 +48,9 @@ our %host_types;
 %yes_no_enum = (D=>'Default',Y=>'Yes', N=>'No');
 %boolean_enum = (f=>'No',t=>'Yes');
 %host_types=(0=>'Any type',1=>'Host',2=>'Delegation',3=>'Plain MX',
-	     4=>'Alias',5=>'Printer',6=>'Glue record',7=>'AREC Alias',
-	     8=>'SRV record',9=>'DHCP only',10=>'Zone',
+	     4=>'Alias',5=>'Printer',6=>'Glue',7=>'AREC Alias',
+	     8=>'SRV',9=>'DHCP',10=>'Zone',11=>'SSHFP',
+             12=>'TLSA',13=>'TXT',
 	     101=>'Host reservation');
 
 
@@ -56,7 +59,7 @@ sub write2log{
   my $filename  = File::Basename::basename($0);
 
   Sys::Syslog::openlog($filename, "cons,pid", "debug");
-  Sys::Syslog::syslog("info", "$msg");
+  Sys::Syslog::syslog("info", encode_str("$msg"));
   Sys::Syslog::closelog();
 } # End of write2log
 
@@ -168,7 +171,11 @@ use Data::Dumper;
     alert1("You are not authorized to add/modify: $rule") unless ($quiet);
     return 1;
   }
-
+  elsif ($type eq 'equal') {
+    return 0 if ("$$rule[0]" eq "$$rule[1]");
+    alert1("Your equal condition is not equal.") unless ($quiet);
+    return 1;
+  }
   alert1("Access to $type denied") unless ($quiet);
   return 1;
 }

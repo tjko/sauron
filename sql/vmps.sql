@@ -22,6 +22,6 @@ CREATE TABLE vmps (
        comment	   TEXT, /* comments */
 
        CONSTRAINT  vmps_key UNIQUE (name,server)
-) INHERITS(common_fields) WITH OIDS;
+) INHERITS(common_fields);
 
 

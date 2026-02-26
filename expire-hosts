@@ -14,8 +14,11 @@ use Sauron::DB;
 use Sauron::Util;
 use Sauron::BackEnd;
 use Sauron::Sauron;
+use Sauron::SetupIO;
 use strict;
 use warnings;
+
+set_encoding();
 
 sub sql_array_str($$@) {
     my ($ss,$tc,@arr) = (@_); # split string, type cast, array

@@ -6,6 +6,7 @@
 #
 package Sauron::Util;
 require Exporter;
+use Sauron::SetupIO;
 use Time::Local 'timelocal_nocheck';
 use Digest::MD5;
 # use Net::Netmask;
@@ -15,13 +16,14 @@ use strict;
 use vars qw($VERSION @ISA @EXPORT);
 use Sys::Syslog qw(:DEFAULT setlogsock);
 Sys::Syslog::setlogsock('unix');
+use open ':locale';
 
 sub write2log{
   my $msg       = shift;
   my $filename  = File::Basename::basename($0);
 
   Sys::Syslog::openlog($filename, "cons,pid", "debug");
-  Sys::Syslog::syslog("info", "$msg");
+  Sys::Syslog::syslog("info", encode_str("$msg"));
   Sys::Syslog::closelog();
 } # End of write2log
 
@@ -30,9 +32,12 @@ $VERSION = '$Id:$ ';
 
 @ISA = qw(Exporter); # Inherit from Exporter
 @EXPORT = qw(
+             valid_base64
 	     valid_domainname_check
 	     valid_domainname
+             valid_hex
 	     valid_texthandle
+             cidrok
              cidr4ok
              cidr6ok
              cidr64ok
@@ -80,7 +85,14 @@ $VERSION = '$Id:$ ';
          dhcpduid
 	    );
 
+sub valid_base64($) {
+  my($base64)= @_;
 
+  return 1
+    if ($base64 =~ /^[a-zA-Z0-9\/\+=]*$/);
+
+  return 0;
+}
 
 # returns nonzero in case given domainname is valid
 sub valid_domainname_check($$) {
@@ -179,6 +191,15 @@ sub valid_domainname($) {
   my($domain) = @_;
 
   return valid_domainname_check($domain,0);
+}
+
+sub valid_hex($) {
+  my($hex)= @_;
+
+  return 1
+    if ($hex =~ /^[a-fA-F0-9]*$/);
+
+  return 0;
 }
 
 sub valid_texthandle($) {
@@ -650,8 +671,7 @@ sub net_ip_list($) {
 # remove_origin($domain,$origin) - strip origin from domain
 sub remove_origin($$) {
   my($domain,$origin) = @_;
-
-  $domain="\L$domain" unless ($domain eq "\$DOMAIN");
+  $domain="\L$domain" unless ($domain =~ /^\$DOMAIN(\..*)?$/);
   $origin="\L$origin";
   $origin =~ s/\./\\\./g;
   #print "before: $domain $origin\n";

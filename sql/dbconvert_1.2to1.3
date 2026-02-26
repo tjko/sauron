@@ -74,7 +74,7 @@ CREATE TABLE keys (
 	comment     TEXT,
 
 	CONSTRAINT  keyname_key UNIQUE(name,ref,type)
-) INHERITS(common_fields) WITH OIDS;
+) INHERITS(common_fields);
 
 
 /* acls table creation */
@@ -89,7 +89,7 @@ CREATE TABLE acls (
        comment	    TEXT,
 
        CONSTRAINT   acls_key UNIQUE(name,server)
-) INHERITS(common_fields) WITH OIDS;
+) INHERITS(common_fields);
 
 INSERT INTO acls (server,name) VALUES(-1,'any');
 INSERT INTO acls (server,name) VALUES(-1,'none');
@@ -114,7 +114,7 @@ CREATE TABLE leases (
       uid	   TEXT, /* dhcp uid */
       hostname     TEXT, /* dhcp hostname */
       info	   TEXT  /* extra info */
-) WITH OIDS;
+);
 
 CREATE INDEX leases_mac_index ON leases (mac);
 CREATE INDEX leases_ip_index ON leases (ip);

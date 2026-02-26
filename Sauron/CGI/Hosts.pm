@@ -14,6 +14,7 @@ use Sauron::BackEnd;
 use Sauron::Util;
 use Sauron::Sauron;
 use Sauron::CGI::Utils;
+use Sauron::SetupIO;
 use Sys::Syslog qw(:DEFAULT setlogsock);
 Sys::Syslog::setlogsock('unix');
 use Net::IP qw(:PROC);
@@ -33,7 +34,7 @@ sub write2log{
   my $filename  = File::Basename::basename($0);
 
   Sys::Syslog::openlog($filename, "cons,pid", "debug");
-  Sys::Syslog::syslog("info", "$msg");
+  Sys::Syslog::syslog("info", encode_str("$msg"));
   Sys::Syslog::closelog();
 } # End of write2log
 
@@ -43,11 +44,66 @@ my $hinfo_addempty_mode = (defined($main::SAURON_HINFO_MODE) ?
 			   $main::SAURON_HINFO_MODE : 1);
 my $chr_group;
 
+my %sshfp_algorithms=(
+    0=>'reserved',
+    1=>'RSA',
+    2=>'DSA',
+    3=>'ECDSA',
+    4=>'Ed25519',
+    6=>'Ed448'
+);
+
+my %sshfp_types=(
+    0=>'reserved',
+    1=>'SHA-1',
+    2=>'SHA-256'
+);
+
+my %tlsa_usage=(
+    0=>'PKIX-TA',
+    1=>'PKIX-EE',
+    2=>'DANE-TA',
+    3=>'DANE-EE'
+);
+
+my %tlsa_selector=(
+    0=>'Full certificate',
+    1=>'SubjectPublicKeyInfo'
+);
+
+my %tlsa_matching_type=(
+    0=>'No hash',
+    1=>'SHA-256',
+    2=>'SHA-512'
+);
+
+my %ds_algorithm=(
+    1=>'RSAMD5',
+    3=>'DSA',
+    5=>'RSASHA1',
+    6=>'DSA-NSEC3-SHA1',
+    7=>'RSASHA1-NSEC3-SHA1',
+    8=>'RSASHA256',
+   10=>'RSASHA512',
+   12=>'ECC-GOST',
+   13=>'ECDSAP256SHA256',
+   14=>'ECDSAP384SHA384',
+   15=>'ED25519',
+   16=>'ED448 '
+);
+
+my %ds_digest_type=(
+    1=>'SHA-1',
+    2=>'SHA-256',
+    3=>'GOST R 34.11-94',
+    4=>'SHA-384'
+);
+
 my %host_form = (
  data=>[
   {ftype=>0, name=>'Host' },
   {ftype=>1, tag=>'domain', name=>'Hostname', type=>'domain', maxlen=>400,
-   conv=>'L', len=>64, iff=>['type','([^82]|101)']},
+   conv=>'L', len=>64, iff=>['type','(?:[13-7]|9|[1-9]\d+)']}, # all types without 2, 8
   {ftype=>4, tag=>'fqdn', name=>'FQDN', title=>'Fully Qualified Domain Name'}, # ****
   {ftype=>1, tag=>'domain', name=>'Hostname (delegation)', type=>'zonename',
    len=>64,conv=>'L', iff=>['type','[2]']},
@@ -131,10 +187,17 @@ my %host_form = (
   {ftype=>6, tag=>'mx', name=>'MX template', iff=>['type','[13]']},
   {ftype=>7, tag=>'wks', name=>'WKS template', iff=>['type','1']},
 
-  {ftype=>0, name=>'Host specific',iff=>['type','[12]']},
+  {ftype=>0, name=>'Host specific',iff=>['type','(?:13|1|2|3|7)']},
   {ftype=>2, tag=>'ns_l', name=>'Name servers (NS)', type=>['domain','text'],
    fields=>2, maxlen=>[400,80],
    len=>[50,20], empty=>[0,1], elabels=>['NS','comment'], iff=>['type','2']},
+  {ftype=>2, tag=>'ds_l', name=>'DS entries', fields=>5,len=>[5,2,2,60,10],
+   empty=>[0,0,0,0,1], maxlen=>[5,3,3,65535,100],addempty=>[-1,-1,-1,0,0],
+   elabels=>['Key tag','Algorithm','Digest type','Digest','Comment'],
+   type=>['int','enum','enum','hex','text'],
+   enum=>[undef, \%ds_algorithm, \%ds_digest_type, undef, undef],
+   iff=>['type','2']},
+
   {ftype=>2, tag=>'wks_l', name=>'WKS', no_empty=>1, whitesp=>['','P','P'],
    type=>['text','text','text'], fields=>3, len=>[10,37,20], empty=>[0,0,1],
    elabels=>['Protocol','Services','Comment'], iff=>['type','1'], maxlen=>[10,400,80]},
@@ -145,13 +208,7 @@ my %host_form = (
 
   {ftype=>2, tag=>'txt_l', name=>'TXT', type=>['text','text'],
    whitesp=>['P','P'], fields=>2, maxlen=>[253, 80],
-#  len=>[40,15], empty=>[0,1], elabels=>['TXT','comment'], iff=>['type','1']},
-#  len=>[50,20], empty=>[0,1], elabels=>['TXT','comment'], iff=>['type','[13]']},
-   len=>[50,20], empty=>[0,1], elabels=>['TXT','comment'], iff=>['type','[137]']},
-# TVu 2020-06-17 Changed '1' to [13] on previous line. For future: Changing to [134]
-# will allow TXT records for CNAME aliases, including static aliases, which is not
-# permitted by current rules.
-# TVu 2020-11-02 Added type 7 (AREC aliases).
+   len=>[50,20], empty=>[0,1], elabels=>['TXT','comment'], iff=>['type','(?:13|1|3|7)']},
 
   {ftype=>2, tag=>'printer_l', name=>'PRINTER entries', no_empty=>1,
    type=>['text','text'], fields=>2,len=>[50,20], empty=>[0,1],
@@ -162,6 +219,10 @@ my %host_form = (
   {ftype=>2, tag=>'dhcp_l6', name=>'DHCPv6 entries', no_empty=>1, whitesp=>['N','P'],
    type=>['text','text'], fields=>2,len=>[50,20], maxlen=>[200,80],
    empty=>[0,1],elabels=>['DHCP','comment'], iff=>['type','[15]']},
+  {ftype=>2, tag=>'sshfp_l', name=>'SSHFP entries', no_empty=>1, fields=>4,len=>[2,2,60,10],
+   empty=>[0,0,0,1],elabels=>['Algorithm','Hashtype','Fingerprint','comment'],
+   type=>['enum','enum','hex','text'], enum=>[\%sshfp_algorithms, \%sshfp_types, undef, undef],
+   iff=>['type','1'],maxlen=>[5,5,1024,100],addempty=>[-1,-1,0,0]},
   {ftype=>0, name=>'Aliases', no_edit=>1, iff=>['type','1']},
   {ftype=>8, tag=>'alias_l', name=>'Aliases', fields=>3, iff=>['type','1']},
   {ftype=>0, name=>'SRV records', no_edit=>1, iff=>['type','8']},
@@ -171,6 +232,14 @@ my %host_form = (
    empty=>[0,0,0,0,1],elabels=>['Priority','Weight','Port','Target','Comment'],
    type=>['priority','priority','priority','fqdn','text'],
    iff=>['type','8']},
+
+  {ftype=>0, name=>'TLSA records', no_edit=>1, iff=>['type','12']},
+  {ftype=>2, tag=>'tlsa_l', name=>'TLSA entries', fields=>5,len=>[2,2,2,60,10],
+   empty=>[0,0,0,0,1], maxlen=>[5,5,5,65535,100],addempty=>[-1,-1,-1,0,0],
+   elabels=>['Usage','Selector','Matching Type','Association Data','Comment'],
+   type=>['enum','enum','enum','hex','text'],
+   enum=>[\%tlsa_usage, \%tlsa_selector, \%tlsa_matching_type, undef, undef],
+   iff=>['type','12']},
 
   {ftype=>0, name=>'Record info', no_edit=>0},
   {ftype=>4, name=>'Record created', tag=>'cdate_str', no_edit=>1},
@@ -274,7 +343,7 @@ my %new_host_form = (
   {ftype=>0, name=>'New record' },
   {ftype=>4, tag=>'type', name=>'Type', type=>'enum', enum=>\%host_types},
   {ftype=>1, tag=>'domain', name=>'Hostname', type=>'domain', len=>64, maxlen=>400,
-   conv=>'L', iff=>['type','[^82]']},
+   conv=>'L', iff=>['type','(?!101$)(?:[13-7]|9|[1-9]\d+)']}, # any types without 2, 8, 101
   {ftype=>1, tag=>'domain', name=>'Hostname (reservation)', maxlen=>400,
    type=>'domain', len=>64, maxlen=>400, conv=>'L', iff=>['type','101']},
   {ftype=>1, tag=>'domain', name=>'Hostname (SRV)', type=>'srvname', len=>64,
@@ -298,6 +367,12 @@ my %new_host_form = (
   {ftype=>2, tag=>'ns_l', name=>'Name servers (NS)', type=>['domain','text'],
    fields=>2, maxlen=>[400,80],
    len=>[50,20], empty=>[0,1], elabels=>['NS','comment'], iff=>['type','2']},
+  {ftype=>2, tag=>'ds_l', name=>'DS entries', fields=>5, len=>[5,2,2,60,10],
+   empty=>[0,0,0,0,1], maxlen=>[5,3,3,65535,100],addempty=>[-1,-1,-1,0,0],
+   elabels=>['Key tag','Algorithm','Digest type','Digest','Comment'],
+   type=>['int','enum','enum','hex','text'],
+   enum=>[undef, \%ds_algorithm, \%ds_digest_type, undef, undef],
+   iff=>['type','2']},
   {ftype=>2, tag=>'printer_l', name=>'PRINTER entries',
    type=>['text','text'], fields=>2,len=>[50,20], empty=>[0,1],
    elabels=>['PRINTER','Comment'], iff=>['type','5']},
@@ -346,15 +421,29 @@ my %new_host_form = (
 
   {ftype=>0, name=>'SRV records', no_edit=>1, iff=>['type','8']},
   {ftype=>2, tag=>'srv_l', name=>'SRV entries', fields=>5,len=>[5,5,5,30,20],
-
 #  maxlen=>[5,5,5,400,10], dot=>1,
-
 # Dot (.) allowed to superuser. 2020-08-10 TVu
    maxlen=>[5,5,5,400,80], dot=>check_perms('superuser','',1) ? 0 : 1,
-
    empty=>[0,0,0,0,1],elabels=>['Priority','Weight','Port','Target','Comment'],
    type=>['priority','priority','priority','fqdn','text'],
    iff=>['type','8']},
+
+  {ftype=>2, tag=>'tlsa_l', name=>'TLSA entries', fields=>5,len=>[2,2,2,60,10],
+   empty=>[0,0,0,0,1], maxlen=>[5,5,5,65535,100],addempty=>[-1,-1,-1,0,0],
+   elabels=>['Usage','Selector','Matching Type','Association Data','Comment'],
+   type=>['enum','enum','enum','hex','text'],
+   enum=>[\%tlsa_usage, \%tlsa_selector, \%tlsa_matching_type, undef, undef],
+   iff=>['type','12']},
+
+  {ftype=>2, tag=>'txt_l', name=>'TXT entries', type=>['text','text'],
+   whitesp=>['P','P'], fields=>2, maxlen=>[253, 80],
+   len=>[50,20], empty=>[0,1], elabels=>['TXT','comment'], iff=>['type','13']},
+
+  {ftype=>0, name=>'SSHFP records', iff=>['type','1']},
+  {ftype=>2, tag=>'sshfp_l', name=>'SSHFP entries', fields=>4,len=>[2,2,60,10],
+   empty=>[0,0,0,1],elabels=>['Algorithm','Hashtype','Fingerprint','comment'],
+   type=>['enum','enum','hex','text'], enum=>[\%sshfp_algorithms, \%sshfp_types, undef, undef],
+   iff=>['type','1'],maxlen=>[5,5,1024,10],addempty=>[-1,-1,0,0]},
 
   {ftype=>0, name=>'Record info', iff=>['type','[147]']},
   {ftype=>1, name=>'Expiration date', tag=>'expiration', len=>30,
@@ -385,6 +474,12 @@ my %restricted_new_host_form = (
   {ftype=>2, tag=>'ns_l', name=>'Name servers (NS)', type=>['text','text'],
    fields=>2, maxlen=>[400,80],
    len=>[50,20], empty=>[0,1], elabels=>['NS','comment'], iff=>['type','2']},
+  {ftype=>2, tag=>'ds_l', name=>'DS entries', fields=>5,len=>[5,2,2,60,10],
+   empty=>[0,0,0,0,1], maxlen=>[5,3,3,65535,100],addempty=>[-1,-1,-1,0,0],
+   elabels=>['Key tag','Algorithm','Digest type','Digest','Comment'],
+   type=>['int','enum','enum','hex','text'],
+   enum=>[undef, \%ds_algorithm, \%ds_digest_type, undef, undef],
+   iff=>['type','2']},
   {ftype=>2, tag=>'printer_l', name=>'PRINTER entries',
    type=>['text','text'], fields=>2,len=>[50,20], empty=>[0,1],
    elabels=>['PRINTER','Comment'], iff=>['type','5']},
@@ -471,13 +566,13 @@ my %browse_hosts_form=(
   {ftype=>0, name=>'Search scope' },
   {ftype=>3, tag=>'type', name=>'Record type', type=>'enum',
    enum=>\%host_types},
-  {ftype=>10, tag=>'grp', name=>'Group' },
+  {ftype=>10, tag=>'grp', name=>'Group', hide=>0},
   {ftype=>3, tag=>'net', name=>'Subnet', type=>'list', listkeys=>'nets_k',
    list=>'nets'},
   {ftype=>1, tag=>'cidr', name=>'CIDR (block) or IP', type=>'cidr',
    len=>43, empty=>1},
   {ftype=>1, tag=>'domain', name=>'Domain pattern (regexp)', type=>'text',
-   len=>40, empty=>1, anydomain=>1},
+   len=>40, empty=>1, anydomain=>1, htmlenc=>''},
   {ftype=>0, name=>'Options' },
   {ftype=>3, tag=>'order', name=>'Sort order', type=>'enum',
    enum=>{1=>'by hostname',2=>'by IP'}},
@@ -492,9 +587,9 @@ my %browse_hosts_form=(
   {ftype=>3, tag=>'stype', name=>'Search field', type=>'enum',
    enum=>\%browse_search_fields},
   {ftype=>1, tag=>'pattern',name=>'Pattern (regexp)',type=>'text',len=>40,
-   whitesp=>'P', empty=>1},
+   whitesp=>'P', empty=>1, htmlenc=>''},
   {ftype=>1, tag=>'search_txt', name=>'TXT (regexp)', type=>'text', len=>40, # TVu 2020-11-03
-   whitesp=>'P', empty=>1, maxlen=>80, title=>'If you use TXT and choose ' .
+   whitesp=>'P', empty=>1, maxlen=>80, htmlenc=>'', title=>'If you use TXT and choose ' .
        '"Any type", only types "Host", "Plain MX" and "AREC Alias" can ' .
        'be found, since only they can have TXT records. If you choose ' .
        'one of these three types, TXT is used to limit the search. If ' .
@@ -566,6 +661,14 @@ sub restricted_add_host($) {
   if ($rec->{type} == 7 && check_perms('flags','AREC',1)) {
     alert1("You don't have permission to add AREC Aliases");
     return -107;
+  }
+  if ($rec->{type} == 11 && check_perms('flags','SSHFP',1)) {
+    alert1("You don't have permission to add SSHFP records");
+    return -108;
+  }
+  if ($rec->{type} == 12 && check_perms('flags','TLSA',1)) {
+    alert1("You don't have permission to add TLSA records");
+    return -109;
   }
 
   return add_host($rec);
@@ -1982,7 +2085,7 @@ sub menu_handler {
     $data{zone}=$zoneid;
     $data{router}=0;
     $data{grp}=-1; $data{mx}=-1; $data{wks}=-1;
-    $data{mx_l}=[]; $data{ns_l}=[]; $data{printer_l}=[]; $data{srv_l}=[];
+    $data{mx_l}=[]; $data{ns_l}=[]; $data{printer_l}=[]; $data{srv_l}=[]; $data{sshfp_l}=[]; $data{tlsa_l}=[]; $data{ds_l}=[]; $data{txt_l}=[];
     $data{subgroups}=[];
     $data{dept}=$perms->{defdept} if ($perms->{defdept});
     $data{expiration}=time()+$perms->{elimit}*86400 if ($perms->{elimit} > 0);
@@ -2000,6 +2103,8 @@ sub menu_handler {
       elsif ($type==6) { return if check_perms('flags','GLUE'); }
       elsif ($type==8) { return if check_perms('flags','SRV'); }
       elsif ($type==9) { return if check_perms('flags','DHCP'); }
+      elsif ($type==11) { return if check_perms('flags','SSHFP'); }
+      elsif ($type==12) { return if check_perms('flags','TLSA'); }
       elsif ($type==101) {
 	if (check_perms('level',$main::ALEVEL_RESERVATIONS,1) &&
 	    check_perms('flags','RESERV',1)) {
@@ -2108,6 +2213,21 @@ sub menu_handler {
 			   "ADD: $host_types{$data{type}} ",
 			   "domain: $data{domain}",$res);
 	    print h2("Host added successfully");
+
+            # check reverse zone only if defined IP address
+            if (defined $data{ip}[0][1]) {
+              # check if exists revers zone
+              db_query("SELECT COUNT(name) " .
+                       "FROM zones " .
+                       "WHERE reverse=true " .
+                       " AND server=$serverid " .
+                       " AND '$data{ip}[0][1]' << reversenet", \@q);
+              if ($q[0][0] == 0) {
+                warning1('There is no reverse zone for this IP address. ' .
+                         'It will not be possible to create a PTR record.');
+              }
+            }
+
 	    param('h_id',$res);
 	    show_host_record($state,$perms);
 	    return;

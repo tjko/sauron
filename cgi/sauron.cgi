@@ -16,9 +16,11 @@ use Sauron::BackEnd;
 use Sauron::CGIutil;
 use Sauron::CGI::Utils;
 use Sauron::Sauron;
+use HTML::Entities;
 use Data::Dumper;
 #use strict;
 use warnings;;
+use open ':locale';
 
 $CGI::DISABLE_UPLOADS = 1; # no uploads
 $CGI::POST_MAX = 100000; # max 100k posts
@@ -64,9 +66,9 @@ $debug_mode = $SAURON_DEBUG_MODE;
 			['Show Current',''],
 			['Select','sub=select'],
 			[],
-			['Add','sub=add'],
-			['Delete','sub=del'],
-			['Edit','sub=edit']
+			['Add','sub=add','root'],
+			['Delete','sub=del','root'],
+			['Edit','sub=edit','root']
 		       ],
 	    'zones'=>[
 		      ['Show Current','sub=Current'],
@@ -74,28 +76,28 @@ $debug_mode = $SAURON_DEBUG_MODE;
 		      [],
 		      ['Select','sub=select'],
 		      [],
-		      ['Add','sub=add'],
-		      ['Copy','sub=Copy'],
-		      ['Delete','sub=Delete'],
-		      ['Edit','sub=Edit'],
+		      ['Add','sub=add','root'],
+		      ['Copy','sub=Copy','root'],
+		      ['Delete','sub=Delete','root'],
+		      ['Edit','sub=Edit','root'],
 		      [],
-		      ['Add Default Zones','sub=AddDefaults']
+		      ['Add Default Zones','sub=AddDefaults','root']
 		     ],
 	    'nets'=>[
 		     ['Networks',''],
 		     ['&nbsp; + Subnets','list=sub'],
 		     ['&nbsp; + All','list=all'],
-		     ['&nbsp; + Free','list=free', $ALEVEL_SHOW_UNALLOCATED_CIDRS || 'root'],
+		     ['&nbsp; + Free','list=free',['level',$ALEVEL_SHOW_UNALLOCATED_CIDRS]],
 		     [],
-		     ['Add net','sub=addnet'],
-		     ['Add subnet','sub=addsub'],
-		     ['Add virtual subnet','sub=addvsub'],
+		     ['Add net','sub=addnet','root'],
+		     ['Add subnet','sub=addsub','root'],
+		     ['Add virtual subnet','sub=addvsub','root'],
 		     [],
-		     ['VLANs','sub=vlans'],
-		     ['Add vlan','sub=addvlan'],
+		     ['VLANs','sub=vlans',['level',$main::ALEVEL_VLANS]],
+		     ['Add vlan','sub=addvlan','root'],
 		     [],
-		     ['VMPS','sub=vmps'],
-		     ['Add VMPS','sub=addvmps']
+		     ['VMPS','sub=vmps',['level',$main::ALEVEL_VLANS]],
+		     ['Add VMPS','sub=addvmps','root']
 		    ],
 	    'templates'=>[
 			  ['Show MX','sub=mx'],
@@ -103,49 +105,51 @@ $debug_mode = $SAURON_DEBUG_MODE;
 			  ['Show Prn Class','sub=pc'],
 			  ['Show HINFO','sub=hinfo'],
 			  [],
-			  ['Add MX','sub=addmx'],
-			  ['Add WKS','sub=addwks'],
-			  ['Add Prn Class','sub=addpc'],
-			  ['Add HINFO','sub=addhinfo']
+			  ['Add MX','sub=addmx',['flags','MX']],
+			  ['Add WKS','sub=addwks','root'],
+			  ['Add Prn Class','sub=addpc','root'],
+			  ['Add HINFO','sub=addhinfo','root']
 			 ],
 	    'groups'=>[
 		       ['Groups',''],
 		       [],
-		       ['Add','sub=add']
+		       ['Add','sub=add',['zone','RW']]
 		      ],
 	    'acls'=>[
-		       ['ACLs',''],
-		       ['Keys','sub=keys'],
+		       ['ACLs','',['level', $main::ALEVEL_ACLS]],
+		       ['Keys','sub=keys',['level', $main::ALEVEL_ACLS]],
 		       [],
-		       ['Add ACL','sub=addacl']
+		       ['Add ACL','sub=addacl',['level', $main::ALEVEL_ACLS]]
 		      ],
 	    'hosts'=>[
 		      ['Search',''],
 		      ['Last Search','sub=browse&lastsearch=1'],
 		      ['New Search','sub=browse&bh_submit=Clear&bh_re_edit=1'],
 		      [],
-		      ['Add host','sub=add&type=1'],
+		      ['Add host','sub=add&type=1',['zone','RW']],
 		      [],
-		      ['Add alias','sub=add&type=4', 'scname'], # scname 2020-09-08 TVu
+		      ['Add alias','sub=add&type=4',['flags','SCNAME']], 
 		      [],
-		      ['Add MX entry','sub=add&type=3'],
-		      ['Add delegation','sub=add&type=2', 'root'], # root 2021-03-01 TVu
-		      ['Add glue rec.','sub=add&type=6', 'root'], # root 2021-03-01 TVu
-		      ['Add DHCP entry','sub=add&type=9'],
-		      ['Add printer','sub=add&type=5'],
-		      ['Add SRV rec.','sub=add&type=8'],
+		      ['Add MX entry','sub=add&type=3',['flags','MX']],
+		      ['Add delegation','sub=add&type=2',['flags','DELEG']], 
+		      ['Add glue rec.','sub=add&type=6',['flags','GLUE']], 
+		      ['Add DHCP entry','sub=add&type=9',['flags','DHCP']],
+		      ['Add printer','sub=add&type=5',['flags','PRINTER']],
+		      ['Add SRV rec.','sub=add&type=8',['flags','SRV']],
+		      ['Add TLSA rec.','sub=add&type=12',['flags','TLSA']],
+		      ['Add TXT rec.','sub=add&type=13',['flags','TXT']],
 		      [],
-		      ['Add reservation','sub=add&type=101']
+		      ['Add reservation','sub=add&type=101',['flags','RESERV']]
 		     ],
 	    'login'=>[
 		      ['User Info',''],
 		      ['Who','sub=who'],
 		      ['News (motd)','sub=motd'],
 		      [],
-		      ['Login','sub=login'],
-		      ['Logout','sub=logout'],
+		      ['Login','sub=login',['equal',[$main::SAURON_AUTH_MODE, '0']]],
+		      ['Logout','sub=logout',['equal',[$main::SAURON_AUTH_MODE, '0']]],
 		      [],
-		      ['Change password','sub=passwd'],
+		      ['Change password','sub=passwd',['equal',[$main::SAURON_AUTH_MODE, '0']]],
 		      ['Edit settings','sub=edit'],
 		      ['Save defaults','sub=save'],
 		      ['Clear defaults','sub=clear'],
@@ -208,6 +212,7 @@ unless (is_cidr($remote_addr)) {
 
 ($scookie = cookie(-name=>"sauron-$SERVER_ID") // '') =~ s/[^A-Fa-f0-9]//g;
 if ($scookie) {
+  fix_utmp($SAURON_USER_TIMEOUT, 1);
   unless (load_state($scookie,\%state)) {
     logmsg("notice","invalid cookie ($scookie) supplied by $remote_addr");
     undef $scookie;
@@ -383,7 +388,7 @@ elsif ($menuref=$menus{$menu}) {
     exit(0) if (param('csv'));
   }
 }
-else { print p,"Unknown menu '$menu'"; }
+else { print p,"Unknown menu '" . encode_entities($menu) . "'"; }
 
 
 if ($debug_mode) {
@@ -598,7 +603,7 @@ sub login_auth() {
   if ($u eq '' || $p eq '') {
     print p,h1("Username or password empty!");
   }
-  elsif ($u !~ /^[a-zA-Z0-9\.\-]+$/) {
+  elsif ($u !~ /^[a-zA-Z0-9\-\.@]+$/) {
     print p,h1("Invalid username!");
   }
   else {
@@ -723,46 +728,50 @@ sub login_auth() {
   print end_html();
   save_state($scookie,\%state);
   load_state($scookie,\%state) if ($SAURON_AUTH_MODE==1);
-  fix_utmp($SAURON_USER_TIMEOUT*2);
+  fix_utmp($SAURON_USER_TIMEOUT*2, 0);
   exit;
 }
 
 sub top_menu($) {
   my($mode)=@_;
   my($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst,$i);
+  my $bgcolor = $SAURON_TOPMENU_BGCOLOR || '#002d5f';
+  my $fontcolor = $SAURON_TOPMENU_FONTCOLOR || 'white';
 
   ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime(time);
 
   if ($frame_mode) {
-    print '<TABLE border="0" cellspacing="0" width="100%">',
-          '<TR bgcolor="#002d5f"><TD rowspan=2>',
+    print '<TABLE bgcolor="' . $bgcolor . '" border="0" cellspacing="0" width="100%">',
+          '<TR><TD rowspan=2>',
           '<a href="https://github.com/tjko/sauron/" target="sauron">',
           '<IMG src="' .$SAURON_ICON_PATH .
 	  '/logo.png" width="80" height="70" border="0" alt=""></a></TD>',
-          '<TD colspan=2><FONT size=+2 color="white">Sauron</WHITE></TD></TR>',
-	  '<TR bgcolor="#002d5f" align="left" valign="center">',
-          '<TD><FONT color="white">';
-  } else {
-    print '<a href="https://github.com/tjko/sauron/" target="sauron">',
-          '<IMG src="' .$SAURON_ICON_PATH .
-          '/logo.png" width="80" height="70" border="0" alt=""></a>';
-
-    print '<TABLE border="0" cellspacing="0" width="100%">';
-
-    print '<TR bgcolor="#002d5f" align="left" valign="center">',
-      '<TD width="15%" height="24">',
-      '<FONT color="white">&nbsp;Sauron </FONT></TD>',
-      '<TD height="24"><FONT color="white">';
+          '<TD colspan=2><FONT size=+2 color="' . $fontcolor . '">Sauron</WHITE></TD></TR>',
+	  '<TR align="left" valign="center">',
+          '<TD><FONT color="' . $fontcolor  . '">';
+  }
+  else {
+    print '<TABLE bgcolor="' . $bgcolor . '" border="0" cellspacing="0" width="100%">',
+          '  <TR>',
+          '    <TD rowspan="2">',
+          '      <A href="https://github.com/tjko/sauron/" target="sauron">',
+          '        <IMG src="' .$SAURON_ICON_PATH . '/logo.png"',
+          '             width="80" height="70" border="0" alt=""></A></TD>',
+          '    <TD colspan="2">',
+          '      <FONT size=+2 color="' . $fontcolor . '">Sauron</FONT></TD>',
+          '  </TR>',
+          '  <TR>',
+          '    <TD><FONT color="' . $fontcolor . '">';
   }
 
   for $i (0..$#menulist) {
     print
-	"<A HREF=\"$s_url?$menulist[$i][1]\"><FONT size=-1 color=\"#ffffff\">",
+	"<A HREF=\"$s_url?$menulist[$i][1]\"><FONT size=-1 color=\"$fontcolor\">",
 	"$menulist[$i][0]</FONT></A>";
     print " | " if ($i < $#menulist);
   }
 
-  print  "<TD align=\"right\"><FONT color=\"#ffffff\">";
+  print  "<TD align=\"right\"><FONT color=\"$fontcolor\">";
   if ($frame_mode) { print "$SERVER_ID &nbsp;"; }
   else {
     printf "%s &nbsp; &nbsp; %d.%d.%d %02d:%02d ",
@@ -771,8 +780,8 @@ sub top_menu($) {
 
 # Warn users if web interface will soon be closed.
   if ($SAURON_TEMP_LOCK == 1 && !is_superuser()) {
-      print '</td><tr><td colspan=3><center><font color="#ffffff"><h3>Please log ' .
-	  'out from Sauron &ndash; maintenance break imminent!</h3></font></center>';
+      print '</td><tr><td colspan=3><center><font color="' . $fontcolor . '"><h3>Please ' .
+       'log out from Sauron &ndash; maintenance break imminent!</h3></font></center>';
   }
 
   print "</FONT></TD></TR></TABLE>";
@@ -808,6 +817,7 @@ sub left_menu($) {
   $url.="?menu=$menu";
   if (defined $l) {
     for $i (0..$#{$l}) {
+      next if (ref($$l[$i][2]) eq 'ARRAY') and check_perms($$l[$i][2][0], $$l[$i][2][1], 1);
       if ($#{$$l[$i]} < 1) {
 	print Tr({-bgcolor=>'#cccccc',-height=>5},td(''));
 	next;
@@ -815,7 +825,6 @@ sub left_menu($) {
       next if (defined($$l[$i][2]) && $$l[$i][2] =~ /(^|\|)root/ && !is_superuser());
       next if (defined($$l[$i][2]) && $$l[$i][2] =~ /(^|\|)noframes/ && $frame_mode);
       next if (defined($$l[$i][2]) && $$l[$i][2] =~ /(^|\|)frames/ && not $frame_mode);
-      next if (defined($$l[$i][2]) && $$l[$i][2] =~ /(^|\|)scname/ && check_perms('flags','SCNAME',1)); # 2020-09-08 TVu
       # Show / hide menuitem based on auth level.
       next if (defined($$l[$i][2]) && $$l[$i][2] =~ /(^|\|)(\d{1,3})$/ && check_perms('level', $2, 1));
       $name=$$l[$i][0];

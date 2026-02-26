@@ -13,7 +13,8 @@ CREATE TABLE dhcp_entries (
 					3=host,
 					4=net,
 					5=group
-					6=vlan (shared-network) */
+					6=vlan (shared-network)
+					15=group (IPv6 entry) */
         ref         INT4 NOT NULL, /* ptr to table speciefied by type field
 					-->servers.id
 					-->zones.id
@@ -22,7 +23,7 @@ CREATE TABLE dhcp_entries (
 					-->groups.id */
 	dhcp	    TEXT, /* DHCP entry value (without trailing ';') */
         comment     TEXT
-) WITH OIDS;
+);
 
 CREATE INDEX dhcp_entries_ref_index ON dhcp_entries (type,ref);
 

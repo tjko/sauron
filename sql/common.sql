@@ -8,11 +8,11 @@
 
 CREATE TABLE common_fields ( 
        cdate	   INT4, /* creation date */
-       cuser	   CHAR(8) DEFAULT 'unknown',   /* creating user */
+       cuser	   CHAR(321) DEFAULT 'unknown',   /* creating user */
        mdate	   INT4, /* modification date */
-       muser	   CHAR(8) DEFAULT 'unknown', /* last changed by this user */
+       muser	   CHAR(321) DEFAULT 'unknown', /* last changed by this user */
        expiration  INT4  /* expiration date */
-) WITH OIDS;
+);
 
 
 /** global settings table **/
@@ -23,4 +23,4 @@ CREATE TABLE settings (
 	ivalue  INT4, /* interger value of setting */
 	
 	CONSTRAINT global_key PRIMARY KEY (setting)
-) WITH OIDS;
+);

@@ -79,13 +79,17 @@ SQL_TABLES =	sql/common.sql \
 		sql/arec_entries.sql sql/root_servers.sql \
 		sql/history.sql sql/lastlog.sql sql/news.sql \
 		sql/vlans.sql sql/vmps.sql sql/group_entries.sql \
-		sql/keys.sql sql/acls.sql sql/leases.sql
+		sql/keys.sql sql/acls.sql sql/leases.sql \
+		sql/sshfp_entries.sql sql/tlsa_entries.sql \
+		sql/ds_entries.sql
 
 
 SQL_MISC =      sql/DEFAULTS.sql sql/misc.sql sql/copy_tables.sql \
 		sql/drop_tables.sql sql/hinfo_hw.sql sql/hinfo_sw.sql \
 		sql/dbconvert_1.0to1.1 sql/dbconvert_1.1to1.2 \
-		sql/dbconvert_1.2to1.3 sql/dbconvert_1.3to1.4
+		sql/dbconvert_1.2to1.3 sql/dbconvert_1.3to1.4 \
+                sql/dbconvert_1.4to1.5 sql/dbconvert_1.5to1.6 \
+		sql/dbconvert_1.6to1.7 sql/dbconvert_1.7to1.8
 
 
 PROGS = sauron addgroup adduser deluser delgroup modhosts \
@@ -94,11 +98,12 @@ PROGS = sauron addgroup adduser deluser delgroup modhosts \
 	export-networks generatehosts addhosts check-pending \
 	expire-hosts createtables import-zone remove-hosts \
 	update-hosts export-vmps import-nets import-dhcp \
-	export-ip-list export-hosts export-by-group keygen
+	export-ip-list export-hosts export-by-group keygen \
+	addzone import-zone-comments
 
 MODULES = Sauron/Util.pm Sauron/BackEnd.pm Sauron/CGIutil.pm \
 	  Sauron/UtilZone.pm Sauron/Sauron.pm Sauron/UtilDhcp.pm \
-	  Sauron/DB-Pg.pm Sauron/DB-DBI.pm
+	  Sauron/DB-Pg.pm Sauron/DB-DBI.pm Sauron/SetupIO.pm
 
 CGIMODULES = Utils.pm Servers.pm Groups.pm Templates.pm Nets.pm \
 	     Login.pm Zones.pm Hosts.pm ACLs.pm

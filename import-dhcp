@@ -10,13 +10,16 @@ require 5;
 # use Net::Netmask;
 use NetAddr::IP; # For IPv6.
 use Getopt::Long;
+use Socket qw(inet_aton);
 use Sauron::DB;
 use Sauron::Util;
 use Sauron::UtilDhcp;
 use Sauron::BackEnd;
 use Sauron::Sauron;
+use Sauron::SetupIO;
 use Net::IP;
 
+set_encoding();
 load_config();
 
 ##############################
@@ -131,7 +134,7 @@ unless ($opt_dhcp6) {
         print "Skipping invalid subnet: $key\n";
         next;
       }
-
+      $mask = unpack("%32b*", inet_aton($mask)); # mask from 255.255.255.0 to 24 (as /24)
 #     $nh = new2 Net::Netmask($net,$mask);
 #     fatal("invalid subnet: $key") unless ($nh);
 #     $cidr=$nh->desc();

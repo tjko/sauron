@@ -20,7 +20,7 @@ CREATE TABLE txt_entries (
 					-->servers.id */
 	txt	    TEXT,           /* value of TXT record */
         comment     TEXT            /* comments */
-) WITH OIDS;
+);
 
 CREATE INDEX txt_entries_ref_index ON txt_entries (type,ref);
 

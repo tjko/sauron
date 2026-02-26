@@ -1,4 +1,4 @@
-# Sauron::UtilZone.pm - BIND zone file reading/parsing routines
+# Sauron::UtilZone.pm - BIND zone file reading/parsing/formating routines
 #
 # Copyright (c) Michal Kostenec <kostenec@civ.zcu.cz> 2013-2014.
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>  2000,2002.
@@ -10,8 +10,10 @@ use IO::File;
 use Net::DNS;
 use Net::IP qw(:PROC);
 use Sauron::Util;
+use Encode qw( encode decode );
 use strict;
 use vars qw($VERSION @ISA @EXPORT);
+use open ':locale';
 
 $VERSION = '$Id:$ ';
 
@@ -19,11 +21,13 @@ $VERSION = '$Id:$ ';
 @EXPORT = qw(
 	     process_zonefile
 	     process_zonedns
+	     bind_fmt_long_data
 	    );
 
 
 sub process_zonefile($$$$);
 sub process_zonefile_soa_time($);
+sub bind_fmt_long_data($$);
 
 my $debug = 0;
 
@@ -127,7 +131,7 @@ sub process_zonefile($$$$) {
 	unless ($class =~ /^(IN|CS|CH|HS)$/);
 
     # type
-    unless ($type =~ /^(SOA|A|AAAA|PTR|CNAME|MX|NS|TXT|HINFO|WKS|MB|MG|MD|MF|MINFO|MR|AFSDB|ISDN|RP|RT|X25|PX|SRV|NAPTR)$/) {
+    unless ($type =~ /^(SOA|A|AAAA|PTR|CNAME|MX|NS|TXT|HINFO|WKS|MB|MG|MD|MF|MINFO|MR|AFSDB|ISDN|RP|RT|X25|PX|SRV|NAPTR|CAA|DS|SSHFP|TLSA)$/) {
       if ($ext_flag > 0) {
 	unless ($type =~ /^(DHCP|ALIAS|AREC|ROUTER|PRINTER|BOOTP|INFO|ETHER2?|GROUP|BOOTP|MUUTA[0-9]|TYPE|SERIAL|PCTCP)$/) {
 	  print STDERR "$filename($.): unsupported RR type '$type'\n";
@@ -153,6 +157,10 @@ sub process_zonefile($$$$) {
 	      TXT => [],
 	      HINFO => ['',''],
 	      WKS => [],
+              CAA => [],
+              DS => [],
+              SSHFP => [],
+              TLSA => [],
 
 	      RP => [],
 	      SRV => [],
@@ -238,6 +246,28 @@ sub process_zonefile($$$$) {
       $line[1] =~ s/(\s+|^\"|\"$)//g;
       $rec->{HINFO}[0]=$line[0];
       $rec->{HINFO}[1]=$line[1];
+    }
+    elsif ($type eq 'CAA') {
+      fatal("$filename($.): invalid CAA record: $fline")
+        unless ($line[0]=~/^[01]$/ && $line[1]=~/^[a-zA-Z0-9]+$/ && $line[2] ne '');
+      push @{$rec->{CAA}}, "$line[0] $line[1] $line[2]";
+    }
+    elsif ($type eq 'DS') {
+      my $digest = join '', @line[3..$#line];
+      fatal("$filename($.): invalid DS record: $fline")
+        unless ($line[0]=~/^\d+$/ && $line[1]=~/^\d+$/ && $line[2]=~/^\d+$/ && $digest=~/^[0-9A-Fa-f]+$/);
+      push @{$rec->{DS}}, "$line[0] $line[1] $line[2] $digest";
+    }
+    elsif ($type eq 'SSHFP') {
+      my $sshfp_fp = join('', @line[2 .. $#line]);
+      fatal("$filename($.): invalid SSHFP record: $fline")
+        unless ($line[0]=~/^\d+$/ && $line[1]=~/^\d+$/ && $sshfp_fp=~/^[0-9A-Fa-f]+$/);
+      push @{$rec->{SSHFP}}, "$line[0] $line[1] $sshfp_fp";
+    }
+    elsif ($type eq 'TLSA') {
+      fatal("$filename($.): invalid TLSA record: $fline")
+        unless ($line[0]=~/^\d+$/ && $line[1]=~/^\d+$/ && $line[2]=~/^\d+$/ && $line[3]=~/^[0-9A-Fa-f]+$/);
+      push @{$rec->{TLSA}}, "$line[0] $line[1] $line[2] $line[3]";
     }
     elsif ($type eq 'WKS') {
       shift @line; # get rid of IP
@@ -356,7 +386,7 @@ sub process_zonedns($$$$) {
 	$ttl = $rr->ttl;
 
 	next unless ($class eq 'IN');
-	unless ($type =~ /^(SOA|A|PTR|CNAME|MX|NS|TXT|HINFO|SRV|WKS)$/) {
+	unless ($type =~ /^(SOA|A|PTR|CNAME|MX|NS|TXT|HINFO|SRV|WKS|CAA|DS|SSHFP|TLSA)$/) {
 	    $ucount++;
 	    print "Skipping: " . $rr->string . "\n" if ($verbose);
 	    next;
@@ -374,6 +404,10 @@ sub process_zonedns($$$$) {
 		NS => [],
 		TXT => [],
 		HINFO => ['',''],
+                CAA => [],
+                DS => [],
+                SSHFP => [],
+                TLSA => [],
 		WKS => [],
 		SRV => []
 	      };
@@ -415,6 +449,18 @@ sub process_zonedns($$$$) {
 	elsif ($type eq 'HINFO') {
 	    $rec->{HINFO}[0] = $rr->cpu;
 	    $rec->{HINFO}[1] = $rr->os;
+	}
+        elsif ($type eq 'CAA') {
+            push @{$rec->{CAA}}, join(" ",($rr->flags,$rr->tag,$rr->value));
+        }
+        elsif ($type eq 'DS') {
+            push @{$rec->{DS}}, join(" ",($rr->keytag,$rr->algorithm,$rr->digtype,$rr->digest));
+	}
+        elsif ($type eq 'SSHFP') {
+            push @{$rec->{SSHFP}}, join(" ",($rr->flags,$rr->tag,$rr->value));
+	}
+        elsif ($type eq 'TLSA') {
+            push @{$rec->{TLSA}}, join(" ",($rr->usage,$rr->selector,$rr->matchingtype,$rr->cert));
 	}
 	elsif ($type eq 'SRV') {
 	    push @{$rec->{SRV}}, join(" ",($rr->priority,$rr->weight,
@@ -459,6 +505,60 @@ sub process_zonefile_soa_time($) {
   $returnTime += $time if ($time =~ /^\d+$/);
 
   return $returnTime;
+}
+
+# long records must be splited, typicaly DKIM in TXT records
+sub bind_fmt_long_data($$) {
+  my $data = shift @_;
+  my $spaces = shift @_;
+  my $indentation = ' ' x ($spaces - 1);
+
+  # Converting text to a sequence of bytes (DNS operates with bytes)
+  my $bytes = encode('UTF-8', $data); 
+  #print "$data\n";
+  my @chunks;
+  while (length $bytes) {
+    # If <=255 remains, the entire remainder goes as the last piece
+    if (length $bytes <= 255) {
+      push @chunks, decode('UTF-8', $bytes);
+      last;
+    }
+    # Take the first 255 bytes as a candidate
+    my $candidate = substr($bytes, 0, 255, '');   # subtract from $bytes
+
+    # We will try to find the last gap in the candidate
+    my $space_pos = rindex($candidate, ' ');
+    if ($space_pos != -1) {
+      # We found a gap -> we will split before it
+      my $good_part = substr($candidate, 0, $space_pos);
+      my $rest_part = substr($candidate, $space_pos + 1);  # rest after space
+
+      # We will insert the remaining part (which does not contain a space) back to the beginning of $bytes
+      $bytes = $rest_part . $bytes;
+      push @chunks, decode('UTF-8', $good_part);
+    }
+    else {
+      # No space -> we have to hard split into 255 bytes
+      push @chunks, decode('UTF-8', $candidate);
+    }
+  }
+
+  # We clean up the edges: we don't want the first/last chunk to start 
+  # or end with a white character (spaces, tabs, \n).  This would create 
+  # double spaces in TXT‑RR.
+  @chunks = map { s/^\s+//r =~ s/\s+$//r } @chunks;
+
+  # If we only have one part, it is sufficient to print normally.
+  if (scalar(@chunks) == 1) {
+    return "\"$chunks[0]\"\n";
+  }
+
+  # We will compile the output in BIND-style format.
+  my $out = '';
+  $out .= "(\n  $indentation" . join("\n  $indentation", map { qq{"$_"} } @chunks) . "\n";
+  $out .= "$indentation)\n";
+
+  return $out;
 }
 
 

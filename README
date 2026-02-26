@@ -1,5 +1,5 @@
-Sauron v.0.8.5 - DNS/DHCP Management System
-==============
+Sauron v.0.9.0beta - DNS/DHCP Management System
+==================
 
 DBI (DBD::Pg) is now the default database access method, but Pg can still
 be used by specifying --with-Pg option to configure script.
@@ -21,8 +21,11 @@ REQUIREMENTS
 		- Digest::HMAC module
 		- Digest::SHA1 module
 		- MIME::Base64
-		- Crypt::RC5
-	- PostgresSQL [15.10 or newer  recommended]
+		- Crypt::Cipher::RC5
+		- Text::Table
+                - Parse::RecDescent # only for import-zone-comments
+                - HTML::Entities
+ 	- PostgresSQL [15.10 or newer  recommended]
 	  (or add support to your favorite db yourself :)
 	- www-server (Apache or any other www-server with CGI support)
 
@@ -38,6 +41,8 @@ TESTED PLATFORMS
 
 
 INSTALLATION 
+  
+  This instalation was tested on Debian 13.1.
 
   See User Guide for complete installation instruction. This section
   is only a quick overview of the installation process:
@@ -50,7 +55,13 @@ INSTALLATION
 
   2) Create database for Sauron to use in PostgreSQL
      	(use createdb command to create the database, see PostgreSQL
-	 documentation for more help)
+	 documentation for more help), example:
+        su postgres
+        createdb sauron;
+        psql
+        psql> CREATE USER sauron WITH PASSWORD '<random_password>';
+        psql> ALTER DATABASE sauron OWNER TO sauron;
+        psql> exit
 
   3) Edit configuration files: config and config-browser
 	(these are usually in /usr/local/etc/sauron or /etc/sauron)

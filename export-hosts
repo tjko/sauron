@@ -14,9 +14,11 @@ use Sauron::DB;
 use Sauron::Util;
 use Sauron::BackEnd;
 use Sauron::Sauron;
+use Sauron::SetupIO;
 use Data::Dumper;
 use strict;
 
+set_encoding();
 
 my(@zones);
 

@@ -1,4 +1,42 @@
+0.9.0 (beta)
+	- Added Sauron::SetupIO module for correct encoding settings,
+	  sets encoding transport layers according to system settings
+	  (locale for STDIN, STDOUT, STDERR) using Encode::Locale [svamberg]
+	- Increased maximum login length to 321 characters to allow storage 
+	  of eduPersonUniqueId according to RFC4512. [svamberg]
+	- Removed 'WITH OIDS' from SQL table creation; not supported since 
+	  version 12. [svamberg]
+	- change libcrypt-cb5-perl to libcryptx-perl [svamberg]
+	- add import CAA records into Custom zone file entries [svamberg]
+	- import of multiple TXT zone records [svamberg]
+	- add import DS records into Delegation forms [svamberg]
+	- the left menu displays only the items that the user has the right
+	  to access [svamberg]
+	- add sshfp support [valtri, svamberg]
+	- Generic support for enum types in record list [svamberg, valtri]
+	- add import SSHFP records [svamberg, valtri]
+	- add import NAPTR records into Cusom zone file entries [svamberg]
+	- add script 'addzone' for creating new zone [svamberg]
+	- add TLSA support [svamberg]
+	- add script compare-zones.pl to comparing two zone files [svamberg]
+	- Added mask support for reverse zones [svamberg]
+	- Add a check for the existence of a reverse zone when adding
+	  a new host. A warning will appear after submitting the form. [svamberg]
+	- Allow import nets without VLAN definition [svamberg]
+	- add TXT record (typical for DMARC) [svamberg]
+	- Fixed generating long TXT records for bind [svamberg]
+	- Added the option to hide individual form items according to the 
+	  $SAURON_HIDE_FORM_FIELDS configuration option. [svamberg]
+	- Fix Stored XSS attack [svamberg]
+	- Fix SQL injection in session_id param [svamberg]
+	- Add support placeholders and binding values to db_query() [svamberg]
+	- Removed unused options $SAURON_BGCOLOR and $SAURON_FGCOLOR [svamberg]
+	- Add $SAURON_TOPMENU_BGCOLOR and $SAURON_TOPMENU_FONTCOLOR
+	  for customizing top menu. [svamberg]
+	- Unified appearance of the top menu (ON/OFF frames) [svamberg]
+
 0.8.5
+
 	- Fixed zone expiration. Defined value was not honored while generating
 	  configurations. While on the matter, added also zone expiration to
 	  show in zone listing. Pink denotes already expired zone, pale yellow

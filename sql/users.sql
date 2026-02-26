@@ -27,5 +27,5 @@ CREATE TABLE users (
 	comment		TEXT,
 
 	CONSTRAINT	username_key UNIQUE(username)
-) INHERITS(common_fields) WITH OIDS;
+) INHERITS(common_fields);
 

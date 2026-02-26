@@ -11,7 +11,10 @@ use Sauron::DB;
 use Sauron::BackEnd;
 use Sauron::Util;
 use Sauron::Sauron;
+use Sauron::SetupIO;
+use open ':locale';
 
+set_encoding();
 $|=1;
 load_config();
 

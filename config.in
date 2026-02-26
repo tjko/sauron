@@ -147,6 +147,7 @@ $DB_PASSWORD = "bar";
 # $SAURON_RHF{location} = 0; # Location
 # $SAURON_RHF{info}     = 1; # [Extra] Info
 # $SAURON_RHF{ether}    = 0; # Ether
+# $SAURON_RHF{duid}     = 0; # DUID
 # $SAURON_RHF{asset_id} = 1; # Asset ID
 # $SAURON_RHF{model}    = 1; # Model
 # $SAURON_RHF{serial}   = 1; # Serial
@@ -188,6 +189,37 @@ $DB_PASSWORD = "bar";
 #
 # $SAURON_HINFO_MODE = 1;
 
+# Set this to hide individual form items. It is not used to restrict permissions,
+# but only to simplify the form visually, with other items being filled in with
+# default values. Groups are written as regexp without anchors, and all those
+# that match the regexp are applied. This hiding does not apply to superusers.
+#
+# Items marked in the code (Sauron/CGI/*.pm) with the parameter "hide=>0"
+# can never be hidden (typically the 'grp' tag in search form). Conversely,
+# if an item is marked "hide=>1", it will always be hidden unless required.
+#
+# Required fields (with "empty=>0" as RHF) will never be hidden.
+#
+# structure and commands for listing items
+# $SAURON_HIDE_FORM_FIELDS = {
+#   '<group_name_as_regexp>' => {  #  ./modgroup --list 
+#     '<perl_package_name>' => [   #  grep ^package /usr/local/sauron/Sauron/CGI/*.pm
+#        '<tag_name>',             #  grep 'tag=>' /usr/local/sauron/Sauron/CGI/*.pm
+#        '<tag_name>'
+#       ]
+#    }
+# };
+
+# an example:
+#$SAURON_HIDE_FORM_FIELDS = {
+#  '.*_editors' => {
+#    'Hosts' => [ 'expiration', 'sshfp_l' ],
+#    'Zones' => [ 'dummy' ]
+#  }
+#};
+
+
+
 # CGI interface plugins
 #
 # plugins consist of a defition file (.conf) and actual Perl module (.pm)
@@ -203,8 +235,8 @@ $DB_PASSWORD = "bar";
 # uncomment to enable compatibilty with DHCP v2.0 ...
 # $SAURON_DCHP2_MODE = 1;
 
-# $SAURON_BGCOLOR="white";
-# $SAURON_FGCOLOR="black";
+#$SAURON_TOPMENU_BGCOLOR="#002d5f"; # default: #002d5f
+#$SAURON_TOPMENU_FONTCOLOR="white"; # default: white
 
 # $LOOPBACK_NET = "127.0.0.0/24";
 # $LOOPBACK_ZONE = "loopback.";

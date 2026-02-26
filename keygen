@@ -13,7 +13,9 @@ use Sauron::Sauron;
 use Sauron::BackEnd;
 use Digest::MD5;
 use MIME::Base64;
-use Crypt::RC5;
+use Crypt::Cipher::RC5;
+use Sauron::SetupIO;
+use open ':locale';
 
 my %KEY_ALGORITHMS = ( 
 		       0=>'reserved',
@@ -24,6 +26,7 @@ my %KEY_ALGORITHMS = (
 		       157=>'HMAC-MD5'
 		      );
 
+set_encoding();
 load_config();
 
 GetOptions("help|h","setmasterkey:s","add:s","del:s","regen:s","list:s",
@@ -242,9 +245,9 @@ sub setmasterkey($) {
 	    fatal("unsupported key: $name (algorithm=$algo)") 
 	      if ($algo != 157);
 	    if ($keys[$i][1]) {
-		my $ref1 = Crypt::RC5->new($oldkey,16);
+		my $ref1 = Crypt::Cipher::RC5->new($oldkey,16);
 		my $okey=$ref1->decrypt(decode_base64($keys[$i][1]));
-		my $ref2 = Crypt::RC5->new($key,16);
+		my $ref2 = Crypt::Cipher::RC5->new($key,16);
 		my $nkey=encode_base64($ref2->encrypt($okey));
 		chomp($nkey);
 		if (db_exec("UPDATE keys SET secretkey='$nkey' " .
@@ -301,7 +304,7 @@ sub addkey() {
     } else {
 	print "Generating key...\n";
 	my $okey = generate_key($name,$type,$len);
-	my $ref = Crypt::RC5->new($SAURON_KEY,16);
+	my $ref = Crypt::Cipher::RC5->new($SAURON_KEY,16);
 	$key=encode_base64($ref->encrypt(decode_base64($okey)));
 	print "Key: $okey  Encrypted-Key: $key\n" if ($opt_verbose);
 	$mode=0;
@@ -381,7 +384,7 @@ sub regenkeys($) {
 
     print "Generating key: $name ...\n";
     my $okey = generate_key($name,$type,$len);
-    my $ref = Crypt::RC5->new($SAURON_KEY,16);
+    my $ref = Crypt::Cipher::RC5->new($SAURON_KEY,16);
     my $key=encode_base64($ref->encrypt(decode_base64($okey)));
     chomp($key);
     print "Key: $okey  Encrypted-Key: $key\n" if ($opt_verbose);

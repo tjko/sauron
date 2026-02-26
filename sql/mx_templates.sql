@@ -13,5 +13,5 @@ CREATE TABLE mx_templates (
         alevel	        INT4 DEFAULT 0, /* required authorization level */
 	name		TEXT, /* template name */
 	comment		TEXT 
-) INHERITS(common_fields) WITH OIDS;
+) INHERITS(common_fields);
 

@@ -500,6 +500,42 @@
 </section>
 
 
+<section id="import-zone-comments-cmd">
+<title>import-zone-comments</>
+<para>
+  This utility adds comments to existing zone records from a zone file.
+</para>
+<cmdsynopsis>
+  <command>import-zone-comments</>
+  <arg>--help</>
+  <arg><replaceable>OPTIONS</></>
+  <arg choice=req><replaceable>servername</></>
+  <arg choice=req><replaceable>zone</></>
+  <arg><replaceable>zone file</></>
+</cmdsynopsis>
+<informaltable frame=all>
+  <tgroup cols=2>
+  <thead><row><entry>option</><entry>description</></row></thead>
+  <tbody>
+  <row><entry><option>--noop</></>
+       <entry>Run without changes in database.</>
+  </row>
+  <row><entry><option>--verbose</></>
+       <entry>Make program to display more verbose output.</>
+  </row>
+  </tbody>
+  </tgroup>
+</informaltable>
+<para>
+  Command <command>impport-zone-comments</> adds comments to individual 
+  RR records, which are listed on the same line.
+  If a comment is listed above a record, it will be appended to all 
+  records below it until an empty line is reached. If there is a comment 
+  for a record, they will be joined together (separated by a semicolon).
+</para>
+</section>
+
+
 <section id="last-cmd">
 <title>last</>
 <para>

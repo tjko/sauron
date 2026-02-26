@@ -13,6 +13,7 @@ use Sauron::CGIutil;
 use Sauron::BackEnd;
 use Sauron::Sauron;
 use Sauron::CGI::Utils;
+use Sauron::SetupIO;
 use Net::IP qw(:PROC);
 use strict;
 use List::Util qw[min max];
@@ -25,7 +26,7 @@ sub write2log{
   my $filename  = File::Basename::basename($0);
 
   Sys::Syslog::openlog($filename, "cons,pid", "debug");
-  Sys::Syslog::syslog("info", "$msg");
+  Sys::Syslog::syslog("info", encode_str("$msg"));
   Sys::Syslog::closelog();
 } # End of write2log
 

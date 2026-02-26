@@ -14,10 +14,12 @@ use Sauron::DB;
 use Sauron::Util;
 use Sauron::BackEnd;
 use Sauron::Sauron;
+use Sauron::SetupIO;
 use Net::IP;
 
 sub optimize_ip_list($);
 
+set_encoding();
 load_config();
 
 $user = (getpwuid($<))[0];

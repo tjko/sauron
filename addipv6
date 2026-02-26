@@ -12,10 +12,12 @@ use Sauron::DB;
 use Sauron::Util;
 use Sauron::BackEnd;
 use Sauron::Sauron;
+use Sauron::SetupIO;
 use Pod::Usage;
 use strict;
 use warnings;
 
+set_encoding();
 load_config();
 
 # Local variables.

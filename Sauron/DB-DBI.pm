@@ -7,6 +7,7 @@ require Exporter;
 use Time::Local;
 use DBI;
 use Sauron::Util;
+use Sauron::SetupIO;
 use strict;
 use vars qw($VERSION @ISA @EXPORT);
 
@@ -48,7 +49,7 @@ sub write2log
   my $filename  = File::Basename::basename($0);
 
   Sys::Syslog::openlog($filename, "cons,pid", "debug");
-  Sys::Syslog::syslog("info", "$msg");
+  Sys::Syslog::syslog("info", encode_str("$msg"));
   Sys::Syslog::closelog();
 } # End of write2log
 
@@ -108,8 +109,8 @@ sub db_exec($) {
 }
 
 
-sub db_query($$) {
-  my ($sqlstr,$aref) = @_;
+sub db_query($$;@) {
+  my ($sqlstr,$aref, @bind_vals) = @_;
   my ($sth,@row,$types,$i);
 
   undef @{$aref};
@@ -119,7 +120,7 @@ sub db_query($$) {
     return -1;
   }
 
-  unless ($sth->execute()) {
+  unless ($sth->execute(@bind_vals)) {
     $db_last_error_msg=$dbh->errstr;
     return -2;
   }

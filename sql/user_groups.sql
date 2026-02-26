@@ -11,6 +11,6 @@ CREATE TABLE user_groups (
        comment	    TEXT,                              /* comments */
 
        CONSTRAINT   user_groups_name_key UNIQUE(name)
-) WITH OIDS;
+);
 
 

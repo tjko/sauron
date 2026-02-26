@@ -32,6 +32,6 @@ CREATE TABLE nets (
        comment	   TEXT, /* comment */
 
        CONSTRAINT  nets_key UNIQUE (net,server)
-) INHERITS(common_fields) WITH OIDS;
+) INHERITS(common_fields);
 
 

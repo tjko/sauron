@@ -15,8 +15,7 @@ CREATE TABLE a_entries (
       reverse	   BOOL DEFAULT true, /* generate reverse (PTR) record flag */
       forward      BOOL DEFAULT true, /* generate (A) record flag */
       comment	   CHAR(20)
-)
-WITH OIDS;
+);
 
 CREATE INDEX a_entries_ip_index ON a_entries (ip);
 CREATE INDEX a_entries_host_index ON a_entries (host);

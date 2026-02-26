@@ -14,7 +14,9 @@ use Sauron::Util;
 use Sauron::UtilZone;
 use Sauron::BackEnd;
 use Sauron::Sauron;
+use Sauron::SetupIO;
 
+set_encoding();
 load_config();
 
 ##############################
@@ -120,6 +122,8 @@ unless ($pzoneid > 0) {
   }
   $zonehash{txt}=[];
   foreach $rtmp (@{$rec->{TXT}}) { push @{$zonehash{txt}}, [0,$rtmp,'']; }
+  foreach $rtmp (@{$rec->{CAA}}) { push @{$zonehash{zentries}}, [0,"@ IN CAA $rtmp",'']; }
+  foreach $rtmp (@{$rec->{NAPTR}}) { push @{$zonehash{zentries}}, [0,"@ IN NAPTR $rtmp",'']; }
   $zonehash{ip}=[];
   foreach $rtmp (@{$rec->{A}}) { push @{$zonehash{ip}},[0,$rtmp,'true','true']; }
   foreach $rtmp (@{$rec->{AAAA}}) { push @{$zonehash{ip}},[0,$rtmp,'true','true']; }
@@ -183,8 +187,23 @@ foreach $host (sort keys %zonedata) {
   $hosttype=2 if ($nslist && $host2 ne '@');
   $hosttype=3 if ($nslist eq '' && @{$rec->{A}} < 1 && @{$rec->{AAAA}} < 1 && @{$rec->{MX}} > 0);
   $hosttype=8 if (@{$rec->{SRV}} > 0);
+  $hosttype=12 if (@{$rec->{TLSA}} > 0);
+  $hosttype=13 if ((@{$rec->{TXT}} > 0) and $hosttype == 0);
+  $hosttype=14 if (@{$rec->{NAPTR}} > 0);
 
   if ($hosttype == 0) {
+    if (@{$rec->{NAPTR}} > 0) {
+      foreach $tmp (@{$rec->{NAPTR}}) {
+	$res = add_record("txt_entries",
+			  { type=>12,
+			    ref=>$zoneid,
+			    txt=>"$host2 $rec->{TTL} IN NAPTR \"$tmp\""
+			  });
+	fatal("Failed to insert NAPTR record:\n   $host2 $rec->{TTL} IN NAPTR \"$tmp\"") if ($res < 0);
+      }
+      next;
+    }
+
     print STDERR "Ignoring unknown host entry: $host\n";
     delete $zonedata{$host};
     next;
@@ -206,15 +225,6 @@ foreach $host (sort keys %zonedata) {
   $mx=($mxhash{$mxlist} ? $mxhash{$mxlist} : -1);
   $host_ttl=(($rec->{TTL} > 0 && $rec->{TTL} ne $ttl) ? $rec->{TTL}:'');
 
-  $extrainfo='';
-  undef @txt_l;
-  if (@{$rec->{TXT}} > 0) {
-    $extrainfo=$rec->{TXT}->[0];
-    for $k (1..$#{$rec->{TXT}}) {
-      push @txt_l, [0,$rec->{TXT}->[$k],''];
-    }
-  }
-
   undef @ip_l;
   for $k (0..$#{$rec->{A}}) {
     # print "A=",$rec->{A}->[$k],"\n";
@@ -224,9 +234,29 @@ foreach $host (sort keys %zonedata) {
     # print "AAAA=",$rec->{AAAA}->[$k],"\n";
     push @ip_l, [0,$rec->{AAAA}->[$k],'true','true'];
   }
-  undef $ns_l;
+  undef @ns_l;
   for $k (0..$#{$rec->{NS}}) {
     push @ns_l, [0,$rec->{NS}->[$k],''];
+  }
+  undef @ds_l;
+  for $k (0..$#{$rec->{DS}}) {
+    push @ds_l, [0,split(' ', $rec->{DS}->[$k]),''];
+  }
+  undef @sshfp_l;
+  for $k (0..$#{$rec->{SSHFP}}) {
+    push @sshfp_l, [0,split(' ', $rec->{SSHFP}->[$k]),''];
+  }
+  undef @tlsa_l;
+  for $k (0..$#{$rec->{TLSA}}) {
+    push @tlsa_l, [0,split(' ', $rec->{TLSA}->[$k]),''];
+  }
+  undef @txt_l;
+  for $k (0..$#{$rec->{TXT}}) {
+    push @txt_l, [0,$rec->{TXT}->[$k],''];
+  }
+  undef @srv_l;
+  for $k (0..$#{$rec->{SRV}}) {
+    push @srv_l, [0,split(' ', $rec->{SRV}->[$k]),''];
   }
 
   $res = add_host({zone=>$zoneid,
@@ -237,14 +267,17 @@ foreach $host (sort keys %zonedata) {
 		   mx=>$mx,
 		   hinfo_hw=>$rec->{HINFO}[0],
 		   hinfo_sw=>$rec->{HINFO}[1],
-		   info=>$extrainfo,
 		   ttl=>$host_ttl,
 		   txt_l=>\@txt_l,
 		   ns_l=>\@ns_l,
+		   ds_l=>\@ds_l,
+                   srv_l=>\@srv_l,
+                   sshfp_l=>\@sshfp_l,
+                   tlsa_l=>\@tlsa_l,
+                   txt_l=>\@txt_l,
 		   ip=>\@ip_l
-		  });
-
-  fatal("failed to insert host record for: $host ") if ($res < 0);
+		});
+  fatal("failed to insert host record for: $host (rc: $res)") if ($res < 0);
   $rec->{ID}=$res;
 }
 
