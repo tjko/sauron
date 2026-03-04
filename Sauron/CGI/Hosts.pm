@@ -99,6 +99,14 @@ my %ds_digest_type=(
     4=>'SHA-384'
 );
 
+my %naptr_flags=(
+    1=>'S',
+    2=>'A',
+    3=>'U',
+    4=>'P'
+);
+
+
 my %host_form = (
  data=>[
   {ftype=>0, name=>'Host' },
@@ -240,6 +248,14 @@ my %host_form = (
    type=>['enum','enum','enum','hex','text'],
    enum=>[\%tlsa_usage, \%tlsa_selector, \%tlsa_matching_type, undef, undef],
    iff=>['type','12']},
+
+  {ftype=>0, name=>'NAPTR records', no_edit=>1, iff=>['type','14']},
+  {ftype=>2, tag=>'naptr_l', name=>'NAPTR entries', fields=>7,len=>[3,3,2,5,20,20,20],
+   empty=>[0,0,0,0,0,0,1], maxlen=>[5,5,2,20,100,100,80],addempty=>[-1,-1,-1,-1,-1,-1,0],
+   elabels=>['Order','Preference','Flags','Service','Regexp','Replacement','Comment'],
+   type=>['priority','priority','enum','text','text','text','text'],
+   enum=>[undef, undef, \%naptr_flags, undef, undef, undef, undef],
+   iff=>['type','14']},
 
   {ftype=>0, name=>'Record info', no_edit=>0},
   {ftype=>4, name=>'Record created', tag=>'cdate_str', no_edit=>1},
@@ -434,6 +450,14 @@ my %new_host_form = (
    type=>['enum','enum','enum','hex','text'],
    enum=>[\%tlsa_usage, \%tlsa_selector, \%tlsa_matching_type, undef, undef],
    iff=>['type','12']},
+
+  {ftype=>2, tag=>'naptr_l', name=>'NAPTR entries', fields=>7,len=>[5,5,5,5,5,5,20],
+   empty=>[0,0,0,0,0,0,1], maxlen=>[5,5,5,5,5,5,80],addempty=>[-1,-1,-1,-1,-1,-1,0],
+   dot=>1, # allows dot in replacement
+   elabels=>['Order','Preference','Flags','Service','Regexp','Replacement','Comment'],
+   type=>['priority','priority','enum','text','text','fqdn','text'],
+   enum=>[undef, undef, \%naptr_flags, undef, undef, undef, undef],
+   iff=>['type','14']},
 
   {ftype=>2, tag=>'txt_l', name=>'TXT entries', type=>['text','text'],
    whitesp=>['P','P'], fields=>2, maxlen=>[253, 80],
@@ -669,6 +693,10 @@ sub restricted_add_host($) {
   if ($rec->{type} == 12 && check_perms('flags','TLSA',1)) {
     alert1("You don't have permission to add TLSA records");
     return -109;
+  }
+  if ($rec->{type} == 14 && check_perms('flags','NAPTR',1)) {
+    alert1("You don't have permission to add NAPTR records");
+    return -110;
   }
 
   return add_host($rec);
@@ -2105,6 +2133,7 @@ sub menu_handler {
       elsif ($type==9) { return if check_perms('flags','DHCP'); }
       elsif ($type==11) { return if check_perms('flags','SSHFP'); }
       elsif ($type==12) { return if check_perms('flags','TLSA'); }
+      elsif ($type==14) { return if check_perms('flags','NAPTR'); }
       elsif ($type==101) {
 	if (check_perms('level',$main::ALEVEL_RESERVATIONS,1) &&
 	    check_perms('flags','RESERV',1)) {

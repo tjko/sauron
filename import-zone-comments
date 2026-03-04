@@ -620,6 +620,25 @@ sub import_comments($$$) {
       db_exec($sql) unless $opt_noop;
       print "db_exec: $sql\n" if $opt_verbose;
     }
+    elsif ($$rec{rtype} eq 'NAPTR' and $$rec{owner}) {
+      my ($naptr_order, $naptr_preference, $naptr_flags, $naptr_service, $naptr_regexp, $naptr_replacement) = split /\s+/, $$rec{rdata};
+      $naptr_flags =~ tr/a-z/A-Z/;  # flags are case-insensitive, but we store them in uppercase
+      my $host_id = get_host_id($zoneid, $$rec{owner});
+      $sql = qq{
+        UPDATE naptr_entries
+           SET comment     = $comment
+         WHERE ref         = '$host_id'
+           AND order_val   = '$naptr_order'
+           AND preference  = '$naptr_preference'
+           AND flags       = '$naptr_flags'
+           AND service     = '$naptr_service'
+           AND regexp      = '$naptr_regexp'
+           AND replacement = '$naptr_replacement'
+           AND (comment IS NULL OR comment = '')
+      };
+      db_exec($sql) unless $opt_noop;
+      print "db_exec: $sql\n" if $opt_verbose;
+    }
     elsif ($$rec{rtype} eq 'DS' and $$rec{owner}) {
       my ($ds_key_tag,$ds_algorithm,$ds_digest_type,$ds_digest) = split /\s+/, $$rec{rdata};
       my $host_id = get_host_id($zoneid, $$rec{owner});

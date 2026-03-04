@@ -157,16 +157,13 @@ sub process_zonefile($$$$) {
 	      TXT => [],
 	      HINFO => ['',''],
 	      WKS => [],
-              CAA => [],
-              DS => [],
-              SSHFP => [],
-              TLSA => [],
-
+	      CAA => [],
+	      DS => [],
+	      SSHFP => [],
+	      TLSA => [],
 	      RP => [],
 	      SRV => [],
-
-          NAPTR => [],
-
+	      NAPTR => [],
 	      SERIAL => '',
 	      TYPE => '',
 	      MUUTA => [],
@@ -179,7 +176,6 @@ sub process_zonefile($$$$) {
 	      INFO => '',
 	      ALIAS => [],
 	      AREC=> [],
-
 	      ID => -1
 	    };
 
@@ -269,6 +265,23 @@ sub process_zonefile($$$$) {
         unless ($line[0]=~/^\d+$/ && $line[1]=~/^\d+$/ && $line[2]=~/^\d+$/ && $line[3]=~/^[0-9A-Fa-f]+$/);
       push @{$rec->{TLSA}}, "$line[0] $line[1] $line[2] $line[3]";
     }
+    elsif ($type eq 'NAPTR') {
+      # NAPTR: order preference flags service regexp replacement
+      fatal("$filename($.): invalid NAPTR record: $fline")
+      unless (
+        $line[0]=~/^\d+$/ &&                # order
+        $line[1]=~/^\d+$/ &&                # preference
+        $line[2]=~/^".*"$/ &&               # flags (quoted string)
+        $line[3]=~/^".*"$/ &&               # service (quoted string)
+        $line[4]=~/^".*"$/ &&               # regexp (quoted string)
+        $line[5]=~/^.*$/                    # replacement
+      );
+      $line[2] =~ tr/a-z/A-Z/; # flags are case-insensitive, convert to uppercase
+      $line[2] =~ s/^"(.*)"$/$1/; # remove quotes from flag
+      $line[3] =~ s/^"(.*)"$/$1/; # remove quotes from service
+      $line[4] =~ s/^"(.*)"$/$1/; # remove quotes from regexp
+      push @{$rec->{NAPTR}}, join(" ", @line[0..5]);
+    }
     elsif ($type eq 'WKS') {
       shift @line; # get rid of IP
       fatal ("$filename($.): invalid protocol in WKS '$line[0]': $fline")
@@ -287,10 +300,6 @@ sub process_zonefile($$$$) {
       s/(^\s*"|"\s*$)//g;
       s/\\\"/\"/g;
       push @{$rec->{TXT}}, $_;
-    }
-    elsif ($type eq 'NAPTR') {
-      #print "NAPTR '$_'\n";
-      push @{$rec->{NAPTR}}, $_;
     }
 
     #
@@ -386,7 +395,7 @@ sub process_zonedns($$$$) {
 	$ttl = $rr->ttl;
 
 	next unless ($class eq 'IN');
-	unless ($type =~ /^(SOA|A|PTR|CNAME|MX|NS|TXT|HINFO|SRV|WKS|CAA|DS|SSHFP|TLSA)$/) {
+	unless ($type =~ /^(SOA|A|PTR|CNAME|MX|NS|TXT|HINFO|SRV|WKS|CAA|DS|SSHFP|TLSA|NAPTR)$/) {
 	    $ucount++;
 	    print "Skipping: " . $rr->string . "\n" if ($verbose);
 	    next;
@@ -404,10 +413,11 @@ sub process_zonedns($$$$) {
 		NS => [],
 		TXT => [],
 		HINFO => ['',''],
-                CAA => [],
-                DS => [],
-                SSHFP => [],
-                TLSA => [],
+		CAA => [],
+		DS => [],
+		SSHFP => [],
+		TLSA => [],
+		NAPTR => [],
 		WKS => [],
 		SRV => []
 	      };
@@ -450,17 +460,20 @@ sub process_zonedns($$$$) {
 	    $rec->{HINFO}[0] = $rr->cpu;
 	    $rec->{HINFO}[1] = $rr->os;
 	}
-        elsif ($type eq 'CAA') {
-            push @{$rec->{CAA}}, join(" ",($rr->flags,$rr->tag,$rr->value));
-        }
-        elsif ($type eq 'DS') {
-            push @{$rec->{DS}}, join(" ",($rr->keytag,$rr->algorithm,$rr->digtype,$rr->digest));
+	elsif ($type eq 'CAA') {
+	    push @{$rec->{CAA}}, join(" ",($rr->flags,$rr->tag,$rr->value));
 	}
-        elsif ($type eq 'SSHFP') {
-            push @{$rec->{SSHFP}}, join(" ",($rr->flags,$rr->tag,$rr->value));
+	elsif ($type eq 'DS') {
+	    push @{$rec->{DS}}, join(" ",($rr->keytag,$rr->algorithm,$rr->digtype,$rr->digest));
 	}
-        elsif ($type eq 'TLSA') {
-            push @{$rec->{TLSA}}, join(" ",($rr->usage,$rr->selector,$rr->matchingtype,$rr->cert));
+	elsif ($type eq 'SSHFP') {
+	    push @{$rec->{SSHFP}}, join(" ",($rr->flags,$rr->tag,$rr->value));
+	}
+	elsif ($type eq 'TLSA') {
+	    push @{$rec->{TLSA}}, join(" ",($rr->usage,$rr->selector,$rr->matchingtype,$rr->cert));
+	}
+	elsif ($type eq 'NAPTR') {
+	    push @{$rec->{NAPTR}}, join(" ",($rr->order,$rr->preference,uc($rr->flags),$rr->service,$rr->regexp,$rr->replacement));
 	}
 	elsif ($type eq 'SRV') {
 	    push @{$rec->{SRV}}, join(" ",($rr->priority,$rr->weight,
