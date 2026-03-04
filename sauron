@@ -1524,7 +1524,7 @@ sub make_dns() {
     # NAPTR records
     undef @q;
     db_query("SELECT a.domain,a.ttl,a.expiration," .
-         " b.order_val,b.preference,b.flags,b.service,b.regex,b.replacement " .
+         " b.order_val,b.preference,b.flags,b.service,b.regexp,b.replacement " .
          "FROM hosts a, naptr_entries b, zones z " .
          "WHERE a.zone=z.id AND z.id=$zoneid " .
          "AND a.type=14 AND a.id=b.ref AND b.type=1 " .
