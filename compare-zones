@@ -101,7 +101,7 @@ foreach my $key (sort keys %$zone1) {
 # -------------------------------------------------
 sub fmt_key {
     my ($key) = @_;
-    my ($name,$type,$class) = split /\|/, $key;
+    my ($name,$type,$class) = split (/\|/, $key);
     return "$name $type $class";
 }
 
