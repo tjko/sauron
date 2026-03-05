@@ -27,5 +27,7 @@ config.h
 doc/tables.html
 doc/tables.sgml
 
+# dot files and dirs
+.*
 
 # eof
