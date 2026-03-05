@@ -1521,6 +1521,66 @@ sub make_dns() {
       }
     }
 
+    # NAPTR records
+    undef @q;
+    db_query("SELECT a.domain,a.ttl,a.expiration," .
+         " b.order_val,b.preference,b.flags,b.service,b.regexp,b.replacement " .
+         "FROM hosts a, naptr_entries b, zones z " .
+         "WHERE a.zone=z.id AND z.id=$zoneid " .
+         "AND a.type=14 AND a.id=b.ref AND b.type=1 " .
+         "ORDER BY a.domain,b.order_val,b.preference;",\@q);
+    error(db_errormsg()) if (db_errormsg());
+    if (@q > 0) {
+      print ZONEFILE ";\n;\n; NAPTR records\n;\n" if ($bind_conf);
+      for $i (0 .. $#q) {
+      $domain=remove_origin($q[$i][0],$origin);
+      if ($domain =~ /\.$/) {
+      error("Out-of-zone NAPTR record skipped: $q[$i][0]");
+      next;
+      }
+      if ($domain =~ /\.($delegation_mask)$/) {
+      error("NAPTR in delegated zone skipped: $q[$i][0]");
+      next;
+      }
+      if (($q[$i][2] > 0) && ($q[$i][2] < $time_now_ticks)) {
+      error("Skipping expired NAPTR record: $q[$i][0]");
+      next;
+      }
+      $ttl=$q[$i][1];
+      $ttl='' unless ($ttl > 0);
+      $order=($q[$i][3] > 0 ? $q[$i][3] : 0);
+      $preference=($q[$i][4] > 0 ? $q[$i][4] : 0);
+      $flags=$q[$i][5];
+      $service=$q[$i][6];
+      $regex=$q[$i][7];
+      $replacement=$q[$i][8];
+
+      printf ZONEFILE $ZFORMAT, $domain,$ttl,$class,'NAPTR',
+        "$order $preference \"$flags\" \"$service\" \"$regex\" $replacement" if ($bind_conf);
+
+      # tinydns naptr format
+      my $tinydns_record = sprintf("\\%03o\\%03o", $order, $preference);
+      $tinydns_record .= sprintf("\\%03o", length($flags)) if $flags;
+      for (my $j = 0; $j < length($flags); $j++) {
+      $tinydns_record .= sprintf("\\%03o", ord(substr($flags, $j, 1)));
+      }
+      $tinydns_record .= sprintf("\\%03o", length($service)) if $service;
+      for (my $j = 0; $j < length($service); $j++) {
+      $tinydns_record .= sprintf("\\%03o", ord(substr($service, $j, 1)));
+      }
+      $tinydns_record .= sprintf("\\%03o", length($regex)) if $regex;
+      for (my $j = 0; $j < length($regex); $j++) {
+      $tinydns_record .= sprintf("\\%03o", ord(substr($regex, $j, 1)));
+      }
+      $replacement .= ".$zonename" unless ($replacement =~ /\.$/);
+      $tinydns_record .= sprintf("\\%03o", length($replacement)) if $replacement;
+      for (my $j = 0; $j < length($replacement); $j++) {
+      $tinydns_record .= sprintf("\\%03o", ord(substr($replacement, $j, 1)));
+      }
+      printf TINYDNSFILE ":%s:35:%s:\n", $domain, $tinydns_record if ($tiny_conf);
+      }
+    }
+
     # TXT records
     undef @q;
     db_query("SELECT a.domain,a.ttl,a.expiration,b.txt " .

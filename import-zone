@@ -123,7 +123,6 @@ unless ($pzoneid > 0) {
   $zonehash{txt}=[];
   foreach $rtmp (@{$rec->{TXT}}) { push @{$zonehash{txt}}, [0,$rtmp,'']; }
   foreach $rtmp (@{$rec->{CAA}}) { push @{$zonehash{zentries}}, [0,"@ IN CAA $rtmp",'']; }
-  foreach $rtmp (@{$rec->{NAPTR}}) { push @{$zonehash{zentries}}, [0,"@ IN NAPTR $rtmp",'']; }
   $zonehash{ip}=[];
   foreach $rtmp (@{$rec->{A}}) { push @{$zonehash{ip}},[0,$rtmp,'true','true']; }
   foreach $rtmp (@{$rec->{AAAA}}) { push @{$zonehash{ip}},[0,$rtmp,'true','true']; }
@@ -192,18 +191,6 @@ foreach $host (sort keys %zonedata) {
   $hosttype=14 if (@{$rec->{NAPTR}} > 0);
 
   if ($hosttype == 0) {
-    if (@{$rec->{NAPTR}} > 0) {
-      foreach $tmp (@{$rec->{NAPTR}}) {
-	$res = add_record("txt_entries",
-			  { type=>12,
-			    ref=>$zoneid,
-			    txt=>"$host2 $rec->{TTL} IN NAPTR \"$tmp\""
-			  });
-	fatal("Failed to insert NAPTR record:\n   $host2 $rec->{TTL} IN NAPTR \"$tmp\"") if ($res < 0);
-      }
-      next;
-    }
-
     print STDERR "Ignoring unknown host entry: $host\n";
     delete $zonedata{$host};
     next;
@@ -250,6 +237,10 @@ foreach $host (sort keys %zonedata) {
   for $k (0..$#{$rec->{TLSA}}) {
     push @tlsa_l, [0,split(' ', $rec->{TLSA}->[$k]),''];
   }
+  undef @naptr_l;
+  for $k (0..$#{$rec->{NAPTR}}) {
+    push @naptr_l, [0,split(' ', $rec->{NAPTR}->[$k]),''];
+  }
   undef @txt_l;
   for $k (0..$#{$rec->{TXT}}) {
     push @txt_l, [0,$rec->{TXT}->[$k],''];
@@ -271,10 +262,11 @@ foreach $host (sort keys %zonedata) {
 		   txt_l=>\@txt_l,
 		   ns_l=>\@ns_l,
 		   ds_l=>\@ds_l,
-                   srv_l=>\@srv_l,
-                   sshfp_l=>\@sshfp_l,
-                   tlsa_l=>\@tlsa_l,
-                   txt_l=>\@txt_l,
+		   srv_l=>\@srv_l,
+		   sshfp_l=>\@sshfp_l,
+		   tlsa_l=>\@tlsa_l,
+		   naptr_l=>\@naptr_l,
+		   txt_l=>\@txt_l,
 		   ip=>\@ip_l
 		});
   fatal("failed to insert host record for: $host (rc: $res)") if ($res < 0);

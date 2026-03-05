@@ -1,8 +1,7 @@
 #!/usr/bin/perl -I/opt/sauron
 #
 # sauron.cgi
-# $Id:$
-# [едц~]
+# 
 # Copyright (c) Michal Kostenec <kostenec@civ.zcu.cz> 2013-2014.
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>, 2000-2005.
 # All Rights Reserved.
@@ -138,6 +137,7 @@ $debug_mode = $SAURON_DEBUG_MODE;
 		      ['Add SRV rec.','sub=add&type=8',['flags','SRV']],
 		      ['Add TLSA rec.','sub=add&type=12',['flags','TLSA']],
 		      ['Add TXT rec.','sub=add&type=13',['flags','TXT']],
+		      ['Add NAPTR rec.','sub=add&type=14',['flags','NAPTR']],
 		      [],
 		      ['Add reservation','sub=add&type=101',['flags','RESERV']]
 		     ],

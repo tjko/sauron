@@ -73,7 +73,7 @@ SQL_TABLES =	sql/common.sql \
 		sql/ns_entries.sql \
 		sql/printer_classes.sql sql/printer_entries.sql \
 		sql/a_entries.sql sql/txt_entries.sql sql/srv_entries.sql \
-	        sql/users.sql sql/user_rights.sql sql/user_groups.sql \
+		sql/users.sql sql/user_rights.sql sql/user_groups.sql \
 		sql/wks_entries.sql sql/wks_templates.sql \
 		sql/utmp.sql sql/hinfo_templates.sql \
 		sql/arec_entries.sql sql/root_servers.sql \
@@ -81,14 +81,14 @@ SQL_TABLES =	sql/common.sql \
 		sql/vlans.sql sql/vmps.sql sql/group_entries.sql \
 		sql/keys.sql sql/acls.sql sql/leases.sql \
 		sql/sshfp_entries.sql sql/tlsa_entries.sql \
-		sql/ds_entries.sql
+		sql/ds_entries.sql sql/naptr_entries.sql
 
 
 SQL_MISC =      sql/DEFAULTS.sql sql/misc.sql sql/copy_tables.sql \
 		sql/drop_tables.sql sql/hinfo_hw.sql sql/hinfo_sw.sql \
 		sql/dbconvert_1.0to1.1 sql/dbconvert_1.1to1.2 \
 		sql/dbconvert_1.2to1.3 sql/dbconvert_1.3to1.4 \
-                sql/dbconvert_1.4to1.5 sql/dbconvert_1.5to1.6 \
+		sql/dbconvert_1.4to1.5 sql/dbconvert_1.5to1.6 \
 		sql/dbconvert_1.6to1.7 sql/dbconvert_1.7to1.8
 
 

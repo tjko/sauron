@@ -1576,21 +1576,36 @@ sub delete_zone($) {
   $res=db_exec("DELETE FROM srv_entries WHERE id IN ( " .
 	       "SELECT a.id FROM srv_entries a, hosts h " .
 	       "WHERE h.zone=$id AND a.type=1 AND a.ref=h.id)");
-  if ($res < 0) { db_rollback(); return -15; }
+  if ($res < 0) { db_rollback(); return -16; }
 
-  # srv_entries
+  # sshfp_entries
   print "<BR>Deleting SSHFP entries...\n";
   $res=db_exec("DELETE FROM sshfp_entries WHERE id IN ( " .
 	       "SELECT a.id FROM sshfp_entries a, hosts h " .
 	       "WHERE h.zone=$id AND a.type=1 AND a.ref=h.id)");
-  if ($res < 0) { db_rollback(); return -15; }
+  if ($res < 0) { db_rollback(); return -17; }
+
+  # tlsa_entries
+  print "<BR>Deleting TLSA entries...\n";
+  $res=db_exec("DELETE FROM tlsa_entries WHERE id IN ( " .
+	       "SELECT a.id FROM tlsa_entries a, hosts h " .
+	       "WHERE h.zone=$id AND a.type=1 AND a.ref=h.id)");
+  if ($res < 0) { db_rollback(); return -18; }
+
+  # naptr_entries
+  print "<BR>Deleting NAPTR entries...\n";
+  $res=db_exec("DELETE FROM naptr_entries WHERE id IN ( " .
+	       "SELECT a.id FROM naptr_entries a, hosts h " .
+	       "WHERE h.zone=$id AND a.type=1 AND a.ref=h.id)");
+  if ($res < 0) { db_rollback(); return -19; }
+
 
   # arec_entries
   print "<BR>Deleting (sub)group entries...\n";
   $res=db_exec("DELETE FROM group_entries WHERE id IN ( " .
 	       "SELECT a.id FROM group_entries a, hosts h " .
 	       "WHERE h.zone=$id AND a.host=h.id)");
-  if ($res < 0) { db_rollback(); return -16; }
+  if ($res < 0) { db_rollback(); return -20; }
 
   # hosts
   print "<BR>Deleting Hosts...\n";
@@ -1957,6 +1972,9 @@ sub get_host($$) {
   get_array_field("tlsa_entries",6,"id,usage,selector,matching_type,association_data,comment",
 		  "Usage,Selector,Matching Type,Asociation Data,Comments",
 		  "type=1 AND ref=$id ORDER BY usage,selector,matching_type,association_data",$rec,'tlsa_l');
+  get_array_field("naptr_entries",8,"id,order_val,preference,flags,service,regexp,replacement,comment",
+		  "Order,Preference,Flags,Service,Regexp,Replacement,Comments",
+		  "type=1 AND ref=$id ORDER BY order_val,preference,flags,service,regexp,replacement",$rec,'naptr_l');
   get_array_field("txt_entries",3,"id,txt,comment",
 		  "Text,Comments",
 		  "type=2 AND ref=$id ORDER BY txt",$rec,'txt_l');
@@ -2139,27 +2157,31 @@ sub update_host($) {
 			"usage,selector,matching_type,association_data,comment,type,ref",
 			'tlsa_l',$rec,"1,$id");
   if ($r < 0) { db_rollback(); return -20; }
+  $r=update_array_field("naptr_entries",8,
+			"order_val,preference,flags,service,regexp,replacement,comment,type,ref",
+			'naptr_l',$rec,"1,$id");
+  if ($r < 0) { db_rollback(); return -21; }
   $r=update_array_field("txt_entries",3,
 			"txt,comment,type,ref",
 			'txt_l',$rec,"2,$id");
-  if ($r < 0) { db_rollback(); return -21; }
+  if ($r < 0) { db_rollback(); return -22; }
   $r=update_array_field("a_entries",4,"ip,reverse,forward,host",
 			'ip',$rec,"$id");
-  if ($r < 0) { db_rollback(); return -22; }
+  if ($r < 0) { db_rollback(); return -23; }
 
   if ($rec->{type}==7) {
     $r=update_array_field("arec_entries",2,"arec,host",
 			  'alias_a',$rec,"$id");
-    if ($r < 0) { db_rollback(); return -23; }
+    if ($r < 0) { db_rollback(); return -24; }
   }
 
   $r=update_array_field("group_entries",2,"grp,host",
 			'subgroups',$rec,"$id");
-  if ($r < 0) { db_rollback(); return -24; }
+  if ($r < 0) { db_rollback(); return -25; }
 
   $r=update_array_field("dhcp_entries",3,"dhcp,comment,type,ref",
 			'dhcp_l6',$rec,"13,$id");
-  if ($r < 0) { db_rollback(); return -25; }
+  if ($r < 0) { db_rollback(); return -26; }
 
   return db_commit();
 }
@@ -2245,9 +2267,13 @@ sub delete_host($) {
   $res=db_exec("DELETE FROM tlsa_entries WHERE type=1 AND ref=$id;");
   if ($res < 0) { db_rollback(); return -16; }
 
+  # naptr_entries
+  $res=db_exec("DELETE FROM naptr_entries WHERE type=1 AND ref=$id;");
+  if ($res < 0) { db_rollback(); return -17; }
+
   # txt_entries
   $res=db_exec("DELETE FROM txt_entries WHERE type=2 AND ref=$id;");
-  if ($res < 0) { db_rollback(); return -17; }
+  if ($res < 0) { db_rollback(); return -18; }
 
   # group_entries
   $res=db_exec("DELETE FROM group_entries WHERE host=$id;");
@@ -2342,21 +2368,26 @@ sub add_host($) {
 			 'tlsa_l',$rec,'type,ref',"1,$id");
   if ($res < 0) { db_rollback(); return -10; }
 
+  # NAPTRs
+  $res = add_array_field('naptr_entries','order_val,preference,flags,service,regexp,replacement,comment',
+			 'naptr_l',$rec,'type,ref',"1,$id");
+  if ($res < 0) { db_rollback(); return -11; }
+
   # TXTs
   $res = add_array_field('txt_entries','txt,comment',
 			 'txt_l',$rec,'type,ref',"2,$id");
-  if ($res < 0) { db_rollback(); return -11; }
+  if ($res < 0) { db_rollback(); return -12; }
 
   # ARECs
   if ($rec->{type}==7) {
     $res=db_exec("INSERT INTO arec_entries (host,arec) VALUES($id,$a_id);");
-    if ($res < 0) { db_rollback(); return -12; }
+    if ($res < 0) { db_rollback(); return -13; }
   }
 
   # subgroups
   $res = add_array_field('group_entries','grp',
 			 'subgroups',$rec,'host',"$id");
-  if ($res < 0) { db_rollback(); return -13; }
+  if ($res < 0) { db_rollback(); return -14; }
 
   return -20 if (db_commit() < 0);
   return $id;
@@ -2369,7 +2400,7 @@ sub get_host_types() {
     return (0 => 'Any type', 1 => 'Host', 2 => 'Delegation', 3 => 'Plain MX',
 	    4 => 'Alias', 5 => 'Printer', 6 => 'Glue', 7 => 'AREC Alias',
 	    8 => 'SRV', 9 => 'DHCP only', 10 => 'Zone', 11=>'SSHFP only',
-            12 => 'TLSA only', 13 => 'TXT',
+	    12 => 'TLSA only', 13 => 'TXT', 14 => 'NAPTR',
 	    101 => 'Host reservation');
 }
 
