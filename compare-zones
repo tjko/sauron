@@ -5,13 +5,16 @@ use Getopt::Long qw(GetOptions);
 use Net::DNS::ZoneFile;
 use Digest::MD5 qw(md5_hex);
 
-my ($z1_file, $z2_file, $opt_origin, $ignore_soa, @ignore, $ignore_ns, $opt_help);
+my ($z1_file, $z2_file, $opt_origin, $canonize, $ignore_soa, @ignore, $ignore_ttl, $ignore_case, $ignore_ns, $opt_help);
 GetOptions(
     'zone1|1=s'    => \$z1_file,
     'zone2|2=s'    => \$z2_file,
     'origin|o=s'   => \$opt_origin,
+    'canonize|a'   => \$canonize,
     'ignore-soa|s' => \$ignore_soa,
     'ignore|i=s@'  => \@ignore,
+    'ignore_ttl|t' => \$ignore_ttl,
+    'ignore_case|c' => \$ignore_case,
     'ignore_ns|n'  => \$ignore_ns,
     'help|h'       => \$opt_help
 ) or die "Bad options, use --help\n";
@@ -22,19 +25,32 @@ if ($opt_help){
     print "\nOptions:\n",
       "\t-1, --zone1 <file>  first zone file to compare\n",
       "\t-2, --zone2 <file>  second zone file to compare\n",
+      "\t-a, --canonize      canonize zone files before comparing, needs origin (-o)\n",
       "\t-o, --origin <name> define \$ORIGIN if not defined (with a period at the end)\n",
       "\t-s, --ignore-soa    skip SOA record\n",
       "\t-i, --ignore <type> skip this record type (use multiple)\n",
+      "\t-t, --ignore-ttl    ignore TTL differences (only compare RDATA)\n",
+      "\t-c, --ignore_case   ignore case sensitive in RDATA (e.g. for NS, CNAME)\n",
       "\t-n, --ignore_ns     skip NS records in ORIGIN domain\n",
       "\t-h, --help          this help\n";
     exit(1);
 }
 
 die "Both zone files required\n" unless $z1_file && $z2_file;
+die "Origin required for canonize mode\n" if $canonize && !$opt_origin;
 
 sub load {
     my ($file) = @_;
-    my $zf = Net::DNS::ZoneFile->new($file, $opt_origin);
+    my $zf;
+    if ($canonize) {
+        # Input from pipe/command
+        $file = "named-checkzone -D $opt_origin $file";
+        open my $fh, '-|', $file or die "Cannot open pipe '$file': $!\n";
+        $zf = Net::DNS::ZoneFile->new($fh, $opt_origin);
+    } else {
+        # Input from file
+        $zf = Net::DNS::ZoneFile->new($file, $opt_origin);
+    }
     my %rec;
 
     while (my $rr = $zf->read) {
@@ -45,7 +61,8 @@ sub load {
         next if ($ignore_ns && $type eq $ignore_ns && $rr->name eq $zf->origin);
 
         my $key = join('|', $rr->name, $type, $rr->class);
-        my $content = join(' ', $rr->ttl, $rr->rdstring);
+        my $rdstring = $ignore_case ? lc($rr->rdstring) : $rr->rdstring;
+        my $content = $ignore_ttl ? $rdstring : join(' ', $rr->ttl, $rdstring);
         $rec{$key} = { ttl=>$rr->ttl, rdata=>[$rr->rdata], hash=>md5_hex($content), obj=>$rr, line=>$rr->string };
     }
     return \%rec;
@@ -84,7 +101,7 @@ foreach my $key (sort keys %$zone1) {
 # -------------------------------------------------
 sub fmt_key {
     my ($key) = @_;
-    my ($name,$type,$class) = split /\|/, $key;
+    my ($name,$type,$class) = split (/\|/, $key);
     return "$name $type $class";
 }
 
@@ -110,8 +127,39 @@ print "\n=== Records that differ (same name+type, but different content) ===\n";
 if (@changed) {
     foreach my $k (@changed) {
         print ">>> ", fmt_key($k), "\n";
-        print "    ", $zone1->{$k}{line}, " ; $z1_file\n";
-        print "    ", $zone2_full->{$k}{line}, " ; $z2_file\n";
+        my $line1 = $zone1->{$k}{line};
+        my $line2 = $zone2_full->{$k}{line};
+
+        # Highlight differences in zone1 line
+        my @chars1 = split //, $line1;
+        my @chars2 = split //, $line2;
+        my $max = $#chars1 > $#chars2 ? $#chars1 : $#chars2;
+
+        # Highlight differences in zone1 line
+        print "  $z1_file: ";
+        for (my $i = 0; $i <= $max; $i++) {
+            my $c1 = $chars1[$i] // '';
+            my $c2 = $chars2[$i] // '';
+            if ($c1 ne $c2) {
+                print "\033[91m$c1\033[0m";
+            } else {
+                print $c1;
+            }
+        }
+        print "\n";
+
+        # Highlight differences in zone2 line
+        print "  $z2_file: ";
+        for (my $i = 0; $i <= $max; $i++) {
+            my $c1 = $chars1[$i] // '';
+            my $c2 = $chars2[$i] // '';
+            if ($c1 ne $c2) {
+                print "\033[91m$c2\033[0m";
+            } else {
+                print $c2;
+            }
+        }
+        print "\n";
     }
 } else {
     print "(none)\n";
