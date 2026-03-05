@@ -691,8 +691,8 @@ print "server updated id=$serverid\n" if ($opt_verbose);
 
 # $loopback = new Net::Netmask($LOOPBACK_NET);
 # $loopback_reverse=($loopback->inaddr())[0];
-$loopback_reverse_ipv4 = NetAddr::IP($LOOPBACK_NET_IPv4); # For IPv4.
-$loopback_reverse_ipv6 = NetAddr::IP($LOOPBACK_NET_IPv6); # For IPv6.
+$loopback_reverse_ipv4 = new NetAddr::IP($LOOPBACK_NET_IPv4); # For IPv4.
+$loopback_reverse_ipv6 = new NetAddr::IP($LOOPBACK_NET_IPv6); # For IPv6.
 
 # make sure in-adrr.arpa (reverse) zones are processed first
 # (so we can use this information when adding hosts to decide
@@ -721,7 +721,7 @@ for ($i=0; $i <= $#zones; $i+=1) {
   print "REVERSE ZONE! $zone\n" if ($rev eq 'true');
 
 # if ($zone =~ /$LOOPBACK_ZONE|$loopback_reverse/) {
-  $revzone = $rev == 'true' ? NetAddr::IP(arpa2cidr($zone)) : ''; # For IPv6.
+  $revzone = $rev == 'true' ? new NetAddr::IP(arpa2cidr($zone)) : ''; # For IPv6.
   if ($zone =~ /$LOOPBACK_ZONE/ || $revzone ne '' &&
       ($revzone->within($loopback_reverse_ipv4) ||
        ($revzone->within($loopback_reverse_ipv6)))) { # For IPv6.
