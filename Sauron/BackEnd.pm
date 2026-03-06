@@ -3574,9 +3574,9 @@ sub get_free_ip_by_net($$$$$) {
 # Get a list of free ip addresses, one per net, for each net in the
 # same vlan as the given host that fits the user's auth level.
 sub get_ip_sugg($$$) {
-  my ($hostid, $serverid, $perms) = @_;
-  my (@row_n, @row_v, $list, $sql, $old_ip, $new_ip, $netname, $cidr, $mac, $ip_policy, $netid, $alevel_n);
-  my $alevel_u = $perms->{alevel};
+    my ($hostid, $serverid, $perms) = @_;
+    my (@row_n, @row_v, $list, $sql, $old_ip, $new_ip, $netname, $cidr, $mac, $ip_policy, $netid, $alevel_n);
+    my $alevel_u = $perms->{alevel};
 
 # Get subnets. Don't care about alevels or permissions.
     $sql = "select distinct on (n2.netname) " .
@@ -3623,29 +3623,10 @@ sub get_ip_sugg($$$) {
 	    }
 	}
     }
-    # Get possible virtual nets in each subnet even if user can't see the subnet.
-    $sql = "select netname, net, ip_policy, id, alevel from nets " .
-      "where dummy = 't' and net << '$cidr' order by netname;";
-    db_query($sql, \@row_v);
-    for my $ind2 (0..$#row_v) {
-      $netid = $row_v[$ind2][3];
-      $alevel_n = $row_v[$ind2][4];
-      # Show virtual net to user only if alevel and permissions allow.
-      if ($alevel_u >= 998 || $alevel_u >= $alevel_n && (!%{$perms->{net}} || $perms->{net}->{$netid})) {
-        $netname = $row_v[$ind2][0];
-        $cidr = $row_v[$ind2][1];
-        $ip_policy = $row_v[$ind2][2];
-        $new_ip = get_free_ip_by_net($serverid, $cidr, $mac, $old_ip, $ip_policy);
-        if (is_ip($new_ip)) {
-          $list .= "<option value='$new_ip'>\n$netname - $new_ip</option>\n";
-        }
-      }
+    if ($list) {
+	$list = "\n<select name='subnetlist'>\n<option value='null'>&lt;Select&gt;</option>\n$list</select>\n";
     }
-  }
-  if ($list) {
-    $list = "\n<select name='subnetlist'>\n<option value='null'>&lt;Select&gt;</option>\n$list</select>\n";
-  }
-  return $list;
+    return $list;
 }
 
 ############################################################################
