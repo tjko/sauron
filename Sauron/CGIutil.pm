@@ -252,7 +252,7 @@ sub form_check_field($$$) {
 	    "(${$field->{'limits'}}[0] .. ${$field->{'limits'}}[1])";
     }
   } elsif ($type eq 'port') {
-    return 'port number required!' unless ($value > 0 && $value < 65535);
+    return 'port number required!' unless ($value > 0 && $value <= 65535);
   } elsif ($type eq 'bool') {
     return 'boolean value required!' unless ($value =~ /^(t|f)$/);
   } elsif ($type eq 'mac') {
