@@ -3609,13 +3609,13 @@ sub get_ip_sugg($$$) {
 	    "where dummy = 't' and net << '$cidr' order by netname;";
 	db_query($sql, \@row_v);
 	for my $ind2 (0..$#row_v) {
-	    $netid = $row_v[$ind1][3];
-	    $alevel_n = $row_v[$ind1][4];
+	    $netid = $row_v[$ind2][3];
+	    $alevel_n = $row_v[$ind2][4];
 # Show virtual net to user only if alevel and permissions allow.
 	    if ($alevel_u >= 998 || $alevel_u >= $alevel_n && (!%{$perms->{net}} || $perms->{net}->{$netid})) {
 		$netname = $row_v[$ind2][0];
 		$cidr = $row_v[$ind2][1];
-		$ip_policy = $row_v[$ind1][2];
+		$ip_policy = $row_v[$ind2][2];
 		$new_ip = get_free_ip_by_net($serverid, $cidr, $mac, $old_ip, $ip_policy);
 		if (is_ip($new_ip)) {
 		    $list .= "<option value='$new_ip'>\n$netname - $new_ip</option>\n";
