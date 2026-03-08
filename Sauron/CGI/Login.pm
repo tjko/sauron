@@ -646,6 +646,7 @@ sub menu_handler {
     }
   }
   elsif ($sub eq 'history') {
+    return if (check_perms('superuser',''));
     print start_form(-method=>'POST',-action=>$selfurl),
           hidden('menu','login'),hidden('sub','history');
     form_magic('history',\%h,\%history_form);
@@ -660,21 +661,21 @@ sub menu_handler {
     $sqlstr = 'select u.username, h.sid, h.date, h.type, h.ref, h.action, h.info, ho.id, n.id ' .
 	'from history h left join users u on h.uid = u.id left join hosts ho on h.type = 1 and h.ref = ho.id ' .
 	'left join nets n on h.type = 4 and h.ref = n.id where true ';
-    if (param('history_user') =~ /\S/) { $sqlstr .= "and u.username = '" . lc(param('history_user')) . "' "; }
+    if (param('history_user') =~ /\S/) { $sqlstr .= "and u.username = " . db_encode_str(lc(param('history_user'))) . " "; }
     if (param('history_date') =~ /\S/) {
 	my $dates = decode_daterange_str(param('history_date'));
 	if ($$dates[0] > 0) { $sqlstr .= "and h.date >= $$dates[0] "; }
 	if ($$dates[1] > 0) { $sqlstr .= "and h.date <= $$dates[1] "; }
     }
 # If 'Users' (5) was selected, get history of users (5) and user groups (6).
-    if (param('history_type') != 0) {
-	if (param('history_type') == 5) {
+    if (int(param('history_type')) != 0) {
+	if (int(param('history_type')) == 5) {
 	    $sqlstr .= 'and (h.type = 5 or h.type = 6) ';
 	} else {
-	    $sqlstr .= 'and h.type = ' . param('history_type') . ' ';
+	    $sqlstr .= 'and h.type = ' . int(param('history_type')) . ' ';
 	}
     }
-    if (param('history_ref') > 0) { $sqlstr .= 'and h.ref = ' . param('history_ref') . ' '; }
+    if (int(param('history_ref')) > 0) { $sqlstr .= 'and h.ref = ' . int(param('history_ref')) . ' '; }
     if (param('history_action') =~ /\S/) { $sqlstr .= "and h.action ~* " . db_encode_str(param('history_action')) . " "; }
     if (param('history_info') =~ /\S/) { $sqlstr .= "and h.info ~* " . db_encode_str(param('history_info')) . " "; }
     $sqlstr .= 'order by h.date;';
