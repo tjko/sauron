@@ -1062,7 +1062,7 @@ sub menu_handler {
       # Alias inherits TTL from host. 2019-01-08 TVu
       if (param('aliasadd_alias')) {
 	my $sql = "update hosts set ttl = (select ttl from hosts where id = " .
-	  param('aliasadd_alias') . ") where id = $res;";
+	  int(param('aliasadd_alias')) . ") where id = $res;";
 	db_exec($sql); # No error checking.
       }
       update_history($state->{uid},$state->{sid},1,
