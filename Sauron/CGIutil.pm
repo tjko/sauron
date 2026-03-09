@@ -344,6 +344,53 @@ sub form_get_defaults($) {
   $form->{nwidth}="30%" unless ($form->{nwidth});
 }
 
+#####################################################################
+# remove_whitespace($val, $whitesp)
+#
+# Strips/normalizes whitespace per flag string. See form_check_form() 
+# comments for flag descriptions (W, A, L, E, C, T, N, P).
+#
+sub remove_whitespace($$) {
+    my ($val, $whitesp) = @_;
+
+# Return original value if whitespace removal is not enabled.
+    if (!$main::SAURON_REMOVE_WHITESPACE) { return $val; }
+
+# Multi-line strings are processed one line at a time.
+# Seems that some things just don't work otherwise.
+    if ($val =~ /\n/) {
+	my @arr = split(/\n/, $val);
+	for my $ind1 (0..$#arr) {
+	    $arr[$ind1] = remove_whitespace($arr[$ind1], $whitesp);
+	}
+	return join("\n", @arr);
+    }
+
+    if (!$whitesp) {
+	$val =~ s/\s+//g; # Remove all whitespace.
+    } else {
+	if ($whitesp !~ /W/) {
+	    $val =~ s/\s/ /g; # Turn all non-space whitespace into spaces.
+	}
+	if ($whitesp !~ /A/) {
+	    if ($whitesp =~ /[LP]/) {
+		$val =~ s/^\s+//g; # Remove leading whitespace.
+	    }
+	    if ($whitesp =~ /E/) {
+# **		$val =~ s/(\S)\s+(\S)/$1$2/g; # Remove embedded whitespace.
+		$val =~ s/(\S)\s+(?=\S)/$1/g; # Remove embedded whitespace.
+	    }
+	    if ($whitesp =~ /[CNP]/) {
+# **		$val =~ s/(\S)\s+(\S)/$1 $2/g; # Compress embedded whitespace.
+		$val =~ s/(\S)\s+(?=\S)/$1 /g; # Compress embedded whitespace.
+	    }
+	    if ($whitesp =~ /[TNP]/) {
+		$val =~ s/\s+$//g; # Remove trailing whitespace.
+	    }
+	}
+    }
+    return $val;
+}
 
 #####################################################################
 # form_check_form($prefix,$data,$form)
@@ -370,47 +417,6 @@ sub form_check_form($$$) {
 # compresses embedded consequtive spaces into a single space and removes trailing
 # spaces, but keeps leading spaces like this: "  foo\t  bar  " => "  foo bar"
 # Example: AW = make no changes (same as W alone but marginally faster)
-  sub remove_whitespace($$) {
-      my ($val, $whitesp) = @_;
-
-# Return original value if whitespace removal is not enabled.
-      if (!$main::SAURON_REMOVE_WHITESPACE) { return $val; }
-
-# Multi-line strings are processed one line at a time.
-# Seems that some things just don't work otherwise.
-      if ($val =~ /\n/) {
-	  my @arr = split(/\n/, $val);
-	  for my $ind1 (0..$#arr) {
-	      $arr[$ind1] = remove_whitespace($arr[$ind1], $whitesp);
-	  }
-	  return join("\n", @arr);
-      }
-
-      if (!$whitesp) {
-	  $val =~ s/\s+//g; # Remove all whitespace.
-      } else {
-	  if ($whitesp !~ /W/) {
-	      $val =~ s/\s/ /g; # Turn all non-space whitespace into spaces.
-	  }
-	  if ($whitesp !~ /A/) {
-	      if ($whitesp =~ /[LP]/) {
-		  $val =~ s/^\s+//g; # Remove leading whitespace.
-	      }
-	      if ($whitesp =~ /E/) {
-# **		  $val =~ s/(\S)\s+(\S)/$1$2/g; # Remove embedded whitespace.
-		  $val =~ s/(\S)\s+(?=\S)/$1/g; # Remove embedded whitespace.
-	      }
-	      if ($whitesp =~ /[CNP]/) {
-# **		  $val =~ s/(\S)\s+(\S)/$1 $2/g; # Compress embedded whitespace.
-		  $val =~ s/(\S)\s+(?=\S)/$1 /g; # Compress embedded whitespace.
-	      }
-	      if ($whitesp =~ /[TNP]/) {
-		  $val =~ s/\s+$//g; # Remove trailing whitespace.
-	      }
-	  }
-      }
-      return $val;
-  }
 
   $formdata=$form->{data};
   $zonename = $form->{'zonename'} || ''; # TVu 2020-06-01
