@@ -17,6 +17,7 @@ REQUIREMENTS
 		- Net::DNS module
 		- Net::IP module
 		- Net::Netmask module
+                - NetAddr::IP module
 		- Digest::MD5 module
 		- Digest::HMAC module
 		- Digest::SHA1 module

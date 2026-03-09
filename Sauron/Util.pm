@@ -225,8 +225,10 @@ sub url2link($) {
 # Does not test if masked portion is actually all zeros,
 # nor are private/reserved addresses checked.
 sub cidr4ok($) {
-    local ($_) = @_;
-    /^((25[0-5]|2[0-4]\d|[01]?\d{1,2})\.){0,3}(25[0-5]|2[0-4]\d|[01]?\d{1,2})(\/([012]?\d|3[012]))?$/;
+    my ($addr) = @_;
+
+    my $ip = NetAddr::IP->new($addr) or return 0;
+    return $ip->bits == 32 ? 1 : 0; # only IPv4 address is allowed
 }
 
 # Verify IPv6 CIDR is formally correct.
@@ -239,17 +241,13 @@ sub cidr4ok($) {
 # Mixed IPv6-IPv4 notation x:x:x:x:x:x:d.d.d.d is not allowed.
 # Netmask, if present, must be a multiple of 4.
 sub cidr6ok($) {
-    local ($_) = @_;
+    my ($addr) = @_;
 
-#   if (/\/(\d{1,3})$/) { return 0 if ($1 % 4); }
-    if (/\/(\d{1,3})$/ && $1 % 4) { return 0; }
-    s/\/([01]?\d{1,2}|12[0-8])$//;
-    return /^([\dA-F]{1,4}:){7}[\dA-F]{1,4}$/i if !/::/;
-    # Compression (::) is handled by converting :: to single 0
-    # - not complete decompression but for purposes of validity testing
-    # it is sufficient.
-    s/^::$/0:0/ || s/::$/:0/ || s/^::/0:/ || s/::/:0:/;
-    /^([\dA-F]{1,4}:){1,7}[\dA-F]{1,4}$/i;
+    # NetAddr::IP returns object or undef (invalid address)
+    my $ip = NetAddr::IP->new($addr) or return 0;
+    return 0 unless $ip->bits == 128; # only IPv6 address is allowed
+    return 0 if $ip->masklen % 4;  # mask must be a multiple of 4
+    return 1;
 }
 
 # Verify mixed IPv6-IPv4 CIDR:
@@ -257,14 +255,16 @@ sub cidr6ok($) {
 # compression within IPv6 part is allowed, e.g., x::x:d.d.d.d
 # Netmask, if present, must be a multiple of 4.
 sub cidr64ok($) {
-    local ($_) = @_;
+    my ($addr) = @_;
 
-#   if (/\/(\d{1,3})$/) { return 0 if ($1 % 4); }
-    if (/\/(\d{1,3})$/ && $1 % 4) { return 0; }
-    s/\/([01]?\d{1,2}|12[0-8])$//;
-    return /^([\dA-F]{1,4}:){5}[\dA-F]{1,4}:((25[0-5]|2[0-4]\d|[01]?\d{1,2})\.){3}(25[0-5]|2[0-4]\d|[01]?\d{1,2})$/i if !/::/;
-    s/^::$/0:0/ || s/::$/:0/ || s/^::/0:/ || s/::/:0:/;
-    /^([\dA-F]{1,4}:){1,5}[\dA-F]{1,4}:((25[0-5]|2[0-4]\d|[01]?\d{1,2})\.){3}(25[0-5]|2[0-4]\d|[01]?\d{1,2})$/i if !/::/;
+    my $ip = NetAddr::IP->new($addr) or return 0;
+    return 0 unless $ip->bits == 128; # only IPv6 address is allowed
+    return 0 if $ip->masklen % 4; # mask must be a multiple of 4
+
+    # We will check that the original string ends with a classic IPv4 notation.
+    # NetAddr::IP can already parse the IPv4 part, but we need to
+    # verify that the user has actually entered the form "xxx.xxx.xxx.xxx".
+    return ($addr =~ /(?:\d{1,3}\.){3}\d{1,3}$/) ? 1 : 0;
 }
 
 # Verify CIDR is correct, either IPv4 or IPv6 (including mixed).
