@@ -101,6 +101,7 @@ sub db_exec($) {
 
 # $db_last_oid=$sth->{pg_oid_status}; # ** Removed 2018-09-25 TVu
 # eval { $db_last_id = $sth->fetch()->[0]; }; # ** Added 2018-09-25 TVu
+  $db_last_id = -1; # reset if eval() fails
   eval { # ** Added 2018-10-01 TVu
       $db_last_id = $sqlstr =~ /returning/i ? $sth->fetch()->[0] : -1;
   };
