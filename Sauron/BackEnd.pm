@@ -2271,10 +2271,6 @@ sub delete_host($) {
   $res=db_exec("DELETE FROM naptr_entries WHERE type=1 AND ref=$id;");
   if ($res < 0) { db_rollback(); return -17; }
 
-  # txt_entries
-  $res=db_exec("DELETE FROM txt_entries WHERE type=2 AND ref=$id;");
-  if ($res < 0) { db_rollback(); return -18; }
-
   # group_entries
   $res=db_exec("DELETE FROM group_entries WHERE host=$id;");
   if ($res < 0) { db_rollback(); return -12; }
