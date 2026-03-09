@@ -954,22 +954,23 @@ sub update_server($) {
   # custom options (BIND)
   $r=update_array_field("txt_entries",3,"txt,comment,type,ref",
 			 'custom_opts',$rec,"11,$id");
+  if ($r < 0) { db_rollback(); return -21; }
   # Globals (BIND)
   $r=update_array_field("txt_entries",3,"txt,comment,type,ref",
 			 'bind_globals',$rec,"13,$id");
-  if ($r < 0) { db_rollback(); return -21; }
+  if ($r < 0) { db_rollback(); return -22; }
 
   # allow_query_cache
   $r=update_aml_field(14,$id,$rec,'allow_query_cache');
-  if ($r < 0) { db_rollback(); return -22; }
+  if ($r < 0) { db_rollback(); return -23; }
 
   # allow_notify
   $r=update_aml_field(15,$id,$rec,'allow_notify');
-  if ($r < 0) { db_rollback(); return -23; }
+  if ($r < 0) { db_rollback(); return -24; }
 
   # listen_on
   $r=update_aml_field(16,$id,$rec,'listen_on_v6');
-  if ($r < 0) { db_rollback(); return -24; }
+  if ($r < 0) { db_rollback(); return -25; }
 
 
   return db_commit();
@@ -1034,18 +1035,19 @@ sub add_server($) {
   # custom options
   $res = add_array_field('txt_entries','txt,comment','custom_opts',$rec,
 			 'type,ref',"11,$id");
+  if ($res < 0) { db_rollback(); return -19; }
   # bind globals
   $res = add_array_field('txt_entries','txt,comment','bind_globals',$rec,
 			 'type,ref',"13,$id");
-  if ($res < 0) { db_rollback(); return -19; }
+  if ($res < 0) { db_rollback(); return -20; }
 
   # allow_query_cache
   $res = update_aml_field(14,$id,$rec,'allow_query_cache');
-  if ($res < 0) { db_rollback(); return -20; }
+  if ($res < 0) { db_rollback(); return -21; }
 
   # allow_notify
   $res = update_aml_field(15,$id,$rec,'allow_notify');
-  if ($res < 0) { db_rollback(); return -21; }
+  if ($res < 0) { db_rollback(); return -22; }
 
 
   return -100 if (db_commit() < 0);
