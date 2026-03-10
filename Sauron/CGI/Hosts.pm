@@ -1147,7 +1147,7 @@ sub menu_handler {
 	alert1("Invalid network address!");
 	return;
       }
-      $newip = get_free_ip_by_net($serverid, $move_net_val, $data{ether}, '',
+      $newip = get_free_ip_by_net($serverid, param('move_net'), $data{ether}, '',
 				  get_net_ip_policy($serverid, param('move_net')));
       unless (is_cidr($newip)) {
 	logmsg("notice","get_free_ip_by_net($serverid, '" . param('move_net') . "', '" .
