@@ -1901,7 +1901,11 @@ sub copy_zone($$$$) {
 	   "WHERE h.zone=$id AND h.id=a.host",\@q);
   for $i (0..$#q) {
     #print "$i: $q[$i][0] --> $hidh{$q[$i][0]}, $q[$i][1] --> $hidh{$q[$i][1]}<br>";
-    return -23 unless ($hidh{$q[$i][0]} && $hidh{$q[$i][1]});
+    unless ($hidh{$q[$i][0]} && $hidh{$q[$i][1]}) {
+      db_rollback();
+      return -23;
+    }
+
     $q[$i][0]=$hidh{$q[$i][0]};
     $q[$i][1]=$hidh{$q[$i][1]};
   }
