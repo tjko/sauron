@@ -1373,8 +1373,9 @@ sub form_magic($$$) {
 	if (param($p1) eq '' && ($lst[0] ne '') && (not param($p1."_l")));
 
       if ($lsth{param($p1)} && (param($p1) ne '')) {
-	param($p1."_l",param($p1));
-	param($p1,'');
+          # inner param must run in scalar context to avoid CGI warning
+          my $val = scalar(param($p1));
+          param($p1."_l", $val);
       }
 
       print td($rec->{name}),"<TD>",
