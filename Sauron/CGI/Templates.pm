@@ -369,7 +369,7 @@ sub menu_handler {
 	return;
       }
       elsif (param('mx_confirm')) {
-	$new_id=param('mx_new');
+	$new_id=int(param('mx_new'));
 	if ($new_id eq $mx_id) {
 	  print h2("Cannot change host records to point template " .
 		   "being deleted!");
@@ -418,7 +418,7 @@ sub menu_handler {
 	return;
       }
       elsif (param('wks_confirm')) {
-	$new_id=param('wks_new');
+	$new_id=int(param('wks_new'));
 	if ($new_id eq $wks_id) {
 	  print h2("Cannot change host records to point template " .
 		   "being deleted!");
