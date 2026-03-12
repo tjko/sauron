@@ -39,6 +39,14 @@ sub write2log{
 
 my %ztypenames=(M=>'Master',S=>'Slave',F=>'Forward',H=>'Hint');
 
+my %naptr_flags=(
+    0=>'(non-terminal)',
+    1=>'S',
+    2=>'A',
+    3=>'U',
+    4=>'P'
+);
+
 my %new_zone_form=(
  data=>[
   {ftype=>0, name=>'New zone'},
@@ -113,6 +121,12 @@ my %zone_form = (
    iff2=>['reverse','f']},
   {ftype=>2, tag=>'txt', name=>'Info (TXT)', type=>['text','text'], fields=>2,
    len=>[68,15], maxlen=>[220,15], empty=>[0,1], elabels=>['TXT','comment'], whitesp=>['P','P'],
+   iff=>['type','M'], iff2=>['reverse','f']},
+  {ftype=>2, tag=>'naptr', name=>'NAPTR entries', fields=>7, len=>[3,3,2,5,20,20,20],
+   empty=>[0,0,1,1,1,0,1], maxlen=>[5,5,2,20,100,100,80], addempty=>[-1,-1,-1,-1,-1,-1,0],
+   elabels=>['Order','Preference','Flags','Service','Regexp','Replacement','Comment'],
+   type=>['priority','priority','enum','text','text','text','text'],
+   enum=>[undef, undef, \%naptr_flags, undef, undef, undef, undef],
    iff=>['type','M'], iff2=>['reverse','f']},
 
 # New version of Custom zone file entries: Multiple textareas instead

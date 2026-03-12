@@ -267,19 +267,32 @@ sub process_zonefile($$$$) {
     }
     elsif ($type eq 'NAPTR') {
       # NAPTR: order preference flags service regexp replacement
+      # RFC 2915 Section 5: NAPTR RR Format
+      # Flags can be empty (non-terminal) or one of {A,U,S,P} (terminal, case-insensitive)
+      # Service and Regexp are both optional, but at least one must be non-empty
       fatal("$filename($.): invalid NAPTR record: $fline")
       unless (
-        $line[0]=~/^\d+$/ &&                # order
-        $line[1]=~/^\d+$/ &&                # preference
-        $line[2]=~/^".*"$/ &&               # flags (quoted string)
-        $line[3]=~/^".*"$/ &&               # service (quoted string)
-        $line[4]=~/^".*"$/ &&               # regexp (quoted string)
-        $line[5]=~/^.*$/                    # replacement
+        $line[0]=~/^\d+$/ &&                # order (unsigned 16-bit)
+        $line[1]=~/^\d+$/ &&                # preference (unsigned 16-bit)
+        $line[2]=~/^"[AUSP]?"$/i &&         # flags (empty or one of AUSP, quoted, case-insensitive)
+        $line[3]=~/^".*"$/ &&               # service (quoted string, can be empty)
+        $line[4]=~/^".*"$/ &&               # regexp (quoted string, can be empty)
+        $line[5]=~/^.+$/                    # replacement (non-empty domain name)
       );
+      # Extract content for validation
+      $line[3] =~ s/^"(.*)"$/$1/; # extract service content
+      $line[4] =~ s/^"(.*)"$/$1/; # extract regexp content
+      
+      # RFC 2915: At least one of service or regexp must be non-empty (but not both empty)
+      fatal("$filename($.): NAPTR must have non-empty service or regexp (or both): $fline")
+        if ($line[3] eq '' && $line[4] eq '');
+      # RFC 2915: Replacement must be non-empty domain
+      fatal("$filename($.): NAPTR replacement cannot be empty: $fline")
+        if ($line[5] eq '');
+      
       $line[2] =~ tr/a-z/A-Z/; # flags are case-insensitive, convert to uppercase
-      $line[2] =~ s/^"(.*)"$/$1/; # remove quotes from flag
-      $line[3] =~ s/^"(.*)"$/$1/; # remove quotes from service
-      $line[4] =~ s/^"(.*)"$/$1/; # remove quotes from regexp
+      $line[2] =~ s/^"(.*)"$/$1/; # remove quotes from flag (can be empty string)
+      # service and regexp already have quotes removed above
       push @{$rec->{NAPTR}}, join(" ", @line[0..5]);
     }
     elsif ($type eq 'WKS') {
