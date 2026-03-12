@@ -1073,7 +1073,7 @@ sub _delete_server_parts($) {
   if ($res < 0) { db_rollback(); return -2; }
 
   # dhcp_entries
-  $res=db_exec("DELETE FROM dhcp_entries WHERE (type=7 OR type=1) AND ref=$id;");
+  $res=db_exec("DELETE FROM dhcp_entries WHERE (type=7 OR type=1 OR type=17 OR type=11) AND ref=$id;");
   if ($res < 0) { db_rollback(); return -3; }
   
   $res=db_exec("DELETE FROM dhcp_entries WHERE id IN ( " .
@@ -1101,10 +1101,6 @@ sub _delete_server_parts($) {
                "SELECT a.id FROM dhcp_entries a, vlans v " .
                "WHERE v.server=$id AND a.type=6 AND a.ref=v.id);");
   if ($res < 0) { db_rollback(); return -8; }
-
-  # dhcp6_entries
-  $res=db_exec("DELETE FROM dhcp_entries WHERE (type=17 OR type=11) AND ref=$id;");
-  if ($res < 0) { db_rollback(); return -13; }
 
   # txt_entries
   $res=db_exec("DELETE FROM txt_entries " .
