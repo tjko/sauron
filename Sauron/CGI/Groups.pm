@@ -194,7 +194,7 @@ sub menu_handler {
       return;
     }
     elsif (param('grp_confirm')) {
-      $new_id=param('grp_new');
+      $new_id=int(param('grp_new'));
       if ($new_id eq $id) {
 	print h2("Cannot change host records to point to the group " .
 		 "being deleted!");
