@@ -1143,6 +1143,10 @@ sub menu_handler {
       print h2("Move host to another IP");
       # my $tmpnet=new Net::IP(param('move_net'));
       # $newip=auto_address($serverid,param('move_net'));
+      unless (is_cidr(param('move_net'))) {
+	alert1("Invalid network address!");
+	return;
+      }
       $newip = get_free_ip_by_net($serverid, param('move_net'), $data{ether}, '',
 				  get_net_ip_policy($serverid, param('move_net')));
       unless (is_cidr($newip)) {
@@ -1232,9 +1236,13 @@ sub menu_handler {
 # Support for moving hosts with multiple IPs.
 #   $ip=$host{ip}[1][1];
     $ip = param('select_ip');
+    unless (is_ip($ip) || is_cidr($ip)) {
+      alert1("Invalid IP address!");
+      return;
+    }
     undef @q;
     db_query("SELECT net FROM nets WHERE server=$serverid AND subnet=true " .
-	     "AND net >> '$ip';",\@q);
+	     "AND net >> " . db_encode_str($ip) . ";",\@q);
     print h2("Move host to another subnet or zone: ");
     print p,start_form(-method=>'GET',-action=>$selfurl),
           hidden('menu','hosts'),hidden('h_id',$id),
@@ -1620,7 +1628,7 @@ sub menu_handler {
     my $page=param('bh_page');
     my $offset=$page*$limit;
 
-    $type=param('bh_type');
+    $type=int(param('bh_type'));
     if ($type > 0) {
       $typerule=" AND a.type=$type ";
       $typerule=" AND (a.type=$type OR a.type=101) " if ($type==1);
@@ -1632,12 +1640,12 @@ sub menu_handler {
     }
     my $netrule;
     if (param('bh_net') ne 'ANY') {
-      $netrule=" AND b.ip << '" . param('bh_net') . "' ";
+      $netrule=" AND b.ip << " . db_encode_str(param('bh_net')) . " ";
       $typerule=" AND (a.type=1 OR a.type=6 OR a.type=101) " # Include glue records with "Show
 	  if (param('foobar') eq 'Show Hosts');              # Hosts" (subnet). TVu 2021-02-01
     }
     if (param('bh_cidr')) {
-      $netrule=" AND b.ip <<= '" . param('bh_cidr') . "' ";
+      $netrule=" AND b.ip <<= " . db_encode_str(param('bh_cidr')) . " ";
     }
     my $domainrule;
     if (param('bh_domain') ne '') {
@@ -1737,7 +1745,7 @@ sub menu_handler {
 	  $from_mx = ' mx_templates mx, ';
 	  $where_mx = ' a.mx = mx.id and mx.zone = z.id and ';
 	  if (param('bh_pattern')) {
-	      $where_mx .= 'mx.name ~ \'' . param('bh_pattern') . '\' and ';
+              $where_mx .= 'mx.name ~ ' . db_encode_str(param('bh_pattern')) . ' and ';
 	  }
 	  $extrarule = '';
       }
@@ -1910,7 +1918,7 @@ sub menu_handler {
     if (param('bh_net') && param('bh_net') ne 'ANY') { # ****
 	my @net;
 	db_query("SELECT netname, name FROM nets " .
-		 "WHERE net = '" . param('bh_net') . "'", \@net);
+		 "WHERE net = " . db_encode_str(param('bh_net')), \@net);
 	print '<TD><B>Net:</B> ' . param('bh_net') . " &ndash; $net[0][0] &ndash; $net[0][1]<TD>";
     }
     print "<TD align=right>Page: ".($page+1)."</TD></TR></TABLE>"; # ****
@@ -2302,7 +2310,9 @@ sub menu_handler {
           hidden('menu','hosts'),hidden('sub','add'),hidden('type',$type);
     print hidden('copy_id') if (param('copy_id'));
     if (param('select_ip')) { # select_ip exists only when host is added using Copy TVu 15.03.2017
-	$data{ip_policy} = get_net_ip_policy($serverid, param('select_ip'));
+	if (is_ip(param('select_ip')) || is_cidr(param('select_ip'))) {
+	  $data{ip_policy} = get_net_ip_policy($serverid, param('select_ip'));
+	}
     }
     form_magic('addhost',\%data,$newhostform);
     print submit(-name=>'addhost_submit',-value=>'Create'), " ",
