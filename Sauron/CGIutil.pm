@@ -1379,6 +1379,7 @@ sub form_magic($$$) {
           # inner param must run in scalar context to avoid CGI warning
           my $val = scalar(param($p1));
           param($p1."_l", $val);
+          param($p1,'');
       }
 
       print td($rec->{name}),"<TD>",
