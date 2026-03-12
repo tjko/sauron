@@ -90,7 +90,7 @@ $VERSION = '$Id:$ ';
 	     delete_hinfo_template
 
 	     get_group_by_name
-             get_group_type_by_name
+       get_group_type_by_name
 	     get_group
 	     update_group
 	     add_group
@@ -102,12 +102,12 @@ $VERSION = '$Id:$ ';
 	     add_user
 	     delete_user
 	     get_user_group_id
-             get_user_group
-             delete_user_group
-             get_user_status
+       get_user_group
+       delete_user_group
+       get_user_status
 
 	     get_net_by_cidr
-             get_net_cidr_by_ip
+       get_net_cidr_by_ip
 	     get_net_list
 	     get_net
 	     update_net
@@ -119,12 +119,12 @@ $VERSION = '$Id:$ ';
 	     add_vlan
 	     delete_vlan
 	     get_vlan_list
-             get_vlanno
+       get_vlanno
 	     get_vlan_by_name
 
-             ip_policy_names
-             get_net_ip_policy
-             get_free_ip_by_net
+       ip_policy_names
+       get_net_ip_policy
+       get_free_ip_by_net
 	     get_ip_sugg
 
 	     get_vmps_by_name
@@ -1086,7 +1086,7 @@ sub _delete_server_parts($) {
                "WHERE z.server=$id AND h.zone=z.id AND a.type=3 " .
                " AND a.ref=h.id);");
   if ($res < 0) { db_rollback(); return -5; }
-  # Pokračování smazání ostatních tabulek (bez duplicate kódu z delete_zone)
+
   $res=db_exec("DELETE FROM dhcp_entries WHERE id IN ( " .
                "SELECT a.id FROM dhcp_entries a, nets n " .
                "WHERE n.server=$id AND a.type=4 AND a.ref=n.id);");
@@ -1103,10 +1103,7 @@ sub _delete_server_parts($) {
   if ($res < 0) { db_rollback(); return -8; }
 
   # dhcp6_entries
-  $res=db_exec("DELETE FROM dhcp_entries WHERE type=17 AND ref=$id;");
-  if ($res < 0) { db_rollback(); return -13; }
-
-  $res=db_exec("DELETE FROM dhcp_entries WHERE type=11 AND ref=$id;");
+  $res=db_exec("DELETE FROM dhcp_entries WHERE (type=17 OR type=11) AND ref=$id;");
   if ($res < 0) { db_rollback(); return -13; }
 
   # txt_entries
