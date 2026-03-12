@@ -13,6 +13,7 @@ use Sauron::BackEnd;
 use Sauron::Util;
 use Sauron::Sauron;
 use Sauron::SetupIO;
+use HTML::Entities;
 use strict;
 use vars qw($VERSION @ISA @EXPORT);
 use Sys::Syslog qw(:DEFAULT setlogsock);
@@ -407,7 +408,7 @@ sub edit_magic($$$$$$$) {
 
   unless (param($prefix . '_re_edit') eq '1') {
     if (&$get_func($id,\%h)) {
-      print h2("Cannot get $name record (id=$id)!");
+      print h2("Cannot get $name record (id=\"" . encode_entities($id) . "\")!");
       return -3;
     }
   }
@@ -474,7 +475,7 @@ sub delete_magic($$$$$$$) {
 
   if (param($prefix . '_confirm') ne '') {
     if(&$get_func($id,\%h) < 0) {
-      print h2("Cannot find $name record anymore! ($id)");
+      print h2("Cannot find $name record anymore! (" . encode_entities($id) . ")");
       return -2;
     }
 
@@ -491,7 +492,7 @@ sub delete_magic($$$$$$$) {
 
 
   if (&$get_func($id,\%h)) {
-    print h2("Cannot get $name record (id=$id)!");
+    print h2("Cannot get $name record (id=\"" . encode_entities($id) . "\")!");
     return -3;
   }
 
