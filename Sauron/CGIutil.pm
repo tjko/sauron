@@ -1734,7 +1734,10 @@ sub display_list($$$)
     for $j (0..$cols) {
       $val = $$list[$i][$offset+$j];
       if ($$header[$j] =~ /Date/) {
-	$val = localtime($val)." " if ($val > 0);
+        $val = localtime($val)." " if ($val > 0);
+      }
+      if (defined $val && $val ne '' && $val !~ /<a\s/i) {
+        $val = encode_entities($val);
       }
       print td(($val ne '' ? $val : '&nbsp;'));
     }
@@ -1747,17 +1750,17 @@ sub display_list($$$)
 
 sub alert1($) {
   my($msg)=@_;
-  print "<H2><FONT color=\"red\">$msg</FONT></H2>";
+  print "<H2><FONT color=\"red\">" . encode_entities($msg) . "</FONT></H2>";
 }
 
 sub alert2($) {
   my($msg)=@_;
-  print "<H3><FONT color=\"red\">$msg</FONT></H3>";
+  print "<H3><FONT color=\"red\">" . encode_entities($msg) . "</FONT></H3>";
 }
 
 sub warning1($) {
   my($msg)=@_;
-  print "<H2><FONT color=\"orange\">$msg</FONT></H2>";
+  print "<H2><FONT color=\"orange\">" . encode_entities($msg) . "</FONT></H2>";
 }
 
 sub html_error($) {
