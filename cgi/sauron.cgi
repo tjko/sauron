@@ -17,9 +17,33 @@ use Sauron::CGI::Utils;
 use Sauron::Sauron;
 use HTML::Entities;
 use Data::Dumper;
-#use strict;
-use warnings;;
+use strict;
+use warnings;
 use open ':locale';
+
+# variables used globally; needed with strict
+use vars qw(
+    $debug_mode @menulist %menus %menuhooks %menuhash
+    $frame_mode $pathinfo $script_name $script_path $s_url $selfurl
+    $menu $remote_addr $remote_host $remote_user
+    $scookie $new_cookie $server $serverid $zone $zoneid $res $bgcolor $refresh
+    $hook @names $var $menuref $arg $arg_str
+    $login_debug $login_time $login_debug_log $ticks $pwd_chk $last_from
+    $msg $date $i $u
+    %state %perms
+    $rhf_key $key
+);
+
+# configuration globals populated by load_config()
+use vars qw(
+    $SAURON_DEBUG_MODE $ALEVEL_SHOW_UNALLOCATED_CIDRS $ALEVEL_HISTORY_SEARCH
+    $SAURON_TOPMENU_BGCOLOR $SAURON_TOPMENU_FONTCOLOR
+    $SAURON_ICON_PATH $SAURON_DTD_HACK $SAURON_CHARSET
+    $SERVER_ID $SAURON_USER_TIMEOUT $SAURON_AUTH_MODE
+    $SAURON_NO_REMOTE_ADDR_AUTH $LOG_DIR $SAURON_PLUGINS $PROG_DIR
+    %SAURON_RHF $SAURON_TEMP_LOCK $SAURON_SECURE_COOKIES
+    $SAURON_AUTH_PROG
+);
 
 $CGI::DISABLE_UPLOADS = 1; # no uploads
 $CGI::POST_MAX = 100000; # max 100k posts
@@ -29,7 +53,7 @@ $0 = $PG_NAME;
 
 load_config();
 
-$SAURON_CGI_VER = ' $Revision: 1.204 $ $Date: 2005/01/27 09:24:44 $ ';
+my $SAURON_CGI_VER = ' $Revision: 1.204 $ $Date: 2005/01/27 09:24:44 $ ';
 $debug_mode = $SAURON_DEBUG_MODE;
 #$|=1;
 
@@ -430,6 +454,7 @@ exit;
 #
 sub about_menu() {
   my $sub=param('sub') // '';
+  my ($VER);
 
   if ($sub eq 'copyright') {
     open(FILE,"$PROG_DIR/COPYRIGHT") || return;
@@ -683,6 +708,7 @@ sub login_auth() {
 	}
 
 	# print news/MOTD stuff
+	my @newslist;
 	get_news_list($state{serverid},3,\@newslist);
 	if (@newslist > 0) {
 	  print h2("Message(s) of the day:"),
@@ -928,9 +954,8 @@ sub frame_2() {
 
 sub init_plugins($) {
   my($plugins) = @_;
-
   my(@plugs) = split(/,/,$plugins);
-  my($ret,$i,$file,$file2);
+  my($ALEVEL, $j, $MENU, $MENUDATA, $ret, $i, $file, $file2, $NAME);
 
   for $i (0..$#plugs) {
     $file="$PROG_DIR/plugins/$plugs[$i].conf";

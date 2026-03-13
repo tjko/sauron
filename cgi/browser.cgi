@@ -15,6 +15,21 @@ use Sauron::Util;
 use Sauron::BackEnd;
 use Sauron::CGIutil;
 use Sauron::Sauron;
+use strict;
+use warnings;
+
+# global variables for strict/warnings
+use vars qw(
+    $debug_mode %host_types %host_form
+    $res $VER $pathinfo $script_name $s_url $selfurl
+    $remote_addr $remote_host $server $zone
+    $serverid $zoneid $help_str $show_max
+    $min $hour $mday $mon $year $timestamp
+    @search_types $key
+    $BROWSER_CONF $BROWSER_HELP $BROWSER_MAX $BROWSER_CHARSET $BROWSER_SHOW_FIELDS
+    $BROWSER_HIDE_PRIVATE $BROWSER_HIDE_FIELDS
+    $bgcolor
+);
 
 $CGI::DISABLE_UPLOADS = 1; # no uploads
 $CGI::POST_MAX = 10000; # max 10k posts
@@ -146,12 +161,19 @@ print header(-charset=>$BROWSER_CHARSET),
       "<!-- Copyright (c) Timo Kokkonen <tjko\@iki.fi>  2001-2005. -->\n\n";
 
 
-$key = $pathinfo;
+$key = $pathinfo || '';
 $key =~ s/[^a-z0-9\-]//g;
 
-html_error2("Invalid parameters!") unless (@{$$BROWSER_CONF{$key}} == 2);
-$server=$$BROWSER_CONF{$key}[0];
-$zone=$$BROWSER_CONF{$key}[1];
+# make sure we have a valid configuration entry before dereferencing
+unless (defined $key
+        && length $key
+        && exists $BROWSER_CONF->{$key}
+        && ref($$BROWSER_CONF{$key}) eq 'ARRAY'
+        && @{$$BROWSER_CONF{$key}} == 2) {
+    html_error2("Invalid parameters!");
+}
+$server = $$BROWSER_CONF{$key}[0];
+$zone   = $$BROWSER_CONF{$key}[1];
 
 #print "server '$server', zone '$zone'\n";
 
@@ -163,9 +185,15 @@ html_error2("Invalid configuration: cannot find zone") unless ($zoneid>0);
 cgi_util_set_zone($zoneid,$zone);
 cgi_util_set_server($serverid,$server);
 
-$help_str = ( @{$$BROWSER_HELP{$key}} == 2 ?
-	  "<a href=\"$$BROWSER_HELP{$key}[1]\">$$BROWSER_HELP{$key}[0]</a>" :
-          "&nbsp;" );
+# safely build help link if configuration exists
+if (defined $key
+    && exists $BROWSER_HELP->{$key}
+    && ref($$BROWSER_HELP{$key}) eq 'ARRAY'
+    && @{$$BROWSER_HELP{$key}} == 2) {
+    $help_str = "<a href=\"$$BROWSER_HELP{$key}[1]\">$$BROWSER_HELP{$key}[0]</a>";
+} else {
+    $help_str = "&nbsp;";
+}
 
 $show_max=($BROWSER_MAX > 0 ? $BROWSER_MAX : 100);
 
@@ -203,10 +231,13 @@ print start_form(-method=>'POST',-action=>$selfurl),
       end_form,"</TD></TR>",
       "</TABLE>\n";
 
-if (($id=int(param('id'))) > 0) {
-  display_host($id);
-} else {
-  do_search();
+{
+    my $id = int(param('id'));
+    if ($id > 0) {
+      display_host($id);
+    } else {
+      do_search();
+    }
 }
 
 
@@ -216,6 +247,7 @@ if ($debug_mode) {
         "<br>s_url='$s_url' '$selfurl'\n",
         "<br>url()=" . url(),
         "<p>remote_addr=$remote_addr<p>";
+  my (@names, $var);
   @names = param();
   foreach $var (@names) { print "$var = '" . param($var) . "'<br>\n"; }
   print "<hr><p>\n";
@@ -227,9 +259,14 @@ exit;
 #####################################################################
 
 sub do_search() {
-  $type=param('type');
-  $mask=param('mask');
-
+    my $type = param('type');
+    my $mask = param('mask');
+    my ($info_search, $order, $mask_str, $rule, $alias, @irules);
+    my ($sql, $sql2, $sql2b, $sql3, $sortparam);
+    my (@q, $count, $url);
+    my (@nlist, $i, $color);
+    # variables used later when printing rows
+    my ($name, $ip, $ether, $info);
   unless (valid_safe_string($type,255) and valid_safe_string($mask,255)) {
     alert2("Invalid input!");
     return;
@@ -342,6 +379,9 @@ sub do_search() {
 
   print "<TABLE width=\"100%\" cellspacing=1 cellpadding=1 border=0>",
         "<TR><TD height=2></TD></TR></TABLE>";
+
+    # counter for printed rows
+    my $printcount = 0;
   print "<TABLE width=\"100%\" cellspacing=1 cellpadding=1 border=0 " .
         "  bgcolor=\"#ccccff\">\n",
         "<TR bgcolor=\"aaaaee\">",th("#"),
@@ -435,7 +475,8 @@ sub do_search() {
 
 sub display_host($) {
   my($id) = @_;
-  my(@q, @r, $i, $j, $url);
+  my(@q, @r, $i, $j, $url, $k);
+  my %host;
 
   if (get_host($id,\%host)) {
     alert2("Cannot get host record (id=$id)");
@@ -476,8 +517,6 @@ sub display_host($) {
 
   display_form(\%host,\%host_form);
 }
-
-
 
 # eof
 

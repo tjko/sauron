@@ -683,18 +683,21 @@ sub form_field_enum($$$$) {
     }
     $lsth{''} = '';
   }
-  if (defined $lsth{param($n)} && (param($n) ne '')) {
-    param($n."_enum",param($n));
+  # fetch values safely in scalar context
+  my $cur   = scalar(param($n));
+  my $cur_e = scalar(param($n . "_enum"));
+  if (defined $lsth{$cur} && ($cur ne '')) {
+    param($n . "_enum", $cur);
     param($n,'');
   }
   print "<TD>",
     popup_menu(
       -name=>$n."_enum",
       -values=>\@lst,
-      -value=>param($n."_enum") ? param($n."_enum") : $lst[0],
+      -value=> $cur_e ? $cur_e : $lst[0],
       -labels=>\%lsth),
     " ",
-    textfield(-name=>$n,-size=>$len,-maxlength=>$maxlen,-value=>param($n));
+    textfield(-name=>$n,-size=>$len,-maxlength=>$maxlen,-value=>$cur);
   if ($update > 0) {
     my $tmp=param($n);
     $tmp=param($n."_enum") if ($tmp eq '');
@@ -1373,8 +1376,10 @@ sub form_magic($$$) {
 	if (param($p1) eq '' && ($lst[0] ne '') && (not param($p1."_l")));
 
       if ($lsth{param($p1)} && (param($p1) ne '')) {
-	param($p1."_l",param($p1));
-	param($p1,'');
+          # inner param must run in scalar context to avoid CGI warning
+          my $val = scalar(param($p1));
+          param($p1."_l", $val);
+          param($p1,'');
       }
 
       print td($rec->{name}),"<TD>",
