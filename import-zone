@@ -123,6 +123,20 @@ unless ($pzoneid > 0) {
   $zonehash{txt}=[];
   foreach $rtmp (@{$rec->{TXT}}) { push @{$zonehash{txt}}, [0,$rtmp,'']; }
   foreach $rtmp (@{$rec->{CAA}}) { push @{$zonehash{zentries}}, [0,"@ IN CAA $rtmp",'']; }
+  $zonehash{naptr}=[];
+  if (@{$rec->{NAPTR}} > 0) {
+    print "Processing " . scalar(@{$rec->{NAPTR}}) . " NAPTR records for zone apex\n" if ($opt_verbose);
+  }
+  foreach $rtmp (@{$rec->{NAPTR}}) {
+    my @naptr_parts = split(/ /, $rtmp);
+    # NAPTR format: order preference flags service regexp replacement
+    if (@naptr_parts >= 6) {
+      push @{$zonehash{naptr}}, [0,@naptr_parts[0..5],''];
+      print "  Added NAPTR: order=$naptr_parts[0], pref=$naptr_parts[1], flags=$naptr_parts[2], service=$naptr_parts[3]\n" if ($opt_verbose);
+    } else {
+      print STDERR "Warning: Invalid NAPTR record (needs 6 parts, got " . scalar(@naptr_parts) . "): $rtmp\n";
+    }
+  }
   $zonehash{ip}=[];
   foreach $rtmp (@{$rec->{A}}) { push @{$zonehash{ip}},[0,$rtmp,'true','true']; }
   foreach $rtmp (@{$rec->{AAAA}}) { push @{$zonehash{ip}},[0,$rtmp,'true','true']; }
@@ -207,6 +221,11 @@ foreach $host (sort keys %zonedata) {
 
   fatal("empty hostname adfter stripping origin: $host") unless ($host2);
   print "host: $host ($host2) (type=$hosttype)\n" if ($opt_verbose);
+  if ($hosttype == 14 && @{$rec->{NAPTR}} > 0) {
+    for my $k (0..$#{$rec->{NAPTR}}) {
+      print "  NAPTR[$k]: $rec->{NAPTR}[$k]\n" if ($opt_verbose);
+    }
+  }
 
   $mxlist = db_build_list_str($rec->{MX});
   $mx=($mxhash{$mxlist} ? $mxhash{$mxlist} : -1);
@@ -239,7 +258,7 @@ foreach $host (sort keys %zonedata) {
   }
   undef @naptr_l;
   for $k (0..$#{$rec->{NAPTR}}) {
-    push @naptr_l, [0,split(' ', $rec->{NAPTR}->[$k]),''];
+    push @naptr_l, [0,split(/ /, $rec->{NAPTR}->[$k]),''];
   }
   undef @txt_l;
   for $k (0..$#{$rec->{TXT}}) {

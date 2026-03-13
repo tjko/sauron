@@ -1327,6 +1327,9 @@ sub get_zone($$) {
 		      "type=2 AND ref=$hid ORDER BY pri,mx",$rec,'mx');
       get_array_field("txt_entries",3,"id,txt,comment","TXT,Comments",
 		      "type=2 AND ref=$hid ORDER BY id",$rec,'txt');
+      get_array_field("naptr_entries",8,"id,order_val,preference,flags,service,regexp,replacement,comment",
+		      "Order,Preference,Flags,Service,Regexp,Replacement,Comments",
+		      "type=1 AND ref=$hid ORDER BY order_val,preference,flags,service,regexp,replacement",$rec,'naptr');
       get_array_field("a_entries",4,"id,ip,reverse,forward",
 		      "IP,reverse,forward","host=$hid ORDER BY ip",$rec,'ip');
 
@@ -1413,6 +1416,9 @@ sub update_zone($) {
     $r=update_array_field("txt_entries",3,"txt,comment,type,ref",
 			  'txt',$rec,"2,$hid");
     if ($r < 0) { db_rollback(); return -14; }
+    $r=update_array_field("naptr_entries",7,"order_val,preference,flags,service,regexp,replacement,comment,type,ref",
+			  'naptr',$rec,"1,$hid");
+    if ($r < 0) { db_rollback(); return -140; }
   }
 
   # dhcp
@@ -1656,6 +1662,10 @@ sub add_zone($) {
     $res = add_array_field('txt_entries','txt,comment','txt',$rec,
 			   'type,ref',"2,$hid");
     if ($res < 0) { db_rollback(); return -104; }
+    # naptr
+    $res = add_array_field('naptr_entries','order_val,preference,flags,service,regexp,replacement,comment',
+			   'naptr',$rec,'type,ref',"1,$hid");
+    if ($res < 0) { db_rollback(); return -1040; }
     # ip
     $res = add_array_field('a_entries','ip,reverse,forward','ip',$rec,
 			   'host',"$hid");
