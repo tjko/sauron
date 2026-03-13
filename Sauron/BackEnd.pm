@@ -90,7 +90,7 @@ $VERSION = '$Id:$ ';
 	     delete_hinfo_template
 
 	     get_group_by_name
-             get_group_type_by_name
+       get_group_type_by_name
 	     get_group
 	     update_group
 	     add_group
@@ -102,12 +102,12 @@ $VERSION = '$Id:$ ';
 	     add_user
 	     delete_user
 	     get_user_group_id
-             get_user_group
-             delete_user_group
-             get_user_status
+       get_user_group
+       delete_user_group
+       get_user_status
 
 	     get_net_by_cidr
-             get_net_cidr_by_ip
+       get_net_cidr_by_ip
 	     get_net_list
 	     get_net
 	     update_net
@@ -119,12 +119,12 @@ $VERSION = '$Id:$ ';
 	     add_vlan
 	     delete_vlan
 	     get_vlan_list
-             get_vlanno
+       get_vlanno
 	     get_vlan_by_name
 
-             ip_policy_names
-             get_net_ip_policy
-             get_free_ip_by_net
+       ip_policy_names
+       get_net_ip_policy
+       get_free_ip_by_net
 	     get_ip_sugg
 
 	     get_vmps_by_name
@@ -1054,167 +1054,120 @@ sub add_server($) {
   return $id;
 }
 
-sub delete_server($) {
+sub _delete_server_parts($) {
   my($id) = @_;
   my($res);
 
-  return -100 unless ($id > 0);
-
-  db_begin();
-
   # cidr_entries
   $res=db_exec("DELETE FROM cidr_entries " .
-	       "WHERE (type=1 OR type=7 OR type=8 OR type=9 OR type=10 " .
-	       " OR type=11) AND ref=$id;");
+               "WHERE (type=1 OR type=7 OR type=8 OR type=9 OR type=10 " .
+               " OR type=11) AND ref=$id;");
   if ($res < 0) { db_rollback(); return -1; }
 
   $res=db_exec("DELETE FROM cidr_entries WHERE id IN ( " .
-	        "SELECT a.id FROM cidr_entries a, zones z " .
-	        "WHERE z.server=$id AND " .
-                " (a.type=12 OR a.type=6 OR a.type=5 OR a.type=4 OR " .
-	        "  a.type=3 OR a.type=2) " .
-	        " AND a.ref=z.id);");
+               "SELECT a.id FROM cidr_entries a, zones z " .
+               "WHERE z.server=$id AND " .
+               " (a.type=12 OR a.type=6 OR a.type=5 OR a.type=4 OR " .
+               "  a.type=3 OR a.type=2) " .
+               " AND a.ref=z.id);");
   if ($res < 0) { db_rollback(); return -2; }
 
   # dhcp_entries
-# Local DHCP settings 2020-07-20 TVu
-  $res=db_exec("DELETE FROM dhcp_entries WHERE type=7 AND ref=$id;");
+  $res=db_exec("DELETE FROM dhcp_entries WHERE (type=7 OR type=1 OR type=17 OR type=11) AND ref=$id;");
   if ($res < 0) { db_rollback(); return -3; }
-  $res=db_exec("DELETE FROM dhcp_entries WHERE type=1 AND ref=$id;");
-  if ($res < 0) { db_rollback(); return -3; }
+  
   $res=db_exec("DELETE FROM dhcp_entries WHERE id IN ( " .
-	        "SELECT a.id FROM dhcp_entries a, zones z " .
-	        "WHERE z.server=$id AND a.type=2 AND a.ref=z.id);");
+               "SELECT a.id FROM dhcp_entries a, zones z " .
+               "WHERE z.server=$id AND a.type=2 AND a.ref=z.id);");
   if ($res < 0) { db_rollback(); return -4; }
+
   $res=db_exec("DELETE FROM dhcp_entries WHERE id IN ( " .
-	        "SELECT a.id FROM dhcp_entries a, zones z, hosts h " .
-	        "WHERE z.server=$id AND h.zone=z.id AND a.type=3 " .
-	        " AND a.ref=h.id);");
+               "SELECT a.id FROM dhcp_entries a, zones z, hosts h " .
+               "WHERE z.server=$id AND h.zone=z.id AND a.type=3 " .
+               " AND a.ref=h.id);");
   if ($res < 0) { db_rollback(); return -5; }
+
   $res=db_exec("DELETE FROM dhcp_entries WHERE id IN ( " .
-	        "SELECT a.id FROM dhcp_entries a, nets n " .
-	        "WHERE n.server=$id AND a.type=4 AND a.ref=n.id);");
+               "SELECT a.id FROM dhcp_entries a, nets n " .
+               "WHERE n.server=$id AND a.type=4 AND a.ref=n.id);");
   if ($res < 0) { db_rollback(); return -6; }
+
   $res=db_exec("DELETE FROM dhcp_entries WHERE id IN ( " .
-	        "SELECT a.id FROM dhcp_entries a, groups g " .
-	        "WHERE g.server=$id AND a.type=5 AND a.ref=g.id);");
+               "SELECT a.id FROM dhcp_entries a, groups g " .
+               "WHERE g.server=$id AND a.type=5 AND a.ref=g.id);");
   if ($res < 0) { db_rollback(); return -7; }
+
   $res=db_exec("DELETE FROM dhcp_entries WHERE id IN ( " .
-	        "SELECT a.id FROM dhcp_entries a, vlans v " .
-	        "WHERE v.server=$id AND a.type=6 AND a.ref=v.id);");
+               "SELECT a.id FROM dhcp_entries a, vlans v " .
+               "WHERE v.server=$id AND a.type=6 AND a.ref=v.id);");
   if ($res < 0) { db_rollback(); return -8; }
 
-# dhcp_entries6
-# Local DHCP settings 2020-07-20 TVu
-  $res=db_exec("DELETE FROM dhcp_entries WHERE type=17 AND ref=$id;");
-  if ($res < 0) { db_rollback(); return -13; }
-  $res=db_exec("DELETE FROM dhcp_entries WHERE type=11 AND ref=$id;");
-  if ($res < 0) { db_rollback(); return -13; }
-  $res=db_exec("DELETE FROM dhcp_entries WHERE id IN ( " .
-	        "SELECT a.id FROM dhcp_entries a, zones z " .
-	        "WHERE z.server=$id AND a.type=12 AND a.ref=z.id);");
-  if ($res < 0) { db_rollback(); return -14; }
-  $res=db_exec("DELETE FROM dhcp_entries WHERE id IN ( " .
-	        "SELECT a.id FROM dhcp_entries a, zones z, hosts h " .
-	        "WHERE z.server=$id AND h.zone=z.id AND a.type=13 " .
-	        " AND a.ref=h.id);");
-  if ($res < 0) { db_rollback(); return -15; }
-  $res=db_exec("DELETE FROM dhcp_entries WHERE id IN ( " .
-	        "SELECT a.id FROM dhcp_entries a, nets n " .
-	        "WHERE n.server=$id AND a.type=14 AND a.ref=n.id);");
-  if ($res < 0) { db_rollback(); return -16; }
-  $res=db_exec("DELETE FROM dhcp_entries WHERE id IN ( " .
-	        "SELECT a.id FROM dhcp_entries a, groups g " .
-	        "WHERE g.server=$id AND a.type=15 AND a.ref=g.id);");
+  # txt_entries
+  $res=db_exec("DELETE FROM txt_entries " .
+               "WHERE (type=3 OR type=10 OR type=11) AND ref=$id;");
   if ($res < 0) { db_rollback(); return -17; }
-  $res=db_exec("DELETE FROM dhcp_entries WHERE id IN ( " .
-	        "SELECT a.id FROM dhcp_entries a, vlans v " .
-	        "WHERE v.server=$id AND a.type=16 AND a.ref=v.id);");
-  if ($res < 0) { db_rollback(); return -8; }
-
-
-  # host_info
-  # FIXME
 
   # mx_entries
   $res=db_exec("DELETE FROM mx_entries WHERE id IN ( " .
-	       "SELECT a.id FROM mx_entries a, zones z, hosts h " .
-	  "WHERE z.server=$id AND h.zone=z.id AND a.type=2 AND a.ref=h.id);");
+               "SELECT a.id FROM mx_entries a, zones z, hosts h " .
+               "WHERE z.server=$id AND h.zone=z.id AND a.type=2 AND a.ref=h.id);");
   if ($res < 0) { db_rollback(); return -9; }
+
   $res=db_exec("DELETE FROM mx_entries WHERE id IN ( " .
-	       "SELECT a.id FROM mx_entries a, zones z, mx_templates m " .
-	  "WHERE z.server=$id AND m.zone=z.id AND a.type=3 AND a.ref=m.id);");
+               "SELECT a.id FROM mx_entries a, zones z, mx_templates m " .
+               "WHERE z.server=$id AND m.zone=z.id AND a.type=3 AND a.ref=m.id);");
   if ($res < 0) { db_rollback(); return -10; }
 
   # wks_entries
   $res=db_exec("DELETE FROM wks_entries WHERE id IN ( " .
-	       "SELECT a.id FROM wks_entries a, zones z, hosts h " .
-	  "WHERE z.server=$id AND h.zone=z.id AND a.type=1 AND a.ref=h.id);");
+               "SELECT a.id FROM wks_entries a, zones z, hosts h " .
+               "WHERE z.server=$id AND h.zone=z.id AND a.type=1 AND a.ref=h.id);");
   if ($res < 0) { db_rollback(); return -11; }
-  $res=db_exec("DELETE FROM wks_entries WHERE id IN ( " .
-	       "SELECT a.id FROM wks_entries a, wks_templates w " .
-	       "WHERE w.server=$id AND a.type=2 AND a.ref=w.id);");
-  if ($res < 0) { db_rollback(); return -12; }
 
+  $res=db_exec("DELETE FROM wks_entries WHERE id IN ( " .
+               "SELECT a.id FROM wks_entries a, wks_templates w " .
+               "WHERE w.server=$id AND a.type=2 AND a.ref=w.id);");
+  if ($res < 0) { db_rollback(); return -12; }
 
   # ns_entries
   $res=db_exec("DELETE FROM ns_entries WHERE id IN ( " .
-	       "SELECT a.id FROM ns_entries a, zones z, hosts h " .
-	  "WHERE z.server=$id AND h.zone=z.id AND a.type=2 AND a.ref=h.id);");
+               "SELECT a.id FROM ns_entries a, zones z, hosts h " .
+               "WHERE z.server=$id AND h.zone=z.id AND a.type=2 AND a.ref=h.id);");
   if ($res < 0) { db_rollback(); return -14; }
-
 
   # printer_entries
   $res=db_exec("DELETE FROM printer_entries WHERE id IN ( " .
-	       "SELECT a.id FROM printer_entries a, groups g " .
-	       "WHERE g.server=$id AND a.type=1 AND a.ref=g.id);");
+               "SELECT a.id FROM printer_entries a, groups g " .
+               "WHERE g.server=$id AND a.type=1 AND a.ref=g.id);");
   if ($res < 0) { db_rollback(); return -15; }
+
   $res=db_exec("DELETE FROM printer_entries WHERE id IN ( " .
-	       "SELECT a.id FROM printer_entries a, zones z, hosts h " .
-	  "WHERE z.server=$id AND h.zone=z.id AND a.type=2 AND a.ref=h.id);");
+               "SELECT a.id FROM printer_entries a, zones z, hosts h " .
+               "WHERE z.server=$id AND h.zone=z.id AND a.type=2 AND a.ref=h.id);");
   if ($res < 0) { db_rollback(); return -16; }
-
-
-  # txt_entries
-  $res=db_exec("DELETE FROM txt_entries " .
-	       "WHERE (type=3 OR type=10 OR type=11) AND ref=$id;");
-  if ($res < 0) { db_rollback(); return -17; }
-  $res=db_exec("DELETE FROM txt_entries WHERE id IN ( " .
-	       "SELECT a.id FROM txt_entries a, zones z " .
-
-#	       "WHERE z.server=$id AND a.type=12 AND a.ref=z.id);");
-
-	       "WHERE z.server=$id AND (a.type=4 OR a.type=12) AND a.ref=z.id);"); # 2020-07-30 TVu
-
-  if ($res < 0) { db_rollback(); return -180; }
-  $res=db_exec("DELETE FROM txt_entries WHERE id IN ( " .
-	       "SELECT a.id FROM txt_entries a, zones z, hosts h " .
-	  "WHERE z.server=$id AND h.zone=z.id AND a.type=2 AND a.ref=h.id);");
-  if ($res < 0) { db_rollback(); return -18; }
-
 
   # a_entries
   $res=db_exec("DELETE FROM a_entries WHERE id IN ( " .
-	       "SELECT a.id FROM a_entries a, zones z, hosts h " .
-	       "WHERE z.server=$id AND h.zone=z.id AND a.host=h.id);");
+               "SELECT a.id FROM a_entries a, zones z, hosts h " .
+               "WHERE z.server=$id AND h.zone=z.id AND a.host=h.id);");
   if ($res < 0) { db_rollback(); return -19; }
 
   # arec_entries
   $res=db_exec("DELETE FROM arec_entries WHERE id IN ( " .
-	       "SELECT a.id FROM arec_entries a, zones z, hosts h " .
-	       "WHERE z.server=$id AND h.zone=z.id AND a.host=h.id);");
+               "SELECT a.id FROM arec_entries a, zones z, hosts h " .
+               "WHERE z.server=$id AND h.zone=z.id AND a.host=h.id);");
   if ($res < 0) { db_rollback(); return -20; }
 
   # srv_entries
   $res=db_exec("DELETE FROM srv_entries WHERE id IN ( " .
-	       "SELECT a.id FROM srv_entries a, zones z, hosts h " .
-            "WHERE z.server=$id AND h.zone=z.id AND a.type=1 AND a.ref=h.id)");
+               "SELECT a.id FROM srv_entries a, zones z, hosts h " .
+               "WHERE z.server=$id AND h.zone=z.id AND a.type=1 AND a.ref=h.id);");
   if ($res < 0) { db_rollback(); return -21; }
 
   # group_entries
   $res=db_exec("DELETE FROM group_entries WHERE id IN ( " .
-	       "SELECT a.id FROM group_entries a, zones z, hosts h " .
-	       "WHERE z.server=$id AND h.zone=z.id AND a.host=h.id);");
+               "SELECT a.id FROM group_entries a, zones z, hosts h " .
+               "WHERE z.server=$id AND h.zone=z.id AND a.host=h.id);");
   if ($res < 0) { db_rollback(); return -22; }
 
   # wks_templates
@@ -1223,8 +1176,8 @@ sub delete_server($) {
 
   # mx_templates
   $res=db_exec("DELETE FROM mx_templates WHERE id IN ( " .
-	       "SELECT a.id FROM mx_templates a, zones z " .
-	       "WHERE z.server=$id AND a.zone=z.id);");
+               "SELECT a.id FROM mx_templates a, zones z " .
+               "WHERE z.server=$id AND a.zone=z.id);");
   if ($res < 0) { db_rollback(); return -26; }
 
   # groups
@@ -1235,21 +1188,61 @@ sub delete_server($) {
   $res=db_exec("DELETE FROM nets WHERE server=$id;");
   if ($res < 0) { db_rollback(); return -28; }
 
-  # hosts
-  $res=db_exec("DELETE FROM hosts WHERE id IN ( " .
-	       "SELECT a.id FROM hosts a, zones z " .
-	       "WHERE z.server=$id AND a.zone=z.id);");
-  if ($res < 0) { db_rollback(); return -29; }
+  # vlans
+  # Poznámka: VLAN nejsou smazány, pouze zóny a jejich obsah
+  # To odpovídá původní logice
 
-  # zones
-  $res=db_exec("DELETE FROM zones WHERE server=$id;");
-  if ($res < 0) { db_rollback(); return -30; }
-
+  # server itself
   $res=db_exec("DELETE FROM servers WHERE id=$id;");
   if ($res < 0) { db_rollback(); return -31; }
 
-  return db_commit();
-  #return db_rollback();
+  return 0;
+}
+
+
+sub delete_server($) {
+  my($id) = @_;
+  my($res);
+
+  return -100 unless ($id > 0);
+
+  write2log("SERVER_DELETE_START: Deleting server ID=$id");
+  db_begin();
+
+  # get all zones of server
+  my @zone_ids;
+  my @q;
+  db_query("SELECT id FROM zones WHERE server=$id", \@q);
+  for my $i (0..$#q) {
+      push @zone_ids, $q[$i][0];
+  }
+
+  # Delete all zones of server
+  for my $zone_id (@zone_ids) {
+      $res = _delete_zone_parts($zone_id);
+      if ($res < 0) {
+          db_rollback();
+          write2log("SERVER_DELETE_FAILED: Server ID=$id was NOT deleted - failure to delete zone ID=$zone_id with error $res");
+          return $res;
+      }
+  }
+
+
+  # Delete other parts of server
+  $res = _delete_server_parts($id);
+  if ($res < 0) {
+    db_rollback();
+    write2log("SERVER_DELETE_FAILED: Server ID=$id was NOT deleted - failure to delete server parts with error $res");
+    return $res;
+  }
+  if (db_commit() < 0) {
+    write2log("SERVER_DELETE_FAILED: Server ID=$id was NOT deleted - commit failure");
+    return -200;
+  }
+
+  write2log("SERVER_DELETE_SUCCESS: Server ID=$id successfully deleted");
+
+  return 0;
 }
 
 ############################################################################
@@ -1479,153 +1472,148 @@ sub update_zone($) {
   return db_commit();
 }
 
+# Internal helper function for deleting part of a zone (without transaction)
+# Called from delete_zone() and delete_server()
+sub _delete_zone_parts($) {
+    my($id) = @_;
+    my($res);
+
+    # cidr_entries
+    $res=db_exec("DELETE FROM cidr_entries WHERE " .
+                 "(type=2 OR type=3 OR type=4 OR type=5 OR type=6 OR " .
+                 " type=12 OR type=13) " .
+                 " AND ref=$id");
+    if ($res < 0) { return -1; }
+
+    # dhcp_entries
+    $res=db_exec("DELETE FROM dhcp_entries WHERE type=2 AND ref=$id");
+    if ($res < 0) { return -2; }
+    $res=db_exec("DELETE FROM dhcp_entries WHERE id IN ( " .
+                 "SELECT a.id FROM dhcp_entries a, hosts h " .
+                 "WHERE h.zone=$id AND a.type=3 AND a.ref=h.id)");
+    if ($res < 0) { return -3; }
+    
+    # mx_entries
+    $res=db_exec("DELETE FROM mx_entries WHERE id IN ( " .
+                 "SELECT a.id FROM mx_entries a, hosts h " .
+                 "WHERE h.zone=$id AND a.type=2 AND a.ref=h.id)");
+    if ($res < 0) { return -5; }
+    $res=db_exec("DELETE FROM mx_entries WHERE id IN ( " .
+                 "SELECT a.id FROM mx_entries a, mx_templates m " .
+                 "WHERE m.zone=$id AND a.type=3 AND a.ref=m.id)");
+    if ($res < 0) { return -6; }
+    
+    # wks_entries
+    $res=db_exec("DELETE FROM wks_entries WHERE id IN ( " . 
+                 "SELECT a.id FROM wks_entries a, hosts h " . 
+                 "WHERE h.zone=$id AND a.type=1 AND a.ref=h.id)");
+    if ($res < 0) { return -7; }
+
+    # ns_entries
+    $res=db_exec("DELETE FROM ns_entries WHERE id IN ( " . 
+                 "SELECT a.id FROM ns_entries a, hosts h " . 
+                 "WHERE h.zone=$id AND a.type=2 AND a.ref=h.id)");
+    if ($res < 0) { return -9; }
+        
+    # printer_entries
+    $res=db_exec("DELETE FROM printer_entries WHERE id IN ( " .
+                 "SELECT a.id FROM printer_entries a, hosts h " .
+                 "WHERE h.zone=$id AND a.type=2 AND a.ref=h.id)");
+    if ($res < 0) { return -10; }
+    
+    # txt_entries
+    $res=db_exec("DELETE FROM txt_entries WHERE (type=4 OR type=12) AND ref=$id");
+    if ($res < 0) { return -11; }
+    $res=db_exec("DELETE FROM txt_entries WHERE id IN ( " .
+                 "SELECT a.id FROM txt_entries a, hosts h " .
+                 "WHERE h.zone=$id AND a.type=2 AND a.ref=h.id)");
+    if ($res < 0) { return -12; }
+
+    # a_entries
+    $res=db_exec("DELETE FROM a_entries WHERE id IN ( " .
+                 "SELECT a.id FROM a_entries a, hosts h " .
+                 "WHERE h.zone=$id AND a.host=h.id)");
+    if ($res < 0) { return -13; }
+
+    # arec_entries
+    $res=db_exec("DELETE FROM arec_entries WHERE id IN ( " .
+                 "SELECT a.id FROM arec_entries a, hosts h " .
+                 "WHERE h.zone=$id AND a.host=h.id)");
+    if ($res < 0) { return -14; }
+
+    # mx_templates
+    $res=db_exec("DELETE FROM mx_templates WHERE zone=$id");
+    if ($res < 0) { return -15; }
+
+    # srv_entries
+    $res=db_exec("DELETE FROM srv_entries WHERE id IN ( " .
+                 "SELECT a.id FROM srv_entries a, hosts h " .
+                 "WHERE h.zone=$id AND a.type=1 AND a.ref=h.id)");
+    if ($res < 0) { return -16; }
+
+    # sshfp_entries
+    $res=db_exec("DELETE FROM sshfp_entries WHERE id IN ( " .
+                 "SELECT a.id FROM sshfp_entries a, hosts h " .
+                 "WHERE h.zone=$id AND a.type=1 AND a.ref=h.id)");
+    if ($res < 0) { return -17; }
+
+    # tlsa_entries
+    $res=db_exec("DELETE FROM tlsa_entries WHERE id IN ( " .
+                 "SELECT a.id FROM tlsa_entries a, hosts h " .
+                 "WHERE h.zone=$id AND a.type=1 AND a.ref=h.id)");
+    if ($res < 0) { return -18; }
+
+    # naptr_entries
+    $res=db_exec("DELETE FROM naptr_entries WHERE id IN ( " .
+                 "SELECT a.id FROM naptr_entries a, hosts h " .
+                 "WHERE h.zone=$id AND a.type=1 AND a.ref=h.id)");
+    if ($res < 0) { return -19; }
+
+    # group_entries
+    $res=db_exec("DELETE FROM group_entries WHERE id IN ( " .
+                 "SELECT a.id FROM group_entries a, hosts h " .
+                 "WHERE h.zone=$id AND a.host=h.id)");
+    if ($res < 0) { return -20; }
+
+    # hosts
+    $res=db_exec("DELETE FROM hosts WHERE zone=$id");
+    if ($res < 0) { return -25; }
+
+    # zone record
+    $res=db_exec("DELETE FROM zones WHERE id=$id");
+    if ($res < 0) { return -50; }
+
+    # user_rights
+    $res=db_exec("DELETE FROM user_rights WHERE (rtype=2 OR rtype=4 " .
+                 "OR rtype=9 OR rtype=10 OR rtype=11) AND rref=$id");
+    if ($res < 0) { return -90; }
+
+    return 0;
+}
+
 sub delete_zone($) {
-  my($id) = @_;
-  my($res);
+    my($id) = @_;
+    my($res);
 
-  return -100 unless ($id > 0);
+    return -100 unless ($id > 0);
 
-  db_begin();
+    write2log("ZONE_DELETE_START: Deleting zone ID=$id");
+    db_begin();
 
-  # cidr_entries
-  print "<BR>Deleting CIDR entries...\n";
-  $res=db_exec("DELETE FROM cidr_entries WHERE " .
-	       "(type=2 OR type=3 OR type=4 OR type=5 OR type=6 OR " .
-	       " type=12 OR type=13) " .
-	       " AND ref=$id");
-  if ($res < 0) { db_rollback(); return -1; }
+    $res = _delete_zone_parts($id);
+    if ($res < 0) {
+        db_rollback();
+        write2log("ZONE_DELETE_FAILED: Zone ID=$id WAS NOT deleted - error $res");
+        return $res;
+    }
 
-  # dhcp_entries
-  print "<BR>Deleting DHCP entries...\n";
-  $res=db_exec("DELETE FROM dhcp_entries WHERE type=2 AND ref=$id");
-  if ($res < 0) { db_rollback(); return -2; }
-  $res=db_exec("DELETE FROM dhcp_entries WHERE id IN ( " .
-	        "SELECT a.id FROM dhcp_entries a, hosts h " .
-	        "WHERE h.zone=$id AND a.type=3 AND a.ref=h.id)");
-  if ($res < 0) { db_rollback(); return -3; }
+    if (db_commit() < 0) {
+        write2log("ZONE_DELETE_FAILED: Zone ID=$id WAS NOT deleted - commit failure");
+        return -200;
+    }
 
-  # mx_entries
-  print "<BR>Deleting MX entries...\n";
-  #$res=db_exec("DELETE FROM mx_entries WHERE type=1 AND ref=$id");
-  #if ($res < 0) { db_rollback(); return -4; }
-  $res=db_exec("DELETE FROM mx_entries WHERE id IN ( " .
-	       "SELECT a.id FROM mx_entries a, hosts h " .
-	       "WHERE h.zone=$id AND a.type=2 AND a.ref=h.id)");
-  if ($res < 0) { db_rollback(); return -5; }
-  $res=db_exec("DELETE FROM mx_entries WHERE id IN ( " .
-	       "SELECT a.id FROM mx_entries a, mx_templates m " .
-	       "WHERE m.zone=$id AND a.type=3 AND a.ref=m.id)");
-  if ($res < 0) { db_rollback(); return -6; }
-
-  # wks_entries
-  print "<BR>Deleting WKS entries...\n";
-  $res=db_exec("DELETE FROM wks_entries WHERE id IN ( " .
-	       "SELECT a.id FROM wks_entries a, hosts h " .
-	       "WHERE h.zone=$id AND a.type=1 AND a.ref=h.id)");
-  if ($res < 0) { db_rollback(); return -7; }
-
-  # ns_entries
-  print "<BR>Deleting NS entries...\n";
-  #$res=db_exec("DELETE FROM ns_entries WHERE type=1 AND ref=$id");
-  #if ($res < 0) { db_rollback(); return -8; }
-  $res=db_exec("DELETE FROM ns_entries WHERE id IN ( " .
-	       "SELECT a.id FROM ns_entries a, hosts h " .
-	       "WHERE h.zone=$id AND a.type=2 AND a.ref=h.id)");
-  if ($res < 0) { db_rollback(); return -9; }
-
-
-  # printer_entries
-  print "<BR>Deleting PRINTER entries...\n";
-  $res=db_exec("DELETE FROM printer_entries WHERE id IN ( " .
-	       "SELECT a.id FROM printer_entries a, hosts h " .
-	       "WHERE h.zone=$id AND a.type=2 AND a.ref=h.id)");
-  if ($res < 0) { db_rollback(); return -10; }
-
-  # txt_entries
-  print "<BR>Deleting TXT entries...\n";
-
-# $res=db_exec("DELETE FROM txt_entries WHERE type=12 AND ref=$id");
-
-  $res=db_exec("DELETE FROM txt_entries WHERE (type=4 OR type=12) AND ref=$id"); # 2020-07-30 TVu
-
-  if ($res < 0) { db_rollback(); return -11; }
-  $res=db_exec("DELETE FROM txt_entries WHERE id IN ( " .
-	       "SELECT a.id FROM txt_entries a, hosts h " .
-	       "WHERE h.zone=$id AND a.type=2 AND a.ref=h.id)");
-  if ($res < 0) { db_rollback(); return -12; }
-
-  # a_entries
-  print "<BR>Deleting A entries...\n";
-  $res=db_exec("DELETE FROM a_entries WHERE id IN ( " .
-	       "SELECT a.id FROM a_entries a, hosts h " .
-	       "WHERE h.zone=$id AND a.host=h.id)");
-  if ($res < 0) { db_rollback(); return -13; }
-
-  # arec_entries
-  print "<BR>Deleting AREC entries...\n";
-  $res=db_exec("DELETE FROM arec_entries WHERE id IN ( " .
-	       "SELECT a.id FROM arec_entries a, hosts h " .
-	       "WHERE h.zone=$id AND a.host=h.id)");
-  if ($res < 0) { db_rollback(); return -14; }
-
-  # mx_templates
-  print "<BR>Deleting MX templates...\n";
-  $res=db_exec("DELETE FROM mx_templates WHERE zone=$id");
-  if ($res < 0) { db_rollback(); return -15; }
-
-  # srv_entries
-  print "<BR>Deleting SRV entries...\n";
-  $res=db_exec("DELETE FROM srv_entries WHERE id IN ( " .
-	       "SELECT a.id FROM srv_entries a, hosts h " .
-	       "WHERE h.zone=$id AND a.type=1 AND a.ref=h.id)");
-  if ($res < 0) { db_rollback(); return -16; }
-
-  # sshfp_entries
-  print "<BR>Deleting SSHFP entries...\n";
-  $res=db_exec("DELETE FROM sshfp_entries WHERE id IN ( " .
-	       "SELECT a.id FROM sshfp_entries a, hosts h " .
-	       "WHERE h.zone=$id AND a.type=1 AND a.ref=h.id)");
-  if ($res < 0) { db_rollback(); return -17; }
-
-  # tlsa_entries
-  print "<BR>Deleting TLSA entries...\n";
-  $res=db_exec("DELETE FROM tlsa_entries WHERE id IN ( " .
-	       "SELECT a.id FROM tlsa_entries a, hosts h " .
-	       "WHERE h.zone=$id AND a.type=1 AND a.ref=h.id)");
-  if ($res < 0) { db_rollback(); return -18; }
-
-  # naptr_entries
-  print "<BR>Deleting NAPTR entries...\n";
-  $res=db_exec("DELETE FROM naptr_entries WHERE id IN ( " .
-	       "SELECT a.id FROM naptr_entries a, hosts h " .
-	       "WHERE h.zone=$id AND a.type=1 AND a.ref=h.id)");
-  if ($res < 0) { db_rollback(); return -19; }
-
-
-  # arec_entries
-  print "<BR>Deleting (sub)group entries...\n";
-  $res=db_exec("DELETE FROM group_entries WHERE id IN ( " .
-	       "SELECT a.id FROM group_entries a, hosts h " .
-	       "WHERE h.zone=$id AND a.host=h.id)");
-  if ($res < 0) { db_rollback(); return -20; }
-
-  # hosts
-  print "<BR>Deleting Hosts...\n";
-  $res=db_exec("DELETE FROM hosts WHERE zone=$id");
-  if ($res < 0) { db_rollback(); return -25; }
-
-
-  print "<BR>Deleting Zone record...\n";
-  $res=db_exec("DELETE FROM zones WHERE id=$id");
-  if ($res < 0) { db_rollback(); return -50; }
-
-
-  print "<BR>Deleting User rights records...\n";
-  $res=db_exec("DELETE FROM user_rights WHERE (rtype=2 OR rtype=4 " .
-	       "OR rtype=9 OR rtype=10 OR rtype=11) AND rref=$id");
-  if ($res < 0) { db_rollback(); return -100; }
-
-  return db_commit();
+    write2log("ZONE_DELETE_SUCCESS: Zone ID=$id successfully deleted");
+    return 0;
 }
 
 sub add_zone($) {
