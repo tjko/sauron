@@ -105,26 +105,22 @@ sub fmt_key {
     return "$name $type $class";
 }
 
-print "\n=== Records only in the first zone ($z1_file) ===\n";
 if (@only_in_1) {
+    print "\n=== Records only in the first zone ($z1_file) ===\n";
     foreach my $k (@only_in_1) {
         print fmt_key($k), "  => ", $zone1->{$k}{line}, "\n";
     }
-} else {
-    print "(none)\n";
 }
 
-print "\n=== Records only in the second zone ($z2_file) ===\n";
 if (@only_in_2) {
+    print "\n=== Records only in the second zone ($z2_file) ===\n";
     foreach my $k (@only_in_2) {
         print fmt_key($k), "  => ", $zone2->{$k}{line}, "\n";
     }
-} else {
-    print "(none)\n";
 }
 
-print "\n=== Records that differ (same name+type, but different content) ===\n";
 if (@changed) {
+    print "\n=== Records that differ (same name+type, but different content) ===\n";
     foreach my $k (@changed) {
         print ">>> ", fmt_key($k), "\n";
         my $line1 = $zone1->{$k}{line};
@@ -146,7 +142,7 @@ if (@changed) {
                 print $c1;
             }
         }
-        print "\n";
+#        print "\n";
 
         # Highlight differences in zone2 line
         print "  $z2_file: ";
@@ -159,10 +155,8 @@ if (@changed) {
                 print $c2;
             }
         }
-        print "\n";
+#        print "\n";
     }
-} else {
-    print "(none)\n";
 }
 
 exit 0;
