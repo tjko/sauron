@@ -1527,7 +1527,7 @@ sub make_dns() {
          " b.order_val,b.preference,b.flags,b.service,b.regexp,b.replacement " .
          "FROM hosts a, naptr_entries b, zones z " .
          "WHERE a.zone=z.id AND z.id=$zoneid " .
-         "AND a.type=14 AND a.id=b.ref AND b.type=1 " .
+         "AND (a.type=10 OR a.type=14) AND a.id=b.ref AND b.type=1 " .
          "ORDER BY a.domain,b.order_val,b.preference;",\@q);
     error(db_errormsg()) if (db_errormsg());
     if (@q > 0) {

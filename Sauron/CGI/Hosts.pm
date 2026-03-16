@@ -100,6 +100,7 @@ my %ds_digest_type=(
 );
 
 my %naptr_flags=(
+    0=>'(non-terminal)',
     1=>'S',
     2=>'A',
     3=>'U',
@@ -251,7 +252,7 @@ my %host_form = (
 
   {ftype=>0, name=>'NAPTR records', no_edit=>1, iff=>['type','14']},
   {ftype=>2, tag=>'naptr_l', name=>'NAPTR entries', fields=>7,len=>[3,3,2,5,20,20,20],
-   empty=>[0,0,0,0,0,0,1], maxlen=>[5,5,2,20,100,100,80],addempty=>[-1,-1,-1,-1,-1,-1,0],
+   empty=>[0,0,1,1,1,0,1], maxlen=>[5,5,2,20,100,100,80],addempty=>[-1,-1,-1,-1,-1,-1,0],
    elabels=>['Order','Preference','Flags','Service','Regexp','Replacement','Comment'],
    type=>['priority','priority','enum','text','text','text','text'],
    enum=>[undef, undef, \%naptr_flags, undef, undef, undef, undef],
@@ -452,7 +453,7 @@ my %new_host_form = (
    iff=>['type','12']},
 
   {ftype=>2, tag=>'naptr_l', name=>'NAPTR entries', fields=>7,len=>[5,5,5,5,5,5,20],
-   empty=>[0,0,0,0,0,0,1], maxlen=>[5,5,5,5,5,5,80],addempty=>[-1,-1,-1,-1,-1,-1,0],
+   empty=>[0,0,1,1,1,0,1], maxlen=>[5,5,5,5,5,5,80],addempty=>[-1,-1,-1,-1,-1,-1,0],
    dot=>1, # allows dot in replacement
    elabels=>['Order','Preference','Flags','Service','Regexp','Replacement','Comment'],
    type=>['priority','priority','enum','text','text','fqdn','text'],

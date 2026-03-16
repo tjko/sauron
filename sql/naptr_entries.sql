@@ -12,14 +12,11 @@ CREATE TABLE naptr_entries (
                         -->hosts.id */
     order_val   INT4 NOT NULL CHECK (order_val >= 0), /* RFC 2915: ORDER */
     preference  INT4 NOT NULL CHECK (preference >= 0), /* RFC 2915: PREFERENCE */
-    flags       CHAR(1) NOT NULL CHECK (flags ~* '^[AUSP]$'), /* value:
-                        A=A or AAAA record
-                        S=SRV record
-                        U=URI
-                        P=Protocol specific */
-    service       TEXT NOT NULL, /* service name, example: "E2U+sip" */
-    regexp        TEXT NOT NULL, /* regexp by RFC 2915 */
-    replacement   TEXT NOT NULL, /* target FQDN (can be ".") */
+    flags       CHAR(1) CHECK (flags ~ '^[AUSP]?$'), /* RFC 2915: FLAGS
+                        empty=non-terminal, A=A/AAAA, S=SRV, U=URI, P=PTR */
+    service     TEXT, /* RFC 2915: service name, can be empty if regexp is defined */
+    regexp      TEXT, /* RFC 2915: regexp - can be empty */
+    replacement TEXT NOT NULL, /* target FQDN (can be ".") */
     comment     TEXT /* comment */
 );
 
