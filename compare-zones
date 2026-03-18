@@ -142,7 +142,7 @@ if (@changed) {
                 print $c1;
             }
         }
-#        print "\n";
+        print "\n";
 
         # Highlight differences in zone2 line
         print "  $z2_file: ";
@@ -155,7 +155,7 @@ if (@changed) {
                 print $c2;
             }
         }
-#        print "\n";
+        print "\n";
     }
 }
 
