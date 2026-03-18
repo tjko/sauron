@@ -1,0 +1,543 @@
+#!/usr/bin/env perl
+#
+#=====================================================================
+#  check_reverse.pl - verifies that each A/AAAA record has a 
+#                     corresponding PTR record and suggests appropriate
+#                     reverse zones for missing PTRs.
+#
+#  Usage:
+#        perl check_reverse.pl --zone example.com
+#
+#  The script performs an AXFR query (from localhost by default) 
+#  and then runs a reverse lookup for each IP address found.
+#  
+#  When PTRs are missing, the script suggests the appropriate reverse
+#  zone using three methods (in priority order):
+#  1. Detects existing authoritative SOA records
+#  2. Queries WHOIS to determine IP allocation block size (CIDR)
+#  3. Falls back to standard boundaries (/24 for IPv4, /32 for IPv6)
+#=====================================================================
+
+use strict;
+use warnings;
+use Getopt::Long qw(GetOptions);
+use Pod::Usage;
+use Net::DNS;
+use Net::IP qw(:PROC);           
+use List::Util qw(any);
+use Encode qw(encode_utf8);
+
+#--------------------------------------------------------------------
+#  Options
+#--------------------------------------------------------------------
+my $zone_name;
+my $nameserver = '127.0.0.1';
+my $help = 0;
+my $all = 0;
+my $suggest_zone = 1;  # Default: show zone suggestions
+
+GetOptions(
+    'zone=s' => \$zone_name,
+    'nameserver=s' => \$nameserver,
+    'all' => \$all,
+    'no-suggest' => sub { $suggest_zone = 0 },
+    'help|?' => \$help,
+) or pod2usage(2);
+
+pod2usage(1) if $help;
+unless ($zone_name) {
+    pod2usage(
+        -msg     => "You must specify the zone name (--zone parameter).\n",
+        -exitval => 2
+    );
+}
+
+#--------------------------------------------------------------------
+#  Helper functions
+#--------------------------------------------------------------------
+
+=head2 get_ip_allocation_block($ip)
+
+Queries WHOIS for the IP allocation block (CIDR).
+Returns a hash with 'block' and 'prefix_bits' keys, or undef on error.
+
+For IPv4: tries to parse "inetnum" (RIPE/APNIC) or "inet" (ARIN)
+For IPv6: tries to parse "inet6num" or "inet6"
+
+=cut
+sub get_ip_allocation_block {
+    my ($ip) = @_;
+    
+    my $ip_obj = Net::IP->new($ip)
+        or return undef;
+    
+    # Try to get whois data
+    my $whois_output = `whois -B -- "$ip" 2>/dev/null` || return undef;
+    
+    my ($block, $prefix_bits);
+    
+    if ($ip_obj->version == 4) {
+        # IPv4: look for "inetnum:" or "inet:"
+        if ($whois_output =~ /inetnum:\s*(\S+)\s*-\s*(\S+)/m) {
+            my ($start_ip, $end_ip) = ($1, $2);
+            # Convert to CIDR notation
+            my $range = "$start_ip - $end_ip";
+            ($block, $prefix_bits) = convert_ip_range_to_cidr($start_ip, $end_ip);
+        } elsif ($whois_output =~ /inet:\s*([0-9.]+\/(\d+))/m) {
+            # CIDR format
+            my $cidr = $1;
+            if ($cidr =~ /^[0-9.]+\/(\d+)$/) {
+                $prefix_bits = $1;
+                $block = $cidr;
+            }
+        }
+    } elsif ($ip_obj->version == 6) {
+        # IPv6: look for "inet6num:" or "inet6:"
+        if ($whois_output =~ /inet6num:\s*([0-9a-f:]+\/(\d+))/im) {
+            $block = $1;
+            $prefix_bits = $2;
+        } elsif ($whois_output =~ /inet6:\s*([0-9a-f:]+\/(\d+))/im) {
+            $block = $1;
+            $prefix_bits = $2;
+        }
+    }
+    
+    return undef unless $prefix_bits;
+    
+    return {
+        block       => $block,
+        prefix_bits => $prefix_bits,
+        version     => $ip_obj->version,
+    };
+}
+
+=head2 convert_ip_range_to_cidr($start_ip, $end_ip)
+
+Converts an IP range to CIDR notation and returns (block, prefix_bits).
+
+=cut
+sub convert_ip_range_to_cidr {
+    my ($start_ip, $end_ip) = @_;
+    
+    my $start_obj = Net::IP->new($start_ip)
+        or return (undef, undef);
+    my $end_obj = Net::IP->new($end_ip)
+        or return (undef, undef);
+    
+    # Calculate the CIDR block
+    # This is a simplified approach: find common prefix length
+    my $start_bin = $start_obj->binip;
+    my $end_bin = $end_obj->binip;
+    
+    my $prefix_len = 0;
+    for my $i (0..31) {
+        if (substr($start_bin, $i, 1) eq substr($end_bin, $i, 1)) {
+            $prefix_len++;
+        } else {
+            last;
+        }
+    }
+    
+    return ("$start_ip/$prefix_len", $prefix_len);
+}
+
+=head2 calculate_classless_reverse_zone($ip, $prefix_bits)
+
+Calculates a classless reverse zone (RFC 2317) for subnets smaller than /24.
+Used for subnets /25 to /32 in IPv4.
+
+The format is: start-end.octet3.octet2.octet1.in-addr.arpa
+where start-end represents the range of the last octet.
+
+Examples:
+  192.0.2.128/25 → 128-255.2.0.192.in-addr.arpa
+  192.0.2.192/26 → 192-255.2.0.192.in-addr.arpa
+  192.0.2.128/26 → 128-191.2.0.192.in-addr.arpa
+
+=cut
+sub calculate_classless_reverse_zone {
+    my ($ip, $prefix_bits) = @_;
+    
+    return undef unless $prefix_bits;
+    
+    my $ip_obj = Net::IP->new($ip)
+        or return undef;
+    
+    # Only applicable to IPv4 and for /25 to /32 in the last octet
+    return undef unless $ip_obj->version == 4;
+    return undef unless $prefix_bits > 24 && $prefix_bits <= 32;
+    
+    my @octets = split(/\./, $ip);
+    my $last_octet = $octets[3];
+    
+    # Calculate the number of host bits in the last octet
+    my $host_bits = 32 - $prefix_bits;
+    
+    # Calculate the network mask within the last octet
+    my $mask = 256 - (1 << $host_bits);
+    
+    # Calculate the first and last IP in the subnet
+    my $first = int($last_octet / (1 << $host_bits)) * (1 << $host_bits);
+    my $last = $first + (1 << $host_bits) - 1;
+    
+    # RFC 2317 format
+    my $zone = "$first-$last.$octets[2].$octets[1].$octets[0].in-addr.arpa";
+    
+    return $zone;
+}
+
+=head2 suggest_reverse_zone_from_cidr($ip, $cidr_info)
+
+Based on the IP allocation block size, suggests the appropriate reverse zone.
+Uses CIDR boundaries to determine zone granularity, including classless zones (RFC 2317).
+
+Rules for IPv4:
+- /25 to /32: Classless reverse zone (e.g., 128-255.2.0.192.in-addr.arpa)
+- /24 or larger: /24 boundary (2.0.192.in-addr.arpa)
+- /16 or larger: /16 boundary (0.192.in-addr.arpa)
+- /8 or larger: /8 boundary (192.in-addr.arpa)
+
+For IPv6:
+- /32 or larger: /32 boundary (nibble boundary at 32 hex digits)
+- /48 or larger: /48 boundary (nibble boundary at 24 hex digits)
+- etc.
+
+=cut
+sub suggest_reverse_zone_from_cidr {
+    my ($ip, $cidr_info) = @_;
+    
+    return undef unless $cidr_info;
+    
+    my $prefix_bits = $cidr_info->{prefix_bits};
+    my $version     = $cidr_info->{version};
+    
+    my $ip_obj = Net::IP->new($ip)
+        or return undef;
+    
+    my $zone;
+    
+    if ($version == 4) {
+        my @octets = split(/\./, $ip);
+        
+        # Try classless reverse zone (RFC 2317) for /25-/32
+        if ($prefix_bits > 24 && $prefix_bits <= 32) {
+            my $classless = calculate_classless_reverse_zone($ip, $prefix_bits);
+            $zone = $classless if $classless;
+        } else {
+            # Determine zone based on standard CIDR boundaries
+            # /24 -> 3 octets (2.0.192.in-addr.arpa)
+            # /16 -> 2 octets (0.192.in-addr.arpa)
+            # /8  -> 1 octet  (192.in-addr.arpa)
+            
+            if ($prefix_bits >= 24) {
+                # /24, use /24 boundary
+                $zone = "$octets[2].$octets[1].$octets[0].in-addr.arpa";
+            } elsif ($prefix_bits >= 16) {
+                # /16 or larger, use /16 boundary
+                $zone = "$octets[1].$octets[0].in-addr.arpa";
+            } elsif ($prefix_bits >= 8) {
+                # /8 or larger, use /8 boundary
+                $zone = "$octets[0].in-addr.arpa";
+            } else {
+                # Smaller than /8 (very rare), suggest /24 boundary
+                $zone = "$octets[2].$octets[1].$octets[0].in-addr.arpa";
+            }
+        }
+    } elsif ($version == 6) {
+        my $rev_name = $ip_obj->reverse_ip;
+        $rev_name =~ s/\.$//;
+        
+        # IPv6 zones are typically at nibble boundaries (/4 increments)
+        # /32 -> 32 hex digits (8 characters with dots)
+        # /48 -> 24 hex digits (6 characters with dots)
+        # /56 -> 22 hex digits (5.5 characters with dots)
+        
+        my $hex_digits = int($prefix_bits / 4);
+        my $remainder  = $prefix_bits % 4;
+        
+        # Round up if there's a remainder
+        if ($remainder > 0) {
+            $hex_digits++;
+        }
+        
+        # Convert hex_digits count to reverse zone string
+        my @parts = split(/\./, $rev_name);
+        my $zone_parts = int(($hex_digits + 1) / 2);  # 2 parts = 1 octet after split
+        
+        if ($zone_parts <= scalar(@parts)) {
+            $zone = join('.', @parts[0..($zone_parts-1)]) . '.ip6.arpa';
+        } else {
+            $zone = $rev_name;
+        }
+    }
+    
+    return $zone;
+}
+
+=head2 find_authoritative_reverse_zone($ip, $resolver)
+
+Finds the authoritative in-addr.arpa or ip6.arpa zone for the given IP.
+Returns the zone name or undef if unable to determine.
+
+=cut
+sub find_authoritative_reverse_zone {
+    my ($ip, $resolver) = @_;
+    
+    my $ip_obj = Net::IP->new($ip)
+        or return undef;
+    
+    my $rev_name = $ip_obj->reverse_ip;
+    
+    # Extract reverse domain parts (e.g., 5.2.0.192.in-addr.arpa -> check 192.in-addr.arpa, 0.192.in-addr.arpa, etc.)
+    my @parts = split(/\./, $rev_name);
+    
+    # Starting from broader zones, work backwards (e.g., in-addr.arpa -> 192.in-addr.arpa -> 0.192.in-addr.arpa)
+    for (my $i = scalar(@parts) - 1; $i >= 0; $i--) {
+        my $zone_candidate = join('.', @parts[$i..$#parts]);
+        
+        my $query = $resolver->query($zone_candidate, 'SOA');
+        if ($query) {
+            my @soa = grep { $_->type eq 'SOA' } $query->answer;
+            if (@soa) {
+                return $zone_candidate;
+            }
+        }
+    }
+    
+    return undef;
+}
+
+=head2 suggest_ptr_zone($ip, $resolver)
+
+Suggests where the PTR record should be configured.
+Priority:
+1. Try to find existing authoritative zone (SOA lookup)
+2. Query WHOIS for IP allocation block and suggest zone based on CIDR size
+3. Fallback to standard CIDR boundaries (/24 for IPv4, /32 for IPv6)
+
+=cut
+sub suggest_ptr_zone {
+    my ($ip, $resolver) = @_;
+    
+    # Step 1: Try to find existing authoritative zone
+    my $auth_zone = find_authoritative_reverse_zone($ip, $resolver);
+    return $auth_zone if $auth_zone;
+    
+    # Step 2: Try to get WHOIS allocation block and suggest based on its size
+    my $cidr_info = get_ip_allocation_block($ip);
+    if ($cidr_info) {
+        my $suggested = suggest_reverse_zone_from_cidr($ip, $cidr_info);
+        return $suggested if $suggested;
+    }
+    
+    # Step 3: Fallback to standard CIDR boundaries
+    my $ip_obj = Net::IP->new($ip)
+        or return undef;
+    
+    my $rev_name = $ip_obj->reverse_ip;
+    $rev_name =~ s/\.$//;
+    
+    # For IPv4: suggest /24 boundary (e.g., 5.2.0.192.in-addr.arpa)
+    if ($ip_obj->version == 4) {
+        my @octets = split(/\./, $ip);
+        return "$octets[2].$octets[1].$octets[0].in-addr.arpa";
+    }
+    
+    # For IPv6: suggest /32 boundary (128 bits -> 32 hexadigits)
+    if ($ip_obj->version == 6) {
+        $rev_name =~ /^((?:[0-9a-f]\.){32})/i;
+        return $1 . 'ip6.arpa' if $1;
+    }
+    
+    return undef;
+}
+
+#------------------------------------------------------
+#  We retrieve the complete zone via AXFR
+#------------------------------------------------------
+my $resolver = Net::DNS::Resolver->new(
+    nameservers => [$nameserver],
+    recurse     => 0,      
+    udp_timeout => 5,
+    tcp_timeout => 5,
+);
+
+my @axfr = $resolver->axfr($zone_name);
+unless (@axfr) {
+    die "AXFR failed for zone $zone_name from $nameserver, it may not be enabled or permissions are missing.\n";
+}
+
+my %ip_to_owner;   # ip (number) => fqdn (without last dot)
+
+foreach my $rr (@axfr) {
+    # $rr is Net::DNS::RR object
+    next unless $rr->type eq 'A'  || $rr->type eq 'AAAA';
+
+    my $owner = $rr->name;               # FQDN (with dot)
+    $owner =~ s/\.$//;                   # Remove the trailing period for comparison
+    my $ip = $rr->address;               # IPv4 or IPv6 address
+
+    $ip_to_owner{$ip} = $owner;
+}
+
+my $total = scalar keys %ip_to_owner;
+print "Zone $zone_name: $total A/AAAA records retrieved.\n";
+
+#------------------------------------------------------
+#  We will check the reverse PTR for each IP address
+#------------------------------------------------------
+my $missing = 0;
+my $mismatch = 0;
+
+foreach my $ip (sort keys %ip_to_owner) {
+    my $owner = $ip_to_owner{$ip};
+
+    # We will create a Net::IP object and retrieve the reverse name:
+    my $ip_obj = Net::IP->new($ip)
+        or do {
+            warn "Unable to create a Net::IP object from the address $ip - skipped.\n";
+            next;
+        };
+    my $rev_name = $ip_obj->reverse_ip;   # returns, for example, 5.2.0.192.in-addr.arpa.
+
+    # We will perform a PTR lookup
+    my $query = $resolver->search($rev_name, 'PTR');
+    my $ptr_name;
+
+    if ($query) {
+        # There can always be multiple PTRs, but typically only one
+        my @ptrs = map { $_->ptrdname } grep { $_->type eq 'PTR' } $query->answer;
+        if (@ptrs) {
+            $ptr_name = $ptrs[0];
+            $ptr_name =~ s/\.$//;    
+        }
+    }
+
+    if (!$ptr_name) {
+        my $suggested_zone = suggest_ptr_zone($ip, $resolver);
+        my $suggestion = "";
+        if ($suggested_zone) {
+            $suggestion = " [suggested zone: $suggested_zone]";
+        }
+        print "ERROR: $owner ($ip) -> $rev_name - PTR **missing**$suggestion\n";
+        $missing++;
+        next;
+    }
+
+    if (lc $ptr_name ne lc $owner) {
+        print "ERROR: $owner ($ip) -> $rev_name - PTR points to $ptr_name (expected: $owner)\n";
+        $mismatch++;
+        next;
+    }
+
+    # All OK
+    print "OK:    $owner ($ip) -> $rev_name (PTR exists and matches)\n" if $all;
+}
+
+#------------------------------------------------------
+#  Summary output
+#------------------------------------------------------
+print "\n================================================================\n";
+print "Zone                      : $zone_name\n";
+print "Total A/AAAA records      : $total\n";
+print "Missing PTRs              : $missing\n";
+print "PTRs with incorrect values: $mismatch\n";
+print "================================================================\n";
+
+exit( ($missing || $mismatch) ? 1 : 0 );
+
+#=====================================================================
+#  POD - help
+#=====================================================================
+__END__
+
+=head1 NAME
+
+check_reverse.pl - validates that every A/AAAA record in the zone has a corresponding PTR record.
+
+
+=head1 SYNOPSIS
+
+  perl check_reverse.pl --zone example.com
+
+Options:
+
+  --zone       Name of the zone you want to check (required)
+  --nameserver Address of the nameserver (default: 127.0.0.1)
+  --all        Prints all records, not just problematic ones
+  --no-suggest Disable suggestions for PTR zones (by default enabled)
+  --help       Displays this help message
+
+=head1 DESCRIPTION
+
+The script performs an **AXFR** (zone transfer) from the local DNS server at
+`127.0.0.1`.  It retrieves all **A** and **AAAA** records from the file, calculates
+the reverse name for each IP (`reverse_ip` from the C<Net::IP> module), and performs
+a **PTR** query.  
+
+=head2 PTR Zone Suggestions
+
+When a PTR record is missing, the script suggests the appropriate reverse zone using 
+this priority:
+
+=over
+
+=item 1. Authoritative Zone Detection
+
+Queries progressively longer reverse zone names to find existing SOA records
+(e.g., C<192.in-addr.arpa> → C<0.192.in-addr.arpa> → C<2.0.192.in-addr.arpa>).
+
+=item 2. WHOIS IP Allocation Block Analysis
+
+Queries WHOIS for the IP allocation block (CIDR notation). The reverse zone is then
+suggested based on the block size:
+
+=over
+
+=item * /25 to /32: Classless reverse zone (RFC 2317) (e.g., C<128-255.2.0.192.in-addr.arpa>)
+
+=item * /24 or larger: Suggests /24 boundary (e.g., C<2.0.192.in-addr.arpa>)
+
+=item * /16 or larger: Suggests /16 boundary (e.g., C<0.192.in-addr.arpa>)
+
+=item * /8 or larger:  Suggests /8 boundary (e.g., C<192.in-addr.arpa>)
+
+=item * Smaller blocks (< /8): Suggests /24 boundary
+
+=back
+
+This approach ensures that the suggested zone matches the administrative responsibility
+for the IP block, as determined by WHOIS registrations.
+
+For subnets smaller than /24 (/25-/32), the script uses B<classless reverse zones>
+defined in RFC 2317 with format C<start-end.octet3.octet2.octet1.in-addr.arpa>.
+This is the modern standard for reverse DNS delegations:
+
+=over
+
+=item * 192.0.2.128/25 → C<128-255.2.0.192.in-addr.arpa>
+
+=item * 192.0.2.192/26 → C<192-255.2.0.192.in-addr.arpa>
+
+=item * 192.0.2.128/26 → C<128-191.2.0.192.in-addr.arpa>
+
+=back
+
+=item 3. Standard CIDR Boundaries (Fallback)
+
+If WHOIS is unavailable, falls back to standard boundaries (/24 for IPv4, /32 for IPv6).
+
+=back
+
+=head2 Example Output
+
+  ERROR: example.com (192.0.2.5) -> 5.2.0.192.in-addr.arpa - PTR **missing** [suggested zone: 2.0.192.in-addr.arpa]
+  ERROR: example.com (10.20.30.40) -> 40.30.20.10.in-addr.arpa - PTR **missing** [suggested zone: 20.10.in-addr.arpa]
+  ERROR: example.com (192.0.2.130) -> 130.2.0.192.in-addr.arpa - PTR **missing** [suggested zone: 128-255.2.0.192.in-addr.arpa]
+
+The results are printed to STDOUT, and the script exits with an exit code of 1
+if at least one PTR is missing or does not match the name, and with an exit code of 0
+if everything is OK.
+
+=cut
+
