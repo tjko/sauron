@@ -198,9 +198,11 @@ Rules for IPv4:
 - /8 or larger: /8 boundary (192.in-addr.arpa)
 
 For IPv6:
-- /32 or larger: /32 boundary (nibble boundary at 32 hex digits)
-- /48 or larger: /48 boundary (nibble boundary at 24 hex digits)
-- etc.
+- /48: Takes LAST (128-48)/4 = 20 nibbles from reverse domain
+- /56: Takes LAST (128-56)/4 = 18 nibbles from reverse domain
+- /64: Takes LAST (128-64)/4 = 16 nibbles from reverse domain
+- In reverse notation, least significant bits come first in the domain string,
+  so for delegations we take the LAST nibbles (most significant bits)
 
 =cut
 sub suggest_reverse_zone_from_cidr {
@@ -245,29 +247,31 @@ sub suggest_reverse_zone_from_cidr {
         }
     } elsif ($version == 6) {
         my $rev_name = $ip_obj->reverse_ip;
-        $rev_name =~ s/\.$//;
+        $rev_name =~ s/\.ip6\.arpa\.?$//;  # Remove .ip6.arpa suffix
         
-        # IPv6 zones are typically at nibble boundaries (/4 increments)
-        # /32 -> 32 hex digits (8 characters with dots)
-        # /48 -> 24 hex digits (6 characters with dots)
-        # /56 -> 22 hex digits (5.5 characters with dots)
+        # IPv6 zones - reverse DNS notation has LEAST significant bits first
+        # For a /prefix network, we take the LAST prefix/4 nibbles from reverse domain
+        # Example: /48 means first 48 bits are network, so LAST 48/4=12 nibbles become the zone
         
-        my $hex_digits = int($prefix_bits / 4);
-        my $remainder  = $prefix_bits % 4;
+        my $zone_nibbles = int($prefix_bits / 4);
+        my $remainder    = $prefix_bits % 4;
         
         # Round up if there's a remainder
         if ($remainder > 0) {
-            $hex_digits++;
+            $zone_nibbles++;
         }
         
-        # Convert hex_digits count to reverse zone string
-        my @parts = split(/\./, $rev_name);
-        my $zone_parts = int(($hex_digits + 1) / 2);  # 2 parts = 1 octet after split
+        # Split reverse name into individual nibbles
+        my @nibbles = split(/\./, $rev_name);
         
-        if ($zone_parts <= scalar(@parts)) {
-            $zone = join('.', @parts[0..($zone_parts-1)]) . '.ip6.arpa';
+        # Take the LAST zone_nibbles from the reverse domain
+        # (not the first ones!)
+        if ($zone_nibbles <= scalar(@nibbles)) {
+            my $start_idx = scalar(@nibbles) - $zone_nibbles;
+            $zone = join('.', @nibbles[$start_idx..$#nibbles]) . '.ip6.arpa';
         } else {
-            $zone = $rev_name;
+            # Fallback if something went wrong
+            $zone = $rev_name . '.ip6.arpa';
         }
     }
     
@@ -343,10 +347,15 @@ sub suggest_ptr_zone {
         return "$octets[2].$octets[1].$octets[0].in-addr.arpa";
     }
     
-    # For IPv6: suggest /32 boundary (128 bits -> 32 hexadigits)
+    # For IPv6: suggest /32 boundary
+    # In reverse notation, /32 means take the LAST (128-32)/4 = 24 nibbles
     if ($ip_obj->version == 6) {
-        $rev_name =~ /^((?:[0-9a-f]\.){32})/i;
-        return $1 . 'ip6.arpa' if $1;
+        my @nibbles = split(/\./, $rev_name);
+        my $nibbles_for_32 = (128 - 32) / 4;  # = 24 nibbles from the END
+        if ($nibbles_for_32 <= scalar(@nibbles)) {
+            my $start_idx = scalar(@nibbles) - $nibbles_for_32;
+            return join('.', @nibbles[$start_idx..$#nibbles]) . '.ip6.arpa';
+        }
     }
     
     return undef;
