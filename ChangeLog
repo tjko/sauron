@@ -1,4 +1,5 @@
 0.9.0 (beta)
+	- Added new option --keep-pending for sauron command [svamberg]
 	- Add check-reverse utility script for DNS PTR record validation
 	  * Verifies that A/AAAA records have corresponding PTR records in DNS
 	  * Intelligent reverse zone suggestions via WHOIS lookup and CIDR analysis
