@@ -1,5 +1,11 @@
 0.9.0 (beta)
 	- Added new option --keep-pending for sauron command [svamberg]
+	- Add check-reverse utility script for DNS PTR record validation
+	  * Verifies that A/AAAA records have corresponding PTR records in DNS
+	  * Intelligent reverse zone suggestions via WHOIS lookup and CIDR analysis
+	  * Support for RFC 2317 classless reverse zones (/25-/32 subnets)
+	  * Three-tier fallback strategy: authoritative SOA -> WHOIS block size -> 
+	    standard boundaries [svamberg]
 	- Added Sauron::SetupIO module for correct encoding settings,
 	  sets encoding transport layers according to system settings
 	  (locale for STDIN, STDOUT, STDERR) using Encode::Locale [svamberg]
