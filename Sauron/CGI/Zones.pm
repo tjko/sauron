@@ -37,7 +37,7 @@ sub write2log{
 } # End of write2log
 
 
-my %ztypenames=(M=>'Master',S=>'Slave',F=>'Forward',H=>'Hint');
+my %ztypenames=(M=>'Master',S=>'Slave',F=>'Forward',H=>'Hint',C=>'Catalog');
 
 my %naptr_flags=(
     0=>'(non-terminal)',
@@ -52,10 +52,12 @@ my %new_zone_form=(
   {ftype=>0, name=>'New zone'},
   {ftype=>1, tag=>'name', name=>'Zone name', type=>'zonename',
    len=>72, empty=>0},
+  {ftype=>1, tag=>'comment', name=>'Comments', type=>'text', len=>80, maxlen=>200, 
+   empty=>1, anchor=>1, whitesp=>'P'},
   {ftype=>3, tag=>'type', name=>'Type', type=>'enum', conv=>'U',
-   enum=>{M=>'Master', S=>'Slave', H=>'Hint', F=>'Forward'}},
+   enum=>{M=>'Master', S=>'Slave', H=>'Hint', F=>'Forward', C=>'Catalog'}},
   {ftype=>3, tag=>'reverse', name=>'Reverse', type=>'enum',  conv=>'L',
-   enum=>{f=>'No',t=>'Yes'}}
+   enum=>{f=>'No',t=>'Yes'}, iff=>['type','M']}
  ]
 );
 
@@ -71,7 +73,7 @@ my %zone_form = (
   {ftype=>1, tag=>'comment', name=>'Comments', type=>'text', len=>80, maxlen=>200, # TVu.
    empty=>1, anchor=>1, whitesp=>'P'},
   {ftype=>4, tag=>'type', name=>'Type', type=>'enum', conv=>'U',
-   enum=>{M=>'Master', S=>'Slave', H=>'Hint', F=>'Forward'}},
+   enum=>{M=>'Master', S=>'Slave', H=>'Hint', F=>'Forward', C=>'Catalog'}},
   {ftype=>4, tag=>'reverse', name=>'Reverse', type=>'enum',
    enum=>{f=>'No',t=>'Yes'}, iff=>['type','M']},
   {ftype=>3, tag=>'txt_auto_generation',
@@ -113,7 +115,7 @@ my %zone_form = (
    iff2=>['reverse','f']},
   {ftype=>2, tag=>'ns', name=>'Name servers (NS)', type=>['fqdn','text'],
    fields=>2, whitesp=>['','P'], maxlen=>[400,20],
-   len=>[30,20], empty=>[0,1], elabels=>['NS','comment'], iff=>['type','M']},
+   len=>[30,20], empty=>[0,1], elabels=>['NS','comment']},
   {ftype=>2, tag=>'mx', name=>'Mail exchanges (MX)', maxlen=>[5,400,20],
 #  type=>['int','text','text'], fields=>3, len=>[5,30,20], empty=>[0,0,1],
    type=>['int','mx','text'], fields=>3, len=>[5,30,20], empty=>[0,0,1],
@@ -172,6 +174,17 @@ my %zone_form = (
    fields=>3, len=>[39,6,15], empty=>[0,1,1], elabels=>['IP','Port','comment'],
    iff=>['type','F']},
 
+  {ftype=>0, name=>'Catalog Zones', iff=>['type','C'], no_edit=>1},
+  {ftype=>0, name=>'Catalog Zones', iff=>['type','M']},
+  {ftype=>4, tag=>'catalog_member_count', name=>'Member zones count',
+   no_edit=>1, iff=>['type','C']},
+  {ftype=>4, tag=>'zone_catalog_count', name=>'Number of catalogs',
+   no_edit=>1, iff=>['type','M']},
+#  {ftype=>4, tag=>'zone_catalogs_list', name=>'Included in catalogs',
+#   no_edit=>1, iff=>['type','M']}, # duplicity
+  {ftype=>14, tag=>'catalog_zones_selected', name=>'Member of catalog zones',
+   iff=>['type','M']},
+
   {ftype=>0, name=>'DHCP', iff=>['type','M']},
   {ftype=>2, tag=>'dhcp', name=>'Zone specific DHCP entries',
    type=>['text','text'], fields=>2, maxlen=>[200,20], whitesp=>['N','P'],
@@ -212,7 +225,7 @@ sub select_zone($$)
   my (%server,%zonelist);
 
   #display zone selection list
-  my %ztypecolors=(M=>'#c0ffc0',S=>'#eeeeff',F=>'#eedfdf',H=>'#eeeebf');
+  my %ztypecolors=(M=>'#c0ffc0',C=>'#add0fe',S=>'#eeeeff',F=>'#eedfdf',H=>'#eeeebf');
   # 2022-08-10 mesrik: add last expired arg, no skipping here
   my $list=get_zone_list($serverid,0,0,0);
 # my $zlimit = 50; # Limit removed.
@@ -351,6 +364,17 @@ sub display_zone($$)
     my %data;
     get_zone($zoneid,\%data);
     save_state($state->{cookie},$state);
+
+    # Format catalog zones list with links
+    if ($data{zone_catalogs} && @{$data{zone_catalogs}} > 0) {
+      my @catalog_links;
+      for my $cat (@{$data{zone_catalogs}}) {
+        my $cat_name = $cat->[1];
+        my $cat_link = "<a href=\"$selfurl?menu=zones&selected_zone=$cat_name\">$cat_name</a>";
+        push @catalog_links, $cat_link;
+      }
+      $data{zone_catalogs_list} = join(', ', @catalog_links);
+    }
 
     display_form(\%data,\%zone_form);
     return;

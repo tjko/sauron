@@ -165,9 +165,16 @@ $VERSION = '$Id:$ ';
 	     save_state
 	     load_state
 	     remove_state
+
+	     is_catalog_zone
+	     validate_zone_for_catalog
+	     get_zone_catalog_members
+	     get_zone_catalogs
+	     add_zone_to_catalog
+	     remove_zone_from_catalog
 	    );
 
-
+# Catalog zones support (RFC 9432) - six functions exported above
 my($muser);
 
 
@@ -1317,23 +1324,37 @@ sub get_zone($$) {
   fix_bools($rec,"active,dummy,reverse,noreverse");
   $sid=$rec->{server};
 
-  if ($rec->{type} eq 'M') {
+  if ($rec->{type} eq 'M' || $rec->{type} eq 'C') {
     $hid=get_host_id($id,'@');
     if ($hid > 0) {
       get_array_field("ns_entries",3,"id,ns,comment","NS,Comments",
 		      "type=2 AND ref=$hid ORDER BY ns",$rec,'ns');
-      get_array_field("mx_entries",4,"id,pri,mx,comment",
-		      "Priority,MX,Comments",
-		      "type=2 AND ref=$hid ORDER BY pri,mx",$rec,'mx');
-      get_array_field("txt_entries",3,"id,txt,comment","TXT,Comments",
-		      "type=2 AND ref=$hid ORDER BY id",$rec,'txt');
-      get_array_field("naptr_entries",8,"id,order_val,preference,flags,service,regexp,replacement,comment",
-		      "Order,Preference,Flags,Service,Regexp,Replacement,Comments",
-		      "type=1 AND ref=$hid ORDER BY order_val,preference,flags,service,regexp,replacement",$rec,'naptr');
-      get_array_field("a_entries",4,"id,ip,reverse,forward",
-		      "IP,reverse,forward","host=$hid ORDER BY ip",$rec,'ip');
+
+      # For non-catalog zones, also load MX, TXT, NAPTR and IP records
+      if ($rec->{type} eq 'M') {
+        get_array_field("mx_entries",4,"id,pri,mx,comment",
+		        "Priority,MX,Comments",
+		        "type=2 AND ref=$hid ORDER BY pri,mx",$rec,'mx');
+        get_array_field("txt_entries",3,"id,txt,comment","TXT,Comments",
+		        "type=2 AND ref=$hid ORDER BY id",$rec,'txt');
+        get_array_field("naptr_entries",8,"id,order_val,preference,flags,service,regexp,replacement,comment",
+		        "Order,Preference,Flags,Service,Regexp,Replacement,Comments",
+		        "type=1 AND ref=$hid ORDER BY order_val,preference,flags,service,regexp,replacement",$rec,'naptr');
+        get_array_field("a_entries",4,"id,ip,reverse,forward",
+		        "IP,reverse,forward","host=$hid ORDER BY ip",$rec,'ip');
+      }
 
       $rec->{zonehostid}=$hid;
+    } else {
+      # Initialize empty NS array if host record missing (for catalog zones)
+      # This ensures the form can still be edited
+      $rec->{ns} = [['NS','Comments']];  # Header row
+      if ($rec->{type} eq 'M') {
+        $rec->{mx} = [['Priority','MX','Comments']];
+        $rec->{txt} = [['TXT','Comments']];
+        $rec->{naptr} = [['Order','Preference','Flags','Service','Regexp','Replacement','Comments']];
+        $rec->{ip} = [['IP','reverse','forward']];
+      }
     }
   }
 
@@ -1359,6 +1380,39 @@ sub get_zone($$) {
   $rec->{pending_info}=($q[0][0] > 0 ?
 			"<FONT color=\"#ff0000\">$q[0][0]</FONT>" : 'None');
 
+  # Catalog zones support (RFC 9432)
+  if ($rec->{type} eq 'C') {
+    # Zone is a catalog - load its members
+    my $rec_catalogs = {};
+    get_zone_catalog_members($id, $rec_catalogs);
+    $rec->{catalog_members} = $rec_catalogs->{members};
+    $rec->{catalog_member_count} = $rec_catalogs->{count};
+  } else {
+    # Zone is a regular zone - load which catalogs contain it
+    my $rec_cats = {};
+    get_zone_catalogs($id, $rec_cats);
+    $rec->{zone_catalogs} = $rec_cats->{catalogs};
+    $rec->{zone_catalog_count} = $rec_cats->{count};
+
+    # Format catalog list for display
+    if ($rec_cats->{count} > 0) {
+      my @catalog_list;
+      for my $cat (@{$rec_cats->{catalogs}}) {
+        push @catalog_list, $cat->[1];  # zone name
+      }
+      $rec->{zone_catalogs_list} = join(', ', sort @catalog_list);
+    } else {
+      $rec->{zone_catalogs_list} = 'None';
+    }
+
+    # For Master zones, load available catalogs for selection
+    if ($rec->{type} eq 'M') {
+      my $rec_sel = {};
+      get_catalog_zones_for_selection($id, $sid, $rec_sel);
+      $rec->{available_catalogs} = $rec_sel->{available_catalogs};
+      $rec->{catalog_zones_selected} = $rec_sel->{catalog_zones_selected};
+    }
+  }
 
   $rec->{txt_auto_generation}=($rec->{flags} & 0x01 ? 1 : 0);
 
@@ -1369,10 +1423,23 @@ sub get_zone($$) {
 sub update_zone($) {
   my($rec) = @_;
   my($r,$id,$new_net,$hid);
+  my(@current_catalogs, @new_catalogs, %new_cat_hash, %current_cat_hash);
 
   del_std_fields($rec);
   delete $rec->{pending_info};
   delete $rec->{zonehostid};
+
+  # Catalog zones support - save before cleanup
+  my $selected_catalogs = $rec->{catalog_zones_selected} || [];
+
+  # Catalog zones support - clean up before update
+  delete $rec->{catalog_members};
+  delete $rec->{catalog_member_count};
+  delete $rec->{zone_catalogs};
+  delete $rec->{zone_catalog_count};
+  delete $rec->{zone_catalogs_list};
+  delete $rec->{available_catalogs};
+  delete $rec->{catalog_zones_selected};
 
   $rec->{flags}=0;
   $rec->{flags}|=0x01 if ($rec->{txt_auto_generation});
@@ -1399,26 +1466,44 @@ sub update_zone($) {
   if ($r < 0) { db_rollback(); return $r; }
 
   return -199 unless ($rec->{type});
-  if ($rec->{type} eq 'M') {
+  if ($rec->{type} eq 'M' || $rec->{type} eq 'C') {
     $hid=get_host_id($id,'@');
-    return -200 unless ($hid > 0);
 
-    $r=update_array_field("a_entries",4,"ip,reverse,forward,host",
-			  'ip',$rec,"$hid");
-    if ($r < 0) { db_rollback(); return -10; }
+    # If host record doesn't exist for catalog or master zone, create it
+    if ($hid <= 0) {
+      if ($rec->{type} eq 'C') {
+        # For catalog zones, create the @ host record if missing
+        $hid = add_record('hosts',{zone=>$id,type=>10,domain=>'@',
+                                   comment=>'zone record'});
+        if ($hid < 0) { db_rollback(); return -201; }
+      } else {
+        # For master zones, this should not happen - it's an error
+        return -200;
+      }
+    }
 
+    # For catalog zones, only update NS records
+    # For master zones, update all record types
+    if ($rec->{type} eq 'M') {
+      $r=update_array_field("a_entries",4,"ip,reverse,forward,host",
+			    'ip',$rec,"$hid");
+      if ($r < 0) { db_rollback(); return -10; }
+
+      $r=update_array_field("mx_entries",4,"pri,mx,comment,type,ref",
+			    'mx',$rec,"2,$hid");
+      if ($r < 0) { db_rollback(); return -13; }
+      $r=update_array_field("txt_entries",3,"txt,comment,type,ref",
+			    'txt',$rec,"2,$hid");
+      if ($r < 0) { db_rollback(); return -14; }
+      $r=update_array_field("naptr_entries",7,"order_val,preference,flags,service,regexp,replacement,comment,type,ref",
+			    'naptr',$rec,"1,$hid");
+      if ($r < 0) { db_rollback(); return -140; }
+    }
+
+    # NS records for both Master and Catalog zones
     $r=update_array_field("ns_entries",3,"ns,comment,type,ref",
 			  'ns',$rec,"2,$hid");
     if ($r < 0) { db_rollback(); return -12; }
-    $r=update_array_field("mx_entries",4,"pri,mx,comment,type,ref",
-			  'mx',$rec,"2,$hid");
-    if ($r < 0) { db_rollback(); return -13; }
-    $r=update_array_field("txt_entries",3,"txt,comment,type,ref",
-			  'txt',$rec,"2,$hid");
-    if ($r < 0) { db_rollback(); return -14; }
-    $r=update_array_field("naptr_entries",7,"order_val,preference,flags,service,regexp,replacement,comment,type,ref",
-			  'naptr',$rec,"1,$hid");
-    if ($r < 0) { db_rollback(); return -140; }
   }
 
   # dhcp
@@ -1474,6 +1559,48 @@ sub update_zone($) {
 # $$rec{'zentries'}[0][0],
 
   if ($r < 0) { db_rollback(); return -21; }
+
+  # Process catalog zone selection changes
+  if ($rec->{type} eq 'M' && $id > 0) {
+    # Get current catalogs for this zone
+    my @current_catalogs = ();
+    my @q;
+    db_query("SELECT catalog_zone_id FROM zone_catalogs " .
+             "WHERE member_zone_id = $id", \@q);
+    for my $row (@q) {
+      push @current_catalogs, $row->[0];
+    }
+    my $curr_debug = join(",", @current_catalogs);
+
+    # Get new catalogs from form submission
+    my @new_catalogs = ();
+    if (ref($selected_catalogs) eq 'ARRAY') {
+      @new_catalogs = @{$selected_catalogs};
+      # Ensure they are numeric IDs
+      @new_catalogs = map { int($_) } @new_catalogs;
+      my $new_debug = join(",", @new_catalogs);
+    }
+
+    # Build hashes for comparison
+    my %current_hash = map { $_ => 1 } @current_catalogs;
+    my %new_hash = map { $_ => 1 } @new_catalogs;
+
+    # Remove catalogs that are no longer selected
+    for my $cat_id (@current_catalogs) {
+      unless ($new_hash{$cat_id}) {
+        $r = remove_zone_from_catalog($id, $cat_id);
+        if ($r < 0) { db_rollback(); return -23; }
+      }
+    }
+
+    # Add catalogs that are newly selected
+    for my $cat_id (@new_catalogs) {
+      unless ($current_hash{$cat_id}) {
+        $r = add_zone_to_catalog($id, $cat_id);
+        if ($r < 0 && $r != -10) { db_rollback(); return -24; }  # -10 means already exists, which is ok
+      }
+    }
+  }
 
   return db_commit();
 }
@@ -1643,33 +1770,37 @@ sub add_zone($) {
   $rec->{id}=$id=$res;
 
 
-  if ($rec->{type} eq 'M') {
+  if ($rec->{type} eq 'M' || $rec->{type} eq 'C') {
     # zone's host record (@)
     $res = add_record('hosts',{zone=>$id,type=>10,domain=>'@',
 			       comment=>'zone record'});
     if ($res < 0) { db_rollback(); return -101; }
     $hid=$res;
 
-    # ns
+    # ns - for both Master and Catalog zones
     $res = add_array_field('ns_entries','ns,comment','ns',$rec,
 			   'type,ref',"2,$hid");
     if ($res < 0) { db_rollback(); return -102; }
-    # mx
-    $res = add_array_field('mx_entries','pri,mx,comment','mx',$rec,
-			   'type,ref',"2,$hid");
-    if ($res < 0) { db_rollback(); return -103; }
-    # txt
-    $res = add_array_field('txt_entries','txt,comment','txt',$rec,
-			   'type,ref',"2,$hid");
-    if ($res < 0) { db_rollback(); return -104; }
-    # naptr
-    $res = add_array_field('naptr_entries','order_val,preference,flags,service,regexp,replacement,comment',
-			   'naptr',$rec,'type,ref',"1,$hid");
-    if ($res < 0) { db_rollback(); return -1040; }
-    # ip
-    $res = add_array_field('a_entries','ip,reverse,forward','ip',$rec,
-			   'host',"$hid");
-    if ($res < 0) { db_rollback(); return -105; }
+
+    # For Master zones only
+    if ($rec->{type} eq 'M') {
+      # mx
+      $res = add_array_field('mx_entries','pri,mx,comment','mx',$rec,
+			     'type,ref',"2,$hid");
+      if ($res < 0) { db_rollback(); return -103; }
+      # txt
+      $res = add_array_field('txt_entries','txt,comment','txt',$rec,
+			     'type,ref',"2,$hid");
+      if ($res < 0) { db_rollback(); return -104; }
+      # naptr
+      $res = add_array_field('naptr_entries','order_val,preference,flags,service,regexp,replacement,comment',
+			     'naptr',$rec,'type,ref',"1,$hid");
+      if ($res < 0) { db_rollback(); return -1040; }
+      # ip
+      $res = add_array_field('a_entries','ip,reverse,forward','ip',$rec,
+			     'host',"$hid");
+      if ($res < 0) { db_rollback(); return -105; }
+    }
   }
 
   # dhcp
@@ -2295,12 +2426,18 @@ sub delete_host($) {
 
 sub add_host($) {
   my($rec) = @_;
-  my($res,$i,$id,$a_id);
+  my($res,$i,$id,$a_id, @q);
 
   delete $rec->{cname_alias};
   delete $rec->{static_alias};
 
   return -100 unless ($rec->{zone} > 0);
+
+  # Catalog zones cannot have hosts added (RFC 9432)
+  if (is_catalog_zone($rec->{zone})) {
+    return -999;  # ERROR: Cannot add hosts to catalog zones
+  }
+
   db_begin();
   if ($rec->{type}==7) {
     $a_id=$rec->{alias};
@@ -4292,6 +4429,167 @@ sub remove_state($) {
   return 1;
 }
 
+###############################################################################
+# Catalog zones support (RFC 9432)
+
+sub is_catalog_zone($) {
+  my($zone_id) = @_;
+  my(@q);
+
+  return -1 unless ($zone_id > 0);
+
+  db_query("SELECT type FROM zones WHERE id=$zone_id", \@q);
+  return -2 unless (@q > 0);
+
+  return ($q[0][0] eq 'C' ? 1 : 0);
+}
+
+sub validate_zone_for_catalog($$) {
+  my($zone_id, $catalog_zone_id) = @_;
+  my(@q, %zone, %catalog);
+
+  return -1 unless ($zone_id > 0 && $catalog_zone_id > 0);
+  return -2 if ($zone_id == $catalog_zone_id);  # Prevent self-reference
+
+  # Check that catalog zone is actually type 'C'
+  db_query("SELECT type FROM zones WHERE id=$catalog_zone_id", \@q);
+  return -3 unless (@q > 0 && $q[0][0] eq 'C');
+
+  # Check that zone to be added is not type 'C'
+  db_query("SELECT type FROM zones WHERE id=$zone_id", \@q);
+  return -4 unless (@q > 0 && $q[0][0] ne 'C');
+
+  return 0;  # Valid
+}
+
+sub get_zone_catalog_members($$) {
+  my($catalog_zone_id, $rec) = @_;
+  my(@q, $i);
+
+  return -1 unless ($catalog_zone_id > 0);
+
+  $rec = {} unless (ref($rec) eq 'HASH');
+
+  db_query("SELECT zc.member_zone_id, z.name, z.type, z.server, zc.version " .
+           "FROM zone_catalogs zc " .
+           "JOIN zones z ON zc.member_zone_id = z.id " .
+           "WHERE zc.catalog_zone_id = $catalog_zone_id " .
+           "ORDER BY z.name", \@q);
+
+  $rec->{count} = @q;
+  $rec->{members} = \@q;
+
+  return 0;
+}
+
+sub get_zone_catalogs($$) {
+  my($zone_id, $rec) = @_;
+  my(@q, $i);
+
+  return -1 unless ($zone_id > 0);
+
+  $rec = {} unless (ref($rec) eq 'HASH');
+
+  db_query("SELECT zc.catalog_zone_id, z.name, z.server, zc.version " .
+           "FROM zone_catalogs zc " .
+           "JOIN zones z ON zc.catalog_zone_id = z.id " .
+           "WHERE zc.member_zone_id = $zone_id " .
+           "ORDER BY z.name", \@q);
+
+  $rec->{count} = @q;
+  $rec->{catalogs} = \@q;
+
+  return 0;
+}
+
+sub get_catalog_zones_for_selection($$$) {
+  my($zone_id, $server_id, $rec) = @_;
+  my(@q, @available, @selected, %selected_ids);
+
+  return -1 unless ($server_id > 0);
+
+  $rec = {} unless (ref($rec) eq 'HASH');
+
+  # Get all catalog zones from this server
+  db_query("SELECT id, name, comment FROM zones " .
+           "WHERE server = $server_id AND type = 'C' " .
+           "ORDER BY name", \@available);
+
+  # Build list for form display (ftype 14)
+  my @catalog_list;
+  for my $zone_row (@available) {
+    push @catalog_list, [$zone_row->[0], $zone_row->[1], $zone_row->[2]];
+  }
+  $rec->{available_catalogs} = \@catalog_list;
+
+  # Get currently selected catalogs for this zone (if zone_id is valid)
+  if ($zone_id > 0) {
+    db_query("SELECT catalog_zone_id FROM zone_catalogs " .
+             "WHERE member_zone_id = $zone_id " .
+             "ORDER BY catalog_zone_id", \@selected);
+
+    # Create a hash of selected IDs
+    for my $sel_row (@selected) {
+      $selected_ids{$sel_row->[0]} = 1;
+    }
+
+    # Build selected array for form
+    my @selected_cat_ids;
+    for my $zone_row (@available) {
+      if ($selected_ids{$zone_row->[0]}) {
+        push @selected_cat_ids, $zone_row->[0];
+      }
+    }
+    $rec->{catalog_zones_selected} = \@selected_cat_ids;
+  } else {
+    $rec->{catalog_zones_selected} = [];
+  }
+
+  return 0;
+}
+
+sub add_zone_to_catalog($$) {
+  my($zone_id, $catalog_zone_id) = @_;
+  my($res, $version);
+
+  return -1 unless ($zone_id > 0 && $catalog_zone_id > 0);
+
+  # Validate relationship
+  $res = validate_zone_for_catalog($zone_id, $catalog_zone_id);
+  return $res if ($res < 0);
+
+  # Check if zone is already in catalog
+  my(@q);
+  db_query("SELECT id FROM zone_catalogs " .
+           "WHERE catalog_zone_id=$catalog_zone_id AND member_zone_id=$zone_id", \@q);
+  return -10 if (@q > 0);  # Already exists
+
+  # Insert new relationship
+  # BIND 9 catalog zones use version '2' (RFC 9432)
+  $version = '2';
+
+  my $insert_sql = "INSERT INTO zone_catalogs (catalog_zone_id, member_zone_id, version) " .
+                   "VALUES($catalog_zone_id, $zone_id, '$version')";
+
+  $res = db_exec($insert_sql);
+
+  if ($res < 0) {
+  }
+
+  return $res;
+}
+
+sub remove_zone_from_catalog($$) {
+  my($zone_id, $catalog_zone_id) = @_;
+  my($res);
+
+  return -1 unless ($zone_id > 0 && $catalog_zone_id > 0);
+
+  $res = db_exec("DELETE FROM zone_catalogs " .
+                 "WHERE catalog_zone_id=$catalog_zone_id AND member_zone_id=$zone_id");
+
+  return $res;
+}
 
 1;
 # eof
