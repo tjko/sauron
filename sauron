@@ -559,7 +559,7 @@ sub make_dns() {
       #print "server: $server{mdate}, zone: $zone{mdate} ",
       #     "hosts: $hosts_mdate  - $serial_date\n";
       $serial=new_serial($serial);
-      $serial_date=time;
+      $serial_date=time unless ($opt_keep_pending);
       unless ($opt_noupdateserial) {
         print "Updating serial $zone{serial} --> $serial\n";
         fatal("Cannot update zone $zonename serial!")
@@ -3399,7 +3399,7 @@ sub make_printcap() {
 $VER = sauron_version();
 
 $result=GetOptions("help|h","all|a","bind|b","dhcp|d","dhcp6","printer|p","mail",
-                   "updateserial","noupdateserial","verbose","clean",
+                   "updateserial","noupdateserial","keep-pending","verbose","clean",
                    "check","dhcpclass=s","tinydns|t", "ignorelocal|i");
 
 if ($opt_help || @ARGV < 1 || $result < 1) {
@@ -3412,7 +3412,8 @@ if ($opt_help || @ARGV < 1 || $result < 1) {
       "\t--dhcp6              generate DHCPv6 (dhcpd) configuration files\n",
       "\t--clean              cleanup expired records and vacuum database\n",
       "\t--printer            generate PRINTER (lpd) configuration files\n\n",
-      "\t--updateserial       force serial update on master zones\n\n",
+      "\t--updateserial       force serial update on master zones\n",
+      "\t--keep-pending       keep PENDING markers (do not update serial_date)\n\n",
       "\t--ignorelocal        force ignore RFC1918 subnets\n\n",
       "\t--check              check validity of generated dhcp.conf,named.conf,\n",
       "\t                     and zone files\n\n",
@@ -3430,6 +3431,7 @@ $opt_dhcp6=($opt_dhcp6 ? 1 : 0);
 $opt_bind=($opt_bind ? 1 : 0);
 $opt_tinydns=($opt_tinydns ? 1 : 0);
 $opt_printer=($opt_printer ? 1 : 0);
+$opt_keep_pending=($opt_keep_pending ? 1 : 0);
 $opt_updateserial=($opt_updateserial ? 1 : 0);
 $opt_noupdateserial=($opt_noupdateserial ? 1 : 0);
 $opt_check=($opt_check ? 1 : 0);
