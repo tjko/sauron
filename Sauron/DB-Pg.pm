@@ -1,5 +1,9 @@
 # Sauron::DB.pm  -- Sauron database interface routines using Pg.pm module
 #
+# DEPRECATED: This module is deprecated as of Sauron 0.9.0
+# Use Sauron::DB-DBI.pm (DBI/DBD::Pg) instead.
+# Support for this module will be removed in a future version.
+#
 # $Id$
 #
 package Sauron::DB;
@@ -7,8 +11,13 @@ require Exporter;
 use Time::Local;
 use Pg;
 use Sauron::Util;
+use File::Basename;
+use Sys::Syslog qw(:DEFAULT setlogsock);
+Sys::Syslog::setlogsock('unix');
 use strict;
 use vars qw($VERSION @ISA @EXPORT);
+
+my $deprecation_warning_sent = 0;
 
 $VERSION = '$Id$ ';
 
@@ -73,6 +82,15 @@ sub db_connect2() {
   my $dsn = ($main::DB_DSN ? $main::DB_DSN : '');
   $dsn .= " user=$main::DB_USER" if ($main::DB_USER);
   $dsn .= " password=$main::DB_PASSWORD" if ($main::DB_PASSWORD);
+
+  # Log deprecation warning (only once per process)
+  unless ($deprecation_warning_sent) {
+    my $filename = File::Basename::basename($0);
+    Sys::Syslog::openlog($filename, "cons,pid", "debug");
+    Sys::Syslog::syslog("warning", "DEPRECATED: Sauron::DB-Pg.pm is deprecated since Sauron 0.9.0. Please migrate to DB-DBI.pm (DBI/DBD::Pg backend). Set --with-DBI in configure or use 'ln -sf DB-DBI.pm Sauron/DB.pm' to switch backends. Support for this module will be removed in a future version.");
+    Sys::Syslog::closelog();
+    $deprecation_warning_sent = 1;
+  }
 
   $db_connection_handle = Pg::connectdb($dsn);
   if ($db_connection_handle->status != PGRES_CONNECTION_OK) {
