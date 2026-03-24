@@ -1387,6 +1387,24 @@ sub get_zone($$) {
     get_zone_catalog_members($id, $rec_catalogs);
     $rec->{catalog_members} = $rec_catalogs->{members};
     $rec->{catalog_member_count} = $rec_catalogs->{count};
+
+    # Format member zones list for display
+    if ($rec_catalogs->{count} > 0) {
+      my @member_list;
+      # Type names mapping
+      my %zone_type_names = (M=>'Master', S=>'Slave', F=>'Forward', H=>'Hint', C=>'Catalog');
+      for my $member (@{$rec_catalogs->{members}}) {
+        my $zone_name = $member->[1];    # zone name
+        my $zone_type = $member->[2];    # zone type (M, S, F, H, C)
+        my $server_name = $member->[4];  # server name
+        my $type_label = $zone_type_names{$zone_type} || $zone_type;  # Get readable type name
+        #push @member_list, "$zone_name ($type_label at $server_name)";
+        push @member_list, "$zone_name ($type_label)";
+      }
+      $rec->{catalog_members_list} = join(', ', @member_list);
+    } else {
+      $rec->{catalog_members_list} = 'None';
+    }
   } else {
     # Zone is a regular zone - load which catalogs contain it
     my $rec_cats = {};
@@ -4470,9 +4488,10 @@ sub get_zone_catalog_members($$) {
 
   $rec = {} unless (ref($rec) eq 'HASH');
 
-  db_query("SELECT zc.member_zone_id, z.name, z.type, z.server, zc.version " .
+  db_query("SELECT zc.member_zone_id, z.name, z.type, z.server, s.name, zc.version " .
            "FROM zone_catalogs zc " .
            "JOIN zones z ON zc.member_zone_id = z.id " .
+           "JOIN servers s ON z.server = s.id " .
            "WHERE zc.catalog_zone_id = $catalog_zone_id " .
            "ORDER BY z.name", \@q);
 

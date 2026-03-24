@@ -178,6 +178,8 @@ my %zone_form = (
   {ftype=>0, name=>'Catalog Zones', iff=>['type','M']},
   {ftype=>4, tag=>'catalog_member_count', name=>'Member zones count',
    no_edit=>1, iff=>['type','C']},
+  {ftype=>4, tag=>'catalog_members_list', name=>'Member zones',
+   no_edit=>1, iff=>['type','C']},
   {ftype=>4, tag=>'zone_catalog_count', name=>'Number of catalogs',
    no_edit=>1, iff=>['type','M']},
 #  {ftype=>4, tag=>'zone_catalogs_list', name=>'Included in catalogs',
@@ -374,6 +376,43 @@ sub display_zone($$)
         push @catalog_links, $cat_link;
       }
       $data{zone_catalogs_list} = join(', ', @catalog_links);
+    }
+
+    # Format member zones list with links (for catalog zones)
+    if ($data{catalog_members} && @{$data{catalog_members}} > 0) {
+      my @member_links;
+      my %zone_type_names = (M=>'Master', S=>'Slave', F=>'Forward', H=>'Hint', C=>'Catalog');
+      for my $member (@{$data{catalog_members}}) {
+        my $zone_name = $member->[1];    # zone name
+        my $zone_type = $member->[2];    # zone type
+        my $server_name = $member->[4];  # server name
+        my $type_label = $zone_type_names{$zone_type} || $zone_type;
+        my $member_link = "<a href=\"$selfurl?menu=zones&selected_zone=$zone_name\" title=\"Edit zone $zone_name\">$zone_name</a> ($type_label na $server_name)";
+        push @member_links, $member_link;
+      }
+      $data{catalog_members_list} = join(', ', @member_links);
+    }
+
+    # Format catalog zones selected list with links (for Member of catalog zones field)
+    if ($data{catalog_zones_selected} && @{$data{catalog_zones_selected}} > 0) {
+      my @selected_cat_ids = @{$data{catalog_zones_selected}};
+      my @catalog_zone_links;
+      if ($data{available_catalogs} && @{$data{available_catalogs}} > 0) {
+        # Create a mapping of catalog IDs to catalog names
+        my %cat_id_to_name;
+        for my $cat (@{$data{available_catalogs}}) {
+          $cat_id_to_name{$cat->[0]} = $cat->[1];  # ID => NAME
+        }
+        # Create links for selected catalog zones
+        for my $cat_id (@selected_cat_ids) {
+          if (exists $cat_id_to_name{$cat_id}) {
+            my $cat_name = $cat_id_to_name{$cat_id};
+            my $cat_link = "<a href=\"$selfurl?menu=zones&selected_zone=$cat_name\" title=\"Edit catalog zone $cat_name\">$cat_name</a>";
+            push @catalog_zone_links, $cat_link;
+          }
+        }
+      }
+      $data{catalog_zones_selected_links} = join(', ', sort @catalog_zone_links) if @catalog_zone_links;
     }
 
     display_form(\%data,\%zone_form);

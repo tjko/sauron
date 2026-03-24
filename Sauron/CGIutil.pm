@@ -1719,24 +1719,32 @@ sub display_form($$) {
       print "<TD bgcolor='#e0e0e0'>$a</TD>";
     } elsif ($rec->{ftype} == 14) { # Checkbox group (show)
       print td($rec->{name});
-      my $selected_ids = $data->{$rec->{tag}} || [];
-      my $available = $data->{'available_catalogs'} || [];
 
-      if (ref($selected_ids) eq 'ARRAY' && @{$selected_ids}) {
-        my %sel_hash = map { $_ => 1 } @{$selected_ids};
-        my @names;
-        for my $cat (@{$available}) {
-          if ($sel_hash{$cat->[0]}) {
-            push @names, $cat->[1];
+      # Check if there's a pre-formatted links version of this field
+      my $links_tag = $rec->{tag} . '_links';
+      if (exists $data->{$links_tag} && $data->{$links_tag}) {
+        print "<TD>" . $data->{$links_tag} . "</TD>";
+      } else {
+        # Fall back to original display logic
+        my $selected_ids = $data->{$rec->{tag}} || [];
+        my $available = $data->{'available_catalogs'} || [];
+
+        if (ref($selected_ids) eq 'ARRAY' && @{$selected_ids}) {
+          my %sel_hash = map { $_ => 1 } @{$selected_ids};
+          my @names;
+          for my $cat (@{$available}) {
+            if ($sel_hash{$cat->[0]}) {
+              push @names, $cat->[1];
+            }
           }
-        }
-        if (@names) {
-          print "<TD>" . join(", ", sort @names) . "</TD>";
+          if (@names) {
+            print "<TD>" . join(", ", sort @names) . "</TD>";
+          } else {
+            print "<TD><FONT color='blue'>None selected</FONT></TD>";
+          }
         } else {
           print "<TD><FONT color='blue'>None selected</FONT></TD>";
         }
-      } else {
-        print "<TD><FONT color='blue'>None selected</FONT></TD>";
       }
     } else {
       error("internal error (display_form)");
