@@ -165,7 +165,7 @@ my %zone_form = (
   {ftype=>12, tag=>'allow_query', whitesp=>['','','','','','P'],
    name=>'Allow queries from (allow-query)'},
   {ftype=>12, tag=>'allow_transfer', whitesp=>['','','','','','P'],
-   name=>'Allow zone-transfers from (allow-transfer)', iff=>['type','M']},
+   name=>'Allow zone-transfers from (allow-transfer)', iff=>['type','[MC]']},
   {ftype=>2, tag=>'also_notify',
    name=>'[Stealth] Servers to notify (also-notify)', type=>['ip','text'],
    fields=>2, len=>[39,15], empty=>[0,1], elabels=>['IP','comment'],
