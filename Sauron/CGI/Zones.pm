@@ -381,7 +381,7 @@ sub display_zone($$)
     # Format member zones list with links (for catalog zones)
     if ($data{catalog_members} && @{$data{catalog_members}} > 0) {
       my @member_links;
-      my %zone_type_names = (M=>'Master', S=>'Slave', F=>'Forward', H=>'Hint', C=>'Catalog');
+      my %zone_type_names = (M=>'master', S=>'slave', F=>'forward', H=>'hint', C=>'catalog');
       for my $member (@{$data{catalog_members}}) {
         my $zone_name = $member->[1];    # zone name
         my $zone_type = $member->[2];    # zone type
