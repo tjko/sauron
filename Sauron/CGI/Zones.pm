@@ -37,7 +37,7 @@ sub write2log{
 } # End of write2log
 
 
-my %ztypenames=(M=>'Master',S=>'Slave',F=>'Forward',H=>'Hint',C=>'Catalog');
+my %ztypenames=(M=>'master',S=>'slave',F=>'forward',H=>'hint',C=>'catalog');
 
 my %naptr_flags=(
     0=>'(non-terminal)',
