@@ -1453,11 +1453,13 @@ sub update_zone($) {
   # Catalog zones support - clean up before update
   delete $rec->{catalog_members};
   delete $rec->{catalog_member_count};
+  delete $rec->{catalog_members_list};
   delete $rec->{zone_catalogs};
   delete $rec->{zone_catalog_count};
   delete $rec->{zone_catalogs_list};
   delete $rec->{available_catalogs};
   delete $rec->{catalog_zones_selected};
+  delete $rec->{catalog_zones_selected_links};
 
   $rec->{flags}=0;
   $rec->{flags}|=0x01 if ($rec->{txt_auto_generation});
@@ -1583,8 +1585,13 @@ sub update_zone($) {
     # Get current catalogs for this zone
     my @current_catalogs = ();
     my @q;
-    db_query("SELECT catalog_zone_id FROM zone_catalogs " .
+    $r = db_query("SELECT catalog_zone_id FROM zone_catalogs " .
              "WHERE member_zone_id = $id", \@q);
+    if ($r < 0) { 
+      db_rollback(); 
+      write2log("ERROR: Failed to get current catalogs for zone $id: $r");
+      return -25; 
+    }
     for my $row (@q) {
       push @current_catalogs, $row->[0];
     }
@@ -4579,8 +4586,9 @@ sub add_zone_to_catalog($$) {
 
   # Check if zone is already in catalog
   my(@q);
-  db_query("SELECT id FROM zone_catalogs " .
+  $res = db_query("SELECT id FROM zone_catalogs " .
            "WHERE catalog_zone_id=$catalog_zone_id AND member_zone_id=$zone_id", \@q);
+  return -11 if ($res < 0);  # Query failed
   return -10 if (@q > 0);  # Already exists
 
   # Insert new relationship
@@ -4593,6 +4601,7 @@ sub add_zone_to_catalog($$) {
   $res = db_exec($insert_sql);
 
   if ($res < 0) {
+    write2log("ERROR: Failed to add zone $zone_id to catalog $catalog_zone_id: $res");
   }
 
   return $res;

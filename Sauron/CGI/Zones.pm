@@ -215,6 +215,28 @@ my %copy_zone_form=(
 );
 
 
+# Wrapper for update_zone that cleans up computed/formatted fields before updating
+sub update_zone_wrapper($) {
+  my($rec) = @_;
+  
+  # Remove all computed/formatted fields that should not be saved to database
+  delete $rec->{catalog_members};
+  delete $rec->{catalog_member_count};
+  delete $rec->{catalog_members_list};
+  delete $rec->{zone_catalogs};
+  delete $rec->{zone_catalog_count};
+  delete $rec->{zone_catalogs_list};
+  delete $rec->{available_catalogs};
+  delete $rec->{catalog_zones_selected_links};
+  delete $rec->{cdate_str};
+  delete $rec->{mdate_str};
+  delete $rec->{pending_info};
+  delete $rec->{fqdn};
+  
+  # Call the actual update_zone function from BackEnd
+  return Sauron::BackEnd::update_zone($rec);
+}
+
 
 sub select_zone($$)
 {
@@ -559,7 +581,7 @@ sub menu_handler {
   elsif ($sub eq 'Edit') {
     return if (check_perms('superuser',''));
 
-    $res=edit_magic('zn','Zone','zones',\%zone_form,\&get_zone,\&update_zone,
+    $res=edit_magic('zn','Zone','zones',\%zone_form,\&get_zone,\&update_zone_wrapper,
 		    $zoneid);
     if ($res == -1) {
       select_zone($state,$perms);
