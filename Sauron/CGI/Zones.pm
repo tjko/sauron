@@ -387,7 +387,8 @@ sub display_zone($$)
         my $zone_type = $member->[2];    # zone type
         my $server_name = $member->[4];  # server name
         my $type_label = $zone_type_names{$zone_type} || $zone_type;
-        my $member_link = "<a href=\"$selfurl?menu=zones&selected_zone=$zone_name\" title=\"Edit zone $zone_name\">$zone_name</a> ($type_label na $server_name)";
+        #my $member_link = "<a href=\"$selfurl?menu=zones&selected_zone=$zone_name\" title=\"Edit zone $zone_name\">$zone_name</a> ($type_label at $server_name)";
+        my $member_link = "<a href=\"$selfurl?menu=zones&selected_zone=$zone_name\" title=\"Edit zone $zone_name\">$zone_name</a> ($type_label)";
         push @member_links, $member_link;
       }
       $data{catalog_members_list} = join(', ', @member_links);
