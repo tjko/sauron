@@ -136,7 +136,7 @@ my %zone_form = (
   {ftype => 2, tag => 'zentries_ta', name => 'Custom Zone File Entries (current)',
    type => ['area'], fields => 1, rows => 6, len => [90], linelen => [253], # [15],
    empty => [0], elabels => ['Zone Entries (current)'],
-   extrainfo => 'Use zone file syntax', whitesp => ['N'], iff => ['type', 'M'] },
+   extrainfo => 'Use zone file syntax', whitesp => ['N'], iff => ['type', '[MC]'] },
 
 # -------------------------------------------------------------------------------
 # Custom zone file entries have been changed into a textarea to make editing
@@ -149,7 +149,7 @@ my %zone_form = (
   {ftype=>2, tag=>'zentries', name=>'Custom zone file entries (depre&shy;cated)',
    type=>['text','text'], fields=>2, len=>[68,15], maxlen=>[255,20],
    empty=>[0,1], elabels=>['Zone Entry (deprecated)','Comment'], whitesp=>['N','P'],
-   iff=>['type','M']},
+   iff=>['type','[MC]']},
 
 # New code, will be used later.
 #  {ftype=>13, tag=>'zentries', name=>'Custom zone file entries', type=>'cust_entr', # Textarea 12 Apr 2017 TVu
