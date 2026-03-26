@@ -1,4 +1,15 @@
 0.9.0 (beta)
+	- DEPRECATED: Sauron::DB-Pg.pm module (legacy Pg.pm backend) is now 
+	  deprecated. Users are strongly encouraged to migrate to the default
+	  DB-DBI.pm module (DBI/DBD::Pg backend) which provides:
+	  - Better performance and reliability
+	  - Wider database compatibility
+	  - Better error handling and logging
+	  - More active maintenance and PostgreSQL version support
+	  Migration: Use 'ln -sf DB-DBI.pm Sauron/DB.pm' to switch backends,
+	  or reconfigure with './configure --with-DBI' and rebuild.
+	  The Pg.pm backend will be removed in a future version. Users will see
+	  deprecation warnings in system logs when using DB-Pg.pm.
 	- Added Catalog Zones (RFC 9432) [svamberg]
 	  - Full BIND 9.11+ support for DNS zone catalogs
 	  - New zone type 'C' (Catalog) for aggregating multiple zone metadata

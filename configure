@@ -1339,7 +1339,7 @@ Optional Packages:
   --with-PACKAGE[=ARG]    use PACKAGE [ARG=yes]
   --without-PACKAGE       do not use PACKAGE (same as --with-PACKAGE=no)
   --with-DBI              use DBI module (default)
-  --with-Pg               use Pg module instead of default DBI (DBD::Pg)
+  --with-Pg               use Pg module instead of default DBI (DBD::Pg) DEPRECATED
 
 Some influential environment variables:
   CC          C compiler command
@@ -3930,6 +3930,9 @@ if test ${with_Pg+y}
 then :
   withval=$with_Pg;  if test $withval = yes; then
             PERL_DB_BACKEND="DB-Pg.pm"
+            echo "WARNING: Pg.pm backend is DEPRECATED since Sauron 0.9.0"
+            echo "WARNING: Please migrate to DBI backend (default)."
+            echo "WARNING: Pg.pm backend will be removed in a future version."
           fi
           echo "foo: $withval"
 
@@ -4284,6 +4287,14 @@ done
 echo "------------------------------------------------------------"
 echo "Selected Perl Database backend: $PERL_DB_BACKEND"
 echo "------------------------------------------------------------"
+
+test "$PERL_DB_BACKEND" = "DB-Pg.pm" && cat <<'EOF'
+
+WARNING: DB-Pg.pm (legacy Pg.pm backend) is DEPRECATED!
+WARNING: Please consider migrating to DB-DBI.pm (DBI/DBD::Pg).
+WARNING: Support for Pg.pm backend will be removed in future versions.
+
+EOF
 
 
 ac_config_files="$ac_config_files Makefile"

@@ -15,6 +15,53 @@ Sauron version		database version
 0.9.0			1.8
 
 
+DATABASE BACKEND MIGRATION (Pg.pm → DBI/DBD::Pg)
+
+Starting with Sauron 0.9.0, the default database backend has changed from
+the legacy Pg.pm module to the modern DBI/DBD::Pg backend. The Pg.pm backend
+is now DEPRECATED and should be migrated.
+
+Benefits of DBI/DBD::Pg:
+ - Better error handling and recovery
+ - Improved performance with modern PostgreSQL versions
+ - Better support for connection pooling and transactions
+ - More consistent behavior across different PostgreSQL versions
+ - Scheduled to be the only supported backend in Sauron 1.0
+
+To migrate from DB-Pg.pm to DB-DBI.pm:
+
+ Option A: Simple symlink replacement (if already installed)
+   1) cd /usr/local/sauron/Sauron (or your installation directory)
+   2) rm -f DB.pm
+   3) ln -sf DB-DBI.pm DB.pm
+   4) Test your installation: cd .. && ./status
+
+ Option B: Rebuild from source with DBI backend (recommended)
+   1) ./configure --with-DBI  (or just ./configure, DBI is default)
+   2) make
+   3) make install
+   4) Test: cd /usr/local/sauron && ./status
+
+ Option C: Remove and reinstall with proper backend
+   1) make clean
+   2) ./configure --with-DBI
+   3) make
+   4) make install
+
+Known compatibility issues:
+ - No known data loss issues when switching backends
+ - Both backends use identical PostgreSQL database schema
+ - Configuration strings remain the same (DB_DSN, DB_USER, etc.)
+ - Performance should be similar or better with DBI backend
+
+If you experience issues during migration:
+ 1) Check system logs for deprecation warnings
+ 2) Verify database connectivity: ./runsql "SELECT version();"
+ 3) Review Perl module dependencies (DBI, DBD::Pg)
+ 4) Consult documentation or file a bug report
+
+
+
 GENERAL UPGRADE PROCEDURE
 
  1) Make backup of your database!

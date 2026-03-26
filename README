@@ -1,8 +1,11 @@
 Sauron v.0.9.0beta - DNS/DHCP Management System
 ==================
 
-DBI (DBD::Pg) is now the default database access method, but Pg can still
-be used by specifying --with-Pg option to configure script.
+DBI (DBD::Pg) is now the default and RECOMMENDED database access method.
+
+NOTE: The legacy Pg.pm backend (DB-Pg.pm) is DEPRECATED and will be removed 
+in a future version. If you are currently using --with-Pg, please migrate to 
+the default DBI backend. See README.upgrade for migration instructions.
 
 
 UPGRADE
@@ -13,7 +16,8 @@ REQUIREMENTS
 	- ISC dhcpd v3 or later [at least 4.4.3 recommended] (optional)
 	- Perl 5 or better [at least 5.36 recommended]
 		- CGI module
-		- DBD::Pg (and DBI) module (or Pg module)
+		- DBI + DBD::Pg module (REQUIRED - default backend)
+		- Pg module (DEPRECATED - only if using --with-Pg)
 		- Net::DNS module
 		- Net::IP module
 		- Net::Netmask module
