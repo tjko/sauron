@@ -104,7 +104,9 @@ PROGS = sauron addgroup adduser deluser delgroup modhosts \
 
 MODULES = Sauron/Util.pm Sauron/BackEnd.pm Sauron/CGIutil.pm \
 	  Sauron/UtilZone.pm Sauron/Sauron.pm Sauron/UtilDhcp.pm \
-	  Sauron/DB-Pg.pm Sauron/DB-DBI.pm Sauron/SetupIO.pm
+	  Sauron/DB-Pg.pm Sauron/DB-DBI.pm Sauron/SetupIO.pm \
+	  Sauron/ErrorCodes.pm
+	
 
 CGIMODULES = Utils.pm Servers.pm Groups.pm Templates.pm Nets.pm \
 	     Login.pm Zones.pm Hosts.pm ACLs.pm
