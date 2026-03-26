@@ -31,7 +31,8 @@ $printer_conf=0;
 
 %yes_no_enum = (D=>'',Y=>'yes',N=>'no');
 %check_names_enum = (D=>'',W=>'warn',F=>'fail',I=>'ignore');
-%zone_type_enum = (M=>'master',S=>'slave',H=>'hint',F=>'forward');
+# Catalog zones (C) are configured as type master in BIND (RFC 9432)
+%zone_type_enum = (M=>'master',S=>'slave',H=>'hint',F=>'forward',C=>'master');
 %forward_enum = (D=>'', O=>'only', F=>'first');
 %algorithm_enum = (157=>'hmac-md5');
 
@@ -489,7 +490,8 @@ sub make_dns() {
       print BINDFILE "};\n\n\n";
     }
 
-    next unless ($type eq 'master');
+    # Catalog zones are treated as master zones for file generation (RFC 9432)
+    next unless ($type eq 'master' || $zone{type} eq 'C');
 
     if ($zone{'dummy'} eq 't') {
       print "Skipping zone creation for dummy zone: $zonename\n";
@@ -593,11 +595,34 @@ sub make_dns() {
                 "$ttl_refresh\:$ttl_retry\:$ttl_expire\:$ttl_minimum\:\:\n";
     }
 
-    foreach $i (1..$#{$zone{ns}}) {
-      printf ZONEFILE $ZFORMAT, '',$ttl,$class,'NS',$zone{ns}[$i][1]
+    # For catalog zones (RFC 9432) or zones without NS records, add placeholder NS
+    my $has_ns = 0;
+    if (defined($zone{ns}) && ref($zone{ns}) eq 'ARRAY' && @{$zone{ns}} > 1) {
+      for my $i (1..$#{$zone{ns}}) {
+        if ($zone{ns}[$i] && $zone{ns}[$i][1]) {
+          $has_ns = 1;
+          last;
+        }
+      }
+    }
+
+    if ($zone{type} eq 'C' || !$has_ns) {
+      # Catalog zone or no NS records - add placeholder NS record
+      printf ZONEFILE $ZFORMAT, '',$ttl,$class,'NS','invalid.'
         if ($bind_conf);
-      printf TINYDNSFILE "&$zonename\:\:$zone{ns}[$i][1]\:$ttl\:\:\n"
+      printf TINYDNSFILE "&$zonename\:\:invalid.\:$ttl\:\:\n"
         if ($tiny_conf);
+    }
+
+    # Generate any actual NS records (skip the header at index 0)
+    if (defined($zone{ns}) && ref($zone{ns}) eq 'ARRAY') {
+      foreach $i (1..$#{$zone{ns}}) {
+        next unless $zone{ns}[$i][1];  # Skip empty entries
+        printf ZONEFILE $ZFORMAT, '',$ttl,$class,'NS',$zone{ns}[$i][1]
+          if ($bind_conf);
+        printf TINYDNSFILE "&$zonename\:\:$zone{ns}[$i][1]\:$ttl\:\:\n"
+          if ($tiny_conf);
+      }
     }
 
     if ($rev eq 'f') {
@@ -1636,6 +1661,33 @@ sub make_dns() {
       for $i (1..$#{$zone{zentries}}) {
         print ZONEFILE $zone{zentries}[$i][1],"\n" if ($bind_conf);
         # Nothing we can do for tinydns here I guess ..
+      }
+    }
+
+    # Catalog zone metadata (RFC 9432)
+    if ($zone{type} eq 'C' && $bind_conf) {
+      my @catalog_members;
+      my $catalog_rec = {};
+
+      # Load catalog members
+      if (get_zone_catalog_members($zoneid, $catalog_rec) == 0 && $catalog_rec->{count} > 0) {
+        print ZONEFILE ";\n; Catalog zone members (RFC 9432)\n;\n";
+
+        # Version metadata record
+        print ZONEFILE "version.catalog\t$ttl\tIN\tTXT\t\"2\"\n";
+
+        # Member zone PTR records
+        for $i (0 .. $#{$catalog_rec->{members}}) {
+          my $member_zone = $catalog_rec->{members}[$i][1];
+          my $member_id = $catalog_rec->{members}[$i][0];
+          $member_zone =~ s/\.$//;  # Remove trailing dot
+
+          printf ZONEFILE $ZFORMAT, "uuid-$member_id.zones.catalog",$ttl,'IN','PTR',"$member_zone."
+            if ($bind_conf);
+        }
+      } else {
+        print ZONEFILE ";\n; Catalog zone (no members currently)\n;\n" if ($bind_conf);
+        print ZONEFILE "version.catalog\t$ttl\tIN\tTXT\t\"2\"\n" if ($bind_conf);
       }
     }
 

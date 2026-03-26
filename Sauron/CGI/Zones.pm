@@ -37,7 +37,7 @@ sub write2log{
 } # End of write2log
 
 
-my %ztypenames=(M=>'Master',S=>'Slave',F=>'Forward',H=>'Hint');
+my %ztypenames=(M=>'master',S=>'slave',F=>'forward',H=>'hint',C=>'catalog');
 
 my %naptr_flags=(
     0=>'(non-terminal)',
@@ -52,10 +52,12 @@ my %new_zone_form=(
   {ftype=>0, name=>'New zone'},
   {ftype=>1, tag=>'name', name=>'Zone name', type=>'zonename',
    len=>72, empty=>0},
+  {ftype=>1, tag=>'comment', name=>'Comments', type=>'text', len=>80, maxlen=>200, 
+   empty=>1, anchor=>1, whitesp=>'P'},
   {ftype=>3, tag=>'type', name=>'Type', type=>'enum', conv=>'U',
-   enum=>{M=>'Master', S=>'Slave', H=>'Hint', F=>'Forward'}},
+   enum=>{M=>'Master', S=>'Slave', H=>'Hint', F=>'Forward', C=>'Catalog'}},
   {ftype=>3, tag=>'reverse', name=>'Reverse', type=>'enum',  conv=>'L',
-   enum=>{f=>'No',t=>'Yes'}}
+   enum=>{f=>'No',t=>'Yes'}, iff=>['type','M']}
  ]
 );
 
@@ -71,7 +73,7 @@ my %zone_form = (
   {ftype=>1, tag=>'comment', name=>'Comments', type=>'text', len=>80, maxlen=>200, # TVu.
    empty=>1, anchor=>1, whitesp=>'P'},
   {ftype=>4, tag=>'type', name=>'Type', type=>'enum', conv=>'U',
-   enum=>{M=>'Master', S=>'Slave', H=>'Hint', F=>'Forward'}},
+   enum=>{M=>'Master', S=>'Slave', H=>'Hint', F=>'Forward', C=>'Catalog'}},
   {ftype=>4, tag=>'reverse', name=>'Reverse', type=>'enum',
    enum=>{f=>'No',t=>'Yes'}, iff=>['type','M']},
   {ftype=>3, tag=>'txt_auto_generation',
@@ -113,7 +115,7 @@ my %zone_form = (
    iff2=>['reverse','f']},
   {ftype=>2, tag=>'ns', name=>'Name servers (NS)', type=>['fqdn','text'],
    fields=>2, whitesp=>['','P'], maxlen=>[400,20],
-   len=>[30,20], empty=>[0,1], elabels=>['NS','comment'], iff=>['type','M']},
+   len=>[30,20], empty=>[0,1], elabels=>['NS','comment']},
   {ftype=>2, tag=>'mx', name=>'Mail exchanges (MX)', maxlen=>[5,400,20],
 #  type=>['int','text','text'], fields=>3, len=>[5,30,20], empty=>[0,0,1],
    type=>['int','mx','text'], fields=>3, len=>[5,30,20], empty=>[0,0,1],
@@ -134,7 +136,7 @@ my %zone_form = (
   {ftype => 2, tag => 'zentries_ta', name => 'Custom Zone File Entries (current)',
    type => ['area'], fields => 1, rows => 6, len => [90], linelen => [253], # [15],
    empty => [0], elabels => ['Zone Entries (current)'],
-   extrainfo => 'Use zone file syntax', whitesp => ['N'], iff => ['type', 'M'] },
+   extrainfo => 'Use zone file syntax', whitesp => ['N'], iff => ['type', '[MC]'] },
 
 # -------------------------------------------------------------------------------
 # Custom zone file entries have been changed into a textarea to make editing
@@ -147,7 +149,7 @@ my %zone_form = (
   {ftype=>2, tag=>'zentries', name=>'Custom zone file entries (depre&shy;cated)',
    type=>['text','text'], fields=>2, len=>[68,15], maxlen=>[255,20],
    empty=>[0,1], elabels=>['Zone Entry (deprecated)','Comment'], whitesp=>['N','P'],
-   iff=>['type','M']},
+   iff=>['type','[MC]']},
 
 # New code, will be used later.
 #  {ftype=>13, tag=>'zentries', name=>'Custom zone file entries', type=>'cust_entr', # Textarea 12 Apr 2017 TVu
@@ -163,7 +165,7 @@ my %zone_form = (
   {ftype=>12, tag=>'allow_query', whitesp=>['','','','','','P'],
    name=>'Allow queries from (allow-query)'},
   {ftype=>12, tag=>'allow_transfer', whitesp=>['','','','','','P'],
-   name=>'Allow zone-transfers from (allow-transfer)', iff=>['type','M']},
+   name=>'Allow zone-transfers from (allow-transfer)', iff=>['type','[MC]']},
   {ftype=>2, tag=>'also_notify',
    name=>'[Stealth] Servers to notify (also-notify)', type=>['ip','text'],
    fields=>2, len=>[39,15], empty=>[0,1], elabels=>['IP','comment'],
@@ -171,6 +173,19 @@ my %zone_form = (
   {ftype=>2, tag=>'forwarders',name=>'Forwarders', type=>['ip','int','text'],
    fields=>3, len=>[39,6,15], empty=>[0,1,1], elabels=>['IP','Port','comment'],
    iff=>['type','F']},
+
+  {ftype=>0, name=>'Catalog Zones', iff=>['type','C'], no_edit=>1},
+  {ftype=>0, name=>'Catalog Zones', iff=>['type','M']},
+  {ftype=>4, tag=>'catalog_member_count', name=>'Member zones count',
+   no_edit=>1, iff=>['type','C']},
+  {ftype=>4, tag=>'catalog_members_list', name=>'Member zones',
+   no_edit=>1, iff=>['type','C']},
+  {ftype=>4, tag=>'zone_catalog_count', name=>'Number of catalogs',
+   no_edit=>1, iff=>['type','M']},
+#  {ftype=>4, tag=>'zone_catalogs_list', name=>'Included in catalogs',
+#   no_edit=>1, iff=>['type','M']}, # duplicity
+  {ftype=>14, tag=>'catalog_zones_selected', name=>'Member of catalog zones',
+   iff=>['type','M']},
 
   {ftype=>0, name=>'DHCP', iff=>['type','M']},
   {ftype=>2, tag=>'dhcp', name=>'Zone specific DHCP entries',
@@ -200,6 +215,28 @@ my %copy_zone_form=(
 );
 
 
+# Wrapper for update_zone that cleans up computed/formatted fields before updating
+sub update_zone_wrapper($) {
+  my($rec) = @_;
+  
+  # Remove all computed/formatted fields that should not be saved to database
+  delete $rec->{catalog_members};
+  delete $rec->{catalog_member_count};
+  delete $rec->{catalog_members_list};
+  delete $rec->{zone_catalogs};
+  delete $rec->{zone_catalog_count};
+  delete $rec->{zone_catalogs_list};
+  delete $rec->{available_catalogs};
+  delete $rec->{catalog_zones_selected_links};
+  delete $rec->{cdate_str};
+  delete $rec->{mdate_str};
+  delete $rec->{pending_info};
+  delete $rec->{fqdn};
+  
+  # Call the actual update_zone function from BackEnd
+  return Sauron::BackEnd::update_zone($rec);
+}
+
 
 sub select_zone($$)
 {
@@ -212,7 +249,7 @@ sub select_zone($$)
   my (%server,%zonelist);
 
   #display zone selection list
-  my %ztypecolors=(M=>'#c0ffc0',S=>'#eeeeff',F=>'#eedfdf',H=>'#eeeebf');
+  my %ztypecolors=(M=>'#c0ffc0',C=>'#add0fe',S=>'#eeeeff',F=>'#eedfdf',H=>'#eeeebf');
   # 2022-08-10 mesrik: add last expired arg, no skipping here
   my $list=get_zone_list($serverid,0,0,0);
 # my $zlimit = 50; # Limit removed.
@@ -351,6 +388,55 @@ sub display_zone($$)
     my %data;
     get_zone($zoneid,\%data);
     save_state($state->{cookie},$state);
+
+    # Format catalog zones list with links
+    if ($data{zone_catalogs} && @{$data{zone_catalogs}} > 0) {
+      my @catalog_links;
+      for my $cat (@{$data{zone_catalogs}}) {
+        my $cat_name = $cat->[1];
+        my $cat_link = "<a href=\"$selfurl?menu=zones&selected_zone=$cat_name\">$cat_name</a>";
+        push @catalog_links, $cat_link;
+      }
+      $data{zone_catalogs_list} = join(', ', @catalog_links);
+    }
+
+    # Format member zones list with links (for catalog zones)
+    if ($data{catalog_members} && @{$data{catalog_members}} > 0) {
+      my @member_links;
+      my %zone_type_names = (M=>'master', S=>'slave', F=>'forward', H=>'hint', C=>'catalog');
+      for my $member (@{$data{catalog_members}}) {
+        my $zone_name = $member->[1];    # zone name
+        my $zone_type = $member->[2];    # zone type
+        my $server_name = $member->[4];  # server name
+        my $type_label = $zone_type_names{$zone_type} || $zone_type;
+        #my $member_link = "<a href=\"$selfurl?menu=zones&selected_zone=$zone_name\" title=\"Select zone $zone_name\">$zone_name</a> ($type_label at $server_name)";
+        my $member_link = "<a href=\"$selfurl?menu=zones&selected_zone=$zone_name\" title=\"Select $type_label zone $zone_name\">$zone_name</a>";
+        push @member_links, $member_link;
+      }
+      $data{catalog_members_list} = join(', ', @member_links);
+    }
+
+    # Format catalog zones selected list with links (for Member of catalog zones field)
+    if ($data{catalog_zones_selected} && @{$data{catalog_zones_selected}} > 0) {
+      my @selected_cat_ids = @{$data{catalog_zones_selected}};
+      my @catalog_zone_links;
+      if ($data{available_catalogs} && @{$data{available_catalogs}} > 0) {
+        # Create a mapping of catalog IDs to catalog names
+        my %cat_id_to_name;
+        for my $cat (@{$data{available_catalogs}}) {
+          $cat_id_to_name{$cat->[0]} = $cat->[1];  # ID => NAME
+        }
+        # Create links for selected catalog zones
+        for my $cat_id (@selected_cat_ids) {
+          if (exists $cat_id_to_name{$cat_id}) {
+            my $cat_name = $cat_id_to_name{$cat_id};
+            my $cat_link = "<a href=\"$selfurl?menu=zones&selected_zone=$cat_name\" title=\"Select catalog zone $cat_name\">$cat_name</a>";
+            push @catalog_zone_links, $cat_link;
+          }
+        }
+      }
+      $data{catalog_zones_selected_links} = join(', ', sort @catalog_zone_links) if @catalog_zone_links;
+    }
 
     display_form(\%data,\%zone_form);
     return;
@@ -495,7 +581,7 @@ sub menu_handler {
   elsif ($sub eq 'Edit') {
     return if (check_perms('superuser',''));
 
-    $res=edit_magic('zn','Zone','zones',\%zone_form,\&get_zone,\&update_zone,
+    $res=edit_magic('zn','Zone','zones',\%zone_form,\&get_zone,\&update_zone_wrapper,
 		    $zoneid);
     if ($res == -1) {
       select_zone($state,$perms);
