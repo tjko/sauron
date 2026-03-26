@@ -10,13 +10,18 @@
 	  or reconfigure with './configure --with-DBI' and rebuild.
 	  The Pg.pm backend will be removed in a future version. Users will see
 	  deprecation warnings in system logs when using DB-Pg.pm.
+	- Added Catalog Zones (RFC 9432) [svamberg]
+	  - Full BIND 9.11+ support for DNS zone catalogs
+	  - New zone type 'C' (Catalog) for aggregating multiple zone metadata
+	  - Automatic zone distribution via AXFR transfers to secondary servers
+	  - Web interface for managing catalog membership
 	- Added new option --keep-pending for sauron command [svamberg]
-	- Add check-reverse utility script for DNS PTR record validation
-	  * Verifies that A/AAAA records have corresponding PTR records in DNS
-	  * Intelligent reverse zone suggestions via WHOIS lookup and CIDR analysis
-	  * Support for RFC 2317 classless reverse zones (/25-/32 subnets)
-	  * Three-tier fallback strategy: authoritative SOA -> WHOIS block size -> 
-	    standard boundaries [svamberg]
+	- Add check-reverse utility script for DNS PTR record validation [svamberg]
+	  - Verifies that A/AAAA records have corresponding PTR records in DNS
+	  - Intelligent reverse zone suggestions via WHOIS lookup and CIDR analysis
+	  - Support for RFC 2317 classless reverse zones (/25-/32 subnets)
+	  - Three-tier fallback strategy: authoritative SOA -> WHOIS block size -> 
+	    standard boundaries 
 	- Added Sauron::SetupIO module for correct encoding settings,
 	  sets encoding transport layers according to system settings
 	  (locale for STDIN, STDOUT, STDERR) using Encode::Locale [svamberg]

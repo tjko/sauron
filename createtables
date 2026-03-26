@@ -20,6 +20,7 @@ load_config();
 @TABLES  =  qw@ sql/common.sql
 		sql/servers.sql
 		sql/zones.sql
+		sql/zone_catalogs.sql
 		sql/hosts.sql
 		sql/groups.sql
 		sql/nets.sql

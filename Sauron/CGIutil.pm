@@ -464,8 +464,8 @@ sub form_check_form($$$) {
     $val="\U$val" if ($rec->{conv} eq 'U');
 
 # Remove unnecessary whitespace from individual input fields.
-    if (!($type == 2 || $type==5 || $type==11 || $type==12 || $type == 13
-	  || ($type==8 && $rec->{arec}))) {
+    if (!($type == 2 || $type==5 || $type==11 || $type==12 || $type == 13 ||
+          $type == 14 || ($type==8 && $rec->{arec}))) {
 	$val = remove_whitespace($val, $rec->{whitesp});
 	param($p, $val);
     }
@@ -659,6 +659,18 @@ sub form_check_form($$$) {
 	param($p . '_id', param($p . '_id'));
 	return 13 if (form_check_field($rec, \@val_arr, 0));
     }
+    elsif ($type == 14) { # Checkbox group (check input)
+      # Collect selected catalog IDs
+      my @selected = ();
+      my $count = param($p."_count") || 0;
+      for my $j (0..$count-1) {
+        my $val = param($p."_".$j);
+        if (defined $val && $val) {
+          push @selected, $val;
+        }
+      }
+      $data->{$tag} = \@selected;  # Store as array reference
+    }
   }
   return 0;
 }
@@ -811,6 +823,21 @@ sub form_magic($$$) {
       }
       elsif ($rec->{ftype} == 6 || $rec->{ftype} == 7 || $rec->{ftype} == 10) {
 	param($p1,$val);
+      }
+      elsif ($rec->{ftype} == 14) {
+	# Checkbox group (ftype 14)
+	my $selected_ids = $data->{$rec->{tag}} || [];
+	my $available = $data->{available_catalogs} || [];
+
+	# Set initial parameter values for selected items
+	if (ref($selected_ids) eq 'ARRAY') {
+	  for $j (0..$#{$selected_ids}) {
+	    param($p1."_".$j, $$selected_ids[$j]);
+	  }
+	}
+
+	# Count should be the total number of AVAILABLE items, not selected
+	param($p1."_count", scalar(@{$available}));
       }
       else {
 	error("internal error (form_magic):". $rec->{ftype});
@@ -1355,6 +1382,50 @@ sub form_magic($$$) {
       param($p1 . '_id', join(",", @id));
       param($p1, join("\n", @tx));
     }
+    elsif ($rec->{ftype} == 14) { # Checkbox group (edit)
+      print td($rec->{name}), "<TD><TABLE>";
+      my $available = $data->{'available_catalogs'} || [];
+      my $selected = $data->{$rec->{tag}} || [];
+      my %sel_hash = map { $_ => 1 } @{$selected};
+      my $total_count = scalar(@{$available});
+
+      # Load current params if form is being re-edited
+      my $count = param($p1."_count");
+      if (defined $count && $count > 0) {
+	%sel_hash = ();
+	for $j (0..$count-1) {
+	  my $cat_id = param($p1."_".$j);
+	  $sel_hash{$cat_id} = 1 if $cat_id;
+	}
+      }
+
+      # Add hidden field for checkbox count
+      print hidden(-name=>$p1."_count",-value=>$total_count);
+      print "<TR>";
+
+      # Render checkboxes in a grid
+      my $cols = 1;
+      my $col_count = 0;
+      for $j (0..$#{$available}) {
+	my $cat_id = $$available[$j][0];
+	my $cat_name = $$available[$j][1];
+        my $cat_comment = $$available[$j][2];
+	my $is_checked = $sel_hash{$cat_id} ? 'on' : '';
+
+	if ($col_count == 0 && $j > 0) {
+	  print "</TR><TR>";
+	}
+	print "<TD>", checkbox(-label=>"$cat_name | $cat_comment", -name=>$p1."_".$j, 
+			       -value=>$cat_id, -checked=>$is_checked), "</TD>";
+	$col_count++;
+	if ($col_count >= $cols) {
+	  print "</TR>";
+	  $col_count = 0;
+	}
+      }
+      print "</TR>" if ($col_count > 0);
+      print "</TABLE></TD>";
+    }
     elsif ($rec->{ftype} == 101) {
       undef @q; undef @lst; undef %lsth;
       $maxlen=$rec->{len};
@@ -1646,6 +1717,35 @@ sub display_form($$) {
       $a =~ s/\n/<br>\n/g;
       $a =~ s/^(\s+)/'&nbsp;' x (length($1) * 2)/emg; # Prserve indentation.
       print "<TD bgcolor='#e0e0e0'>$a</TD>";
+    } elsif ($rec->{ftype} == 14) { # Checkbox group (show)
+      print td($rec->{name});
+
+      # Check if there's a pre-formatted links version of this field
+      my $links_tag = $rec->{tag} . '_links';
+      if (exists $data->{$links_tag} && $data->{$links_tag}) {
+        print "<TD>" . $data->{$links_tag} . "</TD>";
+      } else {
+        # Fall back to original display logic
+        my $selected_ids = $data->{$rec->{tag}} || [];
+        my $available = $data->{'available_catalogs'} || [];
+
+        if (ref($selected_ids) eq 'ARRAY' && @{$selected_ids}) {
+          my %sel_hash = map { $_ => 1 } @{$selected_ids};
+          my @names;
+          for my $cat (@{$available}) {
+            if ($sel_hash{$cat->[0]}) {
+              push @names, $cat->[1];
+            }
+          }
+          if (@names) {
+            print "<TD>" . join(", ", sort @names) . "</TD>";
+          } else {
+            print "<TD><FONT color='blue'>None selected</FONT></TD>";
+          }
+        } else {
+          print "<TD><FONT color='blue'>None selected</FONT></TD>";
+        }
+      }
     } else {
       error("internal error (display_form)");
     }
