@@ -33,6 +33,9 @@ jobs:
       - name: Create DB.pm symlink
         run: cd Sauron && ln -sf DB-DBI.pm DB.pm
 
+      - name: Configure
+        run: ./configure
+
       - name: Perl syntax check (make check)
         env:
           PERL5LIB: ${{ github.workspace }}
