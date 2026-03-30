@@ -15,6 +15,13 @@
 	  - New zone type 'C' (Catalog) for aggregating multiple zone metadata
 	  - Automatic zone distribution via AXFR transfers to secondary servers
 	  - Web interface for managing catalog membership
+	- Added Catalog Zone Groups support (RFC 9432 §5.2) [svamberg]
+	  - Member zones can be assigned to multiple named groups per catalog
+	  - Group definitions managed per catalog zone with optional comments
+	  - Web UI for group management with usage tracking and delete warnings
+	  - BIND zone file generator outputs group TXT records per member
+	  - New tables: zone_catalog_groups, catalog_group_defs
+	  - New "Catalog Groups" menu item and inline link from catalog zone view
 	- Added new option --keep-pending for sauron command [svamberg]
 	- Add check-reverse utility script for DNS PTR record validation [svamberg]
 	  - Verifies that A/AAAA records have corresponding PTR records in DNS

@@ -172,6 +172,13 @@ $VERSION = '$Id:$ ';
 	     get_zone_catalogs
 	     add_zone_to_catalog
 	     remove_zone_from_catalog
+
+	     get_catalog_group_defs
+	     add_catalog_group_def
+	     delete_catalog_group_def
+	     get_member_groups
+	     set_member_groups
+	     get_catalog_group_usage
 	    );
 
 # Catalog zones support (RFC 9432) - six functions exported above
@@ -1398,12 +1405,31 @@ sub get_zone($$) {
         my $zone_type = $member->[2];    # zone type (M, S, F, H, C)
         my $server_name = $member->[4];  # server name
         my $type_label = $zone_type_names{$zone_type} || $zone_type;  # Get readable type name
-        #push @member_list, "$zone_name ($type_label at $server_name)";
-        push @member_list, "$zone_name ($type_label)";
+        my $groups = $member->[7];       # groups arrayref
+        my $group_str = '';
+        if (ref($groups) eq 'ARRAY' && @{$groups}) {
+          $group_str = ' [' . join(', ', @{$groups}) . ']';
+        }
+        push @member_list, "$zone_name ($type_label)$group_str";
       }
       $rec->{catalog_members_list} = join(', ', @member_list);
     } else {
       $rec->{catalog_members_list} = 'None';
+    }
+
+    # Load group definitions for this catalog zone
+    my $rec_gdefs = {};
+    get_catalog_group_defs($id, $rec_gdefs);
+    if ($rec_gdefs->{count} > 0) {
+      my @gdef_list;
+      for my $gdef (@{$rec_gdefs->{groups}}) {
+        my $gname = $gdef->[1];
+        my $gcomment = $gdef->[2];
+        push @gdef_list, $gcomment ? "$gname ($gcomment)" : $gname;
+      }
+      $rec->{catalog_group_defs_list} = join(', ', @gdef_list);
+    } else {
+      $rec->{catalog_group_defs_list} = 'None';
     }
   } else {
     # Zone is a regular zone - load which catalogs contain it
@@ -1429,6 +1455,8 @@ sub get_zone($$) {
       get_catalog_zones_for_selection($id, $sid, $rec_sel);
       $rec->{available_catalogs} = $rec_sel->{available_catalogs};
       $rec->{catalog_zones_selected} = $rec_sel->{catalog_zones_selected};
+      $rec->{catalog_group_defs} = $rec_sel->{catalog_group_defs};
+      $rec->{member_groups} = $rec_sel->{member_groups};
     }
   }
 
@@ -1449,6 +1477,7 @@ sub update_zone($) {
 
   # Catalog zones support - save before cleanup
   my $selected_catalogs = $rec->{catalog_zones_selected} || [];
+  my $selected_member_groups = $rec->{member_groups} || {};
 
   # Catalog zones support - clean up before update
   delete $rec->{catalog_members};
@@ -1460,6 +1489,10 @@ sub update_zone($) {
   delete $rec->{available_catalogs};
   delete $rec->{catalog_zones_selected};
   delete $rec->{catalog_zones_selected_links};
+  delete $rec->{catalog_group_defs};
+  delete $rec->{catalog_group_defs_list};
+  delete $rec->{catalog_group_manage_link};
+  delete $rec->{member_groups};
 
   $rec->{flags}=0;
   $rec->{flags}|=0x01 if ($rec->{txt_auto_generation});
@@ -1625,6 +1658,19 @@ sub update_zone($) {
         if ($r < 0 && $r != -10) { db_rollback(); return -24; }  # -10 means already exists, which is ok
       }
     }
+
+    # Update group assignments for each selected catalog
+    if (ref($selected_member_groups) eq 'HASH') {
+      for my $cat_id (@new_catalogs) {
+        my $groups = $selected_member_groups->{$cat_id} || [];
+        $r = set_member_groups($id, $cat_id, $groups);
+        if ($r < 0) {
+          write2log("ERROR: Failed to set groups for zone $id in catalog $cat_id: $r");
+          db_rollback();
+          return -26;
+        }
+      }
+    }
   }
 
   return db_commit();
@@ -1732,6 +1778,21 @@ sub _delete_zone_parts($) {
                  "SELECT a.id FROM group_entries a, hosts h " .
                  "WHERE h.zone=$id AND a.host=h.id)");
     if ($res < 0) { return -20; }
+
+    # zone_catalog_groups (must be deleted before zone_catalogs due to FK)
+    $res=db_exec("DELETE FROM zone_catalog_groups WHERE zone_catalog_id IN (" .
+                 "SELECT id FROM zone_catalogs " .
+                 "WHERE catalog_zone_id=$id OR member_zone_id=$id)");
+    if ($res < 0) { return -21; }
+
+    # catalog_group_defs (for catalog zones)
+    $res=db_exec("DELETE FROM catalog_group_defs WHERE catalog_zone_id=$id");
+    if ($res < 0) { return -22; }
+
+    # zone_catalogs
+    $res=db_exec("DELETE FROM zone_catalogs " .
+                 "WHERE catalog_zone_id=$id OR member_zone_id=$id");
+    if ($res < 0) { return -23; }
 
     # hosts
     $res=db_exec("DELETE FROM hosts WHERE zone=$id");
@@ -4489,18 +4550,30 @@ sub validate_zone_for_catalog($$) {
 
 sub get_zone_catalog_members($$) {
   my($catalog_zone_id, $rec) = @_;
-  my(@q, $i);
+  my(@q, @g, $i);
 
   return -1 unless ($catalog_zone_id > 0);
 
   $rec = {} unless (ref($rec) eq 'HASH');
 
-  db_query("SELECT zc.member_zone_id, z.name, z.type, z.server, s.name, zc.version " .
+  db_query("SELECT zc.member_zone_id, z.name, z.type, z.server, s.name, " .
+           "zc.version, zc.id " .
            "FROM zone_catalogs zc " .
            "JOIN zones z ON zc.member_zone_id = z.id " .
            "JOIN servers s ON z.server = s.id " .
            "WHERE zc.catalog_zone_id = $catalog_zone_id " .
            "ORDER BY z.name", \@q);
+
+  # Load groups for each membership
+  for $i (0 .. $#q) {
+    my $membership_id = $q[$i][6];
+    my @member_groups;
+    db_query("SELECT group_name FROM zone_catalog_groups " .
+             "WHERE zone_catalog_id = $membership_id " .
+             "ORDER BY group_name", \@g);
+    @member_groups = map { $_->[0] } @g;
+    $q[$i][7] = \@member_groups;  # groups as arrayref at index 7
+  }
 
   $rec->{count} = @q;
   $rec->{members} = \@q;
@@ -4510,17 +4583,28 @@ sub get_zone_catalog_members($$) {
 
 sub get_zone_catalogs($$) {
   my($zone_id, $rec) = @_;
-  my(@q, $i);
+  my(@q, @g, $i);
 
   return -1 unless ($zone_id > 0);
 
   $rec = {} unless (ref($rec) eq 'HASH');
 
-  db_query("SELECT zc.catalog_zone_id, z.name, z.server, zc.version " .
+  db_query("SELECT zc.catalog_zone_id, z.name, z.server, zc.version, zc.id " .
            "FROM zone_catalogs zc " .
            "JOIN zones z ON zc.catalog_zone_id = z.id " .
            "WHERE zc.member_zone_id = $zone_id " .
            "ORDER BY z.name", \@q);
+
+  # Load groups for each membership
+  for $i (0 .. $#q) {
+    my $membership_id = $q[$i][4];
+    my @member_groups;
+    db_query("SELECT group_name FROM zone_catalog_groups " .
+             "WHERE zone_catalog_id = $membership_id " .
+             "ORDER BY group_name", \@g);
+    @member_groups = map { $_->[0] } @g;
+    $q[$i][5] = \@member_groups;  # groups as arrayref at index 5
+  }
 
   $rec->{count} = @q;
   $rec->{catalogs} = \@q;
@@ -4543,20 +4627,37 @@ sub get_catalog_zones_for_selection($$$) {
 
   # Build list for form display (ftype 14)
   my @catalog_list;
+  my %catalog_group_defs;
   for my $zone_row (@available) {
     push @catalog_list, [$zone_row->[0], $zone_row->[1], $zone_row->[2]];
+
+    # Load group definitions for each catalog zone
+    my @gdefs;
+    db_query("SELECT id, group_name, comment FROM catalog_group_defs " .
+             "WHERE catalog_zone_id = $zone_row->[0] " .
+             "ORDER BY group_name", \@gdefs);
+    $catalog_group_defs{$zone_row->[0]} = \@gdefs;
   }
   $rec->{available_catalogs} = \@catalog_list;
+  $rec->{catalog_group_defs} = \%catalog_group_defs;
 
   # Get currently selected catalogs for this zone (if zone_id is valid)
   if ($zone_id > 0) {
-    db_query("SELECT catalog_zone_id FROM zone_catalogs " .
+    db_query("SELECT catalog_zone_id, id FROM zone_catalogs " .
              "WHERE member_zone_id = $zone_id " .
              "ORDER BY catalog_zone_id", \@selected);
 
-    # Create a hash of selected IDs
+    # Create a hash of selected IDs and load their groups
+    my %member_groups;
     for my $sel_row (@selected) {
       $selected_ids{$sel_row->[0]} = 1;
+
+      # Load assigned groups for this membership
+      my @grps;
+      db_query("SELECT group_name FROM zone_catalog_groups " .
+               "WHERE zone_catalog_id = $sel_row->[1] " .
+               "ORDER BY group_name", \@grps);
+      $member_groups{$sel_row->[0]} = [ map { $_->[0] } @grps ];
     }
 
     # Build selected array for form
@@ -4567,8 +4668,10 @@ sub get_catalog_zones_for_selection($$$) {
       }
     }
     $rec->{catalog_zones_selected} = \@selected_cat_ids;
+    $rec->{member_groups} = \%member_groups;
   } else {
     $rec->{catalog_zones_selected} = [];
+    $rec->{member_groups} = {};
   }
 
   return 0;
@@ -4617,6 +4720,194 @@ sub remove_zone_from_catalog($$) {
                  "WHERE catalog_zone_id=$catalog_zone_id AND member_zone_id=$zone_id");
 
   return $res;
+}
+
+
+# get_catalog_group_defs($catalog_zone_id, $rec)
+# Returns predefined group definitions for a catalog zone.
+# rec->{groups} = [[id, group_name, comment], ...]
+# rec->{count} = number of groups
+sub get_catalog_group_defs($$) {
+  my($catalog_zone_id, $rec) = @_;
+  my(@q);
+
+  return -1 unless ($catalog_zone_id > 0);
+
+  $rec = {} unless (ref($rec) eq 'HASH');
+
+  db_query("SELECT id, group_name, comment FROM catalog_group_defs " .
+           "WHERE catalog_zone_id = $catalog_zone_id " .
+           "ORDER BY group_name", \@q);
+
+  $rec->{count} = scalar @q;
+  $rec->{groups} = \@q;
+
+  return 0;
+}
+
+# add_catalog_group_def($catalog_zone_id, $group_name, $comment)
+# Adds a new group definition to a catalog zone.
+# Returns: 0 on success, negative on error
+sub add_catalog_group_def($$$) {
+  my($catalog_zone_id, $group_name, $comment) = @_;
+  my($res, @q);
+
+  return -1 unless ($catalog_zone_id > 0);
+  return -2 unless (defined($group_name) && $group_name ne '');
+
+  # Verify this is a catalog zone
+  $res = is_catalog_zone($catalog_zone_id);
+  return -3 unless ($res == 1);
+
+  # Check if group already exists
+  db_query("SELECT id FROM catalog_group_defs " .
+           "WHERE catalog_zone_id=$catalog_zone_id AND group_name=" .
+           db_encode_str($group_name), \@q);
+  return -10 if (@q > 0);  # Already exists
+
+  my $comment_sql = defined($comment) && $comment ne ''
+                    ? db_encode_str($comment) : 'NULL';
+
+  $res = db_exec("INSERT INTO catalog_group_defs " .
+                 "(catalog_zone_id, group_name, comment) VALUES(" .
+                 "$catalog_zone_id, " . db_encode_str($group_name) .
+                 ", $comment_sql)");
+
+  if ($res < 0) {
+    write2log("ERROR: Failed to add group def '$group_name' to catalog $catalog_zone_id: $res");
+  }
+
+  return $res;
+}
+
+# delete_catalog_group_def($catalog_zone_id, $group_name)
+# Removes a group definition from a catalog zone.
+# Also removes all group assignments using this name within the catalog.
+# Returns: 0 on success, negative on error
+sub delete_catalog_group_def($$) {
+  my($catalog_zone_id, $group_name) = @_;
+  my($res);
+
+  return -1 unless ($catalog_zone_id > 0);
+  return -2 unless (defined($group_name) && $group_name ne '');
+
+  # Delete group assignments that reference this group within this catalog
+  $res = db_exec("DELETE FROM zone_catalog_groups WHERE id IN (" .
+                 "SELECT zcg.id FROM zone_catalog_groups zcg " .
+                 "JOIN zone_catalogs zc ON zcg.zone_catalog_id = zc.id " .
+                 "WHERE zc.catalog_zone_id = $catalog_zone_id " .
+                 "AND zcg.group_name = " . db_encode_str($group_name) . ")");
+  return $res if ($res < 0);
+
+  # Delete the group definition
+  $res = db_exec("DELETE FROM catalog_group_defs " .
+                 "WHERE catalog_zone_id=$catalog_zone_id AND group_name=" .
+                 db_encode_str($group_name));
+
+  return $res;
+}
+
+# get_member_groups($zone_id, $catalog_zone_id, $rec)
+# Returns groups assigned to a member zone within a specific catalog.
+# rec->{groups} = ['group1', 'group2', ...]
+sub get_member_groups($$$) {
+  my($zone_id, $catalog_zone_id, $rec) = @_;
+  my(@q, @g);
+
+  return -1 unless ($zone_id > 0 && $catalog_zone_id > 0);
+
+  $rec = {} unless (ref($rec) eq 'HASH');
+
+  # Get the membership ID
+  db_query("SELECT id FROM zone_catalogs " .
+           "WHERE catalog_zone_id=$catalog_zone_id AND member_zone_id=$zone_id", \@q);
+  return -2 unless (@q > 0);
+
+  my $membership_id = $q[0][0];
+
+  db_query("SELECT group_name FROM zone_catalog_groups " .
+           "WHERE zone_catalog_id = $membership_id " .
+           "ORDER BY group_name", \@g);
+
+  $rec->{groups} = [ map { $_->[0] } @g ];
+
+  return 0;
+}
+
+# set_member_groups($zone_id, $catalog_zone_id, \@groups)
+# Sets the groups for a member zone within a specific catalog.
+# Performs diff: adds new groups, removes deselected groups.
+# Returns: 0 on success, negative on error
+sub set_member_groups($$$) {
+  my($zone_id, $catalog_zone_id, $new_groups) = @_;
+  my($res, @q, @g);
+
+  return -1 unless ($zone_id > 0 && $catalog_zone_id > 0);
+
+  # Get the membership ID
+  db_query("SELECT id FROM zone_catalogs " .
+           "WHERE catalog_zone_id=$catalog_zone_id AND member_zone_id=$zone_id", \@q);
+  return -2 unless (@q > 0);
+
+  my $membership_id = $q[0][0];
+
+  # Get current groups
+  db_query("SELECT group_name FROM zone_catalog_groups " .
+           "WHERE zone_catalog_id = $membership_id", \@g);
+  my %current = map { $_->[0] => 1 } @g;
+
+  # Build new groups hash
+  my @new = ref($new_groups) eq 'ARRAY' ? @{$new_groups} : ();
+  my %new_hash = map { $_ => 1 } @new;
+
+  # Remove groups no longer selected
+  for my $gname (keys %current) {
+    unless ($new_hash{$gname}) {
+      $res = db_exec("DELETE FROM zone_catalog_groups " .
+                     "WHERE zone_catalog_id=$membership_id AND group_name=" .
+                     db_encode_str($gname));
+      return $res if ($res < 0);
+    }
+  }
+
+  # Add newly selected groups
+  for my $gname (@new) {
+    unless ($current{$gname}) {
+      $res = db_exec("INSERT INTO zone_catalog_groups " .
+                     "(zone_catalog_id, group_name) VALUES(" .
+                     "$membership_id, " . db_encode_str($gname) . ")");
+      return $res if ($res < 0);
+    }
+  }
+
+  return 0;
+}
+
+# get_catalog_group_usage($catalog_zone_id, $group_name, $rec)
+# Returns list of member zones that use a specific group within a catalog.
+# rec->{zones} = [[zone_id, zone_name, zone_type], ...]
+# rec->{count} = number of zones using this group
+sub get_catalog_group_usage($$$) {
+  my($catalog_zone_id, $group_name, $rec) = @_;
+  my(@q);
+
+  return -1 unless ($catalog_zone_id > 0);
+  return -2 unless (defined($group_name) && $group_name ne '');
+
+  $rec = {} unless (ref($rec) eq 'HASH');
+
+  db_query("SELECT z.id, z.name, z.type " .
+           "FROM zone_catalog_groups zcg " .
+           "JOIN zone_catalogs zc ON zcg.zone_catalog_id = zc.id " .
+           "JOIN zones z ON zc.member_zone_id = z.id " .
+           "WHERE zc.catalog_zone_id = $catalog_zone_id " .
+           "AND zcg.group_name = " . db_encode_str($group_name) . " " .
+           "ORDER BY z.name", \@q);
+
+  $rec->{count} = scalar @q;
+  $rec->{zones} = \@q;
+
+  return 0;
 }
 
 1;

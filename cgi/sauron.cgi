@@ -104,6 +104,7 @@ $debug_mode = $SAURON_DEBUG_MODE;
 		      ['Delete','sub=Delete','root'],
 		      ['Edit','sub=Edit','root'],
 		      [],
+		      ['Catalog Groups','sub=CatalogGroups','root'],
 		      ['Add Default Zones','sub=AddDefaults','root']
 		     ],
 	    'nets'=>[
