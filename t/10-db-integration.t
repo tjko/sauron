@@ -29,6 +29,11 @@ unless ($DB_DSN) {
 
 use Sauron::DB;
 
+# Override DB connection parameters from environment
+$Sauron::DB::DB_DSN      = $ENV{SAURON_TEST_DSN}      if $ENV{SAURON_TEST_DSN};
+$Sauron::DB::DB_USER     = $ENV{SAURON_TEST_USER}     if $ENV{SAURON_TEST_USER};
+$Sauron::DB::DB_PASSWORD = $ENV{SAURON_TEST_PASSWORD} if $ENV{SAURON_TEST_PASSWORD};
+
 # =========================================================================
 # Database connection
 # =========================================================================
