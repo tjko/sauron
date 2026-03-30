@@ -181,6 +181,30 @@ jobs:
         run: prove -lv t/11-import-generate.t
         shell: bash
 
+      - name: Seed roundtrip-test server
+        run: |
+          set -e
+          cat > roundtrip-seed.sql <<'EOF'
+          INSERT INTO servers (name, hostname, hostmaster, ttl, refresh, retry, expire, minimum)
+            VALUES ('roundtrip-test', 'ns1.roundtrip.example.com.', 'hostmaster.roundtrip.example.com.', 86400, 3600, 900, 604800, 86400);
+          INSERT INTO nets (server, net, netname, vlan, subnet)
+            SELECT id, INET '10.20.0.0/16', 'roundtrip-net', 1, false FROM servers WHERE name='roundtrip-test';
+          INSERT INTO nets (server, net, netname, vlan, subnet)
+            SELECT id, INET '2001:db8:20::/48', 'roundtrip-net6', 1, false FROM servers WHERE name='roundtrip-test';
+          EOF
+          /usr/local/sauron/runsql ./roundtrip-seed.sql
+        shell: bash
+
+      - name: Run zone round-trip tests (TAP)
+        env:
+          PERL5LIB: "/usr/local/sauron:${{ github.workspace }}"
+          SAURON_TEST_DSN: "dbi:Pg:dbname=sauron_test;host=postgres"
+          SAURON_TEST_USER: ${{ env.POSTGRES_USER }}
+          SAURON_TEST_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
+          SAURON_INSTALL_DIR: /usr/local/sauron
+        run: prove -lv t/12-zone-roundtrip.t
+        shell: bash
+
       - name: Dump DB for artifacts
         if: always()
         run: |
