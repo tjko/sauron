@@ -155,6 +155,23 @@ check:
 		$(PERL) -w -c $$f; \
 	done
 
+# Run unit tests only (no DB required)
+test-unit:
+	@echo "Running unit tests..."
+	PERL5LIB=$(srcdir) $(PERL) -MTest::Harness -e 'runtests(sort glob("t/0*.t"))'
+
+# Run all tests including integration (requires SAURON_TEST_DSN)
+test: test-unit
+	@echo "Running integration tests..."
+	PERL5LIB=$(srcdir) $(PERL) -MTest::Harness -e 'runtests(sort glob("t/1*.t"))'
+
+# Run all tests with prove (nicer output)
+prove-unit:
+	cd $(srcdir) && prove -l t/0*.t
+
+prove:
+	cd $(srcdir) && prove -l t/
+
 clean:
 	rm -f *~ *.o core a.out make.log \#*\# $(OBJS) $(BINARIES)
 
