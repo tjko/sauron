@@ -1,0 +1,167 @@
+; roundtrip.example.com. zone - comprehensive test zone for round-trip testing
+;
+; Contains: A, AAAA, CNAME, MX, NS, TXT, HINFO, WKS, SRV, SSHFP, TLSA,
+;           NAPTR, DS, delegations, glue records
+;
+
+$TTL 86400	; default TTL
+
+$ORIGIN roundtrip.example.com.
+@		IN	SOA	ns1.roundtrip.example.com. hostmaster.roundtrip.example.com. (
+					 2025010100	; serial number
+					 3600		; refresh
+					 900		; retry
+					 604800		; expire
+					 86400		; minimum
+					)
+
+; zone nameservers
+			IN	NS	ns1.roundtrip.example.com.
+			IN	NS	ns2.roundtrip.example.com.
+
+; zone mail exchanges
+			IN	MX	10 mail1
+			IN	MX	20 mail2
+
+; zone TXT records
+			IN	TXT	"v=spf1 mx -all"
+			IN	TXT	"Roundtrip test zone"
+
+
+; === Nameservers (type=1, A records) ===
+
+ns1			IN	A	10.20.1.10
+			IN	HINFO	PC LINUX
+			IN	MX	10 mail1
+			IN	MX	20 mail2
+			IN	TXT	"Primary DNS server"
+
+ns2			IN	A	10.20.1.11
+			IN	AAAA	2001:db8:20::11
+			IN	HINFO	PC LINUX
+			IN	MX	10 mail1
+			IN	MX	20 mail2
+			IN	TXT	"Secondary DNS server"
+
+
+; === Mail servers (type=1, A records) ===
+
+mail1			IN	A	10.20.1.20
+			IN	HINFO	PC LINUX
+			IN	MX	10 mail1
+			IN	MX	20 mail2
+
+mail2			IN	A	10.20.1.21
+			IN	HINFO	PC LINUX
+			IN	MX	10 mail1
+			IN	MX	20 mail2
+
+
+; === Regular hosts with various records (type=1) ===
+
+webserver		IN	A	10.20.2.10
+			IN	AAAA	2001:db8:20::2:10
+			IN	HINFO	PC LINUX
+			IN	MX	10 mail1
+			IN	MX	20 mail2
+			IN	TXT	"Web server node"
+			IN	WKS	10.20.2.10 tcp http https
+
+dbserver		IN	A	10.20.2.20
+			IN	HINFO	PC LINUX
+			IN	MX	10 mail1
+			IN	MX	20 mail2
+
+appserver		IN	A	10.20.2.30
+			IN	AAAA	2001:db8:20::2:30
+			IN	HINFO	PC LINUX
+			IN	MX	10 mail1
+			IN	MX	20 mail2
+			IN	TXT	"Application server"
+
+; Host with multiple A records
+multihome		IN	A	10.20.3.10
+			IN	A	10.20.3.11
+			IN	HINFO	PC LINUX
+			IN	MX	10 mail1
+			IN	MX	20 mail2
+
+; Host with only AAAA
+ipv6only		IN	AAAA	2001:db8:20::6:1
+			IN	HINFO	PC LINUX
+			IN	MX	10 mail1
+			IN	MX	20 mail2
+
+
+; === CNAME records (type=4) ===
+
+www			IN	CNAME	webserver
+ftp			IN	CNAME	webserver
+db			IN	CNAME	dbserver
+app			IN	CNAME	appserver
+; CNAME pointing outside zone
+external		IN	CNAME	host.other.example.com.
+
+
+; === Delegated subzone (type=2) with NS + DS + glue ===
+
+sub			IN	NS	ns.sub.roundtrip.example.com.
+			IN	NS	ns1.roundtrip.example.com.
+			IN	DS	12345 8 2 49FD46E6C4B45C55D4AC69CBD3CD34AC1AFE51DE49A76F73EAA8BEDA63C84BC7
+
+; Glue record (type=6)
+ns.sub			IN	A	10.20.10.1
+
+
+; === SRV records (type=8) ===
+
+_sip._tcp		IN	SRV	10 60 5060 sipserver.roundtrip.example.com.
+_http._tcp		IN	SRV	10 100 80 webserver.roundtrip.example.com.
+
+
+; === SSHFP records (attached to type=1 host) ===
+
+sshhost			IN	A	10.20.4.10
+			IN	HINFO	PC LINUX
+			IN	MX	10 mail1
+			IN	MX	20 mail2
+			IN	SSHFP	1 1 BF29468C83B6D248E4B1B6F42F22E38E4E00BABE
+			IN	SSHFP	1 2 8EAEF9568E3B45C82A7D68EF6B9AE0C4B0BBE693FBB8B0F33F3C5A27C3F12BAF
+			IN	SSHFP	4 2 A1B2C3D4E5F6A7B8C9D0E1F2A3B4C5D6E7F8A9B0C1D2E3F4A5B6C7D8E9F0A1B2
+
+
+; === TLSA records (type=12) ===
+
+_443._tcp.secure	IN	TLSA	3 1 1 AABBCCDDEE0011223344556677889900AABBCCDDEE0011223344556677889900
+
+
+; === NAPTR records (type=14) ===
+
+naptr-test		IN	NAPTR	100 10 "U" "E2U+sip" "!^.*$!sip:info@roundtrip.example.com!" .
+
+
+; === TXT-only records (type=13) ===
+
+_dmarc			IN	TXT	"v=DMARC1; p=reject; rua=mailto:dmarc@roundtrip.example.com"
+selector1._domainkey	IN	TXT	"v=DKIM1; k=rsa; p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQ"
+
+
+; === Simple workstations ===
+
+ws1			IN	A	10.20.5.1
+			IN	HINFO	PC WINDOWS
+			IN	MX	10 mail1
+			IN	MX	20 mail2
+
+ws2			IN	A	10.20.5.2
+			IN	HINFO	PC LINUX
+			IN	MX	10 mail1
+			IN	MX	20 mail2
+
+ws3			IN	A	10.20.5.3
+			IN	AAAA	2001:db8:20::5:3
+			IN	HINFO	PC MACOS
+			IN	MX	10 mail1
+			IN	MX	20 mail2
+
+; eof
