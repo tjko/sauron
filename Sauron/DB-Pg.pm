@@ -13,7 +13,7 @@ use Pg;
 use Sauron::Util;
 use File::Basename;
 use Sys::Syslog qw(:DEFAULT setlogsock);
-eval { Sys::Syslog::setlogsock('unix') };
+eval { local $SIG{__WARN__} = sub {}; Sys::Syslog::setlogsock('unix') };
 use strict;
 use vars qw($VERSION @ISA @EXPORT);
 
