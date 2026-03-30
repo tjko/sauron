@@ -16,7 +16,7 @@ unless (-e $db_link) {
     symlink("DB-DBI.pm", $db_link) or die "Cannot create DB.pm symlink: $!";
 }
 
-# Globals
+# Globals - db_connect reads $main::DB_DSN, $main::DB_USER, $main::DB_PASSWORD
 our $SAURON_DNSNAME_CHECK_LEVEL = 0;
 our %perms = (alevel => 0);
 our $DB_DSN      = $ENV{SAURON_TEST_DSN}      || '';
@@ -29,17 +29,14 @@ unless ($DB_DSN) {
 
 use Sauron::DB;
 
-# Override DB connection parameters from environment
-$Sauron::DB::DB_DSN      = $ENV{SAURON_TEST_DSN}      if $ENV{SAURON_TEST_DSN};
-$Sauron::DB::DB_USER     = $ENV{SAURON_TEST_USER}     if $ENV{SAURON_TEST_USER};
-$Sauron::DB::DB_PASSWORD = $ENV{SAURON_TEST_PASSWORD} if $ENV{SAURON_TEST_PASSWORD};
-
 # =========================================================================
 # Database connection
+# db_connect() returns 1 on success and calls exit(1) on failure,
+# so we use db_connect2() which returns 1/0 without exiting.
 # =========================================================================
 subtest 'db_connect' => sub {
-    my $ret = db_connect();
-    is($ret, 0, 'db_connect succeeds');
+    my $ret = db_connect2();
+    is($ret, 1, 'db_connect2 succeeds');
 };
 
 # =========================================================================
