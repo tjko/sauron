@@ -12,7 +12,7 @@ use Sauron::DB;
 use Sauron::Util;
 use Sauron::SetupIO;
 use Sys::Syslog qw(:DEFAULT setlogsock);
-Sys::Syslog::setlogsock('unix');
+eval { Sys::Syslog::setlogsock('unix') };
 use Net::IP qw (:PROC);
 
 use strict;

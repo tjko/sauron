@@ -12,7 +12,7 @@ use strict;
 use vars qw($VERSION @ISA @EXPORT);
 
 use Sys::Syslog qw(:DEFAULT setlogsock);
-Sys::Syslog::setlogsock('unix');
+eval { Sys::Syslog::setlogsock('unix') };
 
 $VERSION = '$Id:$ ';
 
