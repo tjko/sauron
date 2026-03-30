@@ -54,7 +54,7 @@ unless ($opt_user) {
 }
 fatal("Invalid username '$opt_user'!")
   unless ($opt_user =~ /^[a-z0-9\-\.@]{1,321}$/);
-fatal("User allready exists!") unless (get_user($opt_user,\%user));
+fatal("User already exists!") unless (get_user($opt_user,\%user));
 undef %user;
 
 unless ($opt_passwd) {

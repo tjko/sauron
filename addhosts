@@ -68,7 +68,7 @@ if ($opt_group) {
 
 if ($opt_info) {
   @infof = split(/:/,$opt_info);
-  fatal("invalid paremeters for info option ") if (@infof > 4);
+  fatal("invalid parameters for info option ") if (@infof > 4);
 }
 
 

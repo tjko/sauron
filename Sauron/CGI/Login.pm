@@ -518,7 +518,7 @@ sub menu_handler {
 	             h2("Password update failed!"),"</FONT>";
 	      return;
 	    }
-	    print p,h2("Password changed succesfully.");
+	    print p,h2("Password changed successfully.");
 	    return;
 	  }
 	  print "<FONT color=\"red\">",h2("Invalid password!"),"</FONT>";
