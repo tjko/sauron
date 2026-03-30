@@ -21,7 +21,7 @@ jobs:
           set -e
           apt-get update -qq
           DEBIAN_FRONTEND=noninteractive apt install -y --no-install-recommends \
-            perl file findutils make \
+            perl file findutils make gcc \
             libcgi-pm-perl libdbd-pg-perl libdbi-perl \
             libnet-dns-perl libnet-ip-perl libnetaddr-ip-perl \
             libnet-netmask-perl libtext-table-perl \
