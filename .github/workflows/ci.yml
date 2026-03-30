@@ -27,7 +27,7 @@ jobs:
             libnet-netmask-perl libtext-table-perl \
             libcryptx-perl libjson-perl libjson-maybexs-perl \
             libpath-tiny-perl libpg-perl libparse-recdescent-perl \
-            libdate-manip-perl
+            libdate-manip-perl libencode-locale-perl
         shell: bash
 
       - name: Create DB.pm symlink
@@ -104,7 +104,7 @@ jobs:
             libnet-netmask-perl libtext-table-perl \
             libcryptx-perl libjson-perl libjson-maybexs-perl \
             libpath-tiny-perl libpg-perl libparse-recdescent-perl \
-            libdate-manip-perl
+            libdate-manip-perl libencode-locale-perl
         shell: bash
 
       - name: Wait for PostgreSQL
