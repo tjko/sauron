@@ -86,7 +86,7 @@ my %zone_form = (
   {ftype=>2, tag=>'masters', name=>'Masters', type=>['ip','text'], fields=>2,
    len=>[43,45], empty=>[0,1], elabels=>['IP','comment'], iff=>['type','S']},
   {ftype=>1, tag=>'hostmaster', name=>'Hostmaster', type=>'domain', len=>30,
-   empty=>1, definfo=>['','Default (from server)'], iff=>['type','M']},
+   empty=>1, definfo=>['','Default (from server)'], iff=>['type','[MC]']},
   {ftype=>3, tag=>'chknames', name=>'Check-names', type=>'enum',
    conv=>'U', enum=>\%check_names_enum},
   {ftype=>3, tag=>'nnotify', name=>'Notify', type=>'enum', conv=>'U',
@@ -99,18 +99,18 @@ my %zone_form = (
   {ftype=>1, tag=>'transfer_source_v6', name=>'Transfer-Source (IPv6 address)',
    type=>'ip6', len=>39,
    empty=>1, definfo=>['','Default (from server)'], iff=>['type','S']},
-  {ftype=>4, tag=>'serial', name=>'Serial', iff=>['type','M']},
+  {ftype=>4, tag=>'serial', name=>'Serial', iff=>['type','[MC]']},
   {ftype=>1, tag=>'refresh', name=>'Refresh', type=>'int', len=>10,
-   empty=>1, definfo=>['','Default (from server)'], iff=>['type','M']},
+   empty=>1, definfo=>['','Default (from server)'], iff=>['type','[MC]']},
   {ftype=>1, tag=>'retry', name=>'Retry', type=>'int', len=>10,
-   empty=>1, definfo=>['','Default (from server)'], iff=>['type','M']},
+   empty=>1, definfo=>['','Default (from server)'], iff=>['type','[MC]']},
   {ftype=>1, tag=>'expire', name=>'Expire', type=>'int', len=>10,
-   empty=>1, definfo=>['','Default (from server)'], iff=>['type','M']},
+   empty=>1, definfo=>['','Default (from server)'], iff=>['type','[MC]']},
   {ftype=>1, tag=>'minimum', name=>'Minimum (negative caching TTL)',
    empty=>1, definfo=>['','Default (from server)'], type=>'int', len=>10,
-   iff=>['type','M']},
+   iff=>['type','[MC]']},
   {ftype=>1, tag=>'ttl', name=>'Default TTL', type=>'int', len=>10,
-   empty=>1, definfo=>['','Default (from server)'], iff=>['type','M']},
+   empty=>1, definfo=>['','Default (from server)'], iff=>['type','[MC]']},
   {ftype=>5, tag=>'ip', name=>'IP addresses', iff=>['type','M'],
    iff2=>['reverse','f']},
   {ftype=>2, tag=>'ns', name=>'Name servers (NS)', type=>['fqdn','text'],
@@ -538,6 +538,12 @@ sub menu_handler {
 	    return;
 	  }
 	  $data{reversenet}=$new_net;
+	}
+
+	# RFC 9432: Catalog zones use TTL=0 and negative caching TTL=0
+	if ($data{type} eq 'C') {
+	  $data{ttl} = 0;
+	  $data{minimum} = 0;
 	}
 
 	$res=add_zone(\%data);
