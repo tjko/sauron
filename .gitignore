@@ -27,7 +27,12 @@ config.h
 doc/tables.html
 doc/tables.sgml
 
-# dot files and dirs
+# dot files
 .*
+
+# don't ignore (yourself, github, ...)
+!.gitignore 
+!.github/
+
 
 # eof
