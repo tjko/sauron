@@ -525,10 +525,10 @@ sub make_dns() {
         $ttl='';
     }
 
-    $ttl_refresh = ($zone{refresh} ? $zone{refresh} : $server{refresh});
-    $ttl_retry = ($zone{retry} ? $zone{retry} : $server{retry});
-    $ttl_expire = ($zone{expire} ? $zone{expire} : $server{expire});
-    $ttl_minimum = ($zone{minimum} ? $zone{minimum} : $server{minimum});
+    $ttl_refresh = (defined($zone{refresh}) && $zone{refresh} ne '' ? $zone{refresh} : $server{refresh});
+    $ttl_retry = (defined($zone{retry}) && $zone{retry} ne '' ? $zone{retry} : $server{retry});
+    $ttl_expire = (defined($zone{expire}) && $zone{expire} ne '' ? $zone{expire} : $server{expire});
+    $ttl_minimum = (defined($zone{minimum}) && $zone{minimum} ne '' ? $zone{minimum} : $server{minimum});
 
     undef @q;
     db_query("SELECT MAX(h.mdate),MAX(h.cdate) " .
@@ -573,7 +573,7 @@ sub make_dns() {
     fatal("no hostmaster defined either in server nor zone record for: " .
           "$zonename") if ($hostmaster eq '');
     fatal("server hostname not defined!") if ($hostname eq '');
-    fatal("no TTL defined!") unless ($TTL > 0);
+    fatal("no TTL defined!") unless ($TTL > 0 || $zone{type} eq 'C');
     if ($bind_conf) {
       print ZONEFILE '$TTL ' . "$TTL\t; default TTL for this zone\n;\n";
       print ZONEFILE '$ORIGIN ' . "$zonename.\n;\n";
