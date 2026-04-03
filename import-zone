@@ -219,7 +219,7 @@ foreach $host (sort keys %zonedata) {
     }
   }
 
-  fatal("empty hostname adfter stripping origin: $host") unless ($host2);
+  fatal("empty hostname after stripping origin: $host") unless ($host2);
   print "host: $host ($host2) (type=$hosttype)\n" if ($opt_verbose);
   if ($hosttype == 14 && @{$rec->{NAPTR}} > 0) {
     for my $k (0..$#{$rec->{NAPTR}}) {

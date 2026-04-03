@@ -204,7 +204,7 @@ if ($opt_help || @ARGV < 2) {
     print "syntax: $0 [options] <servername> <named.conf file>\n";
     print "options:\n",
           "\t--orphans=<zonename>\tzone for 'orphan' PTR record hosts\n",
-	  "\t--notrasaction\t\tdo not use transactions (speeds up things)\n",
+	  "\t--notransaction\t\tdo not use transactions (speeds up things)\n",
 	  "\t--dir=<directory>\tdirectory where config files are located\n",
 	  "\t\t\t\t(if not in directory specified in named.conf)\n",
 	  "\t--verbose\t\tdisplay more detailed progress reports\n",

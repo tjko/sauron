@@ -676,7 +676,7 @@ sub restricted_add_host($) {
   my($rec)=@_;
 
   if (check_perms('host',$rec->{domain},1)) {
-    alert1("Invalid hostname: does not conform your restrictions");
+    alert1("Invalid hostname: does not conform to your restrictions");
     return -101;
   }
   if ($rec->{type} == 4 && check_perms('flags','CNAME',1)) {
@@ -1419,7 +1419,7 @@ sub menu_handler {
 			     ($host{ip}[1][1] ne $old_ips[1] ?
 			      "ip: $old_ips[1] --> $host{ip}[1][1] ":""),
 			     $host{id});
-	      print h2("Host record succesfully updated.");
+	      print h2("Host record successfully updated.");
 	      show_host_record($state,$perms);
 	      return;
 	    }
@@ -2223,7 +2223,7 @@ sub menu_handler {
 	} elsif (is_cidr($data{ip}) && ip_in_use($serverid,$data{ip})) {
 	  alert1("IP number already in use!");
 	} elsif (check_perms('host',$data{domain},1)) {
-	  alert1("Invalid hostname: does not conform your restrictions");
+	  alert1("Invalid hostname: does not conform to your restrictions");
 	} elsif (is_cidr($data{ip}) && check_perms('ip',$data{ip},1)) {
 	  alert1("Invalid IP number: outside allowed range(s): $data{ip}");
 	} else {

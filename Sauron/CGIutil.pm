@@ -1224,7 +1224,7 @@ sub form_magic($$$) {
       $j=$a+1;
       $n=$prefix."_".$rec->{tag}."_".$j."_2";
       print "<TR><TD>",textfield(-name=>$n,-size=>25,-value=>scalar(param($n)));
-      print "<BR><FONT color=\"red\">Uknown host!</FONT>"
+      print "<BR><FONT color=\"red\">Unknown host!</FONT>"
 	if ($unknown_host);
       print "<BR><FONT color=\"red\">Invalid host!</FONT>"
 	if ($invalid_host);

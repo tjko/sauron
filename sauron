@@ -391,7 +391,7 @@ sub make_dns() {
       if (get_zone($zoneid,\%zone));
 
     $type=$zone_type_enum{$zone{type}};
-    fatal("uknown zone type '$zone{type}'!") unless ($type ne '');
+    fatal("unknown zone type '$zone{type}'!") unless ($type ne '');
     if ($loopcounter >= $normalzones) {
       $subtype=$type;
       # process zones from master server
@@ -3464,7 +3464,7 @@ $host =~ s/\n//g;
 
 
 fatal("target directory is a file! ($targetdir)") if (-f $targetdir);
-fatal("target directory does not exists ($targetdir)") if (! -d $targetdir);
+fatal("target directory does not exist ($targetdir)") if (! -d $targetdir);
 fatal("no permissions to target directory!")
         unless (-r $targetdir && -x $targetdir && -w $targetdir);
 fatal("--check option used but SAURON_NAMED_CHK_PROG not configured!")
