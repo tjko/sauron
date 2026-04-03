@@ -180,11 +180,17 @@ my %zone_form = (
    no_edit=>1, iff=>['type','C']},
   {ftype=>4, tag=>'catalog_members_list', name=>'Member zones',
    no_edit=>1, iff=>['type','C']},
+  {ftype=>4, tag=>'catalog_group_defs_list', name=>'Defined groups',
+   no_edit=>1, iff=>['type','C']},
+  {ftype=>4, tag=>'catalog_group_manage_link', name=>'Manage groups',
+   no_edit=>1, iff=>['type','C']},
   {ftype=>4, tag=>'zone_catalog_count', name=>'Number of catalogs',
    no_edit=>1, iff=>['type','M']},
 #  {ftype=>4, tag=>'zone_catalogs_list', name=>'Included in catalogs',
 #   no_edit=>1, iff=>['type','M']}, # duplicity
   {ftype=>14, tag=>'catalog_zones_selected', name=>'Member of catalog zones',
+   iff=>['type','M']},
+  {ftype=>15, tag=>'member_groups', name=>'Catalog zone groups (RFC 9432)',
    iff=>['type','M']},
 
   {ftype=>0, name=>'DHCP', iff=>['type','M']},
@@ -228,6 +234,9 @@ sub update_zone_wrapper($) {
   delete $rec->{zone_catalogs_list};
   delete $rec->{available_catalogs};
   delete $rec->{catalog_zones_selected_links};
+  delete $rec->{catalog_group_defs};
+  delete $rec->{catalog_group_defs_list};
+  delete $rec->{catalog_group_manage_link};
   delete $rec->{cdate_str};
   delete $rec->{mdate_str};
   delete $rec->{pending_info};
@@ -409,11 +418,21 @@ sub display_zone($$)
         my $zone_type = $member->[2];    # zone type
         my $server_name = $member->[4];  # server name
         my $type_label = $zone_type_names{$zone_type} || $zone_type;
-        #my $member_link = "<a href=\"$selfurl?menu=zones&selected_zone=$zone_name\" title=\"Select zone $zone_name\">$zone_name</a> ($type_label at $server_name)";
-        my $member_link = "<a href=\"$selfurl?menu=zones&selected_zone=$zone_name\" title=\"Select $type_label zone $zone_name\">$zone_name</a>";
+        my $groups = $member->[7];       # groups arrayref
+        my $group_str = '';
+        if (ref($groups) eq 'ARRAY' && @{$groups}) {
+          $group_str = ' [' . join(', ', @{$groups}) . ']';
+        }
+        my $member_link = "<a href=\"$selfurl?menu=zones&selected_zone=$zone_name\" title=\"Select $type_label zone $zone_name\">$zone_name</a>$group_str";
         push @member_links, $member_link;
       }
       $data{catalog_members_list} = join(', ', @member_links);
+    }
+
+    # Add manage groups link for catalog zones
+    if ($data{type} && $data{type} eq 'C') {
+      $data{catalog_group_manage_link} =
+        "<a href=\"$selfurl?menu=zones&sub=CatalogGroups\"><B>[ Manage Groups ]</B></a>";
     }
 
     # Format catalog zones selected list with links (for Member of catalog zones field)
@@ -655,6 +674,170 @@ sub menu_handler {
     }
     display_list(['#','Hostname','Type','Action','Date','By'],\@plist,0);
     print "<br>";
+    return;
+  }
+  elsif ($sub eq 'CatalogGroups') {
+    return if (check_perms('superuser',''));
+
+    if ($zoneid < 1) {
+      print h2("No zone selected!");
+      select_zone($state,$perms);
+      return;
+    }
+
+    # Verify this is a catalog zone
+    my $is_cat = is_catalog_zone($zoneid);
+    if ($is_cat != 1) {
+      print h2("Selected zone is not a catalog zone."),
+            p,"Only catalog zones (type C) can have group definitions.",
+            p,"<a href=\"$selfurl?menu=zones&sub=select\">Select a zone</a>";
+      return;
+    }
+
+    my $zone_name = $zone || $state->{zone} || '';
+
+    # Handle form actions
+    my $action = param('grp_action') || '';
+
+    # Add group
+    if ($action eq 'add') {
+      my $new_name = param('grp_new_name') || '';
+      my $new_comment = param('grp_new_comment') || '';
+      $new_name =~ s/^\s+|\s+$//g;
+      $new_comment =~ s/^\s+|\s+$//g;
+
+      if ($new_name eq '') {
+        print "<FONT color=\"red\">",h3("Group name cannot be empty!"),"</FONT>";
+      } elsif ($new_name =~ /[^a-zA-Z0-9_\-.]/) {
+        print "<FONT color=\"red\">",h3("Group name can only contain letters, digits, hyphens, dots and underscores!"),"</FONT>";
+      } else {
+        $res = add_catalog_group_def($zoneid, $new_name, $new_comment);
+        if ($res == -10) {
+          print "<FONT color=\"red\">",h3("Group '$new_name' already exists!"),"</FONT>";
+        } elsif ($res < 0) {
+          print "<FONT color=\"red\">",h3("Failed to add group (error: $res)"),"</FONT>";
+        } else {
+          print h3("Group '<B>$new_name</B>' added successfully.");
+        }
+      }
+    }
+
+    # Confirm delete
+    if ($action eq 'confirm_delete') {
+      my $del_name = param('grp_del_name') || '';
+      $del_name =~ s/^\s+|\s+$//g;
+
+      if ($del_name ne '') {
+        $res = delete_catalog_group_def($zoneid, $del_name);
+        if ($res < 0) {
+          print "<FONT color=\"red\">",h3("Failed to delete group (error: $res)"),"</FONT>";
+        } else {
+          print h3("Group '<B>$del_name</B>' deleted.");
+        }
+      }
+    }
+
+    # Delete check - show usage warning before actual deletion
+    if ($action eq 'delete') {
+      my $del_name = param('grp_del_name') || '';
+      $del_name =~ s/^\s+|\s+$//g;
+
+      if ($del_name ne '') {
+        my %usage;
+        get_catalog_group_usage($zoneid, $del_name, \%usage);
+
+        print h2("Delete group: $del_name"),
+              start_form(-method=>'POST',-action=>$selfurl),
+              hidden('menu','zones'),hidden('sub','CatalogGroups');
+
+        if ($usage{count} > 0) {
+          print "<FONT color=\"red\"><B>Warning:</B> This group is currently assigned to $usage{count} zone(s):</FONT>",
+                "<UL>";
+          my %zone_type_names = (M=>'master', S=>'slave', F=>'forward', H=>'hint');
+          for my $zu (@{$usage{zones}}) {
+            my $zu_name = $zu->[1];
+            my $zu_type = $zone_type_names{$zu->[2]} || $zu->[2];
+            print "<LI><a href=\"$selfurl?menu=zones&selected_zone=$zu_name\">$zu_name</a> ($zu_type)</LI>";
+          }
+          print "</UL>",
+                "<P>Deleting this group will <B>remove it from all these zones</B>.</P>";
+        } else {
+          print p,"This group is not assigned to any zone.";
+        }
+
+        print hidden('grp_action','confirm_delete'),
+              hidden('grp_del_name',$del_name),
+              submit(-name=>'grp_confirm_del',-value=>'Confirm Delete')," ",
+              submit(-name=>'grp_cancel_del',-value=>'Cancel'),
+              end_form;
+        return;
+      }
+    }
+
+    # Main display: list existing groups + add form
+    print h2("Catalog Zone Groups: $zone_name");
+
+    # Load current group definitions
+    my %gdefs;
+    get_catalog_group_defs($zoneid, \%gdefs);
+
+    # Display existing groups as a table
+    print "<TABLE width=\"80%\" bgcolor=\"white\" border=0>",
+          "<TR bgcolor=\"#aaaaff\">",th(['#','Group Name','Comment','Usage','Actions']),"</TR>";
+
+    if ($gdefs{count} > 0) {
+      my $ord = 1;
+      for my $gdef (@{$gdefs{groups}}) {
+        my $gid = $gdef->[0];
+        my $gname = $gdef->[1];
+        my $gcomment = $gdef->[2] || '&nbsp;';
+
+        # Check usage count
+        my %usage;
+        get_catalog_group_usage($zoneid, $gname, \%usage);
+        my $usage_str = $usage{count} > 0
+            ? "<FONT color=\"#cc6600\">$usage{count} zone(s)</FONT>"
+            : "<FONT color=\"green\">unused</FONT>";
+
+        # Delete button in a mini-form
+        my $del_form = "<FORM method=POST action=\"$selfurl\" style=\"display:inline\">" .
+                       "<INPUT type=hidden name=menu value=zones>" .
+                       "<INPUT type=hidden name=sub value=CatalogGroups>" .
+                       "<INPUT type=hidden name=grp_action value=delete>" .
+                       "<INPUT type=hidden name=grp_del_name value=\"" . encode_entities($gname) . "\">" .
+                       "<INPUT type=submit value=Delete></FORM>";
+
+        print "<TR bgcolor=\"#f0f0f0\">",
+              td([$ord, "<B>$gname</B>", $gcomment, $usage_str, $del_form]),
+              "</TR>";
+        $ord++;
+      }
+    } else {
+      print "<TR><TD colspan=5 align=center><I>No groups defined for this catalog zone.</I></TD></TR>";
+    }
+    print "</TABLE><BR>";
+
+    # Add group form
+    print h3("Add New Group"),
+          start_form(-method=>'POST',-action=>$selfurl),
+          hidden('menu','zones'),hidden('sub','CatalogGroups'),
+          hidden('grp_action','add'),
+          "<TABLE>",
+          "<TR><TD>Group name:</TD><TD>",
+          textfield(-name=>'grp_new_name',-size=>30,-maxlength=>63),
+          "</TD></TR>",
+          "<TR><TD>Comment:</TD><TD>",
+          textfield(-name=>'grp_new_comment',-size=>50,-maxlength=>200),
+          "</TD></TR>",
+          "<TR><TD></TD><TD>",
+          submit(-name=>'grp_add_submit',-value=>'Add Group'),
+          "</TD></TR>",
+          "</TABLE>",
+          end_form;
+
+    # Link back to zone display
+    print "<BR><a href=\"$selfurl?menu=zones&selected_zone=$zone_name\">&laquo; Back to zone $zone_name</a>";
+
     return;
   }
   elsif ($sub eq 'AddDefaults') {

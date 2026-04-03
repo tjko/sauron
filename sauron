@@ -1680,10 +1680,19 @@ sub make_dns() {
         for $i (0 .. $#{$catalog_rec->{members}}) {
           my $member_zone = $catalog_rec->{members}[$i][1];
           my $member_id = $catalog_rec->{members}[$i][0];
+          my $member_groups = $catalog_rec->{members}[$i][7];
           $member_zone =~ s/\.$//;  # Remove trailing dot
 
           printf ZONEFILE $ZFORMAT, "uuid-$member_id.zones.catalog",$ttl,'IN','PTR',"$member_zone."
             if ($bind_conf);
+
+          # Group property TXT records (RFC 9432 §5.2)
+          if ($bind_conf && ref($member_groups) eq 'ARRAY') {
+            for my $grp (@{$member_groups}) {
+              printf ZONEFILE $ZFORMAT, "group.uuid-$member_id.zones.catalog",
+                  $ttl,'IN','TXT',"\"$grp\"";
+            }
+          }
         }
       } else {
         print ZONEFILE ";\n; Catalog zone (no members currently)\n;\n" if ($bind_conf);

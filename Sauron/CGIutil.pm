@@ -465,7 +465,7 @@ sub form_check_form($$$) {
 
 # Remove unnecessary whitespace from individual input fields.
     if (!($type == 2 || $type==5 || $type==11 || $type==12 || $type == 13 ||
-          $type == 14 || ($type==8 && $rec->{arec}))) {
+          $type == 14 || $type == 15 || ($type==8 && $rec->{arec}))) {
 	$val = remove_whitespace($val, $rec->{whitesp});
 	param($p, $val);
     }
@@ -671,6 +671,23 @@ sub form_check_form($$$) {
       }
       $data->{$tag} = \@selected;  # Store as array reference
     }
+    elsif ($type == 15) { # Catalog group checkboxes (check input)
+      # Collect selected groups per catalog zone
+      my %member_groups;
+      my $cat_count = param($p."_catcount") || 0;
+      for my $ci (0..$cat_count-1) {
+        my $cat_id = param($p."_cat_".$ci);
+        next unless (defined $cat_id && $cat_id > 0);
+        my $grp_count = param($p."_cat_".$ci."_grpcount") || 0;
+        my @groups;
+        for my $gi (0..$grp_count-1) {
+          my $gval = param($p."_cat_".$ci."_grp_".$gi);
+          push @groups, $gval if (defined $gval && $gval ne '');
+        }
+        $member_groups{$cat_id} = \@groups if @groups;
+      }
+      $data->{$tag} = \%member_groups;
+    }
   }
   return 0;
 }
@@ -838,6 +855,24 @@ sub form_magic($$$) {
 
 	# Count should be the total number of AVAILABLE items, not selected
 	param($p1."_count", scalar(@{$available}));
+      }
+      elsif ($rec->{ftype} == 15) {
+	# Catalog group checkboxes (ftype 15) - init params
+	my $available = $data->{available_catalogs} || [];
+	my $group_defs = $data->{catalog_group_defs} || {};
+	my $member_groups = $data->{$rec->{tag}} || {};
+	param($p1."_catcount", scalar(@{$available}));
+	for my $ci (0..$#{$available}) {
+	  my $cat_id = $$available[$ci][0];
+	  param($p1."_cat_".$ci, $cat_id);
+	  my $gdefs = $group_defs->{$cat_id} || [];
+	  param($p1."_cat_".$ci."_grpcount", scalar(@{$gdefs}));
+	  my %sel = map { $_ => 1 } @{$member_groups->{$cat_id} || []};
+	  for my $gi (0..$#{$gdefs}) {
+	    my $gname = $gdefs->[$gi][1];
+	    param($p1."_cat_".$ci."_grp_".$gi, $sel{$gname} ? $gname : '');
+	  }
+	}
       }
       else {
 	error("internal error (form_magic):". $rec->{ftype});
@@ -1426,6 +1461,66 @@ sub form_magic($$$) {
       print "</TR>" if ($col_count > 0);
       print "</TABLE></TD>";
     }
+    elsif ($rec->{ftype} == 15) { # Catalog group checkboxes (edit)
+      print td($rec->{name}), "<TD><TABLE>";
+      my $available = $data->{'available_catalogs'} || [];
+      my $group_defs = $data->{'catalog_group_defs'} || {};
+      my $member_groups = $data->{$rec->{tag}} || {};
+      my $selected_cats = $data->{'catalog_zones_selected'} || [];
+      my %sel_cats = map { $_ => 1 } @{$selected_cats};
+
+      # Reload from params if re-editing
+      my $cat_count_p = param($p1."_catcount");
+      my %param_groups;
+      if (defined $cat_count_p && $cat_count_p > 0) {
+	%sel_cats = ();
+	# Re-read selected catalogs from ftype 14 params
+	my $f14_count = param($rec->{tag}."_count") || param("catalog_zones_selected_count") || 0;
+	# We just show groups for catalogs that have group defs defined
+      }
+
+      print hidden(-name=>$p1."_catcount",-value=>scalar(@{$available}));
+
+      for my $ci (0..$#{$available}) {
+	my $cat_id = $$available[$ci][0];
+	my $cat_name = $$available[$ci][1];
+	my $gdefs = $group_defs->{$cat_id} || [];
+	next unless (@{$gdefs} > 0);  # Skip catalogs without group defs
+
+	print "<TR><TD colspan=2><B>$cat_name:</B></TD></TR>";
+	print hidden(-name=>$p1."_cat_".$ci,-value=>$cat_id);
+	print hidden(-name=>$p1."_cat_".$ci."_grpcount",-value=>scalar(@{$gdefs}));
+
+	# Get currently selected groups for this catalog
+	my %grp_sel;
+	# First try from re-edit params
+	my $grp_count_p = param($p1."_cat_".$ci."_grpcount");
+	if (defined $grp_count_p && $grp_count_p > 0) {
+	  for my $gi (0..$grp_count_p-1) {
+	    my $gval = param($p1."_cat_".$ci."_grp_".$gi);
+	    $grp_sel{$gval} = 1 if (defined $gval && $gval ne '');
+	  }
+	} else {
+	  # Use data from backend
+	  if (ref($member_groups) eq 'HASH' && $member_groups->{$cat_id}) {
+	    %grp_sel = map { $_ => 1 } @{$member_groups->{$cat_id}};
+	  }
+	}
+
+	print "<TR>";
+	for my $gi (0..$#{$gdefs}) {
+	  my $gname = $gdefs->[$gi][1];
+	  my $gcomment = $gdefs->[$gi][2] || '';
+	  my $label = $gcomment ? "$gname ($gcomment)" : $gname;
+	  my $is_checked = $grp_sel{$gname} ? 'on' : '';
+	  print "<TD>", checkbox(-label=>$label,
+				 -name=>$p1."_cat_".$ci."_grp_".$gi,
+				 -value=>$gname, -checked=>$is_checked), "</TD>";
+	}
+	print "</TR>";
+      }
+      print "</TABLE></TD>";
+    }
     elsif ($rec->{ftype} == 101) {
       undef @q; undef @lst; undef %lsth;
       $maxlen=$rec->{len};
@@ -1745,6 +1840,33 @@ sub display_form($$) {
         } else {
           print "<TD><FONT color='blue'>None selected</FONT></TD>";
         }
+      }
+    } elsif ($rec->{ftype} == 15) { # Catalog group checkboxes (show)
+      print td($rec->{name});
+      my $member_groups = $data->{$rec->{tag}} || {};
+      my $available = $data->{'available_catalogs'} || [];
+      my $group_defs = $data->{'catalog_group_defs'} || {};
+
+      if (ref($member_groups) eq 'HASH' && %{$member_groups}) {
+        my @parts;
+        # Build id-to-name mapping
+        my %cat_names;
+        for my $cat (@{$available}) {
+          $cat_names{$cat->[0]} = $cat->[1];
+        }
+        for my $cat_id (sort { ($cat_names{$a} || '') cmp ($cat_names{$b} || '') }
+                        keys %{$member_groups}) {
+          my $cat_name = $cat_names{$cat_id} || "catalog#$cat_id";
+          my @grps = @{$member_groups->{$cat_id}};
+          push @parts, "<B>$cat_name:</B> " . join(', ', sort @grps) if @grps;
+        }
+        if (@parts) {
+          print "<TD>" . join('<BR>', @parts) . "</TD>";
+        } else {
+          print "<TD><FONT color='blue'>No groups assigned</FONT></TD>";
+        }
+      } else {
+        print "<TD><FONT color='blue'>No groups assigned</FONT></TD>";
       }
     } else {
       error("internal error (display_form)");

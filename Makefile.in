@@ -82,7 +82,9 @@ SQL_TABLES =	sql/common.sql \
 		sql/vlans.sql sql/vmps.sql sql/group_entries.sql \
 		sql/keys.sql sql/acls.sql sql/leases.sql \
 		sql/sshfp_entries.sql sql/tlsa_entries.sql \
-		sql/ds_entries.sql sql/naptr_entries.sql
+		sql/ds_entries.sql sql/naptr_entries.sql \
+		sql/catalog_group_defs.sql sql/zone_catalog_groups.sql
+
 
 
 SQL_MISC =      sql/DEFAULTS.sql sql/misc.sql sql/copy_tables.sql \
