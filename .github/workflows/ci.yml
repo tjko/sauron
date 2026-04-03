@@ -1,0 +1,233 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  # =================================================================
+  # Job 1: Fast syntax check + unit tests (no DB needed)
+  # =================================================================
+  unit-tests:
+    runs-on: ubuntu-latest
+    container:
+      image: debian:stable
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Perl and dependencies
+        run: |
+          set -e
+          apt-get update -qq
+          DEBIAN_FRONTEND=noninteractive apt install -y --no-install-recommends \
+            perl file findutils make build-essential \
+            libcgi-pm-perl libdbd-pg-perl libdbi-perl \
+            libnet-dns-perl libnet-ip-perl libnetaddr-ip-perl \
+            libnet-netmask-perl libtext-table-perl \
+            libcryptx-perl libjson-perl libjson-maybexs-perl \
+            libpath-tiny-perl libpg-perl libparse-recdescent-perl \
+            libdate-manip-perl libencode-locale-perl
+        shell: bash
+
+      - name: Create DB.pm symlink
+        run: cd Sauron && ln -sf DB-DBI.pm DB.pm
+
+      - name: Configure
+        run: ./configure
+
+      - name: Perl syntax check (make check)
+        env:
+          PERL5LIB: ${{ github.workspace }}
+        run: make check
+        shell: bash
+
+      - name: Run unit tests
+        env:
+          PERL5LIB: ${{ github.workspace }}
+        run: |
+          set -e
+          prove -lv t/0*.t
+        shell: bash
+
+  # =================================================================
+  # Job 2: Integration tests with PostgreSQL
+  # =================================================================
+  integration-tests:
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    container:
+      image: debian:stable
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: sauron_test
+          POSTGRES_USER: sauronuser
+          POSTGRES_PASSWORD: "${{ secrets.PROJECT_SEED }}.${{ github.run_id }}.${{ github.run_number }}"
+        ports: [5432:5432]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      POSTGRES_DB: sauron_test
+      POSTGRES_USER: sauronuser
+      POSTGRES_PASSWORD: "${{ secrets.PROJECT_SEED }}.${{ github.run_id }}.${{ github.run_number }}"
+      PGHOST: postgres
+      PGUSER: sauronuser
+      PGPASSWORD: "${{ secrets.PROJECT_SEED }}.${{ github.run_id }}.${{ github.run_number }}"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Cache named.root & ieee-oui.txt
+        uses: actions/cache@v4
+        with:
+          path: |
+            named.root
+            ieee-oui.txt
+          key: cache-root-oui-${{ runner.os }}-${{ hashFiles('**/*.yml') }}
+          restore-keys: |
+            cache-root-oui-${{ runner.os }}-
+
+      - name: Install APT packages
+        run: |
+          set -e
+          apt-get update -qq
+          DEBIAN_FRONTEND=noninteractive apt install -y \
+            file findutils grep coreutils git make build-essential wget \
+            postgresql postgresql-client \
+            perl libcgi-pm-perl libdbd-pg-perl libdbi-perl \
+            libnet-dns-perl libnet-ip-perl libnetaddr-ip-perl \
+            libnet-netmask-perl libtext-table-perl \
+            libcryptx-perl libjson-perl libjson-maybexs-perl \
+            libpath-tiny-perl libpg-perl libparse-recdescent-perl \
+            libdate-manip-perl libencode-locale-perl
+        shell: bash
+
+      - name: Wait for PostgreSQL
+        run: |
+          for i in {1..12}; do
+            if pg_isready -h postgres -p 5432 -U "$POSTGRES_USER" -d "$POSTGRES_DB" > /dev/null 2>&1; then
+              echo "PostgreSQL is ready."
+              exit 0
+            fi
+            echo "Waiting for PostgreSQL... ($i/12)"
+            sleep 5
+          done
+          echo "PostgreSQL failed to start."
+          exit 1
+        shell: bash
+
+      - name: Configure and install Sauron
+        run: |
+          set -euxo pipefail
+          ./configure
+          make install
+
+          echo "export PERL5LIB=/usr/local/sauron" > /etc/profile.d/sauron.sh
+          . /etc/profile.d/sauron.sh
+
+          # Configure DB connection
+          f=/usr/local/etc/sauron/config
+          sed -i "s/\(\$DB_DSN\s*=\s*\).*/\1\"dbi:Pg:dbname=$POSTGRES_DB;host=postgres\";/" "$f"
+          sed -i "s/\(\$DB_USER\s*=\s*\).*/\1\"$POSTGRES_USER\";/" "$f"
+          sed -i "s/\(\$DB_PASSWORD\s*=\s*\).*/\1\"$POSTGRES_PASSWORD\";/" "$f"
+
+          # Initialize DB
+          echo y | /usr/local/sauron/createtables
+
+          # Seed minimal data
+          cat > init.sql <<'EOF'
+          INSERT INTO servers (name, hostname, hostmaster) VALUES ('example', 'sauron.example.com','hostmaster.example.com.');
+          INSERT INTO nets (server, net, netname, vlan, subnet) VALUES (1, INET '10.10.0.0/16', 'net', 1, false);
+          INSERT INTO nets (server, net, netname, vlan, subnet) VALUES (1, INET '2001:db8::/32', 'net6', 1, false);
+          EOF
+          /usr/local/sauron/runsql ./init.sql
+          /usr/local/sauron/status
+        shell: bash
+
+      - name: Run DB integration tests (TAP)
+        env:
+          PERL5LIB: "/usr/local/sauron:${{ github.workspace }}"
+          SAURON_TEST_DSN: "dbi:Pg:dbname=sauron_test;host=postgres"
+          SAURON_TEST_USER: ${{ env.POSTGRES_USER }}
+          SAURON_TEST_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
+        run: prove -lv t/10-db-integration.t
+        shell: bash
+
+      - name: Download and import root hints & OUI
+        run: |
+          set -e
+          . /etc/profile.d/sauron.sh
+          test -s named.root || (rm -fv named.root && wget 'ftp://ftp.rs.internic.net/domain/named.root')
+          /usr/local/sauron/import-roots default ./named.root
+          test -s ieee-oui.txt || (rm -fv ieee-oui.txt && wget -O ./ieee-oui.txt 'https://standards-oui.ieee.org/oui/oui.txt')
+          /usr/local/sauron/import-ethers ./ieee-oui.txt
+        shell: bash
+
+      - name: Run E2E integration tests (TAP)
+        env:
+          PERL5LIB: "/usr/local/sauron:${{ github.workspace }}"
+          SAURON_TEST_DSN: "dbi:Pg:dbname=sauron_test;host=postgres"
+          SAURON_TEST_USER: ${{ env.POSTGRES_USER }}
+          SAURON_TEST_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
+          SAURON_INSTALL_DIR: /usr/local/sauron
+        run: prove -lv t/11-import-generate.t
+        shell: bash
+
+      - name: Seed roundtrip-test server
+        run: |
+          set -e
+          cat > roundtrip-seed.sql <<'EOF'
+          INSERT INTO servers (name, hostname, hostmaster, ttl, refresh, retry, expire, minimum)
+            VALUES ('roundtrip-test', 'ns1.roundtrip.example.com.', 'hostmaster.roundtrip.example.com.', 86400, 3600, 900, 604800, 86400);
+          INSERT INTO nets (server, net, netname, vlan, subnet)
+            SELECT id, INET '10.20.0.0/16', 'roundtrip-net', 1, false FROM servers WHERE name='roundtrip-test';
+          INSERT INTO nets (server, net, netname, vlan, subnet)
+            SELECT id, INET '2001:db8:20::/48', 'roundtrip-net6', 1, false FROM servers WHERE name='roundtrip-test';
+          EOF
+          /usr/local/sauron/runsql ./roundtrip-seed.sql
+        shell: bash
+
+      - name: Run zone round-trip tests (TAP)
+        env:
+          PERL5LIB: "/usr/local/sauron:${{ github.workspace }}"
+          SAURON_TEST_DSN: "dbi:Pg:dbname=sauron_test;host=postgres"
+          SAURON_TEST_USER: ${{ env.POSTGRES_USER }}
+          SAURON_TEST_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
+          SAURON_INSTALL_DIR: /usr/local/sauron
+        run: prove -lv t/12-zone-roundtrip.t
+        shell: bash
+
+      - name: Dump DB for artifacts
+        if: always()
+        run: |
+          pg_dump -Fp "$POSTGRES_DB" > sauron-test.sql 2>/dev/null || true
+        shell: bash
+
+      - name: Generate config files
+        run: |
+          set -e
+          . /etc/profile.d/sauron.sh
+          mkdir -p gen
+          /usr/local/sauron/sauron --verbose --bind example ./gen
+          /usr/local/sauron/sauron --verbose --dhcp example ./gen
+          /usr/local/sauron/sauron --verbose --dhcp6 example ./gen
+        shell: bash
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sauron-integration-artifacts
+          path: |
+            gen/*.conf
+            gen/*.zone
+            gen/named.ca
+            sauron-test.sql

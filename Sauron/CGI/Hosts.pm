@@ -16,7 +16,7 @@ use Sauron::Sauron;
 use Sauron::CGI::Utils;
 use Sauron::SetupIO;
 use Sys::Syslog qw(:DEFAULT setlogsock);
-Sys::Syslog::setlogsock('unix');
+eval { local $SIG{__WARN__} = sub {}; Sys::Syslog::setlogsock('unix') };
 use Net::IP qw(:PROC);
 use Data::Dumper;
 use strict;
