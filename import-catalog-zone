@@ -30,7 +30,7 @@ load_config();
 
 GetOptions("help|h", "verbose|v", "dryrun|dry-run|n", "sync",
 	   "nameserver=s", "axfr-zone=s", "axfr-port=i",
-	   "catalog-only", "group=s",
+	   "catalog-only", "group=s", "ignore-groups",
 	   "notransaction");
 
 $opt_dryrun = $opt_dryrun || 0;
@@ -46,6 +46,8 @@ if ($opt_help || @ARGV < 2) {
 	"\t--axfr-zone=<zone>\toverride zone name used for AXFR\n",
 	"\t--axfr-port=<port>\toverride AXFR TCP port\n",
 	"\t--group=<name>\t\tassign imported member zones to this group\n",
+	"\t\t\t\t(group is auto-created if it does not exist)\n",
+	"\t--ignore-groups\t\tignore RFC 9432 group TXT records from import\n",
 	"\t--catalog-only\t\tmark shadow catalog zone as catalog_only\n",
 	"\t\t\t\t(skip named.conf and zone file generation)\n",
 	"\t--sync\t\t\tsynchronize: add new members, remove stale ones\n",
@@ -118,10 +120,23 @@ if ($opt_nameserver) {
 	unless (valid_domainname($axfr_zone));
 }
 
-# Validate group if specified
+# Validate group if specified - auto-create if missing
 if ($opt_group) {
     $gid = get_group_by_name($serverid, $opt_group);
-    fatal("cannot find group: $opt_group") unless ($gid > 0);
+    if ($gid < 0) {
+	print "Creating group '$opt_group' for server '$servername'\n"
+	    if ($opt_verbose);
+	unless ($opt_dryrun) {
+	    $gid = add_group({server => $serverid, name => $opt_group,
+			       type => 0, comment => "Created by import-catalog-zone",
+			       dhcp => [], dhcp6 => [], printer => []});
+	    fatal("cannot create group '$opt_group' (error=$gid)") if ($gid < 0);
+	    print "  Created group '$opt_group' (id=$gid)\n" if ($opt_verbose);
+	} else {
+	    print "[dry-run] Would create group: $opt_group\n";
+	    $gid = -999;
+	}
+    }
 }
 
 ##############################
@@ -137,6 +152,9 @@ if ($opt_file) {
 	process_zonedns_axfr($axfr_zone, \%zonedata, $axfr_ns, $axfr_port, $opt_verbose);
 }
 
+$source_origin = detect_catalog_origin(\%zonedata, $axfr_zone, $catalogname);
+print "Detected source catalog origin: $source_origin\n" if ($opt_verbose);
+
 ##############################
 # Parse catalog zone contents (RFC 9432)
 #
@@ -148,7 +166,7 @@ if ($opt_file) {
 # Verify catalog version
 # Sauron generator writes 'version.catalog' relative to zone origin, so
 # after FQDN expansion it becomes 'version.catalog.<origin>'.
-$version_key = "version.catalog.$origin";
+$version_key = "version.catalog.$source_origin";
 if ($zonedata{$version_key} && @{$zonedata{$version_key}{TXT}} > 0) {
     $catver = $zonedata{$version_key}{TXT}[0];
     $catver =~ s/^"(.*)"$/$1/;  # strip quotes if present
@@ -163,7 +181,7 @@ if ($zonedata{$version_key} && @{$zonedata{$version_key}{TXT}} > 0) {
 # Sauron generator uses 'uuid-xxx.zones.catalog' and 'group.uuid-xxx.zones.catalog'
 # relative to zone origin, expanding to '*.zones.catalog.<origin>'.
 %members = ();  # uuid => { name => 'zone.name', groups => ['g1', ...] }
-$zones_suffix = "zones.catalog.$origin";
+$zones_suffix = "zones.catalog.$source_origin";
 
 foreach $domain (keys %zonedata) {
     my $rec = $zonedata{$domain};
@@ -182,7 +200,8 @@ foreach $domain (keys %zonedata) {
 
     # Match group TXT records: group.<uuid>.zones.catalog.<origin>
     # Format: group.<uuid>.zones.catalog.<origin> TXT "<group-name>"
-    if ($domain =~ /^group\.([^.]+)\.\Q$zones_suffix\E$/i && @{$rec->{TXT}} > 0) {
+    if (!$opt_ignore_groups &&
+	$domain =~ /^group\.([^.]+)\.\Q$zones_suffix\E$/i && @{$rec->{TXT}} > 0) {
 	my $uuid = $1;
 	$members{$uuid} = { name => '', groups => [] }
 	    unless ($members{$uuid});
@@ -243,7 +262,7 @@ if ($catalog_zone_id > 0) {
 	print "[dry-run] Would create catalog zone: $catalogname\n";
 	$catalog_zone_id = -999;  # placeholder
     } else {
-	my $soa_rec = $zonedata{$origin};
+	my $soa_rec = $zonedata{$source_origin};
 	fatal("no SOA record in catalog zone") unless ($soa_rec && $soa_rec->{SOA});
 
 	my @soa = split(/\s+/, $soa_rec->{SOA});
@@ -293,7 +312,7 @@ if ($catalog_zone_id > 0) {
 
 # Ensure group definitions exist in the shadow catalog
 %known_groups = ();
-unless ($opt_dryrun) {
+unless ($opt_dryrun || $opt_ignore_groups) {
     # Collect all group names from imported members
     my %needed_groups;
     foreach my $uuid (@member_uuids) {
@@ -443,7 +462,7 @@ foreach my $uuid (sort { $members{$a}{name} cmp $members{$b}{name} } @member_uui
     }
 
     # Set groups for member
-    if (@mgroups > 0) {
+    if (@mgroups > 0 && !$opt_ignore_groups) {
 	$res = set_member_groups($zone_id, $catalog_zone_id, \@mgroups);
 	if ($res < 0) {
 	    print STDERR "WARNING: cannot set groups for '$mname' (error=$res)\n";
@@ -452,17 +471,20 @@ foreach my $uuid (sort { $members{$a}{name} cmp $members{$b}{name} } @member_uui
 	}
     }
 
-    # Assign to Sauron group if specified
+    # Assign to Sauron group if specified (best-effort)
     if ($opt_group && $gid > 0) {
-	# Only set group for newly created zones (type S)
-	my %zrec;
-	if (get_zone($zone_id, \%zrec) == 0 && $zrec{type} eq 'S') {
-	    # Check if zone already belongs to a group
-	    my @gq;
-	    db_query("SELECT grp FROM zones WHERE id=$zone_id", \@gq);
-	    if (@gq > 0 && (!$gq[0][0] || $gq[0][0] < 1)) {
-		db_exec("UPDATE zones SET grp=$gid WHERE id=$zone_id");
+	# Some schemas do not have zones.grp. Use apex host record when present.
+	my @hq;
+	db_query("SELECT id, grp FROM hosts " .
+		 "WHERE zone=$zone_id AND domain='\@' ORDER BY id LIMIT 1", \@hq);
+	if (@hq > 0) {
+	    my $host_id = $hq[0][0];
+	    my $cur_grp = $hq[0][1];
+	    if (!$cur_grp || $cur_grp < 1) {
+		db_exec("UPDATE hosts SET grp=$gid WHERE id=$host_id");
 	    }
+	} elsif ($opt_verbose) {
+	    print "    Note: no apex host record for '$mname'; group assignment skipped\n";
 	}
     }
 }
@@ -513,6 +535,49 @@ sub parse_nameserver_spec($) {
     }
 
     return ($host, $port, $zone);
+}
+
+
+sub detect_catalog_origin($$$) {
+	my ($zonedata, $preferred_zone, $fallback_zone) = @_;
+	my (@soa_candidates, @version_candidates, $candidate);
+
+	if ($preferred_zone) {
+	$candidate = $preferred_zone;
+	$candidate .= '.' unless ($candidate =~ /\.$/);
+	return $candidate if ($zonedata->{$candidate} && $zonedata->{$candidate}{SOA});
+	}
+
+	if ($fallback_zone) {
+	$candidate = $fallback_zone;
+	$candidate .= '.' unless ($candidate =~ /\.$/);
+	return $candidate if ($zonedata->{$candidate} && $zonedata->{$candidate}{SOA});
+	}
+
+	@soa_candidates = sort grep {
+	$zonedata->{$_} && $zonedata->{$_}{SOA} && $zonedata->{$_}{SOA} ne ''
+	} keys %{$zonedata};
+	return $soa_candidates[0] if (@soa_candidates == 1);
+
+	@version_candidates = sort map {
+	/^version\.catalog\.(.+)$/ ? $1 : ()
+	} keys %{$zonedata};
+	return $version_candidates[0] if (@version_candidates == 1);
+
+	fatal("cannot determine source catalog origin from imported data")
+		if (!@soa_candidates && !@version_candidates);
+
+	if (@soa_candidates > 1) {
+	fatal("multiple SOA origins found in imported data: " . join(', ', @soa_candidates));
+	}
+
+	if (@version_candidates > 1) {
+	fatal("multiple catalog version origins found in imported data: " .
+	      join(', ', @version_candidates));
+	}
+
+	return $soa_candidates[0] if (@soa_candidates > 0);
+	return $version_candidates[0];
 }
 
 

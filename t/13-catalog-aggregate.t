@@ -602,6 +602,92 @@ subtest 'generate after priority swap - conflict winner changes' => sub {
 
 
 # =========================================================================
+# Test 18: --group auto-creates non-existent Sauron group
+# =========================================================================
+subtest '--group auto-creates non-existent group' => sub {
+    plan skip_all => 'catalog1 not created' unless ($cat1_id && $cat1_id > 0);
+
+    my $test_group = 'catalog-import-test-grp';
+
+    # Ensure group does not exist yet
+    my $pre_gid = get_group_by_name($serverid, $test_group);
+    if ($pre_gid > 0) {
+        db_exec("DELETE FROM groups WHERE id=$pre_gid");
+    }
+
+    # Re-import catalog1 with --group (group should be auto-created)
+    my $zonefile = "$testdata/catalog1.example.com.zone";
+    my $cmd = "$install_dir/import-catalog-zone --verbose --catalog-only " .
+              "--group=$test_group " .
+              "$server catalog1.example.com $zonefile 2>&1";
+    my $out = `$cmd`;
+    my $rc = $? >> 8;
+    is($rc, 0, 'import-catalog-zone --group exits 0') or diag($out);
+    like($out, qr/[Cc]reat.*group.*$test_group/,
+         'output mentions group creation');
+
+    # Verify group now exists
+    my $gid = get_group_by_name($serverid, $test_group);
+    ok($gid > 0, "group '$test_group' auto-created (id=$gid)");
+
+    # Cleanup: remove the test group
+    if ($gid > 0) {
+        db_exec("DELETE FROM groups WHERE id=$gid");
+    }
+};
+
+
+# =========================================================================
+# Test 19: --ignore-groups skips RFC 9432 group TXT records
+# =========================================================================
+subtest '--ignore-groups skips group assignments' => sub {
+    plan skip_all => 'catalog1 not created' unless ($cat1_id && $cat1_id > 0);
+
+    # Clear existing group assignments from catalog1 members
+    my $rec_before = {};
+    get_zone_catalog_members($cat1_id, $rec_before);
+    for my $m (@{$rec_before->{members}}) {
+        set_member_groups($m->[0], $cat1_id, []);
+    }
+
+    # Create a zone file with group assignments
+    my $tmpdir = tempdir(CLEANUP => 1);
+    my $igfile = "$tmpdir/catalog1-ig.zone";
+    open(my $fh, '>', $igfile) or do { fail("cannot write $igfile"); return; };
+    print $fh <<'ZONE';
+$TTL 0
+$ORIGIN catalog1.example.com.
+@	IN	SOA	ns1.example.com. admin.example.com. (
+		2024040101 3600 900 604800 0 )
+	IN	NS	invalid.
+version.catalog		IN	TXT	"2"
+uuid-002.zones.catalog	IN	PTR	beta.example.com.
+uuid-003.zones.catalog	IN	PTR	shared.example.com.
+group.uuid-002.zones.catalog	IN	TXT	"should-be-ignored"
+group.uuid-003.zones.catalog	IN	TXT	"should-be-ignored"
+ZONE
+    close($fh);
+
+    my $cmd = "$install_dir/import-catalog-zone --verbose --ignore-groups " .
+              "$server catalog1.example.com $igfile 2>&1";
+    my $out = `$cmd`;
+    my $rc = $? >> 8;
+    is($rc, 0, 'import-catalog-zone --ignore-groups exits 0') or diag($out);
+
+    # Verify no group assignments were set
+    my $rec_after = {};
+    get_zone_catalog_members($cat1_id, $rec_after);
+
+    my $has_groups = 0;
+    for my $m (@{$rec_after->{members}}) {
+        my $grps = $m->[7];
+        $has_groups++ if (ref($grps) eq 'ARRAY' && @{$grps} > 0);
+    }
+    is($has_groups, 0, 'no group assignments set with --ignore-groups');
+};
+
+
+# =========================================================================
 # Cleanup: remove test zones (in correct dependency order)
 # =========================================================================
 subtest 'cleanup: remove test zones' => sub {

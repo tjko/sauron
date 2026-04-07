@@ -42,6 +42,8 @@
 	  - Creates shadow catalog zone (type C, catalog_only) in Sauron
 	  - --sync mode for incremental updates (add new, remove stale members)
 	  - --dryrun mode for safe preview without database changes
+	  - --group option auto-creates Sauron group if it does not exist
+	  - --ignore-groups option skips RFC 9432 group TXT records
 	  - Automatic group definition creation from imported catalog data
 	- Added new option --keep-pending for sauron command [svamberg]
 	- Add check-reverse utility script for DNS PTR record validation [svamberg]
