@@ -1740,7 +1740,7 @@ sub make_dns() {
             if ($seen_names{$lc_name}) {
               push @conflicts,
                 "  '$mzone_name' from '$src_name' (prio=$prio) " .
-                "overridden by '$seen_names{$lc_name}'";
+                "skipped; $seen_names{$lc_name} has higher precedence (lower priority)";
               next;
             }
             $seen_names{$lc_name} = "$src_name (prio=$prio)";
