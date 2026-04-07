@@ -90,7 +90,7 @@ subtest 'import catalog zone #1' => sub {
     plan skip_all => "Zone file not found: $zonefile" unless (-r $zonefile);
 
     my $cmd = "$install_dir/import-catalog-zone --verbose --catalog-only " .
-              "--file=$zonefile $server catalog1.example.com 2>&1";
+	      "$server catalog1.example.com $zonefile 2>&1";
     my $out = `$cmd`;
     my $rc = $? >> 8;
     is($rc, 0, 'import-catalog-zone exits 0') or diag($out);
@@ -188,7 +188,7 @@ subtest 'import catalog zone #2' => sub {
     plan skip_all => "Zone file not found: $zonefile" unless (-r $zonefile);
 
     my $cmd = "$install_dir/import-catalog-zone --verbose --catalog-only " .
-              "--file=$zonefile $server catalog2.example.com 2>&1";
+	      "$server catalog2.example.com $zonefile 2>&1";
     my $out = `$cmd`;
     my $rc = $? >> 8;
     is($rc, 0, 'import-catalog-zone exits 0') or diag($out);
@@ -458,7 +458,7 @@ ZONE
     close($fh);
 
     my $cmd = "$install_dir/import-catalog-zone --verbose --sync " .
-              "--file=$syncfile $server catalog1.example.com 2>&1";
+	      "$server catalog1.example.com $syncfile 2>&1";
     my $out = `$cmd`;
     my $rc = $? >> 8;
     is($rc, 0, 'import-catalog-zone --sync exits 0') or diag($out);
@@ -510,7 +510,7 @@ ZONE
     close($fh);
 
     my $cmd = "$install_dir/import-catalog-zone --dryrun --verbose " .
-              "--file=$dryfile $server catalog1.example.com 2>&1";
+	      "$server catalog1.example.com $dryfile 2>&1";
     my $out = `$cmd`;
     my $rc = $? >> 8;
     is($rc, 0, 'import-catalog-zone --dryrun exits 0') or diag($out);

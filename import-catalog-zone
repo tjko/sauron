@@ -15,6 +15,7 @@
 #
 require 5;
 use Getopt::Long;
+use Net::DNS;
 use Sauron::DB;
 use Sauron::Util;
 use Sauron::UtilZone;
@@ -28,7 +29,8 @@ load_config();
 ##############################
 
 GetOptions("help|h", "verbose|v", "dryrun|dry-run|n", "sync",
-	   "nameserver=s", "file=s", "catalog-only", "group=s",
+	   "nameserver=s", "axfr-zone=s", "axfr-port=i",
+	   "catalog-only", "group=s",
 	   "notransaction");
 
 $opt_dryrun = $opt_dryrun || 0;
@@ -36,12 +38,13 @@ $opt_verbose = ($opt_verbose ? 1 : 0);
 $opt_sync = $opt_sync || 0;
 
 if ($opt_help || @ARGV < 2) {
-    print "syntax: $0 [options] <servername> <catalog-zone-name>\n\n";
+    print "syntax: $0 [options] <servername> <catalog-zone> [<zone file>]\n\n";
     print "Imports an external catalog zone (RFC 9432) into Sauron as a\n";
     print "shadow catalog zone (type C, catalog_only).\n\n";
     print "options:\n",
-	"\t--nameserver=<ns>\tuse this nameserver for AXFR transfer\n",
-	"\t--file=<path>\t\timport from zone file instead of AXFR\n",
+	"\t--nameserver=<spec>\tAXFR source: <host>[:port][/zone]\n",
+	"\t--axfr-zone=<zone>\toverride zone name used for AXFR\n",
+	"\t--axfr-port=<port>\toverride AXFR TCP port\n",
 	"\t--group=<name>\t\tassign imported member zones to this group\n",
 	"\t--catalog-only\t\tmark shadow catalog zone as catalog_only\n",
 	"\t\t\t\t(skip named.conf and zone file generation)\n",
@@ -50,11 +53,28 @@ if ($opt_help || @ARGV < 2) {
 	"\t--verbose\t\tdisplay detailed progress\n",
 	"\t--notransaction\t\tdo not use transactions\n",
 	"\t--help\t\t\tdisplay this help\n\n";
+    print "examples:\n",
+	"\t$0 myserver catalog.example.com /tmp/catalog.zone\n",
+	"\t$0 --nameserver=ns1.example.net:5353 myserver catalog.example.com\n\n";
     exit(($opt_help ? 0 : 1));
 }
 
 $servername = shift;
 $catalogname = shift;
+$zonefile = shift;  # optional third positional arg
+$axfr_zone = '';
+$axfr_ns = '';
+$axfr_port = 53;
+
+# Zone file can come from positional arg or --nameserver for AXFR
+if ($zonefile) {
+    fatal("cannot specify both <zone file> and --nameserver")
+	if ($opt_nameserver);
+    $opt_file = $zonefile;
+}
+
+fatal("one of <zone file> or --nameserver must be specified")
+    unless ($opt_file || $opt_nameserver);
 
 $user = (getpwuid($<))[0];
 set_muser($user);
@@ -64,10 +84,25 @@ db_connect();
 $serverid = get_server_id($servername);
 fatal("cannot find server: $servername") unless ($serverid > 0);
 
-# Validate nameserver option
+# Validate AXFR source options
 if ($opt_nameserver) {
-    fatal("invalid nameserver: $opt_nameserver")
-	unless (valid_domainname($opt_nameserver) || is_cidr($opt_nameserver));
+    ($axfr_ns, $axfr_port, $axfr_zone) = parse_nameserver_spec($opt_nameserver);
+
+    fatal("invalid nameserver: $axfr_ns")
+	unless (valid_domainname($axfr_ns) || is_cidr($axfr_ns)
+		|| $axfr_ns =~ /^[0-9a-fA-F:]+$/);
+
+    if ($opt_axfr_port) {
+	fatal("invalid --axfr-port value: $opt_axfr_port")
+	    unless ($opt_axfr_port =~ /^\d+$/ && $opt_axfr_port > 0 && $opt_axfr_port < 65536);
+	$axfr_port = $opt_axfr_port;
+    }
+
+    if ($opt_axfr_zone) {
+	fatal("--axfr-zone and --nameserver=<host>[:port]/<zone> cannot both define AXFR zone")
+	    if ($axfr_zone ne '');
+	$axfr_zone = $opt_axfr_zone;
+    }
 }
 
 # Validate catalog zone name
@@ -75,6 +110,13 @@ fatal("invalid catalog zone name: $catalogname")
     unless (valid_domainname($catalogname));
 $catalogname =~ s/\.$//;
 $origin = $catalogname . '.';
+
+if ($opt_nameserver) {
+	$axfr_zone = $catalogname unless ($axfr_zone);
+	$axfr_zone =~ s/\.$//;
+	fatal("invalid AXFR zone name: $axfr_zone")
+	unless (valid_domainname($axfr_zone));
+}
 
 # Validate group if specified
 if ($opt_group) {
@@ -91,7 +133,8 @@ if ($opt_file) {
     fatal("cannot read zone file: $opt_file") unless (-r $opt_file);
     process_zonefile($opt_file, $catalogname, \%zonedata, 0);
 } else {
-    process_zonedns($catalogname, \%zonedata, $opt_nameserver, $opt_verbose);
+	print "AXFR source: $axfr_ns:$axfr_port zone=$axfr_zone\n" if ($opt_verbose);
+	process_zonedns_axfr($axfr_zone, \%zonedata, $axfr_ns, $axfr_port, $opt_verbose);
 }
 
 ##############################
@@ -444,5 +487,155 @@ print "  Removed: $removed\n" if ($removed > 0);
 print "  (dry-run mode - no changes made)\n" if ($opt_dryrun);
 
 exit($failed > 0 ? 1 : 0);
+
+
+sub parse_nameserver_spec($) {
+    my ($spec) = @_;
+    my ($host, $port, $zone);
+
+    $host = $spec;
+    $port = 53;
+    $zone = '';
+
+    if ($host =~ /^(.+)\/(\S+)$/) {
+	$host = $1;
+	$zone = $2;
+    }
+
+    # Support [ipv6]:port and host:port
+    if ($host =~ /^\[([^\]]+)\]:(\d+)$/) {
+	$host = $1;
+	$port = $2;
+    }
+    elsif ($host =~ /^([^:]+):(\d+)$/) {
+	$host = $1;
+	$port = $2;
+    }
+
+    return ($host, $port, $zone);
+}
+
+
+sub process_zonedns_axfr($$$$$) {
+    my ($zone, $data, $nameserver, $port, $verbose) = @_;
+    my (@zonedata, $rr, $domain, $type, $class, $ttl, $c, $rec, $tmp);
+    my $resolver = Net::DNS::Resolver->new;
+    my $ucount = 0;
+    my $origin = $zone;
+
+    $origin .= '.' unless ($origin =~ /\.$/);
+
+    $resolver->nameservers($nameserver) if ($nameserver);
+    $resolver->port($port) if ($port);
+
+    print "Zone transfer...\n" if ($verbose);
+    @zonedata = $resolver->axfr($zone);
+    fatal("zone transfer failed: " . $resolver->errorstring)
+	if (@zonedata < 1);
+
+    foreach $rr (@zonedata) {
+	$domain = $rr->name . '.';
+	$type = $rr->type;
+	$class = $rr->class;
+	$ttl = $rr->ttl;
+
+	next unless ($class eq 'IN');
+	unless ($type =~ /^(SOA|A|AAAA|PTR|CNAME|MX|NS|TXT|HINFO|SRV|WKS|CAA|DS|SSHFP|TLSA|NAPTR)$/) {
+	    $ucount++;
+	    print "Skipping: " . $rr->string . "\n" if ($verbose);
+	    next;
+	}
+
+	unless ($data->{$domain}) {
+	    $data->{$domain} = {
+		TTL => $ttl,
+		CLASS => $class,
+		SOA => '',
+		A => [],
+		AAAA => [],
+		PTR => [],
+		CNAME => '',
+		MX => [],
+		NS => [],
+		TXT => [],
+		HINFO => ['',''],
+		CAA => [],
+		DS => [],
+		SSHFP => [],
+		TLSA => [],
+		NAPTR => [],
+		WKS => [],
+		SRV => []
+	      };
+	}
+
+	$rec = $data->{$domain};
+
+	if ($type eq 'A') {
+	    push @{$rec->{A}}, $rr->address;
+	}
+	elsif ($type eq 'AAAA') {
+	    push @{$rec->{AAAA}}, lc($rr->address);
+	}
+	elsif ($type eq 'SOA') {
+	    $rec->{SOA} = join(" ",($rr->mname,$rr->rname,$rr->serial,
+				    $rr->refresh,$rr->retry,
+				    $rr->expire,$rr->minimum));
+	}
+	elsif ($type eq 'PTR') {
+	    push @{$rec->{PTR}}, $rr->ptrdname;
+	}
+	elsif ($type eq 'CNAME') {
+	    $rec->{CNAME} = $rr->cname . '.';
+	}
+	elsif ($type eq 'MX') {
+	    $tmp = $rr->exchange . '.';
+	    $tmp = '$DOMAIN'
+		if (remove_origin($tmp,$origin) eq
+		    remove_origin($domain,$origin));
+
+	    push @{$rec->{MX}}, $rr->preference . " " . $tmp;
+	}
+	elsif ($type eq 'NS') {
+	    push @{$rec->{NS}}, $rr->nsdname . '.';
+	}
+	elsif ($type eq 'TXT') {
+	    push @{$rec->{TXT}}, $rr->txtdata;
+	}
+	elsif ($type eq 'WKS') {
+	   # ignore...
+	}
+	elsif ($type eq 'HINFO') {
+	    $rec->{HINFO}[0] = $rr->cpu;
+	    $rec->{HINFO}[1] = $rr->os;
+	}
+	elsif ($type eq 'CAA') {
+	    push @{$rec->{CAA}}, join(" ",($rr->flags,$rr->tag,$rr->value));
+	}
+	elsif ($type eq 'DS') {
+	    push @{$rec->{DS}}, join(" ",($rr->keytag,$rr->algorithm,$rr->digtype,$rr->digest));
+	}
+	elsif ($type eq 'SSHFP') {
+	    push @{$rec->{SSHFP}}, join(" ",($rr->flags,$rr->tag,$rr->value));
+	}
+	elsif ($type eq 'TLSA') {
+	    push @{$rec->{TLSA}}, join(" ",($rr->usage,$rr->selector,$rr->matchingtype,$rr->cert));
+	}
+	elsif ($type eq 'NAPTR') {
+	    push @{$rec->{NAPTR}}, join(" ",($rr->order,$rr->preference,
+					   uc($rr->flags),$rr->service,
+					   $rr->regexp,$rr->replacement));
+	}
+	elsif ($type eq 'SRV') {
+	    push @{$rec->{SRV}}, join(" ",($rr->priority,$rr->weight,
+					 $rr->port,$rr->target . '.'));
+	}
+
+	$c++;
+    }
+
+    print "Processed $c records (ignored $ucount records)\n"
+	if ($verbose);
+}
 
 # eof
