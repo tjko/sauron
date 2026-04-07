@@ -22,6 +22,27 @@
 	  - BIND zone file generator outputs group TXT records per member
 	  - New tables: zone_catalog_groups, catalog_group_defs
 	  - New "Catalog Groups" menu item and inline link from catalog zone view
+	- Added Aggregate Catalog Zones (type A) for multi-source catalog
+	  merging (RFC 9432) [svamberg]
+	  - New zone type 'A' merges members from multiple source catalog
+	    zones (type C) into a single output catalog zone
+	  - Priority-based conflict resolution when the same member zone
+	    appears in multiple source catalogs (lower priority wins)
+	  - New table: catalog_compositions (source/priority mapping)
+	  - CGI composition editor (ftype 16) for selecting sources and
+	    setting priorities
+	  - Generator produces merged zone file with conflict reporting
+	- Added 'catalog_only' flag for zones [svamberg]
+	  - Zones marked catalog_only are skipped entirely during generation
+	    (no named.conf entry, no zone file)
+	  - Intended for shadow catalog zones imported from external sources
+	- Added import-catalog-zone script [svamberg]
+	  - Imports external catalog zones via AXFR or zone file
+	  - Parses RFC 9432 PTR (member zones) and TXT (group assignments)
+	  - Creates shadow catalog zone (type C, catalog_only) in Sauron
+	  - --sync mode for incremental updates (add new, remove stale members)
+	  - --dryrun mode for safe preview without database changes
+	  - Automatic group definition creation from imported catalog data
 	- Added new option --keep-pending for sauron command [svamberg]
 	- Add check-reverse utility script for DNS PTR record validation [svamberg]
 	  - Verifies that A/AAAA records have corresponding PTR records in DNS

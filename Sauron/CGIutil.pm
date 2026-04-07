@@ -688,6 +688,23 @@ sub form_check_form($$$) {
       }
       $data->{$tag} = \%member_groups;
     }
+    elsif ($type == 16) { # Catalog composition editor (check input)
+      # Collect selected source catalog zones and priorities
+      my @selected = ();
+      my %priorities;
+      my $count = param($p."_count") || 0;
+      for my $j (0..$count-1) {
+        my $val = param($p."_".$j);
+        if (defined $val && $val) {
+          push @selected, int($val);
+          my $prio = param($p."_prio_".$j);
+          $prio = 100 unless (defined $prio && $prio > 0);
+          $priorities{int($val)} = int($prio);
+        }
+      }
+      $data->{$tag} = \@selected;
+      $data->{composition_priorities} = \%priorities;
+    }
   }
   return 0;
 }
@@ -1518,6 +1535,52 @@ sub form_magic($$$) {
 				 -value=>$gname, -checked=>$is_checked), "</TD>";
 	}
 	print "</TR>";
+      }
+      print "</TABLE></TD>";
+    }
+    elsif ($rec->{ftype} == 16) { # Catalog composition editor (edit)
+      print td($rec->{name}), "<TD><TABLE>";
+      my $available = $data->{'available_source_catalogs'} || [];
+      my $selected = $data->{$rec->{tag}} || [];
+      my %sel_hash = map { $_ => 1 } @{$selected};
+      my $priorities = $data->{'composition_priorities'} || {};
+      my $total_count = scalar(@{$available});
+
+      # Load current params if form is being re-edited
+      my $count = param($p1."_count");
+      if (defined $count && $count > 0) {
+        %sel_hash = ();
+        %{$priorities} = ();
+        for $j (0..$count-1) {
+          my $cat_id = param($p1."_".$j);
+          if ($cat_id) {
+            $sel_hash{$cat_id} = 1;
+            my $prio = param($p1."_prio_".$j);
+            $priorities->{$cat_id} = $prio if (defined $prio);
+          }
+        }
+      }
+
+      print hidden(-name=>$p1."_count",-value=>$total_count);
+      print "<TR bgcolor=\"#cccccc\">",
+            "<TD><B>Select</B></TD><TD><B>Catalog Zone</B></TD>",
+            "<TD><B>Priority</B></TD><TD><B>Comment</B></TD></TR>";
+
+      for $j (0..$#{$available}) {
+        my $cat_id = $$available[$j][0];
+        my $cat_name = $$available[$j][1];
+        my $cat_comment = $$available[$j][2] || '';
+        my $is_checked = $sel_hash{$cat_id} ? 'on' : '';
+        my $prio_val = $priorities->{$cat_id} || 100;
+
+        print "<TR><TD>",
+              checkbox(-label=>'', -name=>$p1."_".$j,
+                       -value=>$cat_id, -checked=>$is_checked),
+              "</TD><TD>$cat_name</TD><TD>",
+              textfield(-name=>$p1."_prio_".$j, -size=>5,
+                        -maxlength=>5, -value=>$prio_val,
+                        -override=>1),
+              "</TD><TD>$cat_comment</TD></TR>";
       }
       print "</TABLE></TD>";
     }
