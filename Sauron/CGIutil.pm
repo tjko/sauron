@@ -1582,7 +1582,10 @@ sub form_magic($$$) {
                         -override=>1),
               "</TD><TD>$cat_comment</TD></TR>";
       }
-      print "</TABLE></TD>";
+      print "<tr><td colspan=4><font size=-1 color=\"blue\">",
+            "Priority is used to determine the order of catalogs in the composition. Lower values have higher priority.",
+            "</font></td></tr>",
+            "</TABLE></TD>";
     }
     elsif ($rec->{ftype} == 101) {
       undef @q; undef @lst; undef %lsth;
