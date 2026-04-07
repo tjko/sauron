@@ -351,7 +351,7 @@ subtest 'generate aggregate zone file' => sub {
     close($fh);
 
     # Verify version record
-    like($content, qr/version\.catalog\s+.*\tIN\tTXT\t"2"/,
+    like($content, qr/version\.catalog\s+.*\s+IN\s+TXT\s+"2"/,
          'contains version.catalog TXT "2"');
 
     # Verify members from catalog1
@@ -383,9 +383,9 @@ subtest 'generate aggregate zone file' => sub {
     # Find the uuid for shared's PTR line and check its group
     my $shared_zone_id = get_zone_id('shared.example.com', $serverid);
     if ($shared_zone_id > 0) {
-        like($content, qr/uuid-$shared_zone_id\.zones\.catalog\s+.*\tPTR\s+shared\.example\.com\./,
+        like($content, qr/uuid-$shared_zone_id\.zones\.catalog\s+.*\s+PTR\s+shared\.example\.com\./,
              'shared uses correct uuid in aggregate');
-        like($content, qr/group\.uuid-$shared_zone_id\.zones\.catalog\s+.*\tTXT\s+"shared-group"/,
+        like($content, qr/group\.uuid-$shared_zone_id\.zones\.catalog\s+.*\s+TXT\s+"shared-group"/,
              'shared group from catalog1 (priority 10) wins');
     }
 
@@ -595,7 +595,7 @@ subtest 'generate after priority swap - conflict winner changes' => sub {
     # With catalog1 at priority=1 (wins), shared's group should be from catalog1
     my $shared_zid = get_zone_id('shared.example.com', $serverid);
     if ($shared_zid > 0) {
-        like($content, qr/group\.uuid-$shared_zid\.zones\.catalog\s+.*\tTXT\s+"shared-group"/,
+        like($content, qr/group\.uuid-$shared_zid\.zones\.catalog\s+.*\s+TXT\s+"shared-group"/,
              'shared group from catalog1 (now priority=1) wins');
     }
 };
