@@ -1,0 +1,32 @@
+; test/catalog2.example.com.zone
+; Test catalog zone with RFC 9432 format - source catalog #2
+; Contains overlapping member (shared.example.com) for conflict testing
+;
+$TTL 0
+$ORIGIN catalog2.example.com.
+@	IN	SOA	ns1.example.com. admin.example.com. (
+		2024010101	; serial
+		3600		; refresh
+		900		; retry
+		604800		; expire
+		0		; minimum
+		)
+	IN	NS	invalid.
+;
+; Catalog zone version (RFC 9432 §4.2)
+;
+version.catalog		IN	TXT	"2"
+;
+; Member zones (PTR records under *.zones.catalog)
+;
+uuid-101.zones.catalog	IN	PTR	gamma.example.com.
+uuid-102.zones.catalog	IN	PTR	delta.example.com.
+uuid-103.zones.catalog	IN	PTR	shared.example.com.
+;
+; Group assignments (TXT records under group.*.zones.catalog)
+;
+group.uuid-101.zones.catalog	IN	TXT	"monitoring"
+group.uuid-102.zones.catalog	IN	TXT	"monitoring"
+group.uuid-103.zones.catalog	IN	TXT	"overlap-group"
+;
+; eof

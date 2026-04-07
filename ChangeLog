@@ -59,6 +59,7 @@
 	    - t/10-db-integration.t: database connectivity tests (requires SAURON_TEST_DSN)
 	    - t/11-import-generate.t: end-to-end import-zone/generatehosts/sauron tests
 	    - t/12-zone-roundtrip.t: zone import → generate → compare round-trip test
+	    - t/13-catalog-aggregate.t: import catalog zones, aggregate, compare tests
 	  - Added zone canonicalization tool (t/zone-canonicalize.pl) for
 	    diff-based comparison of zone files (normalizes FQDN, case, SOA serial)
 	  - Added comprehensive test zone (test/roundtrip.example.com.zone) with
