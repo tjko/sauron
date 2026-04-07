@@ -103,7 +103,9 @@ if ($opt_file) {
 #   group.<uuid>.zones.catalog.<origin>  TXT "<group-name>"
 
 # Verify catalog version
-$version_key = "version.$origin";
+# Sauron generator writes 'version.catalog' relative to zone origin, so
+# after FQDN expansion it becomes 'version.catalog.<origin>'.
+$version_key = "version.catalog.$origin";
 if ($zonedata{$version_key} && @{$zonedata{$version_key}{TXT}} > 0) {
     $catver = $zonedata{$version_key}{TXT}[0];
     $catver =~ s/^"(.*)"$/$1/;  # strip quotes if present
@@ -115,8 +117,10 @@ if ($zonedata{$version_key} && @{$zonedata{$version_key}{TXT}} > 0) {
 }
 
 # Extract member zones and group assignments
+# Sauron generator uses 'uuid-xxx.zones.catalog' and 'group.uuid-xxx.zones.catalog'
+# relative to zone origin, expanding to '*.zones.catalog.<origin>'.
 %members = ();  # uuid => { name => 'zone.name', groups => ['g1', ...] }
-$zones_suffix = "zones.$origin";
+$zones_suffix = "zones.catalog.$origin";
 
 foreach $domain (keys %zonedata) {
     my $rec = $zonedata{$domain};
