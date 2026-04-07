@@ -167,7 +167,10 @@ if ($opt_verbose) {
 
 fatal("no member zones found in catalog zone") if ($member_count == 0);
 
-exit(0) if ($opt_dryrun && !$opt_sync);
+if ($opt_dryrun && !$opt_sync) {
+    print "(dry-run mode - no changes will be made)\n";
+    exit(0);
+}
 
 ##############################
 # Database operations
