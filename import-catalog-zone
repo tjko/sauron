@@ -345,9 +345,10 @@ foreach my $uuid (sort { $members{$a}{name} cmp $members{$b}{name} } @member_uui
 	my %newzone;
 	$newzone{server}  = $serverid;
 	$newzone{type}    = 'S';
+	$newzone{catalog_only} = 'true';
 	$newzone{reverse} = 'false';
 	$newzone{name}    = $mname;
-	$newzone{comment} = "Imported from catalog $catalogname";
+	$newzone{comment} = "Imported from catalog $catalogname (shadow member)";
 	$newzone{serial}  = 1;
 	$newzone{refresh} = 3600;
 	$newzone{retry}   = 900;
