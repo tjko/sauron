@@ -602,38 +602,53 @@ subtest 'generate after priority swap - conflict winner changes' => sub {
 
 
 # =========================================================================
-# Test 18: --group auto-creates non-existent Sauron group
+# Test 18: --group auto-creates catalog group definition (zone-scoped)
 # =========================================================================
-subtest '--group auto-creates non-existent group' => sub {
+subtest '--group auto-creates catalog group definition' => sub {
     plan skip_all => 'catalog1 not created' unless ($cat1_id && $cat1_id > 0);
 
     my $test_group = 'catalog-import-test-grp';
 
-    # Ensure group does not exist yet
-    my $pre_gid = get_group_by_name($serverid, $test_group);
-    if ($pre_gid > 0) {
-        db_exec("DELETE FROM groups WHERE id=$pre_gid");
-    }
+    # Ensure group definition does not exist yet in catalog zone
+    db_exec("DELETE FROM catalog_group_defs " .
+            "WHERE catalog_zone_id=$cat1_id AND group_name=" .
+            db_encode_str($test_group));
 
-    # Re-import catalog1 with --group (group should be auto-created)
+    # Re-import catalog1 with trailing --group/--sync (group def should be auto-created)
     my $zonefile = "$testdata/catalog1.example.com.zone";
     my $cmd = "$install_dir/import-catalog-zone --verbose --catalog-only " .
-              "--group=$test_group " .
-              "$server catalog1.example.com $zonefile 2>&1";
+              "$server catalog1.example.com $zonefile " .
+	      "--group=$test_group --sync 2>&1";
     my $out = `$cmd`;
     my $rc = $? >> 8;
     is($rc, 0, 'import-catalog-zone --group exits 0') or diag($out);
     like($out, qr/[Cc]reat.*group.*$test_group/,
          'output mentions group creation');
 
-    # Verify group now exists
-    my $gid = get_group_by_name($serverid, $test_group);
-    ok($gid > 0, "group '$test_group' auto-created (id=$gid)");
+    # Verify group definition now exists in catalog zone (zone-scoped)
+    my $grp_rec = {};
+    get_catalog_group_defs($cat1_id, $grp_rec);
+    my %gnames = map { $_->[1] => 1 } @{$grp_rec->{groups}};
+    ok($gnames{$test_group},
+       "group def '$test_group' auto-created in catalog zone");
 
-    # Cleanup: remove the test group
-    if ($gid > 0) {
-        db_exec("DELETE FROM groups WHERE id=$gid");
+    # Verify group assigned to members
+    my $mem_rec = {};
+    get_zone_catalog_members($cat1_id, $mem_rec);
+    my $has_test_group = 0;
+    for my $m (@{$mem_rec->{members}}) {
+        my $grps = $m->[7];
+        $has_test_group++ if (ref($grps) eq 'ARRAY' && grep { $_ eq $test_group } @{$grps});
     }
+    ok($has_test_group > 0,
+       "group '$test_group' assigned to at least one member");
+
+    # Cleanup: remove the test group definition
+    db_exec("DELETE FROM zone_catalog_groups " .
+            "WHERE group_name=" . db_encode_str($test_group));
+    db_exec("DELETE FROM catalog_group_defs " .
+            "WHERE catalog_zone_id=$cat1_id AND group_name=" .
+            db_encode_str($test_group));
 };
 
 

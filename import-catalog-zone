@@ -28,6 +28,8 @@ load_config();
 
 ##############################
 
+Getopt::Long::Configure('permute');
+
 GetOptions("help|h", "verbose|v", "dryrun|dry-run|n", "sync",
 	   "nameserver=s", "axfr-zone=s", "axfr-port=i",
 	   "catalog-only", "group=s", "ignore-groups",
@@ -45,8 +47,8 @@ if ($opt_help || @ARGV < 2) {
 	"\t--nameserver=<spec>\tAXFR source: <host>[:port][/zone]\n",
 	"\t--axfr-zone=<zone>\toverride zone name used for AXFR\n",
 	"\t--axfr-port=<port>\toverride AXFR TCP port\n",
-	"\t--group=<name>\t\tassign imported member zones to this group\n",
-	"\t\t\t\t(group is auto-created if it does not exist)\n",
+	"--group=<name>\t\tassign imported member zones to this catalog group\n",
+	"\t\t\t\t(group definition is auto-created in the catalog zone)\n",
 	"\t--ignore-groups\t\tignore RFC 9432 group TXT records from import\n",
 	"\t--catalog-only\t\tmark shadow catalog zone as catalog_only\n",
 	"\t\t\t\t(skip named.conf and zone file generation)\n",
@@ -64,6 +66,7 @@ if ($opt_help || @ARGV < 2) {
 $servername = shift;
 $catalogname = shift;
 $zonefile = shift;  # optional third positional arg
+fatal("too many arguments: " . join(' ', @ARGV)) if (@ARGV > 0);
 $axfr_zone = '';
 $axfr_ns = '';
 $axfr_port = 53;
@@ -120,23 +123,10 @@ if ($opt_nameserver) {
 	unless (valid_domainname($axfr_zone));
 }
 
-# Validate group if specified - auto-create if missing
+# Validate --group name (actual creation deferred until catalog zone is known)
 if ($opt_group) {
-    $gid = get_group_by_name($serverid, $opt_group);
-    if ($gid < 0) {
-	print "Creating group '$opt_group' for server '$servername'\n"
-	    if ($opt_verbose);
-	unless ($opt_dryrun) {
-	    $gid = add_group({server => $serverid, name => $opt_group,
-			       type => 0, comment => "Created by import-catalog-zone",
-			       dhcp => [], dhcp6 => [], printer => []});
-	    fatal("cannot create group '$opt_group' (error=$gid)") if ($gid < 0);
-	    print "  Created group '$opt_group' (id=$gid)\n" if ($opt_verbose);
-	} else {
-	    print "[dry-run] Would create group: $opt_group\n";
-	    $gid = -999;
-	}
-    }
+    fatal("invalid --group name: $opt_group")
+	unless ($opt_group =~ /^[a-zA-Z0-9_][a-zA-Z0-9_.:-]*$/);
 }
 
 ##############################
@@ -345,6 +335,22 @@ unless ($opt_dryrun || $opt_ignore_groups) {
     }
 }
 
+# Add --group to catalog group definitions (independent of --ignore-groups)
+if ($opt_group && !$opt_dryrun && !$known_groups{$opt_group}) {
+    print "  Adding group definition: $opt_group\n" if ($opt_verbose);
+    my $res = add_catalog_group_def($catalog_zone_id, $opt_group,
+				    "Created by import-catalog-zone --group");
+    if ($res < 0 && $res != -10) {
+	print STDERR "WARNING: cannot add group definition '$opt_group' (error=$res)\n";
+    } else {
+	$known_groups{$opt_group} = 1;
+	print "  Created group '$opt_group' for catalog zone (id=$catalog_zone_id)\n"
+	    if ($opt_verbose);
+    }
+} elsif ($opt_group && $opt_dryrun) {
+    print "[dry-run] Would create group definition: $opt_group\n";
+}
+
 ##############################
 # Process member zones
 
@@ -461,30 +467,18 @@ foreach my $uuid (sort { $members{$a}{name} cmp $members{$b}{name} } @member_uui
 	$skipped++ unless ($opt_sync);
     }
 
-    # Set groups for member
-    if (@mgroups > 0 && !$opt_ignore_groups) {
+    # Add explicit --group to member group list
+    if ($opt_group) {
+	push @mgroups, $opt_group unless grep { $_ eq $opt_group } @mgroups;
+    }
+
+    # Set groups for member (skip only when ignoring groups AND no explicit --group)
+    if (@mgroups > 0 && (!$opt_ignore_groups || $opt_group)) {
 	$res = set_member_groups($zone_id, $catalog_zone_id, \@mgroups);
 	if ($res < 0) {
 	    print STDERR "WARNING: cannot set groups for '$mname' (error=$res)\n";
 	} elsif ($opt_verbose) {
 	    print "    Groups: " . join(', ', @mgroups) . "\n";
-	}
-    }
-
-    # Assign to Sauron group if specified (best-effort)
-    if ($opt_group && $gid > 0) {
-	# Some schemas do not have zones.grp. Use apex host record when present.
-	my @hq;
-	db_query("SELECT id, grp FROM hosts " .
-		 "WHERE zone=$zone_id AND domain='\@' ORDER BY id LIMIT 1", \@hq);
-	if (@hq > 0) {
-	    my $host_id = $hq[0][0];
-	    my $cur_grp = $hq[0][1];
-	    if (!$cur_grp || $cur_grp < 1) {
-		db_exec("UPDATE hosts SET grp=$gid WHERE id=$host_id");
-	    }
-	} elsif ($opt_verbose) {
-	    print "    Note: no apex host record for '$mname'; group assignment skipped\n";
 	}
     }
 }
