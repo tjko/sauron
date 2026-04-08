@@ -197,6 +197,55 @@ CREATE INDEX idx_catalog_group_defs_catalog ON catalog_group_defs(catalog_zone_i
 
 ALTER TABLE catalog_group_defs OWNER TO sauron;
 
+/** This table contains CAA record entries. **/
+
+CREATE TABLE caa_entries (
+    id          SERIAL PRIMARY KEY, /* unique ID */
+    type        INT4 NOT NULL, /* type:
+                        1=host */
+    ref         INT4 NOT NULL, /* ptr to table specefied by type field
+                        -->hosts.id */
+    flags       INT4 NOT NULL CHECK (flags >= 0 AND flags <= 255), /* RFC 8659: flags */
+    tag         TEXT NOT NULL CHECK (tag ~ '^[A-Za-z0-9]+$'), /* property tag */
+    value       TEXT NOT NULL, /* property value without surrounding quotes */
+    comment     TEXT /* comment */
+);
+
+CREATE INDEX caa_entries_ref_index ON caa_entries (type,ref);
+CREATE INDEX caa_entries_flags_tag_index ON caa_entries (flags,tag);
+
+ALTER TABLE caa_entries OWNER TO sauron;
+
+/* Migrate legacy apex CAA records imported as custom zone entries. */
+INSERT INTO caa_entries (type,ref,flags,tag,value,comment)
+SELECT 1,
+       h.id,
+       (m.match)[1]::INT4,
+       lower((m.match)[2]),
+       regexp_replace((m.match)[3], '^"(.*)"$', '\\1'),
+       t.comment
+FROM txt_entries t,
+     zones z,
+     hosts h,
+     LATERAL (SELECT regexp_match(t.txt,
+       '^\\s*[@]\\s+(?:IN\\s+)?CAA\\s+(\\d+)\\s+([A-Za-z0-9]+)\\s+(.+?)\\s*$') AS match) m
+WHERE t.type=12
+  AND t.ref=z.id
+  AND h.zone=z.id
+  AND h.domain='@'
+  AND m.match IS NOT NULL;
+
+DELETE FROM txt_entries
+WHERE id IN (
+    SELECT t.id
+    FROM txt_entries t,
+         LATERAL (SELECT regexp_match(t.txt,
+           '^\\s*[@]\\s+(?:IN\\s+)?CAA\\s+(\\d+)\\s+([A-Za-z0-9]+)\\s+(.+?)\\s*$') AS match) m
+    WHERE t.type=12
+      AND m.match IS NOT NULL
+);
+
+
 /* set DB version */
 
 UPDATE settings SET value='1.8' where setting='dbversion';

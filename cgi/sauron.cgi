@@ -163,6 +163,7 @@ $debug_mode = $SAURON_DEBUG_MODE;
 		      ['Add TLSA rec.','sub=add&type=12',['flags','TLSA']],
 		      ['Add TXT rec.','sub=add&type=13',['flags','TXT']],
 		      ['Add NAPTR rec.','sub=add&type=14',['flags','NAPTR']],
+          ['Add CAA rec.','sub=add&type=15',['flags','CAA']],
 		      [],
 		      ['Add reservation','sub=add&type=101',['flags','RESERV']]
 		     ],

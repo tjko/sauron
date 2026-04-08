@@ -62,6 +62,7 @@ sub rtype($) {
 		 8   => 'srv entry',
 		 9   => 'dhcp only',
 		 10  => 'zone',
+         15  => 'caa entry',
 		 101 => 'reservation');
 
     return $htype{$r} if (defined($htype{$r}));
