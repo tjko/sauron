@@ -220,29 +220,34 @@ ALTER TABLE caa_entries OWNER TO sauron;
 INSERT INTO caa_entries (type,ref,flags,tag,value,comment)
 SELECT 1,
        h.id,
-       (m.match)[1]::INT4,
-       lower((m.match)[2]),
-       regexp_replace((m.match)[3], '^"(.*)"$', '\\1'),
+             (raw.match)[3]::INT4,
+             lower((raw.match)[4]),
+             (raw.match)[5],
        t.comment
 FROM txt_entries t,
      zones z,
      hosts h,
      LATERAL (SELECT regexp_match(t.txt,
-       '^\\s*[@]\\s+(?:IN\\s+)?CAA\\s+(\\d+)\\s+([A-Za-z0-9]+)\\s+(.+?)\\s*$') AS match) m
+       '^[[:space:]]*[@][[:space:]]+([0-9]+[[:space:]]+)?(IN[[:space:]]+)?CAA[[:space:]]+([0-9]+)[[:space:]]+([A-Za-z0-9]+)[[:space:]]+"([^"]*)"[[:space:]]*$') AS match) raw
 WHERE t.type=12
   AND t.ref=z.id
   AND h.zone=z.id
   AND h.domain='@'
-  AND m.match IS NOT NULL;
+    AND raw.match IS NOT NULL;
 
 DELETE FROM txt_entries
 WHERE id IN (
     SELECT t.id
-    FROM txt_entries t,
+        FROM txt_entries t,
+                 zones z,
+                 hosts h,
          LATERAL (SELECT regexp_match(t.txt,
-           '^\\s*[@]\\s+(?:IN\\s+)?CAA\\s+(\\d+)\\s+([A-Za-z0-9]+)\\s+(.+?)\\s*$') AS match) m
+           '^[[:space:]]*[@][[:space:]]+([0-9]+[[:space:]]+)?(IN[[:space:]]+)?CAA[[:space:]]+([0-9]+)[[:space:]]+([A-Za-z0-9]+)[[:space:]]+"([^"]*)"[[:space:]]*$') AS match) raw
     WHERE t.type=12
-      AND m.match IS NOT NULL
+            AND t.ref=z.id
+            AND h.zone=z.id
+            AND h.domain='@'
+            AND raw.match IS NOT NULL
 );
 
 
