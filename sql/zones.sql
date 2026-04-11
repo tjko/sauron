@@ -17,11 +17,16 @@ CREATE TABLE zones (
 					 (only active zones are included in
 					  named configuration) */
        dummy	   BOOL DEFAULT false, /* dummy zone flag */
+       catalog_only BOOL DEFAULT false, /* if true, zone is not generated
+					   to named.conf or zone file;
+					   exists only as a catalog member */
        type	   CHAR(1) NOT NULL, /* zone type:
 					(H)int, 
 					(M)aster, 
 					(S)lave, 
-				        (F)orward */
+				        (F)orward,
+					(C)atalog,
+					(A)ggregate catalog */
        reverse	   BOOL DEFAULT false, /* true for reverse (arpa) zones */
        noreverse   BOOL DEFAULT false, /* if true, zone not used in reverse
 				          map generation */

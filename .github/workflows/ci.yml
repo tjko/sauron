@@ -205,6 +205,16 @@ jobs:
         run: prove -lv t/12-zone-roundtrip.t
         shell: bash
 
+      - name: Run catalog aggregate tests (TAP)
+        env:
+          PERL5LIB: "/usr/local/sauron:${{ github.workspace }}"
+          SAURON_TEST_DSN: "dbi:Pg:dbname=sauron_test;host=postgres"
+          SAURON_TEST_USER: ${{ env.POSTGRES_USER }}
+          SAURON_TEST_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
+          SAURON_INSTALL_DIR: /usr/local/sauron
+        run: prove -lv t/13-catalog-aggregate.t
+        shell: bash
+
       - name: Dump DB for artifacts
         if: always()
         run: |

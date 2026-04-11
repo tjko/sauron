@@ -197,6 +197,51 @@ CREATE INDEX idx_catalog_group_defs_catalog ON catalog_group_defs(catalog_zone_i
 
 ALTER TABLE catalog_group_defs OWNER TO sauron;
 
+
+/* Add catalog_only flag to zones table */
+
+ALTER TABLE zones ADD COLUMN catalog_only BOOL DEFAULT false;
+COMMENT ON COLUMN zones.catalog_only IS 'if true, zone is not generated to named.conf or zone file; exists only as a catalog member source';
+
+
+/** This table stores the composition of aggregate catalog zones (type A).
+    Each aggregate catalog zone is composed of one or more source
+    catalog zones (type C) with a priority for conflict resolution.
+    Lower priority number = higher precedence when the same member zone
+    appears in multiple source catalogs. **/
+
+CREATE TABLE catalog_compositions (
+       id                SERIAL PRIMARY KEY,    /* unique ID */
+       composite_zone_id INT4 NOT NULL,         /* ptr to zones table (type='A')
+                                                   -->zones.id */
+       source_zone_id    INT4 NOT NULL,         /* ptr to zones table (type='C')
+                                                   -->zones.id */
+       priority          INT4 NOT NULL DEFAULT 100,
+                                                /* lower number = higher priority
+                                                   in conflict resolution */
+
+       /* Constraints */
+       CONSTRAINT catalog_compositions_composite_fk
+           FOREIGN KEY (composite_zone_id) REFERENCES zones(id) ON DELETE CASCADE,
+       CONSTRAINT catalog_compositions_source_fk
+           FOREIGN KEY (source_zone_id) REFERENCES zones(id) ON DELETE CASCADE,
+       CONSTRAINT catalog_compositions_unique
+           UNIQUE (composite_zone_id, source_zone_id),
+       CONSTRAINT catalog_compositions_priority
+           CHECK (priority > 0),
+       CONSTRAINT catalog_compositions_no_self
+           CHECK (composite_zone_id != source_zone_id)
+);
+
+/* Indexes for fast lookups */
+CREATE INDEX idx_catalog_compositions_composite
+    ON catalog_compositions(composite_zone_id);
+CREATE INDEX idx_catalog_compositions_priority
+    ON catalog_compositions(composite_zone_id, priority);
+
+ALTER TABLE catalog_compositions OWNER TO sauron;
+
+
 /* set DB version */
 
 UPDATE settings SET value='1.8' where setting='dbversion';
