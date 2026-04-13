@@ -42,6 +42,7 @@ load_config();
 		sql/sshfp_entries.sql sql/tlsa_entries.sql sql/ds_entries.sql
 		sql/naptr_entries.sql
 		sql/zone_catalog_groups.sql sql/catalog_group_defs.sql
+		sql/catalog_compositions.sql
 		@;
 
 

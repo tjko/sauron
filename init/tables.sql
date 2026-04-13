@@ -48,8 +48,10 @@ CREATE TABLE zones ( /* zone table; contains zones */
 
        active	   BOOL DEFAULT true,
        dummy	   BOOL DEFAULT false,
+       catalog_only BOOL DEFAULT false,
        type	   CHAR(1) NOT NULL, /* (H)int, (M)aster, (S)lave, 
-				        (F)orward, ... */
+				        (F)orward, (C)atalog,
+					(A)ggregate catalog */
        reverse	   BOOL DEFAULT false, /* true for reverse (arpa) zones */
        noreverse   BOOL DEFAULT false, /* if true, zone not used in reverse
 				          map generation */

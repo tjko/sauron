@@ -31,8 +31,8 @@ $printer_conf=0;
 
 %yes_no_enum = (D=>'',Y=>'yes',N=>'no');
 %check_names_enum = (D=>'',W=>'warn',F=>'fail',I=>'ignore');
-# Catalog zones (C) are configured as type master in BIND (RFC 9432)
-%zone_type_enum = (M=>'master',S=>'slave',H=>'hint',F=>'forward',C=>'master');
+# Catalog zones (C) and aggregate catalog zones (A) are configured as type master in BIND (RFC 9432)
+%zone_type_enum = (M=>'master',S=>'slave',H=>'hint',F=>'forward',C=>'master',A=>'master');
 %forward_enum = (D=>'', O=>'only', F=>'first');
 %algorithm_enum = (157=>'hmac-md5');
 
@@ -392,6 +392,13 @@ sub make_dns() {
 
     $type=$zone_type_enum{$zone{type}};
     fatal("unknown zone type '$zone{type}'!") unless ($type ne '');
+
+    # Skip catalog-only zones - they exist only as catalog members
+    if ($zone{'catalog_only'} eq 't') {
+      print "Skipping catalog-only zone: $zonename\n" if ($opt_verbose);
+      next;
+    }
+
     if ($loopcounter >= $normalzones) {
       $subtype=$type;
       # process zones from master server
@@ -491,7 +498,7 @@ sub make_dns() {
     }
 
     # Catalog zones are treated as master zones for file generation (RFC 9432)
-    next unless ($type eq 'master' || $zone{type} eq 'C');
+    next unless ($type eq 'master' || $zone{type} eq 'C' || $zone{type} eq 'A');
 
     if ($zone{'dummy'} eq 't') {
       print "Skipping zone creation for dummy zone: $zonename\n";
@@ -573,7 +580,7 @@ sub make_dns() {
     fatal("no hostmaster defined either in server nor zone record for: " .
           "$zonename") if ($hostmaster eq '');
     fatal("server hostname not defined!") if ($hostname eq '');
-    fatal("no TTL defined!") unless ($TTL > 0 || $zone{type} eq 'C');
+    fatal("no TTL defined!") unless ($TTL > 0 || $zone{type} eq 'C' || $zone{type} eq 'A');
     if ($bind_conf) {
       print ZONEFILE '$TTL ' . "$TTL\t; default TTL for this zone\n;\n";
       print ZONEFILE '$ORIGIN ' . "$zonename.\n;\n";
@@ -606,8 +613,8 @@ sub make_dns() {
       }
     }
 
-    if ($zone{type} eq 'C' || !$has_ns) {
-      # Catalog zone or no NS records - add placeholder NS record
+    if ($zone{type} eq 'C' || $zone{type} eq 'A' || !$has_ns) {
+      # Catalog/aggregate zone or no NS records - add placeholder NS record
       printf ZONEFILE $ZFORMAT, '',$ttl,$class,'NS','invalid.'
         if ($bind_conf);
       printf TINYDNSFILE "&$zonename\:\:invalid.\:$ttl\:\:\n"
@@ -1740,6 +1747,68 @@ sub make_dns() {
       } else {
         print ZONEFILE ";\n; Catalog zone (no members currently)\n;\n" if ($bind_conf);
         print ZONEFILE "version.catalog\t$ttl\tIN\tTXT\t\"2\"\n" if ($bind_conf);
+      }
+    }
+
+    # Aggregate catalog zone - merge members from source catalog zones (RFC 9432)
+    if ($zone{type} eq 'A' && $bind_conf) {
+      my (@comps, %seen_names, @conflicts);
+
+      # Load source catalog zones ordered by priority
+      db_query("SELECT cc.source_zone_id, z.name, cc.priority " .
+               "FROM catalog_compositions cc " .
+               "JOIN zones z ON cc.source_zone_id = z.id " .
+               "WHERE cc.composite_zone_id = $zoneid " .
+               "ORDER BY cc.priority ASC, z.name ASC", \@comps);
+
+      if (@comps > 0) {
+        print ZONEFILE ";\n; Aggregate catalog zone members (RFC 9432)\n;\n";
+        print ZONEFILE "version.catalog\t$ttl\tIN\tTXT\t\"2\"\n";
+
+        for my $comp (@comps) {
+          my ($src_id, $src_name, $prio) = @$comp;
+          my $src_rec = {};
+          get_zone_catalog_members($src_id, $src_rec);
+
+          print ZONEFILE ";\n; Source: $src_name (priority=$prio)\n;\n";
+
+          next unless ($src_rec->{count} > 0);
+          for $i (0 .. $#{$src_rec->{members}}) {
+            my $mzone_name = $src_rec->{members}[$i][1];
+            my $mzone_id   = $src_rec->{members}[$i][0];
+            my $mgroups    = $src_rec->{members}[$i][7];
+            $mzone_name =~ s/\.\.?$//;
+
+            my $lc_name = lc($mzone_name);
+            if ($seen_names{$lc_name}) {
+              push @conflicts,
+                "  '$mzone_name' from '$src_name' (prio=$prio) " .
+                "skipped; $seen_names{$lc_name} has higher precedence (lower priority)";
+              next;
+            }
+            $seen_names{$lc_name} = "$src_name (prio=$prio)";
+
+            printf ZONEFILE $ZFORMAT,
+                "uuid-$mzone_id.zones.catalog",
+                $ttl, 'IN', 'PTR', "$mzone_name.";
+
+            if (ref($mgroups) eq 'ARRAY') {
+              for my $grp (@{$mgroups}) {
+                printf ZONEFILE $ZFORMAT,
+                    "group.uuid-$mzone_id.zones.catalog",
+                    $ttl, 'IN', 'TXT', "\"$grp\"";
+              }
+            }
+          }
+        }
+
+        if (@conflicts) {
+          print "CONFLICTS in aggregate zone '$zonename':\n";
+          for my $c (@conflicts) { print "$c\n"; }
+        }
+      } else {
+        print ZONEFILE ";\n; Aggregate catalog zone (no source catalogs configured)\n;\n";
+        print ZONEFILE "version.catalog\t$ttl\tIN\tTXT\t\"2\"\n";
       }
     }
 

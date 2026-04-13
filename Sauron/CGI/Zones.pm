@@ -37,7 +37,7 @@ sub write2log{
 } # End of write2log
 
 
-my %ztypenames=(M=>'master',S=>'slave',F=>'forward',H=>'hint',C=>'catalog');
+my %ztypenames=(M=>'master',S=>'slave',F=>'forward',H=>'hint',C=>'catalog',A=>'aggregate');
 
 my %naptr_flags=(
     0=>'(non-terminal)',
@@ -70,7 +70,7 @@ my %new_zone_form=(
   {ftype=>1, tag=>'comment', name=>'Comments', type=>'text', len=>80, maxlen=>200, 
    empty=>1, anchor=>1, whitesp=>'P'},
   {ftype=>3, tag=>'type', name=>'Type', type=>'enum', conv=>'U',
-   enum=>{M=>'Master', S=>'Slave', H=>'Hint', F=>'Forward', C=>'Catalog'}},
+   enum=>{M=>'Master', S=>'Slave', H=>'Hint', F=>'Forward', C=>'Catalog', A=>'Aggregate Catalog'}},
   {ftype=>3, tag=>'reverse', name=>'Reverse', type=>'enum',  conv=>'L',
    enum=>{f=>'No',t=>'Yes'}, iff=>['type','M']}
  ]
@@ -88,7 +88,7 @@ my %zone_form = (
   {ftype=>1, tag=>'comment', name=>'Comments', type=>'text', len=>80, maxlen=>200, # TVu.
    empty=>1, anchor=>1, whitesp=>'P'},
   {ftype=>4, tag=>'type', name=>'Type', type=>'enum', conv=>'U',
-   enum=>{M=>'Master', S=>'Slave', H=>'Hint', F=>'Forward', C=>'Catalog'}},
+   enum=>{M=>'Master', S=>'Slave', H=>'Hint', F=>'Forward', C=>'Catalog', A=>'Aggregate Catalog'}},
   {ftype=>4, tag=>'reverse', name=>'Reverse', type=>'enum',
    enum=>{f=>'No',t=>'Yes'}, iff=>['type','M']},
   {ftype=>3, tag=>'txt_auto_generation',
@@ -194,6 +194,9 @@ my %zone_form = (
    fields=>3, len=>[39,6,15], empty=>[0,1,1], elabels=>['IP','Port','comment'],
    iff=>['type','F']},
 
+  {ftype=>3, tag=>'catalog_only', name=>'Catalog-only (suppress generation)',
+   type=>'enum', enum=>{f=>'No',t=>'Yes'}, iff=>['type','C']},
+
   {ftype=>0, name=>'Catalog Zones', iff=>['type','C'], no_edit=>1},
   {ftype=>0, name=>'Catalog Zones', iff=>['type','M']},
   {ftype=>4, tag=>'catalog_member_count', name=>'Member zones count',
@@ -212,6 +215,12 @@ my %zone_form = (
    iff=>['type','M']},
   {ftype=>15, tag=>'member_groups', name=>'Catalog zone groups (RFC 9432)',
    iff=>['type','M']},
+
+  {ftype=>0, name=>'Aggregate Catalog Zone', iff=>['type','A']},
+  {ftype=>4, tag=>'compositions_list', name=>'Source catalog zones',
+   no_edit=>1, iff=>['type','A']},
+  {ftype=>16, tag=>'selected_source_catalogs',
+   name=>'Source catalog zones (with priority)', iff=>['type','A']},
 
   {ftype=>0, name=>'DHCP', iff=>['type','M']},
   {ftype=>2, tag=>'dhcp', name=>'Zone specific DHCP entries',
@@ -257,6 +266,10 @@ sub update_zone_wrapper($) {
   delete $rec->{catalog_group_defs};
   delete $rec->{catalog_group_defs_list};
   delete $rec->{catalog_group_manage_link};
+  delete $rec->{compositions};
+  delete $rec->{composition_count};
+  delete $rec->{compositions_list};
+  delete $rec->{available_source_catalogs};
   delete $rec->{cdate_str};
   delete $rec->{mdate_str};
   delete $rec->{pending_info};
@@ -278,7 +291,7 @@ sub select_zone($$)
   my (%server,%zonelist);
 
   #display zone selection list
-  my %ztypecolors=(M=>'#c0ffc0',C=>'#add0fe',S=>'#eeeeff',F=>'#eedfdf',H=>'#eeeebf');
+  my %ztypecolors=(M=>'#c0ffc0',C=>'#add0fe',S=>'#eeeeff',F=>'#eedfdf',H=>'#eeeebf',A=>'#d0b0ff');
   # 2022-08-10 mesrik: add last expired arg, no skipping here
   my $list=get_zone_list($serverid,0,0,0);
 # my $zlimit = 50; # Limit removed.
@@ -353,8 +366,8 @@ sub select_zone($$)
 
   get_server($serverid,\%server);
   if ($server{masterserver} > 0) {
-    %ztypecolors=(M=>'#eedeff',S=>'#eeeeff',F=>'#eedfdf',H=>'#eeeebf');
-    %ztypenames=(M=>'Slave (Master)',S=>'Slave',F=>'Forward',H=>'Hint');
+    %ztypecolors=(M=>'#eedeff',S=>'#eeeeff',F=>'#eedfdf',H=>'#eeeebf',C=>'#add0fe',A=>'#d0b0ff');
+    %ztypenames=(M=>'Slave (Master)',S=>'Slave',F=>'Forward',H=>'Hint',C=>'Catalog',A=>'Aggregate');
 
     print h4("Zones from master server:"),
           p,"<TABLE width=98% bgcolor=white border=0>",

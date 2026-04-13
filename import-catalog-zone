@@ -1,0 +1,700 @@
+#!/usr/bin/perl -I/opt/sauron
+#
+# import-catalog-zone - imports external DNS catalog zone (RFC 9432) into Sauron
+#
+# Creates a shadow catalog zone (type 'C', catalog_only=true) from an
+# external catalog zone obtained via AXFR or from a zone file.
+# Member zones referenced by the catalog are registered in Sauron and
+# added to the shadow catalog with their group assignments.
+#
+# Designed to be run periodically (cron) with --sync to keep the shadow
+# catalog in sync with the external source.
+#
+# Copyright (c) 2025.
+# $Id:$
+#
+require 5;
+use Getopt::Long;
+use Net::DNS;
+use Sauron::DB;
+use Sauron::Util;
+use Sauron::UtilZone;
+use Sauron::BackEnd;
+use Sauron::Sauron;
+use Sauron::SetupIO;
+
+set_encoding();
+load_config();
+
+##############################
+
+Getopt::Long::Configure('permute');
+
+GetOptions("help|h", "verbose|v", "dryrun|dry-run|n", "sync",
+	   "nameserver=s", "axfr-zone=s", "axfr-port=i",
+	   "catalog-only", "group=s", "ignore-groups",
+	   "notransaction");
+
+$opt_dryrun = $opt_dryrun || 0;
+$opt_verbose = ($opt_verbose ? 1 : 0);
+$opt_sync = $opt_sync || 0;
+
+if ($opt_help || @ARGV < 2) {
+    print "syntax: $0 [options] <servername> <catalog-zone> [<zone file>]\n\n";
+    print "Imports an external catalog zone (RFC 9432) into Sauron as a\n";
+    print "shadow catalog zone (type C, catalog_only).\n\n";
+    print "options:\n",
+	"\t--nameserver=<spec>\tAXFR source: <host>[:port][/zone]\n",
+	"\t--axfr-zone=<zone>\toverride zone name used for AXFR\n",
+	"\t--axfr-port=<port>\toverride AXFR TCP port\n",
+	"--group=<name>\t\tassign imported member zones to this catalog group\n",
+	"\t\t\t\t(group definition is auto-created in the catalog zone)\n",
+	"\t--ignore-groups\t\tignore RFC 9432 group TXT records from import\n",
+	"\t--catalog-only\t\tmark shadow catalog zone as catalog_only\n",
+	"\t\t\t\t(skip named.conf and zone file generation)\n",
+	"\t--sync\t\t\tsynchronize: add new members, remove stale ones\n",
+	"\t--dryrun\t\tshow what would be done without making changes\n",
+	"\t--verbose\t\tdisplay detailed progress\n",
+	"\t--notransaction\t\tdo not use transactions\n",
+	"\t--help\t\t\tdisplay this help\n\n";
+    print "examples:\n",
+	"\t$0 myserver catalog.example.com /tmp/catalog.zone\n",
+	"\t$0 --nameserver=ns1.example.net:5353 myserver catalog.example.com\n\n";
+    exit(($opt_help ? 0 : 1));
+}
+
+$servername = shift;
+$catalogname = shift;
+$zonefile = shift;  # optional third positional arg
+fatal("too many arguments: " . join(' ', @ARGV)) if (@ARGV > 0);
+$axfr_zone = '';
+$axfr_ns = '';
+$axfr_port = 53;
+
+# Zone file can come from positional arg or --nameserver for AXFR
+if ($zonefile) {
+    fatal("cannot specify both <zone file> and --nameserver")
+	if ($opt_nameserver);
+    $opt_file = $zonefile;
+}
+
+fatal("one of <zone file> or --nameserver must be specified")
+    unless ($opt_file || $opt_nameserver);
+
+$user = (getpwuid($<))[0];
+set_muser($user);
+db_connect();
+
+# Validate server
+$serverid = get_server_id($servername);
+fatal("cannot find server: $servername") unless ($serverid > 0);
+
+# Validate AXFR source options
+if ($opt_nameserver) {
+    ($axfr_ns, $axfr_port, $axfr_zone) = parse_nameserver_spec($opt_nameserver);
+
+    fatal("invalid nameserver: $axfr_ns")
+	unless (valid_domainname($axfr_ns) || is_cidr($axfr_ns)
+		|| $axfr_ns =~ /^[0-9a-fA-F:]+$/);
+
+    if ($opt_axfr_port) {
+	fatal("invalid --axfr-port value: $opt_axfr_port")
+	    unless ($opt_axfr_port =~ /^\d+$/ && $opt_axfr_port > 0 && $opt_axfr_port < 65536);
+	$axfr_port = $opt_axfr_port;
+    }
+
+    if ($opt_axfr_zone) {
+	fatal("--axfr-zone and --nameserver=<host>[:port]/<zone> cannot both define AXFR zone")
+	    if ($axfr_zone ne '');
+	$axfr_zone = $opt_axfr_zone;
+    }
+}
+
+# Validate catalog zone name
+fatal("invalid catalog zone name: $catalogname")
+    unless (valid_domainname($catalogname));
+$catalogname =~ s/\.$//;
+$origin = $catalogname . '.';
+
+if ($opt_nameserver) {
+	$axfr_zone = $catalogname unless ($axfr_zone);
+	$axfr_zone =~ s/\.$//;
+	fatal("invalid AXFR zone name: $axfr_zone")
+	unless (valid_domainname($axfr_zone));
+}
+
+# Validate --group name (actual creation deferred until catalog zone is known)
+if ($opt_group) {
+    fatal("invalid --group name: $opt_group")
+	unless ($opt_group =~ /^[a-zA-Z0-9_][a-zA-Z0-9_.:-]*$/);
+}
+
+##############################
+# Fetch catalog zone data via AXFR or file
+
+print "Fetching catalog zone: $catalogname\n" if ($opt_verbose);
+
+if ($opt_file) {
+    fatal("cannot read zone file: $opt_file") unless (-r $opt_file);
+    process_zonefile($opt_file, $catalogname, \%zonedata, 0);
+} else {
+	print "AXFR source: $axfr_ns:$axfr_port zone=$axfr_zone\n" if ($opt_verbose);
+	process_zonedns_axfr($axfr_zone, \%zonedata, $axfr_ns, $axfr_port, $opt_verbose);
+}
+
+$source_origin = detect_catalog_origin(\%zonedata, $axfr_zone, $catalogname);
+print "Detected source catalog origin: $source_origin\n" if ($opt_verbose);
+
+##############################
+# Parse catalog zone contents (RFC 9432)
+#
+# Structure:
+#   version.catalog.<origin>  TXT "2"
+#   <uuid>.zones.catalog.<origin>  PTR <member-zone-name>.
+#   group.<uuid>.zones.catalog.<origin>  TXT "<group-name>"
+
+# Verify catalog version
+# Sauron generator writes 'version.catalog' relative to zone origin, so
+# after FQDN expansion it becomes 'version.catalog.<origin>'.
+$version_key = "version.catalog.$source_origin";
+if ($zonedata{$version_key} && @{$zonedata{$version_key}{TXT}} > 0) {
+    $catver = $zonedata{$version_key}{TXT}[0];
+    $catver =~ s/^"(.*)"$/$1/;  # strip quotes if present
+    fatal("unsupported catalog zone version: $catver (expected '2')")
+	unless ($catver eq '2');
+    print "Catalog zone version: $catver\n" if ($opt_verbose);
+} else {
+    fatal("no version TXT record found in catalog zone (not RFC 9432 compliant)");
+}
+
+# Extract member zones and group assignments
+# Sauron generator uses 'uuid-xxx.zones.catalog' and 'group.uuid-xxx.zones.catalog'
+# relative to zone origin, expanding to '*.zones.catalog.<origin>'.
+%members = ();  # uuid => { name => 'zone.name', groups => ['g1', ...] }
+$zones_suffix = "zones.catalog.$source_origin";
+
+foreach $domain (keys %zonedata) {
+    my $rec = $zonedata{$domain};
+
+    # Match PTR records under *.zones.catalog.<origin>
+    # Format: <uuid>.zones.catalog.<origin> PTR <member-zone>.
+    if ($domain =~ /^([^.]+)\.\Q$zones_suffix\E$/i && @{$rec->{PTR}} > 0) {
+	my $uuid = $1;
+	my $member_name = $rec->{PTR}[0];
+	$member_name =~ s/\.$//;  # strip trailing dot
+	$members{$uuid} = { name => lc($member_name), groups => [] }
+	    unless ($members{$uuid});
+	$members{$uuid}{name} = lc($member_name);
+	next;
+    }
+
+    # Match group TXT records: group.<uuid>.zones.catalog.<origin>
+    # Format: group.<uuid>.zones.catalog.<origin> TXT "<group-name>"
+    if (!$opt_ignore_groups &&
+	$domain =~ /^group\.([^.]+)\.\Q$zones_suffix\E$/i && @{$rec->{TXT}} > 0) {
+	my $uuid = $1;
+	$members{$uuid} = { name => '', groups => [] }
+	    unless ($members{$uuid});
+	foreach my $txt (@{$rec->{TXT}}) {
+	    my $grpname = $txt;
+	    $grpname =~ s/^"(.*)"$/$1/;  # strip quotes
+	    push @{$members{$uuid}{groups}}, $grpname if ($grpname ne '');
+	}
+	next;
+    }
+}
+
+# Filter out entries without a zone name (group-only orphans)
+@member_uuids = grep { $members{$_}{name} ne '' } keys %members;
+$member_count = scalar @member_uuids;
+
+print "Found $member_count member zones in catalog\n";
+if ($opt_verbose) {
+    foreach my $uuid (sort { $members{$a}{name} cmp $members{$b}{name} } @member_uuids) {
+	my $m = $members{$uuid};
+	my $grps = @{$m->{groups}} > 0 ? ' [' . join(', ', @{$m->{groups}}) . ']' : '';
+	print "  $m->{name}$grps\n";
+    }
+}
+
+fatal("no member zones found in catalog zone") if ($member_count == 0);
+
+if ($opt_dryrun && !$opt_sync) {
+    print "(dry-run mode - no changes will be made)\n";
+    exit(0);
+}
+
+##############################
+# Database operations
+
+unless ($opt_notransaction || $opt_dryrun) {
+    db_begin();
+    db_ignore_begin_and_commit(1);
+}
+
+# Check if shadow catalog zone already exists
+$catalog_zone_id = get_zone_id($catalogname, $serverid);
+
+if ($catalog_zone_id > 0) {
+    # Zone exists - verify it's type 'C'
+    my %existing_zone;
+    fatal("cannot read existing zone: $catalogname")
+	if (get_zone($catalog_zone_id, \%existing_zone) < 0);
+    fatal("zone '$catalogname' exists but is not a catalog zone (type=$existing_zone{type})")
+	unless ($existing_zone{type} eq 'C');
+    print "Using existing shadow catalog zone: $catalogname (id=$catalog_zone_id)\n"
+	if ($opt_verbose);
+} else {
+    # Create new shadow catalog zone
+    print "Creating shadow catalog zone: $catalogname\n";
+
+    if ($opt_dryrun) {
+	print "[dry-run] Would create catalog zone: $catalogname\n";
+	$catalog_zone_id = -999;  # placeholder
+    } else {
+	my $soa_rec = $zonedata{$source_origin};
+	fatal("no SOA record in catalog zone") unless ($soa_rec && $soa_rec->{SOA});
+
+	my @soa = split(/\s+/, $soa_rec->{SOA});
+
+	my %zonehash;
+	$zonehash{server}   = $serverid;
+	$zonehash{type}     = 'C';
+	$zonehash{reverse}  = 'false';
+	$zonehash{name}     = $catalogname;
+	$zonehash{serial}   = $soa[2];
+	$zonehash{refresh}  = $soa[3];
+	$zonehash{retry}    = $soa[4];
+	$zonehash{expire}   = $soa[5];
+	$zonehash{minimum}  = $soa[6];
+	$zonehash{ttl}      = ($soa_rec->{TTL} > 0 ? $soa_rec->{TTL} : '');
+	$zonehash{comment}  = "Imported catalog zone (shadow)";
+
+	$zonehash{ns} = [];
+	if ($soa_rec->{NS}) {
+	    foreach my $ns (@{$soa_rec->{NS}}) {
+		push @{$zonehash{ns}}, [0, $ns, ''];
+	    }
+	}
+	# Ensure at least one NS if none found
+	if (@{$zonehash{ns}} == 0) {
+	    push @{$zonehash{ns}}, [0, 'invalid.', 'placeholder NS for catalog zone'];
+	}
+
+	$zonehash{mx}    = [];
+	$zonehash{txt}   = [];
+	$zonehash{ip}    = [];
+	$zonehash{naptr} = [];
+
+	$catalog_zone_id = add_zone(\%zonehash);
+	fatal("cannot create shadow catalog zone (error=$catalog_zone_id)")
+	    if ($catalog_zone_id < 0);
+
+	# Set catalog_only flag if requested
+	if (${opt_catalog_only}) {
+	    my $res = db_exec("UPDATE zones SET catalog_only=true WHERE id=$catalog_zone_id");
+	    fatal("cannot set catalog_only flag") if ($res < 0);
+	}
+
+	print "Created shadow catalog zone: id=$catalog_zone_id\n";
+    }
+}
+
+# Ensure group definitions exist in the shadow catalog
+%known_groups = ();
+unless ($opt_dryrun || $opt_ignore_groups) {
+    # Collect all group names from imported members
+    my %needed_groups;
+    foreach my $uuid (@member_uuids) {
+	foreach my $grp (@{$members{$uuid}{groups}}) {
+	    $needed_groups{$grp} = 1;
+	}
+    }
+
+    # Load existing group definitions
+    my $grp_rec = {};
+    get_catalog_group_defs($catalog_zone_id, $grp_rec);
+    if ($grp_rec->{groups}) {
+	foreach my $g (@{$grp_rec->{groups}}) {
+	    $known_groups{$g->[1]} = $g->[0];  # name => id
+	}
+    }
+
+    # Add missing group definitions
+    foreach my $grpname (sort keys %needed_groups) {
+	unless ($known_groups{$grpname}) {
+	    print "  Adding group definition: $grpname\n" if ($opt_verbose);
+	    my $res = add_catalog_group_def($catalog_zone_id, $grpname,
+					    "Imported from $catalogname");
+	    if ($res < 0) {
+		print STDERR "WARNING: cannot add group definition '$grpname' (error=$res)\n";
+	    } else {
+		$known_groups{$grpname} = 1;
+	    }
+	}
+    }
+}
+
+# Add --group to catalog group definitions (independent of --ignore-groups)
+if ($opt_group && !$opt_dryrun && !$known_groups{$opt_group}) {
+    print "  Adding group definition: $opt_group\n" if ($opt_verbose);
+    my $res = add_catalog_group_def($catalog_zone_id, $opt_group,
+				    "Created by import-catalog-zone --group");
+    if ($res < 0 && $res != -10) {
+	print STDERR "WARNING: cannot add group definition '$opt_group' (error=$res)\n";
+    } else {
+	$known_groups{$opt_group} = 1;
+	print "  Created group '$opt_group' for catalog zone (id=$catalog_zone_id)\n"
+	    if ($opt_verbose);
+    }
+} elsif ($opt_group && $opt_dryrun) {
+    print "[dry-run] Would create group definition: $opt_group\n";
+}
+
+##############################
+# Process member zones
+
+$added = 0;
+$skipped = 0;
+$failed = 0;
+$removed = 0;
+
+# Build set of imported member zone names for sync
+%imported_names = ();
+foreach my $uuid (@member_uuids) {
+    $imported_names{lc($members{$uuid}{name})} = $uuid;
+}
+
+# Sync mode: remove members no longer in external catalog
+if ($opt_sync && $catalog_zone_id > 0 && !$opt_dryrun) {
+    my $existing_members = {};
+    get_zone_catalog_members($catalog_zone_id, $existing_members);
+
+    if ($existing_members->{count} > 0) {
+	foreach my $m (@{$existing_members->{members}}) {
+	    my $mzone_id   = $m->[0];
+	    my $mzone_name = lc($m->[1]);
+
+	    unless ($imported_names{$mzone_name}) {
+		if ($opt_dryrun) {
+		    print "[dry-run] Would remove stale member: $mzone_name\n";
+		} else {
+		    print "  Removing stale member: $mzone_name\n" if ($opt_verbose);
+		    my $res = remove_zone_from_catalog($mzone_id, $catalog_zone_id);
+		    if ($res < 0) {
+			print STDERR "WARNING: cannot remove member '$mzone_name' (error=$res)\n";
+		    } else {
+			$removed++;
+		    }
+		}
+	    }
+	}
+    }
+}
+
+# Add/update member zones
+foreach my $uuid (sort { $members{$a}{name} cmp $members{$b}{name} } @member_uuids) {
+    my $mname = $members{$uuid}{name};
+    my @mgroups = @{$members{$uuid}{groups}};
+
+    # Check if member zone exists in Sauron
+    my $zone_id = get_zone_id($mname, $serverid);
+
+    if ($zone_id < 0) {
+	# Zone doesn't exist in Sauron - create as slave stub
+	if ($opt_dryrun) {
+	    print "[dry-run] Would create slave zone: $mname\n";
+	    $skipped++;
+	    next;
+	}
+
+	print "  Creating slave zone: $mname\n" if ($opt_verbose);
+
+	my %newzone;
+	$newzone{server}  = $serverid;
+	$newzone{type}    = 'S';
+	$newzone{catalog_only} = 'true';
+	$newzone{reverse} = 'false';
+	$newzone{name}    = $mname;
+	$newzone{comment} = "Imported from catalog $catalogname (shadow member)";
+	$newzone{serial}  = 1;
+	$newzone{refresh} = 3600;
+	$newzone{retry}   = 900;
+	$newzone{expire}  = 604800;
+	$newzone{minimum} = 3600;
+	$newzone{ns}      = [];
+	$newzone{mx}      = [];
+	$newzone{txt}     = [];
+	$newzone{ip}      = [];
+	$newzone{naptr}   = [];
+
+	# Use nameserver from AXFR source as NS if available
+	if ($opt_nameserver) {
+	    my $ns = $opt_nameserver;
+	    $ns .= '.' unless ($ns =~ /\.$/);
+	    push @{$newzone{ns}}, [0, $ns, 'from catalog import'];
+	} else {
+	    push @{$newzone{ns}}, [0, 'invalid.', 'placeholder - update manually'];
+	}
+
+	$zone_id = add_zone(\%newzone);
+	if ($zone_id < 0) {
+	    print STDERR "WARNING: cannot create zone '$mname' (error=$zone_id)\n";
+	    $failed++;
+	    next;
+	}
+    }
+
+    # Add zone to catalog (idempotent - returns -10 if already exists)
+    if ($opt_dryrun) {
+	print "[dry-run] Would add to catalog: $mname\n";
+	$added++;
+	next;
+    }
+
+    my $res = add_zone_to_catalog($zone_id, $catalog_zone_id);
+    if ($res < 0 && $res != -10) {
+	print STDERR "WARNING: cannot add '$mname' to catalog (error=$res)\n";
+	$failed++;
+	next;
+    }
+
+    if ($res >= 0) {
+	print "  Added to catalog: $mname\n" if ($opt_verbose);
+	$added++;
+    } else {
+	# Already in catalog (-10) - that's fine for sync
+	$skipped++ unless ($opt_sync);
+    }
+
+    # Add explicit --group to member group list
+    if ($opt_group) {
+	push @mgroups, $opt_group unless grep { $_ eq $opt_group } @mgroups;
+    }
+
+    # Set groups for member (skip only when ignoring groups AND no explicit --group)
+    if (@mgroups > 0 && (!$opt_ignore_groups || $opt_group)) {
+	$res = set_member_groups($zone_id, $catalog_zone_id, \@mgroups);
+	if ($res < 0) {
+	    print STDERR "WARNING: cannot set groups for '$mname' (error=$res)\n";
+	} elsif ($opt_verbose) {
+	    print "    Groups: " . join(', ', @mgroups) . "\n";
+	}
+    }
+}
+
+##############################
+# Commit
+
+unless ($opt_notransaction || $opt_dryrun) {
+    db_ignore_begin_and_commit(0);
+    fatal("cannot commit changes to database!") if (db_commit() < 0);
+}
+
+##############################
+# Summary
+
+print "\nImport summary for catalog zone: $catalogname\n";
+print "  Members in catalog: $member_count\n";
+print "  Added:   $added\n";
+print "  Skipped: $skipped\n" if ($skipped > 0);
+print "  Failed:  $failed\n" if ($failed > 0);
+print "  Removed: $removed\n" if ($removed > 0);
+print "  (dry-run mode - no changes made)\n" if ($opt_dryrun);
+
+exit($failed > 0 ? 1 : 0);
+
+
+sub parse_nameserver_spec($) {
+    my ($spec) = @_;
+    my ($host, $port, $zone);
+
+    $host = $spec;
+    $port = 53;
+    $zone = '';
+
+    if ($host =~ /^(.+)\/(\S+)$/) {
+	$host = $1;
+	$zone = $2;
+    }
+
+    # Support [ipv6]:port and host:port
+    if ($host =~ /^\[([^\]]+)\]:(\d+)$/) {
+	$host = $1;
+	$port = $2;
+    }
+    elsif ($host =~ /^([^:]+):(\d+)$/) {
+	$host = $1;
+	$port = $2;
+    }
+
+    return ($host, $port, $zone);
+}
+
+
+sub detect_catalog_origin($$$) {
+	my ($zonedata, $preferred_zone, $fallback_zone) = @_;
+	my (@soa_candidates, @version_candidates, $candidate);
+
+	if ($preferred_zone) {
+	$candidate = $preferred_zone;
+	$candidate .= '.' unless ($candidate =~ /\.$/);
+	return $candidate if ($zonedata->{$candidate} && $zonedata->{$candidate}{SOA});
+	}
+
+	if ($fallback_zone) {
+	$candidate = $fallback_zone;
+	$candidate .= '.' unless ($candidate =~ /\.$/);
+	return $candidate if ($zonedata->{$candidate} && $zonedata->{$candidate}{SOA});
+	}
+
+	@soa_candidates = sort grep {
+	$zonedata->{$_} && $zonedata->{$_}{SOA} && $zonedata->{$_}{SOA} ne ''
+	} keys %{$zonedata};
+	return $soa_candidates[0] if (@soa_candidates == 1);
+
+	@version_candidates = sort map {
+	/^version\.catalog\.(.+)$/ ? $1 : ()
+	} keys %{$zonedata};
+	return $version_candidates[0] if (@version_candidates == 1);
+
+	fatal("cannot determine source catalog origin from imported data")
+		if (!@soa_candidates && !@version_candidates);
+
+	if (@soa_candidates > 1) {
+	fatal("multiple SOA origins found in imported data: " . join(', ', @soa_candidates));
+	}
+
+	if (@version_candidates > 1) {
+	fatal("multiple catalog version origins found in imported data: " .
+	      join(', ', @version_candidates));
+	}
+
+	return $soa_candidates[0] if (@soa_candidates > 0);
+	return $version_candidates[0];
+}
+
+
+sub process_zonedns_axfr($$$$$) {
+    my ($zone, $data, $nameserver, $port, $verbose) = @_;
+    my (@zonedata, $rr, $domain, $type, $class, $ttl, $c, $rec, $tmp);
+    my $resolver = Net::DNS::Resolver->new;
+    my $ucount = 0;
+    my $origin = $zone;
+
+    $origin .= '.' unless ($origin =~ /\.$/);
+
+    $resolver->nameservers($nameserver) if ($nameserver);
+    $resolver->port($port) if ($port);
+
+    print "Zone transfer...\n" if ($verbose);
+    @zonedata = $resolver->axfr($zone);
+    fatal("zone transfer failed: " . $resolver->errorstring)
+	if (@zonedata < 1);
+
+    foreach $rr (@zonedata) {
+	$domain = $rr->name . '.';
+	$type = $rr->type;
+	$class = $rr->class;
+	$ttl = $rr->ttl;
+
+	next unless ($class eq 'IN');
+	unless ($type =~ /^(SOA|A|AAAA|PTR|CNAME|MX|NS|TXT|HINFO|SRV|WKS|CAA|DS|SSHFP|TLSA|NAPTR)$/) {
+	    $ucount++;
+	    print "Skipping: " . $rr->string . "\n" if ($verbose);
+	    next;
+	}
+
+	unless ($data->{$domain}) {
+	    $data->{$domain} = {
+		TTL => $ttl,
+		CLASS => $class,
+		SOA => '',
+		A => [],
+		AAAA => [],
+		PTR => [],
+		CNAME => '',
+		MX => [],
+		NS => [],
+		TXT => [],
+		HINFO => ['',''],
+		CAA => [],
+		DS => [],
+		SSHFP => [],
+		TLSA => [],
+		NAPTR => [],
+		WKS => [],
+		SRV => []
+	      };
+	}
+
+	$rec = $data->{$domain};
+
+	if ($type eq 'A') {
+	    push @{$rec->{A}}, $rr->address;
+	}
+	elsif ($type eq 'AAAA') {
+	    push @{$rec->{AAAA}}, lc($rr->address);
+	}
+	elsif ($type eq 'SOA') {
+	    $rec->{SOA} = join(" ",($rr->mname,$rr->rname,$rr->serial,
+				    $rr->refresh,$rr->retry,
+				    $rr->expire,$rr->minimum));
+	}
+	elsif ($type eq 'PTR') {
+	    push @{$rec->{PTR}}, $rr->ptrdname;
+	}
+	elsif ($type eq 'CNAME') {
+	    $rec->{CNAME} = $rr->cname . '.';
+	}
+	elsif ($type eq 'MX') {
+	    $tmp = $rr->exchange . '.';
+	    $tmp = '$DOMAIN'
+		if (remove_origin($tmp,$origin) eq
+		    remove_origin($domain,$origin));
+
+	    push @{$rec->{MX}}, $rr->preference . " " . $tmp;
+	}
+	elsif ($type eq 'NS') {
+	    push @{$rec->{NS}}, $rr->nsdname . '.';
+	}
+	elsif ($type eq 'TXT') {
+	    push @{$rec->{TXT}}, $rr->txtdata;
+	}
+	elsif ($type eq 'WKS') {
+	   # ignore...
+	}
+	elsif ($type eq 'HINFO') {
+	    $rec->{HINFO}[0] = $rr->cpu;
+	    $rec->{HINFO}[1] = $rr->os;
+	}
+	elsif ($type eq 'CAA') {
+	    push @{$rec->{CAA}}, join(" ",($rr->flags,$rr->tag,$rr->value));
+	}
+	elsif ($type eq 'DS') {
+	    push @{$rec->{DS}}, join(" ",($rr->keytag,$rr->algorithm,$rr->digtype,$rr->digest));
+	}
+	elsif ($type eq 'SSHFP') {
+	    push @{$rec->{SSHFP}}, join(" ",($rr->flags,$rr->tag,$rr->value));
+	}
+	elsif ($type eq 'TLSA') {
+	    push @{$rec->{TLSA}}, join(" ",($rr->usage,$rr->selector,$rr->matchingtype,$rr->cert));
+	}
+	elsif ($type eq 'NAPTR') {
+	    push @{$rec->{NAPTR}}, join(" ",($rr->order,$rr->preference,
+					   uc($rr->flags),$rr->service,
+					   $rr->regexp,$rr->replacement));
+	}
+	elsif ($type eq 'SRV') {
+	    push @{$rec->{SRV}}, join(" ",($rr->priority,$rr->weight,
+					 $rr->port,$rr->target . '.'));
+	}
+
+	$c++;
+    }
+
+    print "Processed $c records (ignored $ucount records)\n"
+	if ($verbose);
+}
+
+# eof

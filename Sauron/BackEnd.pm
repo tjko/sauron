@@ -179,6 +179,11 @@ $VERSION = '$Id:$ ';
 	     get_member_groups
 	     set_member_groups
 	     get_catalog_group_usage
+
+	     get_catalog_compositions
+	     add_catalog_composition
+	     remove_catalog_composition
+	     update_catalog_compositions
 	    );
 
 # Catalog zones support (RFC 9432) - six functions exported above
@@ -1328,16 +1333,16 @@ sub get_zone($$) {
   my ($res,@q,$hid,$sid);
 
   $res = get_record("zones",
-	       "server,active,dummy,type,reverse,class,name,nnotify," .
+	       "server,active,dummy,catalog_only,type,reverse,class,name,nnotify," .
 	       "hostmaster,serial,refresh,retry,expire,minimum,ttl," .
 	       "chknames,reversenet,comment,cdate,cuser,mdate,muser," .
 	       "forward,serial_date,flags,rdate,transfer_source,transfer_source_v6,expiration",
 	       $id,$rec,"id");
   return -1 if ($res < 0);
-  fix_bools($rec,"active,dummy,reverse,noreverse");
+  fix_bools($rec,"active,dummy,catalog_only,reverse,noreverse");
   $sid=$rec->{server};
 
-  if ($rec->{type} eq 'M' || $rec->{type} eq 'C') {
+  if ($rec->{type} eq 'M' || $rec->{type} eq 'C' || $rec->{type} eq 'A') {
     $hid=get_host_id($id,'@');
     if ($hid > 0) {
       get_array_field("ns_entries",3,"id,ns,comment","NS,Comments",
@@ -1441,6 +1446,50 @@ sub get_zone($$) {
     } else {
       $rec->{catalog_group_defs_list} = 'None';
     }
+  } elsif ($rec->{type} eq 'A') {
+    # Aggregate catalog zone - load compositions
+    my $rec_comps = {};
+    get_catalog_compositions($id, $rec_comps);
+    $rec->{compositions} = $rec_comps->{compositions};
+    $rec->{composition_count} = $rec_comps->{count};
+
+    # Format compositions list for display
+    if ($rec_comps->{count} > 0) {
+      my @comp_list;
+      for my $comp (@{$rec_comps->{compositions}}) {
+        my $src_name = $comp->[2];
+        my $prio = $comp->[3];
+        push @comp_list, "$src_name (priority=$prio)";
+      }
+      $rec->{compositions_list} = join(', ', @comp_list);
+    } else {
+      $rec->{compositions_list} = 'None';
+    }
+
+    # Load available source catalog zones for selection
+    my @avail;
+    db_query("SELECT id, name, comment FROM zones " .
+             "WHERE server = $sid AND type = 'C' " .
+             "ORDER BY name", \@avail);
+    $rec->{available_source_catalogs} = \@avail;
+
+    # Build list of currently selected source IDs
+    my @selected_ids;
+    if ($rec_comps->{count} > 0) {
+      for my $comp (@{$rec_comps->{compositions}}) {
+        push @selected_ids, $comp->[1];  # source_zone_id
+      }
+    }
+    $rec->{selected_source_catalogs} = \@selected_ids;
+
+    # Build priorities hash {source_zone_id => priority}
+    my %prio_hash;
+    if ($rec_comps->{count} > 0) {
+      for my $comp (@{$rec_comps->{compositions}}) {
+        $prio_hash{$comp->[1]} = $comp->[3];
+      }
+    }
+    $rec->{composition_priorities} = \%prio_hash;
   } else {
     # Zone is a regular zone - load which catalogs contain it
     my $rec_cats = {};
@@ -1489,6 +1538,10 @@ sub update_zone($) {
   my $selected_catalogs = $rec->{catalog_zones_selected} || [];
   my $selected_member_groups = $rec->{member_groups} || {};
 
+  # Aggregate catalog zones support - save before cleanup
+  my $selected_compositions = $rec->{selected_source_catalogs} || [];
+  my $composition_priorities = $rec->{composition_priorities} || {};
+
   # Catalog zones support - clean up before update
   delete $rec->{catalog_members};
   delete $rec->{catalog_member_count};
@@ -1503,6 +1556,14 @@ sub update_zone($) {
   delete $rec->{catalog_group_defs_list};
   delete $rec->{catalog_group_manage_link};
   delete $rec->{member_groups};
+
+  # Aggregate catalog zones support - clean up before update
+  delete $rec->{compositions};
+  delete $rec->{composition_count};
+  delete $rec->{compositions_list};
+  delete $rec->{available_source_catalogs};
+  delete $rec->{selected_source_catalogs};
+  delete $rec->{composition_priorities};
 
   $rec->{flags}=0;
   $rec->{flags}|=0x01 if ($rec->{txt_auto_generation});
@@ -1529,13 +1590,13 @@ sub update_zone($) {
   if ($r < 0) { db_rollback(); return $r; }
 
   return -199 unless ($rec->{type});
-  if ($rec->{type} eq 'M' || $rec->{type} eq 'C') {
+  if ($rec->{type} eq 'M' || $rec->{type} eq 'C' || $rec->{type} eq 'A') {
     $hid=get_host_id($id,'@');
 
-    # If host record doesn't exist for catalog or master zone, create it
+    # If host record doesn't exist for catalog/aggregate/master zone, create it
     if ($hid <= 0) {
-      if ($rec->{type} eq 'C') {
-        # For catalog zones, create the @ host record if missing
+      if ($rec->{type} eq 'C' || $rec->{type} eq 'A') {
+        # For catalog/aggregate zones, create the @ host record if missing
         $hid = add_record('hosts',{zone=>$id,type=>10,domain=>'@',
                                    comment=>'zone record'});
         if ($hid < 0) { db_rollback(); return -201; }
@@ -1683,6 +1744,17 @@ sub update_zone($) {
           return -26;
         }
       }
+    }
+  }
+
+  # Process aggregate catalog zone composition changes
+  if ($rec->{type} eq 'A' && $id > 0) {
+    $r = update_catalog_compositions($id, $selected_compositions,
+                                     $composition_priorities);
+    if ($r < 0) {
+      write2log("ERROR: Failed to update compositions for aggregate zone $id: $r");
+      db_rollback();
+      return -27;
     }
   }
 
@@ -1875,7 +1947,7 @@ sub add_zone($) {
   $rec->{id}=$id=$res;
 
 
-  if ($rec->{type} eq 'M' || $rec->{type} eq 'C') {
+  if ($rec->{type} eq 'M' || $rec->{type} eq 'C' || $rec->{type} eq 'A') {
     # zone's host record (@)
     $res = add_record('hosts',{zone=>$id,type=>10,domain=>'@',
 			       comment=>'zone record'});
@@ -4953,6 +5025,141 @@ sub get_catalog_group_usage($$$) {
 
   $rec->{count} = scalar @q;
   $rec->{zones} = \@q;
+
+  return 0;
+}
+
+
+# Aggregate catalog zone (type 'A') composition functions
+
+# get_catalog_compositions($composite_zone_id, $rec)
+# Returns list of source catalog zones that compose an aggregate zone.
+# rec->{compositions} = [[id, source_zone_id, name, priority], ...]
+# rec->{count} = number of source zones
+sub get_catalog_compositions($$) {
+  my($composite_zone_id, $rec) = @_;
+  my(@q);
+
+  return -1 unless ($composite_zone_id > 0);
+
+  $rec = {} unless (ref($rec) eq 'HASH');
+
+  db_query("SELECT cc.id, cc.source_zone_id, z.name, cc.priority " .
+           "FROM catalog_compositions cc " .
+           "JOIN zones z ON cc.source_zone_id = z.id " .
+           "WHERE cc.composite_zone_id = $composite_zone_id " .
+           "ORDER BY cc.priority ASC, z.name", \@q);
+
+  $rec->{count} = scalar @q;
+  $rec->{compositions} = \@q;
+
+  return 0;
+}
+
+
+# add_catalog_composition($composite_zone_id, $source_zone_id, $priority)
+# Adds a source catalog zone to an aggregate zone.
+sub add_catalog_composition($$$) {
+  my($composite_zone_id, $source_zone_id, $priority) = @_;
+  my($res, @q);
+
+  return -1 unless ($composite_zone_id > 0 && $source_zone_id > 0);
+  return -2 if ($composite_zone_id == $source_zone_id);
+  $priority = 100 unless (defined($priority) && $priority > 0);
+
+  # Verify composite zone is type 'A'
+  db_query("SELECT type FROM zones WHERE id=$composite_zone_id", \@q);
+  return -3 unless (@q > 0 && $q[0][0] eq 'A');
+
+  # Verify source zone is type 'C'
+  db_query("SELECT type FROM zones WHERE id=$source_zone_id", \@q);
+  return -4 unless (@q > 0 && $q[0][0] eq 'C');
+
+  # Check if already exists
+  db_query("SELECT id FROM catalog_compositions " .
+           "WHERE composite_zone_id=$composite_zone_id " .
+           "AND source_zone_id=$source_zone_id", \@q);
+  return -10 if (@q > 0);
+
+  $res = db_exec("INSERT INTO catalog_compositions " .
+                 "(composite_zone_id, source_zone_id, priority) " .
+                 "VALUES($composite_zone_id, $source_zone_id, $priority)");
+
+  return $res;
+}
+
+
+# remove_catalog_composition($composite_zone_id, $source_zone_id)
+# Removes a source catalog zone from an aggregate zone.
+sub remove_catalog_composition($$) {
+  my($composite_zone_id, $source_zone_id) = @_;
+
+  return -1 unless ($composite_zone_id > 0 && $source_zone_id > 0);
+
+  return db_exec("DELETE FROM catalog_compositions " .
+                 "WHERE composite_zone_id=$composite_zone_id " .
+                 "AND source_zone_id=$source_zone_id");
+}
+
+
+# update_catalog_compositions($composite_zone_id, $selected_sources, $priorities)
+# Diff-based update of aggregate zone compositions.
+# $selected_sources = arrayref of source_zone_ids
+# $priorities = hashref {source_zone_id => priority}
+sub update_catalog_compositions($$$) {
+  my($composite_zone_id, $selected_sources, $priorities) = @_;
+  my($r, @q);
+
+  return -1 unless ($composite_zone_id > 0);
+
+  # Get current compositions
+  db_query("SELECT source_zone_id, priority FROM catalog_compositions " .
+           "WHERE composite_zone_id = $composite_zone_id", \@q);
+  my %current;
+  for my $row (@q) {
+    $current{$row->[0]} = $row->[1];
+  }
+
+  # Build new state
+  my @new_sources = ref($selected_sources) eq 'ARRAY' ? @{$selected_sources} : ();
+  my %new_hash;
+  for my $src_id (@new_sources) {
+    my $prio = (ref($priorities) eq 'HASH' && $priorities->{$src_id})
+               ? int($priorities->{$src_id}) : 100;
+    $prio = 1 if ($prio < 1);
+    $new_hash{$src_id} = $prio;
+  }
+
+  # Remove compositions no longer selected
+  for my $src_id (keys %current) {
+    unless ($new_hash{$src_id}) {
+      $r = db_exec("DELETE FROM catalog_compositions " .
+                   "WHERE composite_zone_id=$composite_zone_id " .
+                   "AND source_zone_id=$src_id");
+      return $r if ($r < 0);
+    }
+  }
+
+  # Add or update compositions
+  for my $src_id (keys %new_hash) {
+    my $prio = $new_hash{$src_id};
+    if ($current{$src_id}) {
+      # Update priority if changed
+      if ($current{$src_id} != $prio) {
+        $r = db_exec("UPDATE catalog_compositions " .
+                     "SET priority=$prio " .
+                     "WHERE composite_zone_id=$composite_zone_id " .
+                     "AND source_zone_id=$src_id");
+        return $r if ($r < 0);
+      }
+    } else {
+      # Add new composition
+      $r = db_exec("INSERT INTO catalog_compositions " .
+                   "(composite_zone_id, source_zone_id, priority) " .
+                   "VALUES($composite_zone_id, $src_id, $prio)");
+      return $r if ($r < 0);
+    }
+  }
 
   return 0;
 }

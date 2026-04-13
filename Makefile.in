@@ -84,7 +84,8 @@ SQL_TABLES =	sql/common.sql \
 		sql/keys.sql sql/acls.sql sql/leases.sql \
 		sql/sshfp_entries.sql sql/tlsa_entries.sql \
 		sql/ds_entries.sql sql/naptr_entries.sql \
-		sql/catalog_group_defs.sql sql/zone_catalog_groups.sql
+		sql/catalog_group_defs.sql sql/zone_catalog_groups.sql \
+		sql/catalog_compositions.sql
 
 
 
@@ -103,7 +104,8 @@ PROGS = sauron addgroup adduser deluser delgroup modhosts \
 	expire-hosts createtables import-zone remove-hosts \
 	update-hosts export-vmps import-nets import-dhcp \
 	export-ip-list export-hosts export-by-group keygen \
-	addzone import-zone-comments compare-zones check-reverse
+	addzone import-zone-comments compare-zones check-reverse \
+	import-catalog-zone
 
 MODULES = Sauron/Util.pm Sauron/BackEnd.pm Sauron/CGIutil.pm \
 	  Sauron/UtilZone.pm Sauron/Sauron.pm Sauron/UtilDhcp.pm \
