@@ -55,11 +55,9 @@ my @test_zones = (
     {
         name     => 'roundtrip.example.com',
         file     => "$testdata/roundtrip.example.com.zone",
-        # Record types that survive round-trip (CAA is imported as zentries,
-        # not re-exported as CAA; WKS output depends on server flags)
+        # WKS output depends on server flags.
         # We compare what process_zonefile can parse from both sides.
         skip_types => {
-            'CAA'  => 'CAA records are stored as zone custom entries, not re-exported as CAA',
             'WKS'  => 'WKS output depends on named_flags_wks server setting',
         },
     },

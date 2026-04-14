@@ -47,6 +47,21 @@ my %naptr_flags=(
     4=>'P'
 );
 
+my %caa_flags=(
+    0=>'Required',
+    128=>'Critical'
+);
+
+my %caa_tags=(
+    'issue'=>'issue',
+    'issuewild'=>'issuewild',
+    'issueemail'=>'issueemail',
+    'issuevmc'=>'issuevmc',
+    'iodef'=>'iodef',
+    'contactemail'=>'contactemail',
+    'contactphone'=>'contactphone'
+);
+
 my %new_zone_form=(
  data=>[
   {ftype=>0, name=>'New zone'},
@@ -124,6 +139,11 @@ my %zone_form = (
   {ftype=>2, tag=>'txt', name=>'Info (TXT)', type=>['text','text'], fields=>2,
    len=>[68,15], maxlen=>[220,15], empty=>[0,1], elabels=>['TXT','comment'], whitesp=>['P','P'],
    iff=>['type','M'], iff2=>['reverse','f']},
+  {ftype=>2, tag=>'caa', name=>'CAA entries', fields=>4,
+   len=>[5,20,40,20], maxlen=>[5,20,255,80], empty=>[0,0,0,1],
+   elabels=>['Flags','Tag','Value','Comment'],
+   type=>['enum','enum','text','text'], enum=>[\%caa_flags, \%caa_tags, undef, undef],
+   whitesp=>['','P','P','P'], iff=>['type','M'], iff2=>['reverse','f']},
   {ftype=>2, tag=>'naptr', name=>'NAPTR entries', fields=>7, len=>[3,3,2,5,20,20,20],
    empty=>[0,0,1,1,1,0,1], maxlen=>[5,5,2,20,100,100,80], addempty=>[-1,-1,-1,-1,-1,-1,0],
    elabels=>['Order','Preference','Flags','Service','Regexp','Replacement','Comment'],

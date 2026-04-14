@@ -123,7 +123,7 @@ if ($help || @ARGV < 1) {
 
 	"\tHost types: 0 = Miscellaneous, 1 = Host, 2 = Subdomain (delegation),\n",
 	"\t3 = MX entry, 4 = Alias (CNAME), 5 = Printer, 6 = Glue record,\n",
-	"\t7 = Alias (AREC), 8 = SRV entry, 9 = DHCP only, 10 = Zone,\n",
+    "\t7 = Alias (AREC), 8 = SRV entry, 9 = DHCP only, 10 = Zone, 15 = CAA,\n",
  	"\t101 = Host reservation (Not all types are relevant for this tool.)\n\n";
 
   exit($help ? 0 : 1);

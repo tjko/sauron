@@ -1171,6 +1171,12 @@ sub _delete_server_parts($) {
                "WHERE z.server=$id AND h.zone=z.id AND a.host=h.id);");
   if ($res < 0) { db_rollback(); return -19; }
 
+  # caa_entries
+  $res=db_exec("DELETE FROM caa_entries WHERE id IN ( " .
+               "SELECT a.id FROM caa_entries a, zones z, hosts h " .
+               "WHERE z.server=$id AND h.zone=z.id AND a.type=1 AND a.ref=h.id);");
+  if ($res < 0) { db_rollback(); return -191; }
+
   # arec_entries
   $res=db_exec("DELETE FROM arec_entries WHERE id IN ( " .
                "SELECT a.id FROM arec_entries a, zones z, hosts h " .
@@ -1349,6 +1355,9 @@ sub get_zone($$) {
 		        "type=2 AND ref=$hid ORDER BY pri,mx",$rec,'mx');
         get_array_field("txt_entries",3,"id,txt,comment","TXT,Comments",
 		        "type=2 AND ref=$hid ORDER BY id",$rec,'txt');
+        get_array_field("caa_entries",5,"id,flags,tag,value,comment",
+            "Flags,Tag,Value,Comments",
+            "type=1 AND ref=$hid ORDER BY flags,tag,value",$rec,'caa');
         get_array_field("naptr_entries",8,"id,order_val,preference,flags,service,regexp,replacement,comment",
 		        "Order,Preference,Flags,Service,Regexp,Replacement,Comments",
 		        "type=1 AND ref=$hid ORDER BY order_val,preference,flags,service,regexp,replacement",$rec,'naptr');
@@ -1364,6 +1373,7 @@ sub get_zone($$) {
       if ($rec->{type} eq 'M') {
         $rec->{mx} = [['Priority','MX','Comments']];
         $rec->{txt} = [['TXT','Comments']];
+        $rec->{caa} = [['Flags','Tag','Value','Comments']];
         $rec->{naptr} = [['Order','Preference','Flags','Service','Regexp','Replacement','Comments']];
         $rec->{ip} = [['IP','reverse','forward']];
       }
@@ -1609,6 +1619,9 @@ sub update_zone($) {
       $r=update_array_field("txt_entries",3,"txt,comment,type,ref",
 			    'txt',$rec,"2,$hid");
       if ($r < 0) { db_rollback(); return -14; }
+      $r=update_array_field("caa_entries",5,"flags,tag,value,comment,type,ref",
+    			    'caa',$rec,"1,$hid");
+      if ($r < 0) { db_rollback(); return -141; }
       $r=update_array_field("naptr_entries",7,"order_val,preference,flags,service,regexp,replacement,comment,type,ref",
 			    'naptr',$rec,"1,$hid");
       if ($r < 0) { db_rollback(); return -140; }
@@ -1805,6 +1818,12 @@ sub _delete_zone_parts($) {
                  "WHERE h.zone=$id AND a.type=2 AND a.ref=h.id)");
     if ($res < 0) { return -12; }
 
+    # caa_entries
+    $res=db_exec("DELETE FROM caa_entries WHERE id IN ( " .
+           "SELECT a.id FROM caa_entries a, hosts h " .
+           "WHERE h.zone=$id AND a.type=1 AND a.ref=h.id)");
+    if ($res < 0) { return -121; }
+
     # a_entries
     $res=db_exec("DELETE FROM a_entries WHERE id IN ( " .
                  "SELECT a.id FROM a_entries a, hosts h " .
@@ -1950,6 +1969,10 @@ sub add_zone($) {
       $res = add_array_field('txt_entries','txt,comment','txt',$rec,
 			     'type,ref',"2,$hid");
       if ($res < 0) { db_rollback(); return -104; }
+      # caa
+      $res = add_array_field('caa_entries','flags,tag,value,comment','caa',$rec,
+    			     'type,ref',"1,$hid");
+      if ($res < 0) { db_rollback(); return -1041; }
       # naptr
       $res = add_array_field('naptr_entries','order_val,preference,flags,service,regexp,replacement,comment',
 			     'naptr',$rec,'type,ref',"1,$hid");
@@ -2138,6 +2161,14 @@ sub copy_zone($$$$) {
      "WHERE a.type=2 AND a.ref=h.id AND h.zone=$id");
   if ($res < 0) { db_rollback(); return -18; }
 
+    # caa_entries
+    print "<BR>Copying CAA records..." if ($verbose);
+    $res=copy_records('caa_entries','caa_entries','id','ref',\@hids,
+      'type,flags,tag,value,comment',
+      "SELECT a.id FROM caa_entries a,hosts h " .
+      "WHERE a.type=1 AND a.ref=h.id AND h.zone=$id");
+    if ($res < 0) { db_rollback(); return -181; }
+
   # srv_entries
   print "<BR>Copying SRV records..." if ($verbose);
   $res=copy_records('srv_entries','srv_entries','id','ref',\@hids,
@@ -2268,6 +2299,9 @@ sub get_host($$) {
   get_array_field("naptr_entries",8,"id,order_val,preference,flags,service,regexp,replacement,comment",
 		  "Order,Preference,Flags,Service,Regexp,Replacement,Comments",
 		  "type=1 AND ref=$id ORDER BY order_val,preference,flags,service,regexp,replacement",$rec,'naptr_l');
+  get_array_field("caa_entries",5,"id,flags,tag,value,comment",
+      "Flags,Tag,Value,Comments",
+      "type=1 AND ref=$id ORDER BY flags,tag,value",$rec,'caa_l');
   get_array_field("txt_entries",3,"id,txt,comment",
 		  "Text,Comments",
 		  "type=2 AND ref=$id ORDER BY txt",$rec,'txt_l');
@@ -2454,6 +2488,10 @@ sub update_host($) {
 			"order_val,preference,flags,service,regexp,replacement,comment,type,ref",
 			'naptr_l',$rec,"1,$id");
   if ($r < 0) { db_rollback(); return -21; }
+  $r=update_array_field("caa_entries",5,
+			"flags,tag,value,comment,type,ref",
+			'caa_l',$rec,"1,$id");
+  if ($r < 0) { db_rollback(); return -211; }
   $r=update_array_field("txt_entries",3,
 			"txt,comment,type,ref",
 			'txt_l',$rec,"2,$id");
@@ -2512,6 +2550,10 @@ sub delete_host($) {
   # txt_entries
   $res=db_exec("DELETE FROM txt_entries WHERE type=2 AND ref=$id;");
   if ($res < 0) { db_rollback(); return -6; }
+
+  # caa_entries
+  $res=db_exec("DELETE FROM caa_entries WHERE type=1 AND ref=$id;");
+  if ($res < 0) { db_rollback(); return -61; }
 
   # a_entries
   $res=db_exec("DELETE FROM a_entries WHERE host=$id;");
@@ -2668,6 +2710,11 @@ sub add_host($) {
 			 'naptr_l',$rec,'type,ref',"1,$id");
   if ($res < 0) { db_rollback(); return -11; }
 
+  # CAAs
+  $res = add_array_field('caa_entries','flags,tag,value,comment',
+			 'caa_l',$rec,'type,ref',"1,$id");
+  if ($res < 0) { db_rollback(); return -111; }
+
   # TXTs
   $res = add_array_field('txt_entries','txt,comment',
 			 'txt_l',$rec,'type,ref',"2,$id");
@@ -2695,7 +2742,7 @@ sub get_host_types() {
     return (0 => 'Any type', 1 => 'Host', 2 => 'Delegation', 3 => 'Plain MX',
 	    4 => 'Alias', 5 => 'Printer', 6 => 'Glue', 7 => 'AREC Alias',
 	    8 => 'SRV', 9 => 'DHCP only', 10 => 'Zone', 11=>'SSHFP only',
-	    12 => 'TLSA only', 13 => 'TXT', 14 => 'NAPTR',
+      12 => 'TLSA only', 13 => 'TXT', 14 => 'NAPTR', 15 => 'CAA',
 	    101 => 'Host reservation');
 }
 

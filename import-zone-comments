@@ -269,7 +269,7 @@ caa_rdata:
             };
         }
 
-caa_tag:    /issue|issuewild|iodef|issuemail/
+caa_tag:    /[A-Za-z0-9]+/
 
 # ---- TXT ---------------------------------------------------
 txt_rdata:
@@ -673,13 +673,28 @@ sub import_comments($$$) {
       print "db_exec: $sql\n" if $opt_verbose;
     }
     elsif ($$rec{rtype} eq 'CAA') {
-      my ($caa_flags, $caa_tag, $caa_value) = split /\s+/, $$rec{rdata};
+      my $owner = $$rec{owner};
+      $owner = '@' if (defined $owner && lc($owner) eq lc($zonename . '.'));
+      my ($caa_flags, $caa_tag, $caa_value);
+      if (ref($$rec{rdata}) eq 'HASH') {
+        $caa_flags = $$rec{rdata}->{flags};
+        $caa_tag = $$rec{rdata}->{tag};
+        $caa_value = $$rec{rdata}->{value};
+      } else {
+        ($caa_flags, $caa_tag, $caa_value) = split /\s+/, $$rec{rdata}, 3;
+      }
+      $caa_value =~ s/^"(.*)"$/$1/ if defined $caa_value;
+      my $host_id = get_host_id($zoneid, $owner);
+      $caa_tag = db_encode_str($caa_tag);
+      $caa_value = db_encode_str($caa_value);
       $sql = qq{
-        UPDATE txt_entries
+        UPDATE caa_entries
            SET comment = $comment
-         WHERE ref     = '$zoneid'
-           AND txt     like '% CAA %$caa_flags %$caa_tag %$caa_value'
-           AND type     = '12'
+         WHERE ref     = '$host_id'
+           AND type    = '1'
+           AND flags   = '$caa_flags'
+           AND tag     = $caa_tag
+           AND value   = $caa_value
            AND (comment IS NULL OR comment = '')
       };
       db_exec($sql) unless $opt_noop;

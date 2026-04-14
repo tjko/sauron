@@ -6,6 +6,7 @@
 DROP TABLE a_entries;
 DROP TABLE acls;
 DROP TABLE arec_entries;
+DROP TABLE caa_entries;
 DROP TABLE cidr_entries;
 DROP TABLE common_fields;
 DROP TABLE deleted_hosts;
@@ -48,6 +49,7 @@ DROP TABLE zones;
 DROP SEQUENCE a_entries_id_seq;
 DROP SEQUENCE acls_id_seq;
 DROP SEQUENCE arec_entries_id_seq;
+DROP SEQUENCE caa_entries_id_seq;
 DROP SEQUENCE cidr_entries_id_seq;
 DROP SEQUENCE dhcp_entries_id_seq;
 DROP SEQUENCE ds_entries_id_seq;

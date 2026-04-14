@@ -50,8 +50,8 @@ our %host_types;
 %boolean_enum = (f=>'No',t=>'Yes');
 %host_types=(0=>'Any type',1=>'Host',2=>'Delegation',3=>'Plain MX',
 	     4=>'Alias',5=>'Printer',6=>'Glue',7=>'AREC Alias',
-	     8=>'SRV',9=>'DHCP',10=>'Zone',11=>'SSHFP',
-             12=>'TLSA',13=>'TXT',14=>'NAPTR',
+       8=>'SRV',9=>'DHCP',10=>'Zone',11=>'SSHFP',
+       12=>'TLSA',13=>'TXT',14=>'NAPTR',15=>'CAA',
 	     101=>'Host reservation');
 
 

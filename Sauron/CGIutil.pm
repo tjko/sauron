@@ -202,6 +202,12 @@ sub form_check_field($$$) {
   } elsif ($type eq 'zonename') {
     return 'valid zone name required!'
       unless (valid_domainname_check($value,1));
+  } elsif ($type eq 'caa_flags') {
+    return 'valid CAA flags required!'
+      unless ($value =~ /^\d+$/ && $value >= 0 && $value <= 255);
+  } elsif ($type eq 'caa_tag') {
+    return 'valid CAA tag required!'
+      unless ($value =~ /^[A-Za-z0-9]+$/);
   } elsif ($type eq 'srvname') {
     return 'valid SRV name required!'
       unless (valid_domainname_check($value,2));
@@ -719,7 +725,11 @@ sub form_field_enum($$$$) {
 
   for my $enum_key (sort keys %$rec_enum) {
     push @lst, $enum_key;
-    $lsth{$enum_key} = "$enum_key $rec_enum->{$enum_key}";
+    $lsth{$enum_key} =
+      ($enum_key eq $rec_enum->{$enum_key})
+      ? $enum_key
+      : "$enum_key $rec_enum->{$enum_key}";
+    #$lsth{$enum_key} = "$enum_key $rec_enum->{$enum_key}";
   }
   if (defined $rec->{addempty}) {
     if ($rec->{addempty}[$k-1] > 0) {
@@ -1751,7 +1761,7 @@ sub display_form($$) {
               $value_len = length($rec_enum->{$enum_key}) if (length($rec_enum->{$enum_key}) > $value_len);
             }
             if (defined $rec_enum->{$val}) {
-              $val = "$val $rec_enum->{$val}";
+              $val = ($val eq $rec_enum->{$val}) ? $val : "$val $rec_enum->{$val}";
               $len = $len + 1 + $value_len;
             }
           }

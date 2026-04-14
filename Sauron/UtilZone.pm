@@ -245,7 +245,8 @@ sub process_zonefile($$$$) {
     }
     elsif ($type eq 'CAA') {
       fatal("$filename($.): invalid CAA record: $fline")
-        unless ($line[0]=~/^[01]$/ && $line[1]=~/^[a-zA-Z0-9]+$/ && $line[2] ne '');
+        unless ($line[0]=~/^\d+$/ && $line[0] >= 0 && $line[0] <= 255 &&
+		$line[1]=~/^[a-zA-Z0-9]+$/ && $line[2] ne '');
       push @{$rec->{CAA}}, "$line[0] $line[1] $line[2]";
     }
     elsif ($type eq 'DS') {

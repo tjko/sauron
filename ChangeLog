@@ -1,4 +1,10 @@
 0.9.0 (beta)
+	- Added full CAA record support [svamberg]
+	  - New SQL table: caa_entries and upgrade
+	  - Apex CAA records are managed directly in zone edit form
+	  - Host CAA records are managed in host forms, including CAA-only records
+	  - import-zone/import-zone-comments and sauron generator handle CAA natively
+	  - Round-trip tests now verify CAA import and export
 	- DEPRECATED: Sauron::DB-Pg.pm module (legacy Pg.pm backend) is now 
 	  deprecated. Users are strongly encouraged to migrate to the default
 	  DB-DBI.pm module (DBI/DBD::Pg backend) which provides:

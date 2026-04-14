@@ -1,7 +1,7 @@
 ; roundtrip.example.com. zone - comprehensive test zone for round-trip testing
 ;
 ; Contains: A, AAAA, CNAME, MX, NS, TXT, HINFO, WKS, SRV, SSHFP, TLSA,
-;           NAPTR, DS, delegations, glue records
+;           NAPTR, CAA, DS, delegations, glue records
 ;
 
 $TTL 86400	; default TTL
@@ -26,6 +26,8 @@ $ORIGIN roundtrip.example.com.
 ; zone TXT records
 			IN	TXT	"v=spf1 mx -all"
 			IN	TXT	"Roundtrip test zone"
+			IN	CAA	0 issue "ca.roundtrip.example.com"
+			IN	CAA	128 iodef "mailto:security@roundtrip.example.com"
 
 
 ; === Nameservers (type=1, A records) ===
@@ -65,6 +67,7 @@ webserver		IN	A	10.20.2.10
 			IN	MX	10 mail1
 			IN	MX	20 mail2
 			IN	TXT	"Web server node"
+			IN	CAA	0 issue "ca.roundtrip.example.com"
 			IN	WKS	10.20.2.10 tcp http https
 
 dbserver		IN	A	10.20.2.20
@@ -138,12 +141,14 @@ _443._tcp.secure	IN	TLSA	3 1 1 AABBCCDDEE0011223344556677889900AABBCCDDEE0011223
 ; === NAPTR records (type=14) ===
 
 naptr-test		IN	NAPTR	100 10 "U" "E2U+sip" "!^.*$!sip:info@roundtrip.example.com!" .
+			IN	CAA	0 issuewild "wildcard-ca.roundtrip.example.com"
 
 
-; === TXT-only records (type=13) ===
+; === TXT-only and CAA-only records (type=13, type=15) ===
 
 _dmarc			IN	TXT	"v=DMARC1; p=reject; rua=mailto:dmarc@roundtrip.example.com"
 selector1._domainkey	IN	TXT	"v=DKIM1; k=rsa; p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQ"
+caa-only		IN	CAA	1 issue "letsencrypt.org"
 
 
 ; === Simple workstations ===

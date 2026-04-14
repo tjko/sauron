@@ -122,7 +122,13 @@ unless ($pzoneid > 0) {
   }
   $zonehash{txt}=[];
   foreach $rtmp (@{$rec->{TXT}}) { push @{$zonehash{txt}}, [0,$rtmp,'']; }
-  foreach $rtmp (@{$rec->{CAA}}) { push @{$zonehash{zentries}}, [0,"@ IN CAA $rtmp",'']; }
+  $zonehash{caa}=[];
+  foreach $rtmp (@{$rec->{CAA}}) {
+    my ($flags,$tag,$value) = split(/\s+/, $rtmp, 3);
+    next unless (defined $value);
+    $value =~ s/^"(.*)"$/$1/;
+    push @{$zonehash{caa}}, [0,$flags,$tag,$value,''];
+  }
   $zonehash{naptr}=[];
   if (@{$rec->{NAPTR}} > 0) {
     print "Processing " . scalar(@{$rec->{NAPTR}}) . " NAPTR records for zone apex\n" if ($opt_verbose);
@@ -203,6 +209,7 @@ foreach $host (sort keys %zonedata) {
   $hosttype=12 if (@{$rec->{TLSA}} > 0);
   $hosttype=13 if ((@{$rec->{TXT}} > 0) and $hosttype == 0);
   $hosttype=14 if (@{$rec->{NAPTR}} > 0);
+  $hosttype=15 if (@{$rec->{CAA}} > 0 && $hosttype == 0);
 
   if ($hosttype == 0) {
     print STDERR "Ignoring unknown host entry: $host\n";
@@ -260,6 +267,13 @@ foreach $host (sort keys %zonedata) {
   for $k (0..$#{$rec->{NAPTR}}) {
     push @naptr_l, [0,split(/ /, $rec->{NAPTR}->[$k]),''];
   }
+  undef @caa_l;
+  for $k (0..$#{$rec->{CAA}}) {
+    my ($flags,$tag,$value) = split(/\s+/, $rec->{CAA}->[$k], 3);
+    next unless (defined $value);
+    $value =~ s/^"(.*)"$/$1/;
+    push @caa_l, [0,$flags,$tag,$value,''];
+  }
   undef @txt_l;
   for $k (0..$#{$rec->{TXT}}) {
     push @txt_l, [0,$rec->{TXT}->[$k],''];
@@ -285,6 +299,7 @@ foreach $host (sort keys %zonedata) {
 		   sshfp_l=>\@sshfp_l,
 		   tlsa_l=>\@tlsa_l,
 		   naptr_l=>\@naptr_l,
+       caa_l=>\@caa_l,
 		   txt_l=>\@txt_l,
 		   ip=>\@ip_l
 		});

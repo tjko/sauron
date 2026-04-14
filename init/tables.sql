@@ -262,6 +262,16 @@ CREATE TABLE txt_entries (
         comment     TEXT
 );
 
+CREATE TABLE caa_entries (
+        id	    SERIAL PRIMARY KEY,
+        type        INT4 NOT NULL, /* 1=host */
+        ref         INT4 NOT NULL, /* ptr to table speciefied by type field */
+        flags       INT4 NOT NULL CHECK (flags >= 0 AND flags <= 255),
+        tag         TEXT NOT NULL CHECK (tag ~ '^[A-Za-z0-9]+$'),
+        value       TEXT NOT NULL,
+        comment     TEXT
+);
+
 CREATE TABLE mx_entries (
 	id	    SERIAL PRIMARY KEY,
 	type        INT4 NOT NULL, /* 1=zone,2=host,3=rr_mx */

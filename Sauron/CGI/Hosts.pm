@@ -107,6 +107,21 @@ my %naptr_flags=(
     4=>'P'
 );
 
+my %caa_flags=(
+    0=>'Issue (0)',
+    128=>'Issuemail (128)'
+);
+
+my %caa_tags=(
+    'issue'=>'issue',
+    'issuewild'=>'issuewild',
+    'issueemail'=>'issueemail',
+    'issuevmc'=>'issuevmc',
+    'iodef'=>'iodef',
+    'contactemail'=>'contactemail',
+    'contactphone'=>'contactphone'
+);
+
 
 my %host_form = (
  data=>[
@@ -196,7 +211,7 @@ my %host_form = (
   {ftype=>6, tag=>'mx', name=>'MX template', iff=>['type','[13]']},
   {ftype=>7, tag=>'wks', name=>'WKS template', iff=>['type','1']},
 
-  {ftype=>0, name=>'Host specific',iff=>['type','(?:13|1|2|3|7)']},
+  {ftype=>0, name=>'Host specific',iff=>['type','(?:1|2|3|7|13|15)']},
   {ftype=>2, tag=>'ns_l', name=>'Name servers (NS)', type=>['domain','text'],
    fields=>2, maxlen=>[400,80],
    len=>[50,20], empty=>[0,1], elabels=>['NS','comment'], iff=>['type','2']},
@@ -206,6 +221,11 @@ my %host_form = (
    type=>['int','enum','enum','hex','text'],
    enum=>[undef, \%ds_algorithm, \%ds_digest_type, undef, undef],
    iff=>['type','2']},
+  {ftype=>2, tag=>'caa_l', name=>'CAA entries', fields=>4,len=>[5,20,40,20],
+   empty=>[0,0,0,1], maxlen=>[5,20,255,80], addempty=>[-1,0,0,0],
+   elabels=>['Flags','Tag','Value','Comment'],
+    type=>['caa_flags','caa_tag','text','text'],
+   whitesp=>['','P','P','P'], iff=>['type','(?:1|15)']},
 
   {ftype=>2, tag=>'wks_l', name=>'WKS', no_empty=>1, whitesp=>['','P','P'],
    type=>['text','text','text'], fields=>3, len=>[10,37,20], empty=>[0,0,1],
@@ -344,6 +364,12 @@ my %restricted_host_form = (
    iff=>['type','[159]']},
   {ftype=>6, tag=>'mx', name=>'MX template', iff=>['type','1']},
   {ftype=>7, tag=>'wks', name=>'WKS template', iff=>['type','1']},
+  {ftype=>0, name=>'CAA records', iff=>['type','15']},
+  {ftype=>2, tag=>'caa_l', name=>'CAA entries', fields=>4,len=>[5,20,40,20],
+   empty=>[0,0,0,1], maxlen=>[5,20,255,80], addempty=>[-1,0,0,0],
+   elabels=>['Flags','Tag','Value','Comment'],
+    type=>['caa_flags','caa_tag','text','text'],
+   whitesp=>['','P','P','P'], iff=>['type','15']},
   {ftype=>0, name=>'Record info'},
   {ftype=>1, name=>'Expiration date', tag=>'expiration', len=>30,
    type=>'expiration', empty=>1, iff=>['type','[1479]']}
@@ -464,7 +490,14 @@ my %new_host_form = (
    whitesp=>['P','P'], fields=>2, maxlen=>[253, 80],
    len=>[50,20], empty=>[0,1], elabels=>['TXT','comment'], iff=>['type','13']},
 
-  {ftype=>0, name=>'SSHFP records', iff=>['type','1']},
+
+  {ftype=>0, name=>'Additional records', iff=>['type','1']},
+  {ftype=>2, tag=>'caa_l', name=>'CAA entries', fields=>4,len=>[5,20,40,20],
+   empty=>[0,0,0,1], maxlen=>[5,20,255,80], addempty=>[-1,0,0,0],
+   elabels=>['Flags','Tag','Value','Comment'],
+   type=>['caa_flags','caa_tag','text','text'],
+   whitesp=>['','P','P','P'], iff=>['type','(?:1|15)']},
+
   {ftype=>2, tag=>'sshfp_l', name=>'SSHFP entries', fields=>4,len=>[2,2,60,10],
    empty=>[0,0,0,1],elabels=>['Algorithm','Hashtype','Fingerprint','comment'],
    type=>['enum','enum','hex','text'], enum=>[\%sshfp_algorithms, \%sshfp_types, undef, undef],
@@ -549,6 +582,11 @@ my %restricted_new_host_form = (
    whitesp=>'P', empty=>$main::SAURON_RHF{serial}, iff=>['type','1']},
   {ftype=>1, tag=>'misc', name=>'Misc.', type=>'text', len=>50,
    whitesp=>'P', empty=>$main::SAURON_RHF{misc}, iff=>['type','1']},
+  {ftype=>2, tag=>'caa_l', name=>'CAA entries', fields=>4,len=>[5,20,40,20],
+   empty=>[0,0,0,1], maxlen=>[5,20,255,80], addempty=>[-1,0,0,0],
+   elabels=>['Flags','Tag','Value','Comment'],
+   type=>['caa_flags','caa_tag','text','text'],
+   whitesp=>['','P','P','P'], iff=>['type','15']},
   {ftype=>0, name=>'Record info'},
   {ftype=>1, name=>'Expiration date', tag=>'expiration', len=>30,
    type=>'expiration', empty=>1, iff=>['type','[147]']}
@@ -699,6 +737,10 @@ sub restricted_add_host($) {
     alert1("You don't have permission to add NAPTR records");
     return -110;
   }
+  if ($rec->{type} == 15 && check_perms('flags','CAA',1)) {
+    alert1("You don't have permission to add CAA records");
+    return -111;
+  }
 
   return add_host($rec);
 }
@@ -775,7 +817,8 @@ sub show_host_record($$)
 	      ($host{cname_alias} && $rwx && check_perms('flags','CNAME',1) ||
 	       $host{static_alias} && $rwx && check_perms('flags','SCNAME',1)) ||
 	      $host{type} == 7 && $rwx && check_perms('flags','AREC',1) ||
-	      $host{type} == 8 && $rwx && check_perms('flags','SRV',1));
+        $host{type} == 8 && $rwx && check_perms('flags','SRV',1) ||
+        $host{type} == 15 && $rwx && check_perms('flags','CAA',1));
 
     # CNAME and AREC aliases can't be copied because there are bugs in the program,
     # and finding those bugs proved to be too time-consuming. 2020-09-14 TVu
@@ -785,7 +828,8 @@ sub show_host_record($$)
       # Added check of SRV flag. TVu 2020-11-09
       unless ($host{type} == 4 && ($host{cname_alias} || $host{static_alias} && $rwx && check_perms('flags','SCNAME',1)) ||
 	      $host{type} == 7 ||
-	      $host{type} == 8 && $rwx && check_perms('flags','SRV',1));
+        $host{type} == 8 && $rwx && check_perms('flags','SRV',1) ||
+        $host{type} == 15 && $rwx && check_perms('flags','CAA',1));
 
     print submit(-name=>'sub',-value=>'Move'), " " if ($host{type} == 1);
 
@@ -924,6 +968,10 @@ sub menu_handler {
 	    alert1("You don't have permission to delete SRV records");
 	    return -108;
 	}
+  if ($host{type} == 15 && check_perms('flags','CAA',1)) {
+      alert1("You don't have permission to delete CAA records");
+      return -109;
+  }
     }
 
     if (check_perms('delhost',$host{domain})) {
@@ -1287,6 +1335,10 @@ sub menu_handler {
 	    alert1("You don't have permission to edit SRV records");
 	    return -108;
 	}
+  if ($host{type} == 15 && check_perms('flags','CAA',1)) {
+      alert1("You don't have permission to edit CAA records");
+      return -109;
+  }
     }
 
     $host{type}=1 if ($sub eq 'Enable');
@@ -2122,7 +2174,7 @@ sub menu_handler {
     $data{zone}=$zoneid;
     $data{router}=0;
     $data{grp}=-1; $data{mx}=-1; $data{wks}=-1;
-    $data{mx_l}=[]; $data{ns_l}=[]; $data{printer_l}=[]; $data{srv_l}=[]; $data{sshfp_l}=[]; $data{tlsa_l}=[]; $data{ds_l}=[]; $data{txt_l}=[];
+    $data{mx_l}=[]; $data{ns_l}=[]; $data{printer_l}=[]; $data{srv_l}=[]; $data{sshfp_l}=[]; $data{tlsa_l}=[]; $data{ds_l}=[]; $data{txt_l}=[]; $data{caa_l}=[];
     $data{subgroups}=[];
     $data{dept}=$perms->{defdept} if ($perms->{defdept});
     $data{expiration}=time()+$perms->{elimit}*86400 if ($perms->{elimit} > 0);
@@ -2143,6 +2195,7 @@ sub menu_handler {
       elsif ($type==11) { return if check_perms('flags','SSHFP'); }
       elsif ($type==12) { return if check_perms('flags','TLSA'); }
       elsif ($type==14) { return if check_perms('flags','NAPTR'); }
+      elsif ($type==15) { return if check_perms('flags','CAA'); }
       elsif ($type==101) {
 	if (check_perms('level',$main::ALEVEL_RESERVATIONS,1) &&
 	    check_perms('flags','RESERV',1)) {

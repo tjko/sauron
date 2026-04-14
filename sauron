@@ -1613,6 +1613,49 @@ sub make_dns() {
       }
     }
 
+    # CAA records
+    undef @q;
+    db_query("SELECT a.domain,a.ttl,a.expiration," .
+             " b.flags,b.tag,b.value " .
+             "FROM hosts a, caa_entries b, zones z " .
+             "WHERE a.zone=z.id AND z.id=$zoneid " .
+             "AND (a.type=1 OR a.type=3 OR a.type=8 OR a.type=10 OR " .
+             "     a.type=11 OR a.type=12 OR a.type=13 OR a.type=14 OR a.type=15) " .
+             "AND a.id=b.ref AND b.type=1 " .
+             "ORDER BY a.domain,b.flags,b.tag,b.value;",\@q);
+    error(db_errormsg()) if (db_errormsg());
+    if (@q > 0) {
+      print ZONEFILE ";\n;\n; CAA records\n;\n" if ($bind_conf);
+      for $i (0 .. $#q) {
+        $domain=remove_origin($q[$i][0],$origin);
+        if ($domain =~ /\.$/) {
+          error("Out-of-zone CAA record skipped: $q[$i][0]");
+          next;
+        }
+        if ($domain =~ /\.($delegation_mask)$/) {
+          error("CAA in delegated zone skipped: $q[$i][0]");
+          next;
+        }
+        if (($q[$i][2] > 0) && ($q[$i][2] < $time_now_ticks)) {
+          error("Skipping expired CAA record: $q[$i][0]");
+          next;
+        }
+        $ttl=$q[$i][1];
+        $ttl='' unless ($ttl > 0);
+        $flags=($q[$i][3] > 0 ? $q[$i][3] : 0);
+        $tag=$q[$i][4];
+        $val=$q[$i][5];
+        $val =~ s/^"(.*)"$/$1/;
+        $val =~ s/([\\"])/\\$1/g;
+
+        printf ZONEFILE $ZFORMAT, $domain,$ttl,$class,'CAA',
+               "$flags $tag \"$val\"" if ($bind_conf);
+
+        error("CAA records are not supported in tinydns output: $q[$i][0]")
+          if ($tiny_conf);
+      }
+    }
+
     # TXT records
     undef @q;
     db_query("SELECT a.domain,a.ttl,a.expiration,b.txt " .
