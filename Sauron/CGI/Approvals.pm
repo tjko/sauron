@@ -284,17 +284,26 @@ sub _list_policies {
 sub _add_policy {
   my ($zoneid) = @_;
   my %data = (zone_id => $zoneid, active => 't', on_modify => 't', match_mode => 'O');
-  add_magic('add_policy','Policy','approvals',\%policy_form,\&add_policy,\%data);
+  my $res = add_magic('add_policy','Policy','approvals',\%policy_form,\&add_policy,\%data);
+  if ($res > 0) {
+    print p, a({-href=>"?menu=approvals"}, 'Back to policies');
+  }
 }
 
 sub _edit_policy {
   my ($id) = @_;
-  edit_magic('ap','Policy','approvals',\%policy_form,\&get_policy,\&update_policy,$id);
+  my $res = edit_magic('ap','Policy','approvals',\%policy_form,\&get_policy,\&update_policy,$id);
+  if ($res > 0) {
+    print p, a({-href=>"?menu=approvals"}, 'Back to policies');
+  }
 }
 
 sub _delete_policy {
   my ($id) = @_;
-  delete_magic('ap','Policy','approvals',\%policy_form,\&get_policy,\&delete_policy,$id);
+  my $res = delete_magic('ap','Policy','approvals',\%policy_form,\&get_policy,\&delete_policy,$id);
+  if ($res > 0) {
+    print p, a({-href=>"?menu=approvals"}, 'Back to policies');
+  }
 }
 
 sub _list_rules {
@@ -338,7 +347,12 @@ sub _add_rule {
   print p("Domain regexp examples: '^www\\.', '^(host|srv)\\d+\\.'");
   print p("Record types examples: '1,6', 'HOST,A,AAAA', 're:^(A|AAAA|HOST)$'");
   print p('Supported symbolic names: HOST, DELEGATION, MX, ALIAS/CNAME, GLUE, SRV, DHCP, SSHFP, TLSA, TXT, NAPTR, CAA, RESERVATION, A, AAAA.');
-  add_magic('add_rule','Rule','approvals',\%rule_form,\&add_rule,\%data);
+  my $res = add_magic('add_rule','Rule','approvals',\%rule_form,\&add_rule,\%data);
+  if ($res > 0) {
+    # Re-load policy_id from parameter after POST
+    $policy_id = scalar param('policy_id') unless ($policy_id > 0);
+    print p, a({-href=>"?menu=approvals&sub=rules&policy_id=$policy_id"}, 'Back to rules');
+  }
 }
 
 sub _edit_rule {
@@ -347,12 +361,30 @@ sub _edit_rule {
   print p("Domain regexp examples: '^www\\.', '^(host|srv)\\d+\\.'");
   print p("Record types examples: '1,6', 'HOST,A,AAAA', 're:^(A|AAAA|HOST)$'");
   print p('Supported symbolic names: HOST, DELEGATION, MX, ALIAS/CNAME, GLUE, SRV, DHCP, SSHFP, TLSA, TXT, NAPTR, CAA, RESERVATION, A, AAAA.');
-  edit_magic('ar','Rule','approvals',\%rule_form,\&get_rule,\&update_rule,$id);
+  my $res = edit_magic('ar','Rule','approvals',\%rule_form,\&get_rule,\&update_rule,$id);
+  if ($res > 0) {
+    # Load policy_id from DB if not provided
+    unless ($policy_id > 0) {
+      my @q;
+      db_query("SELECT policy_id FROM approval_rules WHERE id = " . int($id), \@q);
+      $policy_id = $q[0][0] if (@q > 0);
+    }
+    print p, a({-href=>"?menu=approvals&sub=rules&policy_id=$policy_id"}, 'Back to rules');
+  }
 }
 
 sub _delete_rule {
   my ($id, $policy_id) = @_;
-  delete_magic('ar','Rule','approvals',\%rule_form,\&get_rule,\&delete_rule,$id);
+  my $res = delete_magic('ar','Rule','approvals',\%rule_form,\&get_rule,\&delete_rule,$id);
+  if ($res > 0) {
+    # Load policy_id from DB if not provided
+    unless ($policy_id > 0) {
+      my @q;
+      db_query("SELECT policy_id FROM approval_rules WHERE id = " . int($id), \@q);
+      $policy_id = $q[0][0] if (@q > 0);
+    }
+    print p, a({-href=>"?menu=approvals&sub=rules&policy_id=$policy_id"}, 'Back to rules');
+  }
 }
 
 sub _list_levels {
@@ -425,17 +457,40 @@ sub _add_level {
   my ($policy_id) = @_;
   $policy_id = scalar param('policy_id') unless ($policy_id > 0);
   my %data = (policy_id => $policy_id, level_order => 1, level_type => 'O');
-  add_magic('add_level','Level','approvals',\%level_form,\&add_level,\%data);
+  my $res = add_magic('add_level','Level','approvals',\%level_form,\&add_level,\%data);
+  if ($res > 0) {
+    # Re-load policy_id from parameter after POST
+    $policy_id = scalar param('policy_id') unless ($policy_id > 0);
+    print p, a({-href=>"?menu=approvals&sub=levels&policy_id=$policy_id"}, 'Back to levels');
+  }
 }
 
 sub _edit_level {
   my ($id, $policy_id) = @_;
-  edit_magic('al','Level','approvals',\%level_form,\&get_level,\&update_level,$id);
+  my $res = edit_magic('al','Level','approvals',\%level_form,\&get_level,\&update_level,$id);
+  if ($res > 0) {
+    # Load policy_id from DB if not provided
+    unless ($policy_id > 0) {
+      my @q;
+      db_query("SELECT policy_id FROM approval_levels WHERE id = " . int($id), \@q);
+      $policy_id = $q[0][0] if (@q > 0);
+    }
+    print p, a({-href=>"?menu=approvals&sub=levels&policy_id=$policy_id"}, 'Back to levels');
+  }
 }
 
 sub _delete_level {
   my ($id, $policy_id) = @_;
-  delete_magic('al','Level','approvals',\%level_form,\&get_level,\&delete_level,$id);
+  my $res = delete_magic('al','Level','approvals',\%level_form,\&get_level,\&delete_level,$id);
+  if ($res > 0) {
+    # Load policy_id from DB if not provided
+    unless ($policy_id > 0) {
+      my @q;
+      db_query("SELECT policy_id FROM approval_levels WHERE id = " . int($id), \@q);
+      $policy_id = $q[0][0] if (@q > 0);
+    }
+    print p, a({-href=>"?menu=approvals&sub=levels&policy_id=$policy_id"}, 'Back to levels');
+  }
 }
 
 sub _list_approvers {
@@ -528,12 +583,26 @@ sub _add_approver {
   );
 
   my %data = (level_id => $level_id);
-  add_magic('add_approver','Approver','approvals',\%local_approver_form,\&add_approver,\%data);
+  my $res = add_magic('add_approver','Approver','approvals',\%local_approver_form,\&add_approver,\%data);
+  if ($res > 0) {
+    # Re-load level_id from parameter after POST
+    $level_id = int(scalar param('add_approver_level_id')) unless ($level_id > 0);
+    print p, a({-href=>"?menu=approvals&sub=approvers&level_id=$level_id"}, 'Back to approvers');
+  }
 }
 
 sub _delete_approver {
   my ($id, $level_id) = @_;
-  delete_magic('aa','Approver','approvals',\%approver_form,\&get_approver,\&delete_approver,$id);
+  my $res = delete_magic('aa','Approver','approvals',\%approver_form,\&get_approver,\&delete_approver,$id);
+  if ($res > 0) {
+    # Load level_id from DB if not provided
+    unless ($level_id > 0) {
+      my @q;
+      db_query("SELECT level_id FROM approval_level_approvers WHERE id = " . int($id), \@q);
+      $level_id = $q[0][0] if (@q > 0);
+    }
+    print p, a({-href=>"?menu=approvals&sub=approvers&level_id=$level_id"}, 'Back to approvers');
+  }
 }
 
 sub _list_pending {
