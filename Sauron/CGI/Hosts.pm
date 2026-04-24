@@ -13,6 +13,7 @@ use Sauron::CGIutil;
 use Sauron::BackEnd;
 use Sauron::Util;
 use Sauron::Sauron;
+use Sauron::Approval;
 use Sauron::CGI::Utils;
 use Sauron::SetupIO;
 use Sys::Syslog qw(:DEFAULT setlogsock);
@@ -37,6 +38,29 @@ sub write2log{
   Sys::Syslog::syslog("info", encode_str("$msg"));
   Sys::Syslog::closelog();
 } # End of write2log
+
+
+sub _maybe_submit_approval {
+  my ($state, $operation, $host_type, $domain, $host_id, $change_ref, $original_ref) = @_;
+  my ($policy_id, %user, $email, $req_id);
+
+  $policy_id = check_approval_needed($state->{zoneid}, $operation, $host_type, $domain);
+  return 0 unless ($policy_id);
+
+  get_user($state->{user}, \%user);
+  $email = $user{email} || '';
+
+  $req_id = submit_change_request($state->{zoneid}, $policy_id, $state->{uid},
+                                  $email, $operation, $host_id,
+                                  $change_ref, $original_ref, param('approval_reason'));
+  if ($req_id) {
+    print h2("Change submitted for approval (request $req_id)");
+    return 1;
+  }
+
+  alert1("Failed to submit approval request");
+  return -1;
+}
 
 
 
@@ -979,6 +1003,12 @@ sub menu_handler {
       return;
     }
 
+    if (_maybe_submit_approval($state, 'D', $host{type}, $host{domain}, $host{id},
+                               {id=>$host{id}, domain=>$host{domain}}, \%host)) {
+      show_host_record($state,$perms);
+      return;
+    }
+
     $res=delete_magic('h','Host','hosts',\%host_form,\&get_host,\&delete_host,
 		      $id);
     if ($res == 2) {
@@ -1450,6 +1480,11 @@ sub menu_handler {
 	      $host{expiration}=$tmp
 		unless ($host{expiration} > 0 && $host{expiration} < $tmp)
 	      }
+
+      if (_maybe_submit_approval($state, 'M', $host{type}, $host{domain}, $host{id},
+               \%host, \%oldhost)) {
+        return;
+      }
 
 	    $res=update_host(\%host);
 	    if ($res < 0) {
@@ -2298,6 +2333,11 @@ sub menu_handler {
 	    $data{expiration}=$tmp
 	      unless ($data{expiration} > 0 && $data{expiration} < $tmp)
 	  }
+
+    if (_maybe_submit_approval($state, 'A', $data{type}, $data{domain}, undef,
+             \%data, undef)) {
+      return;
+    }
 	  $res=add_host(\%data);
 	  if ($res > 0) {
 	    update_history($state->{uid},$state->{sid},1,

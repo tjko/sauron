@@ -42,6 +42,13 @@ $DB_PASSWORD = "bar";
 # $SAURON_MAILER_ARGS = '-t'; 
 # $SAURON_MAIL_FROM = 'postmaster@somedomain'; 
 
+# approval workflow configuration
+# $SAURON_BASE_URL = 'https://sauron.example.com';
+# $SAURON_APPROVE_CGI_PATH = '/cgi-bin/approve.cgi';
+# $SAURON_APPROVAL_TOKEN_TTL_HOURS = 72;
+# $SAURON_APPROVAL_REMINDER_HOURS = 24;
+# $ALEVEL_APPROVAL_ADMIN = 5;
+
 # set to enable ping command in web interface
 # $SAURON_PING_PROG = '/bin/ping';
 # $SAURON_PING_ARGS = '-c5';  
