@@ -187,12 +187,12 @@ sub process_approval_level {
 	my ($policy_id, $current_level, $level_id, $level_order, $level_type);
 
 	db_query("SELECT policy_id, current_level FROM dns_change_requests " .
-		 "WHERE id = $1", \@rq, $request_id);
+		 "WHERE id = \$1", \@rq, $request_id);
 	return 0 unless (@rq > 0);
 	($policy_id, $current_level) = @{$rq[0]};
 
 	db_query("SELECT id, level_order, level_type FROM approval_levels " .
-		 "WHERE policy_id = $1 AND level_order = $2", \@lv,
+		 "WHERE policy_id = \$1 AND level_order = \$2", \@lv,
 		 $policy_id, $current_level);
 
 	if (@lv == 0) {
@@ -240,13 +240,13 @@ sub record_decision {
 	return ('error', 'Invalid decision') unless ($decision =~ /^[AR]$/);
 
 	db_query("SELECT id, request_id, level_id, user_id, token_expires " .
-		 "FROM dns_change_approval_tokens WHERE token = $1", \@tok, $token);
+		 "FROM dns_change_approval_tokens WHERE token = \$1", \@tok, $token);
 	return ('error', 'Invalid token') unless (@tok > 0);
 	($token_id, $request_id, $level_id, $user_id, $expires) = @{$tok[0]};
 
 	if (defined $expires) {
 		my @t; db_query("SELECT (token_expires < CURRENT_TIMESTAMP) " .
-			 "FROM dns_change_approval_tokens WHERE id = $1", \@t, $token_id);
+			 "FROM dns_change_approval_tokens WHERE id = \$1", \@t, $token_id);
 		if (@t > 0 && $t[0][0] eq 't') {
 			_audit($request_id, $user_id, undef, 'X', undef, 'Token expired');
 			return ('error', 'Token expired');
@@ -269,7 +269,7 @@ sub record_decision {
 	($level_type, $level_order) = @{$lvl[0]};
 
 	db_query("SELECT decision FROM dns_change_approval_tokens " .
-		 "WHERE request_id = $1 AND level_id = $2", \@all,
+		 "WHERE request_id = \$1 AND level_id = \$2", \@all,
 		 $request_id, $level_id);
 
 	$pending = 0; $approved = 0; $rejected = 0;
@@ -314,7 +314,7 @@ sub apply_change {
 	my ($requestor_name, $status);
 
 	db_query("SELECT requestor_id, operation, host_id, change_data, original_data " .
-		 "FROM dns_change_requests WHERE id = $1", \@rq, $request_id);
+		 "FROM dns_change_requests WHERE id = \$1", \@rq, $request_id);
 	return 0 unless (@rq > 0);
 	($requestor_id, $operation, $host_id, $change_data, $original_data) = @{$rq[0]};
 
@@ -359,7 +359,7 @@ sub send_reminder_emails {
 
 	db_query("SELECT id FROM dns_change_approval_tokens " .
 		 "WHERE decision IS NULL AND " .
-		 "(email_sent IS NULL OR email_sent < (CURRENT_TIMESTAMP - ($1 || ' hours')::interval)) " .
+		 "(email_sent IS NULL OR email_sent < (CURRENT_TIMESTAMP - (\$1 || ' hours')::interval)) " .
 		 "AND (token_expires IS NULL OR token_expires > CURRENT_TIMESTAMP)",
 		 \@q, $hours);
 
@@ -379,7 +379,7 @@ sub get_zone_pending_requests {
 	my ($zone_id) = @_;
 	my @q;
 	db_query("SELECT id, requestor_id, operation, status, current_level, " .
-		 "cdate FROM dns_change_requests WHERE zone_id = $1 AND status = 'P' " .
+		 "cdate FROM dns_change_requests WHERE zone_id = \$1 AND status = 'P' " .
 		 "ORDER BY cdate", \@q, $zone_id);
 	return @q;
 }
@@ -391,7 +391,7 @@ sub get_user_pending_approvals {
 	my @q;
 	db_query("SELECT t.request_id, r.zone_id, r.operation, r.cdate " .
 		 "FROM dns_change_approval_tokens t, dns_change_requests r " .
-		 "WHERE t.user_id = $1 AND t.decision IS NULL AND t.request_id = r.id " .
+		 "WHERE t.user_id = \$1 AND t.decision IS NULL AND t.request_id = r.id " .
 		 "ORDER BY r.cdate", \@q, $user_id);
 	return @q;
 }
@@ -404,7 +404,7 @@ sub _advance_or_apply {
 	my (@nxt);
 
 	db_query("SELECT id FROM approval_levels l, dns_change_requests r " .
-		 "WHERE r.id = $1 AND l.policy_id = r.policy_id AND l.level_order = $2",
+		 "WHERE r.id = \$1 AND l.policy_id = r.policy_id AND l.level_order = \$2",
 		 \@nxt, $request_id, $level_order + 1);
 
 	if (@nxt > 0) {
@@ -439,7 +439,7 @@ sub _send_approval_email {
 
 	db_query("SELECT t.token, u.email, r.id, r.zone_id, r.operation " .
 		 "FROM dns_change_approval_tokens t, users u, dns_change_requests r " .
-		 "WHERE t.id = $1 AND t.user_id = u.id AND t.request_id = r.id",
+		 "WHERE t.id = \$1 AND t.user_id = u.id AND t.request_id = r.id",
 		 \@q, $token_id);
 	return 0 unless (@q > 0);
 	($token, $email, $req_id, $zone_id, $operation) = @{$q[0]};
@@ -469,7 +469,7 @@ sub _send_decision_email {
 	return 0 unless ($main::SAURON_MAILER);
 
 	db_query("SELECT requestor_email, operation, status " .
-		 "FROM dns_change_requests WHERE id = $1", \@q, $request_id);
+		 "FROM dns_change_requests WHERE id = \$1", \@q, $request_id);
 	return 0 unless (@q > 0);
 	($email, $operation, $status) = @{$q[0]};
 	return 0 unless ($email);
