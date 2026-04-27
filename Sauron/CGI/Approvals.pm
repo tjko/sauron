@@ -204,7 +204,7 @@ sub menu_handler {
     }
   }
   elsif ($sub eq 'pending') {
-    _list_pending($zoneid);
+    _list_pending($zoneid, $selfurl);
   }
   else {
     _list_policies($zoneid, $selfurl);
@@ -606,20 +606,54 @@ sub _delete_approver {
 }
 
 sub _list_pending {
-  my ($zoneid) = @_;
+  my ($zoneid, $selfurl) = @_;
   my @q;
+  my %user_cache;
+  my %op_name = ('A' => 'Add', 'M' => 'Modify', 'D' => 'Delete');
 
   print h2('Pending approvals');
   @q = get_zone_pending_requests($zoneid);
 
   print "<TABLE bgcolor=\"#ccccff\" width=\"99%\" cellspacing=1 cellpadding=1 border=0>\n";
-  print "<TR bgcolor=\"#aaaaff\"><th>Request ID</th><th>Requestor ID</th><th>Operation</th><th>Level</th><th>Created</th></TR>\n";
+  print "<TR bgcolor=\"#aaaaff\"><th>Request ID</th><th>Domain / Record</th><th>Requestor</th><th>Operation</th><th>Level</th><th>Created</th></TR>\n";
   for my $i (0..$#q) {
-    my ($id, $req_id, $op, $status, $level, $cdate) = @{$q[$i]};
+    my ($id, $req_id, $req_email, $op, $status, $level, $cdate, $change_data) = @{$q[$i]};
+    
+    # Get requestor name
+    my $req_name = '';
+    if (!defined $user_cache{$req_id}) {
+      my @usr;
+      db_query("SELECT username FROM users WHERE id = \$1", \@usr, $req_id);
+      $user_cache{$req_id} = (@usr > 0 ? $usr[0][0] : '?');
+    }
+    $req_name = $user_cache{$req_id};
+    
+    # Deserialize change_data to get domain and type
+    my $domain = '?';
+    my $type_name = '?';
+    if (defined $change_data) {
+      my $rec = _deserialize($change_data);
+      if ($rec && ref($rec) eq 'HASH') {
+        $domain = $rec->{domain} || '?';
+        my $type = $rec->{type} || 0;
+        my %type_names = (
+          1 => 'Host (A/AAAA)', 2 => 'Delegation (NS)', 3 => 'Nameserver (MX)', 
+          4 => 'Alias (CNAME)', 5 => 'Printer', 6 => 'Glue', 8 => 'SRV',
+          9 => 'DHCP', 11 => 'SSHFP', 12 => 'TLSA', 13 => 'TXT', 
+          14 => 'NAPTR', 15 => 'CAA', 101 => 'Reservation'
+        );
+        $type_name = $type_names{$type} || "Type $type";
+      }
+    }
+    
+    # Create request link
+    my $request_link = "<a href=\"$selfurl?menu=approvals&sub=show_request&req_id=$id\">$id</a>";
+    
     print "<TR bgcolor=\"#bfeebf\">\n";
-    print "  <td>$id</td>\n";
-    print "  <td>$req_id</td>\n";
-    print "  <td>" . encode_entities($op || '') . "</td>\n";
+    print "  <td>$request_link</td>\n";
+    print "  <td>" . encode_entities($domain) . " (" . encode_entities($type_name) . ")</td>\n";
+    print "  <td>" . encode_entities($req_name) . " (" . encode_entities($req_email || '') . ")</td>\n";
+    print "  <td>" . encode_entities($op_name{$op} || $op) . "</td>\n";
     print "  <td>$level</td>\n";
     print "  <td>$cdate</td>\n";
     print "</TR>\n";
@@ -817,5 +851,12 @@ sub delete_approver {
   return db_exec("DELETE FROM approval_level_approvers WHERE id = " . $id);
 }
 
+# Helper function to deserialize change_data
+sub _deserialize {
+	my ($text) = @_;
+	return undef unless (defined $text);
+	my $VAR1 = eval $text;
+	return $@ ? undef : $VAR1;
+}
 
 1;

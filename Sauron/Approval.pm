@@ -378,8 +378,8 @@ sub send_reminder_emails {
 sub get_zone_pending_requests {
 	my ($zone_id) = @_;
 	my @q;
-	db_query("SELECT id, requestor_id, operation, status, current_level, " .
-		 "cdate FROM dns_change_requests WHERE zone_id = \$1 AND status = 'P' " .
+	db_query("SELECT id, requestor_id, requestor_email, operation, status, current_level, " .
+		 "cdate, change_data FROM dns_change_requests WHERE zone_id = \$1 AND status = 'P' " .
 		 "ORDER BY cdate", \@q, $zone_id);
 	return @q;
 }
