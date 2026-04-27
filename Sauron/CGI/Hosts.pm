@@ -766,6 +766,18 @@ sub restricted_add_host($) {
     return -111;
   }
 
+  # Check approval workflow before adding the host record
+  # This applies to all record types added via add_magic
+  if (defined($rec->{zone_id}) && $rec->{zone_id} > 0) {
+    my $policy_id = check_approval_needed($rec->{zone_id}, 'A', $rec->{type}, $rec->{domain});
+    if ($policy_id) {
+      # Approval is needed but add_magic doesn't support deferred adds
+      # Return error to indicate approval is required
+      alert1("This record requires approval before adding. Please use the standard Add menu.");
+      return -112;
+    }
+  }
+
   return add_host($rec);
 }
 
@@ -1134,6 +1146,7 @@ sub menu_handler {
 
     $data{type}=4;
     $data{zone}=$zoneid;
+    $data{zone_id}=$zoneid;  # Pass zone_id for approval check in restricted_add_host
     $data{alias}=param('aliasadd_alias') if (param('aliasadd_alias'));
     $res=add_magic('aliasadd','ALIAS','hosts',\%new_alias_form,
 		   \&restricted_add_host,\%data);
