@@ -62,7 +62,7 @@ sub check_approval_needed {
 		     'on_delete');
 
 	db_query("SELECT id, match_mode FROM approval_policies " .
-		 "WHERE zone_id = $1 AND active = true AND $flag_col = true",
+		 "WHERE zone_id = \$1 AND active = true AND $flag_col = true",
 		 \@pols, $zone_id);
 
 	for $i (0..$#pols) {
@@ -70,7 +70,7 @@ sub check_approval_needed {
 		my @r; my $rmatch; my $match_count = 0; my $rule_count = 0;
 
 		db_query("SELECT record_types, domain_regexp FROM approval_rules " .
-			 "WHERE policy_id = $1", \@r, $policy_id);
+			 "WHERE policy_id = \$1", \@r, $policy_id);
 		$rule_count = scalar @r;
 
 		if ($rule_count == 0) {
@@ -201,7 +201,7 @@ sub process_approval_level {
 
 	($level_id, $level_order, $level_type) = @{$lv[0]};
 
-	db_query("SELECT user_id FROM approval_level_approvers WHERE level_id = $1",
+	db_query("SELECT user_id FROM approval_level_approvers WHERE level_id = \$1",
 		 \@ap, $level_id);
 	return 0 unless (@ap > 0);
 
@@ -263,7 +263,7 @@ sub record_decision {
 	_audit($request_id, $user_id, undef, ($decision eq 'A' ? 'A' : 'R'),
 	       undef, $reason);
 
-	db_query("SELECT level_type, level_order FROM approval_levels WHERE id = $1",
+	db_query("SELECT level_type, level_order FROM approval_levels WHERE id = \$1",
 		 \@lvl, $level_id);
 	return ('error', 'Level not found') unless (@lvl > 0);
 	($level_type, $level_order) = @{$lvl[0]};
@@ -318,7 +318,7 @@ sub apply_change {
 	return 0 unless (@rq > 0);
 	($requestor_id, $operation, $host_id, $change_data, $original_data) = @{$rq[0]};
 
-	db_query("SELECT username FROM users WHERE id = $1", \@usr, $requestor_id);
+	db_query("SELECT username FROM users WHERE id = \$1", \@usr, $requestor_id);
 	$requestor_name = (@usr > 0 ? $usr[0][0] : 'approval');
 	set_muser($requestor_name);
 
