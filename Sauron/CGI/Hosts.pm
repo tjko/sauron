@@ -42,7 +42,7 @@ sub write2log{
 
 sub _maybe_submit_approval {
   my ($state, $operation, $host_type, $domain, $host_id, $change_ref, $original_ref) = @_;
-  my ($policy_id, %user, $email, $req_id);
+  my ($policy_id, %user, $email, $req_id, $selfurl);
 
   # DEBUG: Log approval check parameters
   write2log("DEBUG: check_approval_needed(zone=$state->{zoneid}, op=$operation, type=$host_type, domain=$domain)");
@@ -61,7 +61,14 @@ sub _maybe_submit_approval {
                                   $email, $operation, $host_id,
                                   $change_ref, $original_ref, param('approval_reason'));
   if ($req_id) {
+    $selfurl = $state->{selfurl} || '';
     print h2("Change submitted for approval (request $req_id)");
+    print p("Your change has been submitted for approval and is waiting for review.");
+    print p("Links:");
+    print ul(
+      li("<a href=\"$selfurl?menu=approvals&sub=pending\">View pending approvals</a>"),
+      li("<a href=\"$selfurl?menu=approvals&sub=show_request&req_id=$req_id\">View this request details</a>")
+    );
     return 1;
   }
 
