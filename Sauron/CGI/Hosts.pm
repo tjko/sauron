@@ -44,7 +44,14 @@ sub _maybe_submit_approval {
   my ($state, $operation, $host_type, $domain, $host_id, $change_ref, $original_ref) = @_;
   my ($policy_id, %user, $email, $req_id);
 
+  # DEBUG: Log approval check parameters
+  write2log("DEBUG: check_approval_needed(zone=$state->{zoneid}, op=$operation, type=$host_type, domain=$domain)");
+  
   $policy_id = check_approval_needed($state->{zoneid}, $operation, $host_type, $domain);
+  
+  # DEBUG: Log result
+  write2log("DEBUG: check_approval_needed returned " . (defined $policy_id ? "policy_id=$policy_id" : "undef"));
+  
   return 0 unless ($policy_id);
 
   get_user($state->{user}, \%user);
