@@ -567,9 +567,9 @@ my %restricted_new_host_form = (
    elabels=>['PRINTER','Comment'], iff=>['type','5']},
  # {ftype=>0, name=>'Group/Template selections', iff=>['type','[15]']},
   {ftype=>10, tag=>'grp', name=>'Base group', iff=>['type','[15]'],
-   no_dhcp=>1}, # ** Base, no_dhcp 2021-11-29 TVu
+   no_dhcp=>1, empty=>1}, # ** Base, no_dhcp 2021-11-29 TVu
   {ftype=>11, tag=>'subgroups', name=>'SubGroups', fields=>2,
-   iff=>['type','[15]']},
+   iff=>['type','[15]'], empty=>1},
   {ftype=>6, tag=>'mx', name=>'MX template', iff=>['type','1']},
   {ftype=>7, tag=>'wks', name=>'WKS template', iff=>['type','1']},
   {ftype=>0, name=>'Host info',iff=>['type','1']},
@@ -2218,7 +2218,12 @@ sub menu_handler {
     $newhostform = \%new_host_form;
     return if (check_perms('zone','RW'));
     if (check_perms('zone','RWX',1)) {
-      # check privilege flags if user doesn't have RWX permissions
+      # User DOES NOT have RWX (RW-only user) - use restricted form for type=1
+      if ($type==1) {
+        $newhostform = \%restricted_new_host_form;
+      }
+    } else {
+      # User HAS RWX - check privilege flags
       if ($type==1) { }
       elsif ($type==2) { return if check_perms('flags','DELEG'); }
       elsif ($type==3) { return if check_perms('flags','MX'); }
@@ -2242,8 +2247,6 @@ sub menu_handler {
 	alert1("Access Denied!");
 	return;
       }
-
-      $newhostform = \%restricted_new_host_form if ($type==1);
     }
 
     # Use default host name template, if defined. TVu 02 Jun 2015
