@@ -175,7 +175,11 @@ sub menu_handler {
   }
   elsif ($sub eq 'delete_approver') {
     return unless _require_policy_admin();
-    _delete_approver(scalar param('id'), scalar param('level_id'));
+    my $id = scalar param('id');
+    my $level_id = scalar param('level_id');
+    $id = scalar param('aa_id') unless ($id > 0);
+    $level_id = scalar param('aa_level_id') unless ($level_id > 0);
+    _delete_approver($id, $level_id);
   }
   elsif ($sub eq 'Edit') {
     return unless _require_policy_admin();
