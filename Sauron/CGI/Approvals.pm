@@ -206,6 +206,9 @@ sub menu_handler {
   elsif ($sub eq 'pending') {
     _list_pending($zoneid, $selfurl);
   }
+  elsif ($sub eq 'show_request') {
+    _show_request(scalar param('req_id'), $zoneid, $selfurl);
+  }
   else {
     _list_policies($zoneid, $selfurl);
   }
@@ -608,16 +611,21 @@ sub _delete_approver {
 sub _list_pending {
   my ($zoneid, $selfurl) = @_;
   my @q;
+  my @policies;
   my %user_cache;
+  my %policy_cache;
   my %op_name = ('A' => 'Add', 'M' => 'Modify', 'D' => 'Delete');
 
   print h2('Pending approvals');
   @q = get_zone_pending_requests($zoneid);
+  
+  # Load policies for zone to get policy_id -> level_id mapping
+  db_query("SELECT id FROM approval_policies WHERE zone_id = \$1", \@policies, $zoneid);
 
   print "<TABLE bgcolor=\"#ccccff\" width=\"99%\" cellspacing=1 cellpadding=1 border=0>\n";
   print "<TR bgcolor=\"#aaaaff\"><th>Request ID</th><th>Domain / Record</th><th>Requestor</th><th>Operation</th><th>Level</th><th>Created</th></TR>\n";
   for my $i (0..$#q) {
-    my ($id, $req_id, $req_email, $op, $status, $level, $cdate, $change_data) = @{$q[$i]};
+    my ($id, $req_id, $req_email, $op, $status, $level, $cdate, $change_data, $policy_id) = @{$q[$i]};
     
     # Get requestor name
     my $req_name = '';
@@ -649,12 +657,18 @@ sub _list_pending {
     # Create request link
     my $request_link = "<a href=\"$selfurl?menu=approvals&sub=show_request&req_id=$id\">$id</a>";
     
+    # Create level link to Approval Levels if policy_id exists
+    my $level_link = $level;
+    if ($policy_id > 0) {
+      $level_link = "<a href=\"$selfurl?menu=approvals&sub=levels&policy_id=$policy_id\">$level</a>";
+    }
+    
     print "<TR bgcolor=\"#bfeebf\">\n";
     print "  <td>$request_link</td>\n";
     print "  <td>" . encode_entities($domain) . " (" . encode_entities($type_name) . ")</td>\n";
     print "  <td>" . encode_entities($req_name) . " (" . encode_entities($req_email || '') . ")</td>\n";
     print "  <td>" . encode_entities($op_name{$op} || $op) . "</td>\n";
-    print "  <td>$level</td>\n";
+    print "  <td>$level_link</td>\n";
     print "  <td>$cdate</td>\n";
     print "</TR>\n";
   }
@@ -857,6 +871,105 @@ sub _deserialize {
 	return undef unless (defined $text);
 	my $VAR1 = eval $text;
 	return $@ ? undef : $VAR1;
+}
+
+# Show approval request details
+sub _show_request {
+	my ($req_id, $zoneid, $selfurl) = @_;
+	my (@req, @usr, @lvl);
+	my ($zone_id, $policy_id, $requestor_id, $requestor_email, $operation, 
+	    $status, $current_level, $host_id, $change_data, $reason, $cdate);
+	my %op_name = ('A' => 'Add', 'M' => 'Modify', 'D' => 'Delete');
+	my %status_name = ('P' => 'Pending', 'A' => 'Approved', 'R' => 'Rejected');
+
+	return unless (defined $req_id && $req_id > 0);
+
+	# Get request details
+	db_query("SELECT zone_id, policy_id, requestor_id, requestor_email, operation, " .
+		 "status, current_level, host_id, change_data, reason, cdate " .
+		 "FROM dns_change_requests WHERE id = \$1", \@req, $req_id);
+	return unless (@req > 0);
+
+	($zone_id, $policy_id, $requestor_id, $requestor_email, $operation, 
+	 $status, $current_level, $host_id, $change_data, $reason, $cdate) = @{$req[0]};
+
+	# Deserialize change_data
+	my $rec = _deserialize($change_data);
+	return unless ($rec && ref($rec) eq 'HASH');
+
+	# Get requestor name
+	db_query("SELECT username FROM users WHERE id = \$1", \@usr, $requestor_id);
+	my $requestor_name = (@usr > 0 ? $usr[0][0] : '?');
+
+	# Map type
+	my %type_names = (
+		1 => 'Host (A/AAAA)', 2 => 'Delegation (NS)', 3 => 'Nameserver (MX)',
+		4 => 'Alias (CNAME)', 5 => 'Printer', 6 => 'Glue', 8 => 'SRV',
+		9 => 'DHCP', 11 => 'SSHFP', 12 => 'TLSA', 13 => 'TXT',
+		14 => 'NAPTR', 15 => 'CAA', 101 => 'Reservation'
+	);
+	my $type_name = $type_names{$rec->{type} || 0} || "Type " . ($rec->{type} || 'unknown');
+
+	print h2('Approval Request Details');
+
+	# Display request information
+	print "<TABLE bgcolor=\"#ccccff\" width=\"99%\" cellspacing=1 cellpadding=2 border=0>\n";
+	print "<TR bgcolor=\"#aaaaff\"><th colspan=\"2\">Request Information</th></TR>\n";
+	print "<TR bgcolor=\"#bfeebf\"><td>Request ID:</td><td>$req_id</td></TR>\n";
+	print "<TR bgcolor=\"#bfeebf\"><td>Domain:</td><td>" . encode_entities($rec->{domain} || '?') . "</td></TR>\n";
+	print "<TR bgcolor=\"#bfeebf\"><td>Record Type:</td><td>" . encode_entities($type_name) . "</td></TR>\n";
+	print "<TR bgcolor=\"#bfeebf\"><td>Operation:</td><td>" . encode_entities($op_name{$operation} || $operation) . "</td></TR>\n";
+	print "<TR bgcolor=\"#bfeebf\"><td>Status:</td><td>" . encode_entities($status_name{$status} || $status) . "</td></TR>\n";
+	print "<TR bgcolor=\"#bfeebf\"><td>Current Level:</td><td>$current_level</td></TR>\n";
+	print "<TR bgcolor=\"#bfeebf\"><td>Requestor:</td><td>" . encode_entities($requestor_name) . " (" . encode_entities($requestor_email || '') . ")</td></TR>\n";
+	print "<TR bgcolor=\"#bfeebf\"><td>Created:</td><td>$cdate</td></TR>\n";
+	if (defined $reason && $reason ne '') {
+		print "<TR bgcolor=\"#bfeebf\"><td>Reason:</td><td>" . encode_entities($reason) . "</td></TR>\n";
+	}
+	print "</TABLE>\n";
+
+	# Display record data in a structured format
+	print h3('Record Data');
+	print "<TABLE bgcolor=\"#e0e0e0\" width=\"99%\" cellspacing=1 cellpadding=2 border=0>\n";
+	print "<TR bgcolor=\"#aaaaaa\"><th align=\"left\" colspan=\"2\"><FONT color=\"white\">Fields</FONT></th></TR>\n";
+
+	# Display key fields from change_data
+	my @fields = ('domain', 'type', 'ether', 'email', 'comment', 'info');
+	for my $field (@fields) {
+		next unless (defined $rec->{$field});
+		next if ($field eq 'domain' || $field eq 'type'); # Already shown above
+		my $val = $rec->{$field};
+		next if ($val eq '' || !defined $val);
+		print "<TR bgcolor=\"#f0f0f0\"><td>" . encode_entities($field) . ":</td><td>" . encode_entities($val) . "</td></TR>\n";
+	}
+
+	# Display IP addresses if present
+	if (defined $rec->{ip} && ref($rec->{ip}) eq 'ARRAY' && @{$rec->{ip}} > 0) {
+		print "<TR bgcolor=\"#aaaaaa\"><th align=\"left\" colspan=\"2\"><FONT color=\"white\">IP Addresses</FONT></th></TR>\n";
+		for my $ip_entry (@{$rec->{ip}}) {
+			if (ref($ip_entry) eq 'ARRAY' && @$ip_entry > 0) {
+				print "<TR bgcolor=\"#f0f0f0\"><td>IP:</td><td>" . encode_entities($ip_entry->[1]) . "</td></TR>\n";
+			}
+		}
+	}
+
+	print "</TABLE>\n";
+
+	# Display approval buttons if user is approver at current level and request is pending
+	if ($status eq 'P') {
+		print h3('Approval Action');
+		print "<p><b>As an approver, you can approve or reject this request:</b></p>\n";
+		print "<FORM method=\"POST\" action=\"$selfurl\">\n";
+		print "<input type=\"hidden\" name=\"menu\" value=\"approvals\">\n";
+		print "<input type=\"hidden\" name=\"sub\" value=\"approve_action\">\n";
+		print "<input type=\"hidden\" name=\"req_id\" value=\"$req_id\">\n";
+		print "<input type=\"hidden\" name=\"action\" value=\"\">\n";
+		print "<input type=\"submit\" name=\"approve\" value=\"Approve\" onclick=\"document.forms[0].elements['action'].value='approve';\">\n";
+		print "<input type=\"submit\" name=\"reject\" value=\"Reject\" onclick=\"document.forms[0].elements['action'].value='reject';\">\n";
+		print "</FORM>\n";
+	}
+
+	print "<p><a href=\"$selfurl?menu=approvals&sub=pending\">Back to Pending Approvals</a></p>\n";
 }
 
 1;
