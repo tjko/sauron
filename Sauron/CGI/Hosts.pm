@@ -565,11 +565,11 @@ my %restricted_new_host_form = (
   {ftype=>2, tag=>'printer_l', name=>'PRINTER entries',
    type=>['text','text'], fields=>2,len=>[50,20], empty=>[0,1],
    elabels=>['PRINTER','Comment'], iff=>['type','5']},
- # {ftype=>0, name=>'DHCP selections', iff=>['type','(1|5|7)']},
-  {ftype=>10, tag=>'grp', name=>'Base group', iff=>['type','(1|5|7)'],
-   no_dhcp=>1, empty=>1}, # ** Base, no_dhcp 2021-11-29 TVu - DHCP for Host, Printer, WKS
+ # {ftype=>0, name=>'DHCP selections', iff=>['type','(1|5)']},
+  {ftype=>10, tag=>'grp', name=>'Base group', iff=>['type','(1|5)'],
+   no_dhcp=>1, empty=>1}, # ** Base, no_dhcp 2021-11-29 TVu - DHCP for Host, Printer
   {ftype=>11, tag=>'subgroups', name=>'SubGroups', fields=>2,
-   iff=>['type','(1|5|7)'], empty=>1},
+   iff=>['type','(1|5)'], empty=>1},
   {ftype=>6, tag=>'mx', name=>'MX template', iff=>['type','3']},
   {ftype=>7, tag=>'wks', name=>'WKS template', iff=>['type','7']},
   {ftype=>0, name=>'Host info',iff=>['type','1']},
