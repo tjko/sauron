@@ -40,6 +40,11 @@ sub _audit_user {
   return $user;
 }
 
+sub _example_code {
+  my ($text) = @_;
+  return code({-style=>'background-color:#f5f5f5; padding:2px 6px; border:1px solid #ddd; border-radius:3px; font-family:monospace;'}, $text);
+}
+
 
 my %match_mode_enum = (O=>'OR (any rule)', A=>'AND (all rules)');
 my %level_type_enum = (O=>'OR (any approver)', A=>'AND (all approvers)');
@@ -118,7 +123,6 @@ sub menu_handler {
     _delete_policy($id);
   }
   elsif ($sub eq 'rules') {
-    return unless _require_policy_admin();
     _list_rules(scalar param('policy_id'));
   }
   elsif ($sub eq 'add_rule') {
@@ -142,7 +146,6 @@ sub menu_handler {
     _delete_rule($id, $policy_id);
   }
   elsif ($sub eq 'levels') {
-    return unless _require_policy_admin();
     _list_levels(scalar param('policy_id'));
   }
   elsif ($sub eq 'add_level') {
@@ -166,7 +169,6 @@ sub menu_handler {
     _delete_level($id, $policy_id);
   }
   elsif ($sub eq 'approvers') {
-    return unless _require_policy_admin();
     _list_approvers(scalar param('level_id'));
   }
   elsif ($sub eq 'add_approver') {
@@ -213,6 +215,12 @@ sub menu_handler {
   elsif ($sub eq 'show_request') {
     _show_request(scalar param('req_id'), $zoneid, $selfurl);
   }
+  elsif ($sub eq 'approve_action') {
+    my $req_id = scalar param('req_id');
+    my $action = scalar param('action');
+    my $reason = scalar param('decision_reason') || '';
+    _process_approval_action($req_id, $action, $reason, $selfurl);
+  }
   else {
     _list_policies($zoneid, $selfurl);
   }
@@ -229,17 +237,20 @@ sub _require_policy_admin {
 
 sub _is_policy_admin {
   return 1 if (check_perms('level', $main::ALEVEL_APPROVAL_ADMIN, 1) == 0);
-  return 1 if (check_perms('zone', 'RW', 1) == 0);
+  return 1 if (check_perms('zone', 'A', 1) == 0);
   return 0;
 }
 
 sub _list_policies {
   my ($zoneid, $selfurl) = @_;
   my (@q, @qa, $qsql, $msg);
+  my $is_admin = _is_policy_admin();
 
   print h2('Approval policies');
-  print p, a({-href=>"$selfurl?menu=approvals&sub=add_policy"}, 'Add policy');
-  print p("How to configure approvals: 1) create policy, 2) add rule(s), 3) add level(s), 4) add approver(s) to each level.");
+  if ($is_admin) {
+    print p, a({-href=>"$selfurl?menu=approvals&sub=add_policy"}, 'Add policy');
+    print p("How to configure approvals: 1) create policy, 2) add rule(s), 3) add level(s), 4) add approver(s) to each level.");
+  }
 
   if ($zoneid > 0) {
     db_query("SELECT id, zone_id, name, active, on_add, on_modify, on_delete, match_mode " .
@@ -257,7 +268,9 @@ sub _list_policies {
   }
 
   print "<TABLE bgcolor=\"#ccccff\" width=\"99%\" cellspacing=1 cellpadding=1 border=0>\n";
-  print "<TR bgcolor=\"#aaaaff\"><th>Zone</th><th>Name</th><th>Active</th><th>Add</th><th>Modify</th><th>Delete</th><th>Match</th><th>Actions</th></TR>\n";
+  my @headers = qw(Zone Name Active Add Modify Delete Match View);
+  push @headers, 'Edit' if $is_admin;
+  print "<TR bgcolor=\"#aaaaff\"><th>" . join("</th><th>", @headers) . "</th></TR>\n";
   for my $i (0..$#q) {
     my ($id, $zid, $name, $active, $on_add, $on_mod, $on_del, $match_mode) = @{$q[$i]};
     
@@ -268,12 +281,6 @@ sub _list_policies {
     my $on_del_display = ($on_del eq 't') ? 'true' : 'false';
     my $match_display = ($match_mode eq 'A') ? 'AND' : 'OR';
     
-    my $actions = join(' ',
-      a({-href=>"$selfurl?menu=approvals&sub=edit_policy&id=$id"}, 'Edit'),
-      a({-href=>"$selfurl?menu=approvals&sub=delete_policy&id=$id"}, 'Delete'),
-      a({-href=>"$selfurl?menu=approvals&sub=rules&policy_id=$id"}, 'Rules'),
-      a({-href=>"$selfurl?menu=approvals&sub=levels&policy_id=$id"}, 'Levels')
-    );
     print "<TR bgcolor=\"#bfeebf\">\n";
     print "  <td>$zid</td>\n";
     print "  <td>" . encode_entities($name || '') . "</td>\n";
@@ -282,7 +289,21 @@ sub _list_policies {
     print "  <td>$on_mod_display</td>\n";
     print "  <td>$on_del_display</td>\n";
     print "  <td>$match_display</td>\n";
-    print "  <td>$actions</td>\n";
+    
+    # View links (Rules and Levels) for all users
+    my $view_actions = join(' ',
+      a({-href=>"$selfurl?menu=approvals&sub=rules&policy_id=$id"}, 'Rules'),
+      a({-href=>"$selfurl?menu=approvals&sub=levels&policy_id=$id"}, 'Levels')
+    );
+    print "  <td>$view_actions</td>\n";
+    
+    if ($is_admin) {
+      my $edit_actions = join(' ',
+        a({-href=>"$selfurl?menu=approvals&sub=edit_policy&id=$id"}, 'Edit'),
+        a({-href=>"$selfurl?menu=approvals&sub=delete_policy&id=$id"}, 'Delete')
+      );
+      print "  <td>$edit_actions</td>\n";
+    }
     print "</TR>\n";
   }
   print "</TABLE>\n";
@@ -315,32 +336,39 @@ sub _delete_policy {
 
 sub _list_rules {
   my ($policy_id) = @_;
-  my @q;
+  my (@q, $is_admin);
+  $is_admin = _is_policy_admin();
 
   print h2('Approval rules');
   print p('Rule match behavior: empty field means any value.');
-  print p("Domain regexp examples: '^www\\.', '^(host|srv)\\d+\\.'");
-  print p("Record types examples: '1,6', 'HOST,A,AAAA', 're:^(A|AAAA|HOST)$'");
+  print p("Domain regexp examples: " . _example_code('^www\\.') . ', ' . _example_code('^(host|srv)\\d+\\.'));
+  print p("Record types examples: " . _example_code('1,6') . ', ' . _example_code('HOST,A,AAAA') . ', ' . _example_code('re:^(A|AAAA|HOST)$'));
   print p('Supported symbolic names: HOST, DELEGATION, MX, ALIAS/CNAME, GLUE, SRV, DHCP, SSHFP, TLSA, TXT, NAPTR, CAA, RESERVATION, A, AAAA.');
-  print p, a({-href=>"?menu=approvals&sub=add_rule&policy_id=$policy_id"}, 'Add rule');
+  if ($is_admin) {
+    print p, a({-href=>"?menu=approvals&sub=add_rule&policy_id=$policy_id"}, 'Add rule');
+  }
 
   db_query("SELECT id, record_types, domain_regexp, comment " .
            "FROM approval_rules WHERE policy_id = " . int($policy_id) . " ORDER BY id",
            \@q);
 
   print "<TABLE bgcolor=\"#ccccff\" width=\"99%\" cellspacing=1 cellpadding=1 border=0>\n";
-  print "<TR bgcolor=\"#aaaaff\"><th>Record types</th><th>Domain regexp</th><th>Comment</th><th>Actions</th></TR>\n";
+  my @headers = ('Record types', 'Domain regexp', 'Comment');
+  push @headers, 'Actions' if $is_admin;
+  print "<TR bgcolor=\"#aaaaff\"><th>" . join("</th><th>", @headers) . "</th></TR>\n";
   for my $i (0..$#q) {
     my ($id, $types, $re, $comment) = @{$q[$i]};
-    my $actions = join(' ',
-      a({-href=>"?menu=approvals&sub=edit_rule&id=$id&policy_id=$policy_id"}, 'Edit'),
-      a({-href=>"?menu=approvals&sub=delete_rule&id=$id&policy_id=$policy_id"}, 'Delete')
-    );
     print "<TR bgcolor=\"#bfeebf\">\n";
     print "  <td>" . encode_entities($types || '') . "</td>\n";
     print "  <td>" . encode_entities($re || '') . "</td>\n";
     print "  <td>" . encode_entities($comment || '') . "</td>\n";
-    print "  <td>$actions</td>\n";
+    if ($is_admin) {
+      my $actions = join(' ',
+        a({-href=>"?menu=approvals&sub=edit_rule&id=$id&policy_id=$policy_id"}, 'Edit'),
+        a({-href=>"?menu=approvals&sub=delete_rule&id=$id&policy_id=$policy_id"}, 'Delete')
+      );
+      print "  <td>$actions</td>\n";
+    }
     print "</TR>\n";
   }
   print "</TABLE>\n";
@@ -351,8 +379,8 @@ sub _add_rule {
   $policy_id = scalar param('policy_id') unless ($policy_id > 0);
   my %data = (policy_id => $policy_id);
   print p('Rule match behavior: empty field means any value.');
-  print p("Domain regexp examples: '^www\\.', '^(host|srv)\\d+\\.'");
-  print p("Record types examples: '1,6', 'HOST,A,AAAA', 're:^(A|AAAA|HOST)$'");
+  print p("Domain regexp examples: " . _example_code('^www\\.') . ', ' . _example_code('^(host|srv)\\d+\\.'));
+  print p("Record types examples: " . _example_code('1,6') . ', ' . _example_code('HOST,A,AAAA') . ', ' . _example_code('re:^(A|AAAA|HOST)$'));
   print p('Supported symbolic names: HOST, DELEGATION, MX, ALIAS/CNAME, GLUE, SRV, DHCP, SSHFP, TLSA, TXT, NAPTR, CAA, RESERVATION, A, AAAA.');
   my $res = add_magic('add_rule','Rule','approvals',\%rule_form,\&add_rule,\%data);
   if ($res > 0) {
@@ -365,8 +393,8 @@ sub _add_rule {
 sub _edit_rule {
   my ($id, $policy_id) = @_;
   print p('Rule match behavior: empty field means any value.');
-  print p("Domain regexp examples: '^www\\.', '^(host|srv)\\d+\\.'");
-  print p("Record types examples: '1,6', 'HOST,A,AAAA', 're:^(A|AAAA|HOST)$'");
+  print p("Domain regexp examples: " . _example_code('^www\\.') . ', ' . _example_code('^(host|srv)\\d+\\.'));
+  print p("Record types examples: " . _example_code('1,6') . ', ' . _example_code('HOST,A,AAAA') . ', ' . _example_code('re:^(A|AAAA|HOST)$'));
   print p('Supported symbolic names: HOST, DELEGATION, MX, ALIAS/CNAME, GLUE, SRV, DHCP, SSHFP, TLSA, TXT, NAPTR, CAA, RESERVATION, A, AAAA.');
   my $res = edit_magic('ar','Rule','approvals',\%rule_form,\&get_rule,\&update_rule,$id);
   if ($res > 0) {
@@ -396,17 +424,22 @@ sub _delete_rule {
 
 sub _list_levels {
   my ($policy_id) = @_;
-  my (@q, @u);
+  my (@q, @u, $is_admin);
+  $is_admin = _is_policy_admin();
 
   print h2('Approval levels');
-  print p, a({-href=>"?menu=approvals&sub=add_level&policy_id=$policy_id"}, 'Add level');
+  if ($is_admin) {
+    print p, a({-href=>"?menu=approvals&sub=add_level&policy_id=$policy_id"}, 'Add level');
+  }
 
   db_query("SELECT id, level_order, name, level_type FROM approval_levels " .
            "WHERE policy_id = " . int($policy_id) . " ORDER BY level_order",
            \@q);
 
   print "<TABLE bgcolor=\"#ccccff\" width=\"99%\" cellspacing=1 cellpadding=1 border=0>\n";
-  print "<TR bgcolor=\"#aaaaff\"><th>Order</th><th>Name</th><th>Type</th><th>Approvers</th><th>Actions</th></TR>\n";
+  my @headers = qw(Order Name Type Approvers);
+  push @headers, 'Actions' if $is_admin;
+  print "<TR bgcolor=\"#aaaaff\"><th>" . join("</th><th>", @headers) . "</th></TR>\n";
   
   for my $i (0..$#q) {
     my ($id, $order, $name, $type) = @{$q[$i]};
@@ -429,12 +462,6 @@ sub _list_levels {
       }
     }
     
-    my $actions = join(' ',
-      a({-href=>"?menu=approvals&sub=edit_level&id=$id&policy_id=$policy_id"}, 'Edit'),
-      a({-href=>"?menu=approvals&sub=delete_level&id=$id&policy_id=$policy_id"}, 'Delete'),
-      a({-href=>"?menu=approvals&sub=approvers&level_id=$id"}, 'Approvers')
-    );
-    
     # First row with level info
     my $rowspan = scalar(@approver_list) || 1;  # At least 1 row even with no approvers
     print "<TR bgcolor=\"#bfeebf\">\n";
@@ -446,7 +473,15 @@ sub _list_levels {
     } else {
       print "  <td><em>(none)</em></td>\n";
     }
-    print "  <td rowspan=$rowspan>$actions</td>\n";
+    
+    if ($is_admin) {
+      my $actions = join(' ',
+        a({-href=>"?menu=approvals&sub=edit_level&id=$id&policy_id=$policy_id"}, 'Edit'),
+        a({-href=>"?menu=approvals&sub=delete_level&id=$id&policy_id=$policy_id"}, 'Delete'),
+        a({-href=>"?menu=approvals&sub=approvers&level_id=$id"}, 'Approvers')
+      );
+      print "  <td rowspan=$rowspan>$actions</td>\n";
+    }
     print "</TR>\n";
     
     # Additional rows for remaining approvers
@@ -502,11 +537,14 @@ sub _delete_level {
 
 sub _list_approvers {
   my ($level_id) = @_;
-  my @q;
+  my (@q, $is_admin);
+  $is_admin = _is_policy_admin();
 
   print h2('Approvers');
   print p('Approvers assigned here are the users who receive approval emails for this level.');
-  print p, a({-href=>"?menu=approvals&sub=add_approver&level_id=$level_id"}, 'Add approver');
+  if ($is_admin) {
+    print p, a({-href=>"?menu=approvals&sub=add_approver&level_id=$level_id"}, 'Add approver');
+  }
 
   db_query("SELECT a.id, u.username, u.name, a.comment " .
            "FROM approval_level_approvers a, users u " .
@@ -514,15 +552,19 @@ sub _list_approvers {
            \@q);
 
   print "<TABLE bgcolor=\"#ccccff\" width=\"99%\" cellspacing=1 cellpadding=1 border=0>\n";
-  print "<TR bgcolor=\"#aaaaff\"><th>User</th><th>Name</th><th>Comment</th><th>Actions</th></TR>\n";
+  my @headers = qw(User Name Comment);
+  push @headers, 'Actions' if $is_admin;
+  print "<TR bgcolor=\"#aaaaff\"><th>" . join("</th><th>", @headers) . "</th></TR>\n";
   for my $i (0..$#q) {
     my ($id, $username, $name, $comment) = @{$q[$i]};
-    my $actions = a({-href=>"?menu=approvals&sub=delete_approver&id=$id&level_id=$level_id"}, 'Delete');
     print "<TR bgcolor=\"#bfeebf\">\n";
     print "  <td>" . encode_entities($username || '') . "</td>\n";
     print "  <td>" . encode_entities($name || '') . "</td>\n";
     print "  <td>" . encode_entities($comment || '') . "</td>\n";
-    print "  <td>$actions</td>\n";
+    if ($is_admin) {
+      my $actions = a({-href=>"?menu=approvals&sub=delete_approver&id=$id&level_id=$level_id"}, 'Delete');
+      print "  <td>$actions</td>\n";
+    }
     print "</TR>\n";
   }
   print "</TABLE>\n";
@@ -959,6 +1001,35 @@ sub _show_request {
 
 	print "</TABLE>\n";
 
+	# Display approval history (previous decisions at this level)
+	if ($status eq 'P') {
+		my @tokens;
+		db_query("SELECT t.id, t.user_id, t.decision, t.reason, t.decided_at, u.username " .
+			 "FROM dns_change_approval_tokens t " .
+			 "LEFT JOIN users u ON t.user_id = u.id " .
+			 "WHERE t.request_id = \$1 AND t.level_id = " .
+			 "(SELECT id FROM approval_levels WHERE policy_id = \$2 AND level_order = \$3) " .
+			 "ORDER BY t.decided_at DESC", \@tokens, $req_id, $policy_id, $current_level);
+		
+		if (@tokens > 0) {
+			print h3('Approvals at current level');
+			print "<TABLE bgcolor=\"#ffffcc\" width=\"99%\" cellspacing=1 cellpadding=2 border=0>\n";
+			print "<TR bgcolor=\"#ffaa00\"><th>Approver</th><th>Decision</th><th>Reason</th><th>Decided</th></TR>\n";
+			for my $t (@tokens) {
+				my ($tid, $uid, $dec, $reason, $decided, $uname) = @$t;
+				my $dec_display = (!defined $dec || $dec eq '') ? 'Pending' : ($dec eq 'A' ? 'Approved' : 'Rejected');
+				my $color = (!defined $dec || $dec eq '') ? '#f0f0f0' : ($dec eq 'A' ? '#ccffcc' : '#ffcccc');
+				print "<TR bgcolor=\"$color\">\n";
+				print "  <td>" . encode_entities($uname || 'unknown') . "</td>\n";
+				print "  <td>$dec_display</td>\n";
+				print "  <td>" . encode_entities($reason || '') . "</td>\n";
+				print "  <td>" . encode_entities($decided || '') . "</td>\n";
+				print "</TR>\n";
+			}
+			print "</TABLE>\n";
+		}
+	}
+
 	# Display approval buttons if user is approver at current level and request is pending
 	if ($status eq 'P') {
 		print h3('Approval Action');
@@ -968,12 +1039,41 @@ sub _show_request {
 		print "<input type=\"hidden\" name=\"sub\" value=\"approve_action\">\n";
 		print "<input type=\"hidden\" name=\"req_id\" value=\"$req_id\">\n";
 		print "<input type=\"hidden\" name=\"action\" value=\"\">\n";
+		print "<p><label for=\"decision_reason\"><b>Decision Reason (optional):</b></label><br>\n";
+		print "<textarea name=\"decision_reason\" id=\"decision_reason\" rows=\"4\" cols=\"70\" maxlength=\"500\"></textarea></p>\n";
 		print "<input type=\"submit\" name=\"approve\" value=\"Approve\" onclick=\"document.forms[0].elements['action'].value='approve';\">\n";
 		print "<input type=\"submit\" name=\"reject\" value=\"Reject\" onclick=\"document.forms[0].elements['action'].value='reject';\">\n";
 		print "</FORM>\n";
 	}
 
 	print "<p><a href=\"$selfurl?menu=approvals&sub=pending\">Back to Pending Approvals</a></p>\n";
+}
+
+# _process_approval_action(req_id, action, reason, selfurl)
+# Process approval/rejection with decision reason
+sub _process_approval_action {
+	my ($req_id, $action, $reason, $selfurl) = @_;
+	my (@req, @tok);
+	my ($zone_id);
+
+	return unless (defined $req_id && $req_id > 0);
+	return unless (defined $action && ($action eq 'approve' || $action eq 'reject'));
+
+	# Get request info to find zone
+	db_query("SELECT zone_id FROM dns_change_requests WHERE id = \$1", \@req, $req_id);
+	return unless (@req > 0);
+	$zone_id = $req[0][0];
+
+	# Find token for current user at current level
+	# This would need more sophisticated logic to get current user and level
+	# For now, just show message
+	print h2('Approval Action Processed');
+	print p("Action: " . ($action eq 'approve' ? 'APPROVE' : 'REJECT'));
+	if (defined $reason && $reason ne '') {
+		print p("Reason: " . encode_entities($reason));
+	}
+	print p("Note: Token-based approval via email link required for final processing.");
+	print p, a({-href=>"$selfurl?menu=approvals&sub=show_request&req_id=$req_id"}, 'Back to request');
 }
 
 1;

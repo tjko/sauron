@@ -64,6 +64,22 @@ sub _maybe_submit_approval {
     $selfurl = $state->{selfurl} || '';
     print h2("Change submitted for approval (request $req_id)");
     print p("Your change has been submitted for approval and is waiting for review.");
+    
+    # Display summary of what was submitted
+    print h3('Summary of submitted change:');
+    if ($operation eq 'A') {
+      print p("<b>Operation:</b> Add new record");
+    } elsif ($operation eq 'M') {
+      print p("<b>Operation:</b> Modify existing record");
+    } else {
+      print p("<b>Operation:</b> Delete record");
+    }
+    print p("<b>Domain:</b> " . encode_entities($domain));
+    
+    if (param('approval_reason')) {
+      print p("<b>Justification:</b> " . encode_entities(param('approval_reason')));
+    }
+    
     print p("Links:");
     print ul(
       li("<a href=\"$selfurl?menu=approvals&sub=pending\">View pending approvals</a>"),
@@ -317,6 +333,9 @@ my %host_form = (
    iff=>['type','14']},
 
   {ftype=>0, name=>'Record info', no_edit=>0},
+  {ftype=>1, tag=>'approval_reason', name=>'Approval Justification (if change needs approval)', 
+   type=>'text', len=>60, maxlen=>500, empty=>1, whitesp=>'P',
+   title=>'Optional: provide justification for this change - reviewers will see this'},
   {ftype=>4, name=>'Record created', tag=>'cdate_str', no_edit=>1},
   {ftype=>4, name=>'Last modified', tag=>'mdate_str', no_edit=>1},
   {ftype=>1, name=>'Expiration date', tag=>'expiration', len=>30,

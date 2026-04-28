@@ -309,14 +309,14 @@ sub record_decision {
 # apply_change(request_id) -> 1/0
 sub apply_change {
 	my ($request_id) = @_;
-	my (@rq, @usr);
-	my ($operation, $host_id, $change_data, $original_data, $requestor_id);
-	my ($requestor_name, $status);
+	my (@rq, @usr, @srv);
+	my ($operation, $host_id, $change_data, $original_data, $requestor_id, $zone_id);
+	my ($requestor_name, $status, $conflict_msg);
 
-	db_query("SELECT requestor_id, operation, host_id, change_data, original_data " .
+	db_query("SELECT requestor_id, operation, host_id, change_data, original_data, zone_id " .
 		 "FROM dns_change_requests WHERE id = \$1", \@rq, $request_id);
 	return 0 unless (@rq > 0);
-	($requestor_id, $operation, $host_id, $change_data, $original_data) = @{$rq[0]};
+	($requestor_id, $operation, $host_id, $change_data, $original_data, $zone_id) = @{$rq[0]};
 
 	db_query("SELECT username FROM users WHERE id = \$1", \@usr, $requestor_id);
 	$requestor_name = (@usr > 0 ? $usr[0][0] : 'approval');
@@ -325,6 +325,21 @@ sub apply_change {
 	my $rec = _deserialize($change_data);
 	if (!$rec || ref($rec) ne 'HASH') {
 		write2log("approval: invalid change_data for request $request_id");
+		_audit($request_id, undef, undef, 'X', undef, 'Invalid change_data (cannot deserialize)');
+		return 0;
+	}
+
+	# ===== CONFLICT CHECK =====
+	# Get server_id for conflict checking
+	db_query("SELECT server FROM zones WHERE id = \$1", \@srv, $zone_id);
+	my $server_id = (@srv > 0 ? $srv[0][0] : 0);
+
+	$conflict_msg = _check_resource_conflict($operation, $host_id, $zone_id, $server_id, $rec, $request_id);
+	if (defined $conflict_msg) {
+		write2log("approval: $conflict_msg for request $request_id");
+		_audit($request_id, undef, undef, 'X', undef, $conflict_msg);
+		db_exec("UPDATE dns_change_requests SET status = 'R' WHERE id = " . $request_id);
+		_send_conflict_email($request_id, $operation, $conflict_msg);
 		return 0;
 	}
 
@@ -339,6 +354,7 @@ sub apply_change {
 
 	if ($status < 0) {
 		write2log("approval: apply failed for request $request_id (status $status)");
+		_audit($request_id, undef, undef, 'X', undef, "Apply failed with error code $status");
 		return 0;
 	}
 
@@ -482,6 +498,27 @@ sub _send_decision_email {
 		 "Status: $status\n");
 }
 
+sub _send_conflict_email {
+	my ($request_id, $operation, $conflict_msg) = @_;
+	my (@q, $email);
+
+	return 0 unless ($main::SAURON_MAILER);
+
+	db_query("SELECT requestor_email FROM dns_change_requests WHERE id = \$1", \@q, $request_id);
+	return 0 unless (@q > 0);
+	$email = $q[0][0];
+	return 0 unless ($email);
+
+	return _send_mail($email,
+		 "[sauron] Approval request REJECTED - Resource conflict",
+		 "Your DNS change request $request_id has been automatically REJECTED.\n\n" .
+		 "Reason: Resource conflict\n" .
+		 "Operation: $operation\n" .
+		 "Details: $conflict_msg\n\n" .
+		 "The system detected that this resource is already in use or pending approval.\n" .
+		 "Please modify your request and resubmit.\n");
+}
+
 sub _send_mail {
 	my ($to, $subject, $body) = @_;
 	my $from = $main::SAURON_MAIL_FROM || 'sauron';
@@ -511,6 +548,45 @@ sub _audit {
 		 $lvl . "," .
 		 db_encode_str(defined $message ? $message : '') . ")");
 }
+
+# _check_resource_conflict($operation, $host_id, $zone_id, $server_id, $rec_ref, $request_id)
+# Check if the resource (IP/domain) conflicts with existing hosts or other pending requests
+# Returns: undef if no conflict, or conflict message string if conflict detected
+sub _check_resource_conflict {
+	my ($operation, $host_id, $zone_id, $server_id, $rec_ref, $request_id) = @_;
+	return undef unless (defined $rec_ref && ref($rec_ref) eq 'HASH');
+
+	if ($operation eq 'A') {
+		# For ADD: check both domain and IP
+		if (defined $rec_ref->{domain}) {
+			my ($conflict_source, $conflict_id) = domain_in_use_with_pending($zone_id, $rec_ref->{domain}, $request_id);
+			if (defined $conflict_source) {
+				return "Domain conflict: " . $rec_ref->{domain} . " already in use (in $conflict_source)";
+			}
+		}
+
+		if (defined $rec_ref->{ip} && @{$rec_ref->{ip}} > 0) {
+			my $ip = $rec_ref->{ip}[0][1];
+			my ($conflict_source, $conflict_id) = ip_in_use_with_pending($server_id, $ip, $request_id);
+			if (defined $conflict_source) {
+				return "IP conflict: $ip already in use (in $conflict_source)";
+			}
+		}
+	} elsif ($operation eq 'M') {
+		# For MODIFY: check if domain/IP changed (if they did, check for conflicts)
+		if (defined $rec_ref->{ip} && @{$rec_ref->{ip}} > 0) {
+			my $ip = $rec_ref->{ip}[0][1];
+			my ($conflict_source, $conflict_id) = ip_in_use_with_pending($server_id, $ip, $request_id);
+			if (defined $conflict_source) {
+				return "IP conflict on modify: $ip already in use (in $conflict_source)";
+			}
+		}
+	}
+	# For DELETE: no resource conflict check needed
+
+	return undef;
+}
+
 
 sub _generate_token {
 	my $seed1 = time . $$ . rand();
