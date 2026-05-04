@@ -263,6 +263,39 @@ sub _is_policy_admin {
   return 0;
 }
 
+sub _get_level_name {
+  my ($policy_id, $level_order, $cache_ref) = @_;
+  my @lvl;
+  my $key;
+
+  return '' unless ($policy_id > 0 && defined $level_order);
+  $key = int($policy_id) . ':' . $level_order;
+
+  if (defined $cache_ref && ref($cache_ref) eq 'HASH' && exists $cache_ref->{$key}) {
+    return $cache_ref->{$key};
+  }
+
+  db_query("SELECT name FROM approval_levels WHERE policy_id = \$1 AND level_order = \$2",
+           \@lvl, int($policy_id), $level_order);
+
+  my $name = (@lvl > 0 && defined $lvl[0][0] ? $lvl[0][0] : '');
+  if (defined $cache_ref && ref($cache_ref) eq 'HASH') {
+    $cache_ref->{$key} = $name;
+  }
+  return $name;
+}
+
+sub _format_level_display {
+  my ($level_order, $level_name) = @_;
+  my $display = encode_entities(defined $level_order ? "$level_order" : '?');
+
+  if (defined $level_name && $level_name ne '') {
+    $display .= ' (' . encode_entities($level_name) . ')';
+  }
+
+  return $display;
+}
+
 # _is_user_approver_for_request(req_id) - Check if current logged-in user is an approver
 sub _is_user_approver_for_request {
   my ($req_id) = @_;
@@ -745,6 +778,7 @@ sub _list_pending {
   my @policies;
   my %user_cache;
   my %policy_cache;
+  my %level_name_cache;
   my %op_name = ('A' => 'Add', 'M' => 'Modify', 'D' => 'Delete');
 
   print h2('Pending approvals');
@@ -757,6 +791,8 @@ sub _list_pending {
   print "<TR bgcolor=\"#aaaaff\"><th>Request ID</th><th>Domain / Record</th><th>Requestor</th><th>Operation</th><th>Level</th><th>Created</th></TR>\n";
   for my $i (0..$#q) {
     my ($id, $req_id, $req_email, $op, $status, $level, $cdate, $change_data, $policy_id) = @{$q[$i]};
+    my $level_name = _get_level_name($policy_id, $level, \%level_name_cache);
+    my $level_display = _format_level_display($level, $level_name);
     
     # Get requestor name
     my $req_name = '';
@@ -789,9 +825,9 @@ sub _list_pending {
     my $request_link = "<a href=\"$selfurl?menu=approvals&sub=show_request&req_id=$id\">$id</a>";
     
     # Create level link to Approval Levels if policy_id exists
-    my $level_link = $level;
+    my $level_link = $level_display;
     if ($policy_id > 0) {
-      $level_link = "<a href=\"$selfurl?menu=approvals&sub=levels&policy_id=$policy_id\">$level</a>";
+      $level_link = "<a href=\"$selfurl?menu=approvals&sub=levels&policy_id=$policy_id\">$level_display</a>";
     }
     
     print "<TR bgcolor=\"#bfeebf\">\n";
@@ -810,6 +846,7 @@ sub _list_all_requests {
   my ($zoneid, $selfurl) = @_;
   my @q;
   my %user_cache;
+  my %level_name_cache;
   my %status_name = ('P' => 'Pending', 'A' => 'Approved', 'R' => 'Rejected');
   my %op_name = ('A' => 'Add', 'M' => 'Modify', 'D' => 'Delete');
 
@@ -830,6 +867,8 @@ sub _list_all_requests {
   print "<TR bgcolor=\"#aaaaff\"><th>Request ID</th><th>Domain / Record</th><th>Requestor</th><th>Operation</th><th>Status</th><th>Level</th><th>Created</th></TR>\n";
   for my $i (0..$#q) {
     my ($id, $req_id, $req_email, $op, $status, $level, $cdate, $change_data, $policy_id) = @{$q[$i]};
+    my $level_name = _get_level_name($policy_id, $level, \%level_name_cache);
+    my $level_display = _format_level_display($level, $level_name);
     
     # Get requestor name
     my $req_name = '';
@@ -881,7 +920,7 @@ sub _list_all_requests {
     print "  <td>" . encode_entities($req_name) . " (" . encode_entities($req_email || '') . ")</td>\n";
     print "  <td>" . encode_entities($op_name{$op} || $op) . "</td>\n";
     print "  <td>" . encode_entities($status_display) . "</td>\n";
-    print "  <td>$level</td>\n";
+    print "  <td>$level_display</td>\n";
     print "  <td>$cdate</td>\n";
     print "</TR>\n";
   }
@@ -1118,6 +1157,8 @@ sub _show_request {
 	# Get requestor name
 	db_query("SELECT username FROM users WHERE id = \$1", \@usr, $requestor_id);
 	my $requestor_name = (@usr > 0 ? $usr[0][0] : '?');
+  my $level_name = _get_level_name($policy_id, $current_level);
+  my $current_level_display = _format_level_display($current_level, $level_name);
 
 	# Map type
 	my %type_names = (
@@ -1137,8 +1178,8 @@ sub _show_request {
 	print "<TR bgcolor=\"#bfeebf\"><td>Domain:</td><td>" . encode_entities($rec->{domain} || '?') . "</td></TR>\n";
 	print "<TR bgcolor=\"#bfeebf\"><td>Record Type:</td><td>" . encode_entities($type_name) . "</td></TR>\n";
 	print "<TR bgcolor=\"#bfeebf\"><td>Operation:</td><td>" . encode_entities($op_name{$operation} || $operation) . "</td></TR>\n";
-	print "<TR bgcolor=\"#bfeebf\"><td>Status:</td><td>" . encode_entities($status_name{$status} || $status) . "</td></TR>\n";
-	print "<TR bgcolor=\"#bfeebf\"><td>Current Level:</td><td>$current_level</td></TR>\n";
+  print "<TR bgcolor=\"#bfeebf\"><td>Status:</td><td>" . encode_entities($status_name{$status} || $status) . "</td></TR>\n";
+  print "<TR bgcolor=\"#bfeebf\"><td>Current Level:</td><td>$current_level_display</td></TR>\n";
 	print "<TR bgcolor=\"#bfeebf\"><td>Requestor:</td><td>" . encode_entities($requestor_name) . " (" . encode_entities($requestor_email || '') . ")</td></TR>\n";
 	print "<TR bgcolor=\"#bfeebf\"><td>Created:</td><td>$cdate</td></TR>\n";
 	if (defined $reason && $reason ne '') {
