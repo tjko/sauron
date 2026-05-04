@@ -1,4 +1,27 @@
+Unreleased
+
 0.9.0 (beta)
+    Approvals (new feature) [svamberg]
+      - Added a full web-based DNS approval workflow
+	    - New modules: Sauron::Approval and Sauron::CGI::Approvals
+	    - New CGI handlers and menu integration for approval requests,
+		  decision pages, and request detail views
+	    - Added helper script send-approval-reminders for pending approvals
+	  - Added database schema and migration support for approvals 
+	    - New schema file: sql/approval_workflow.sql
+	    - Updated init/tables.sql and dbconvert_1.7to1.8 to create and migrate
+	      approval-related tables
+	    - Updated config.in for approval workflow configuration options
+	  - Improved approval policy enforcement and security behavior 
+	    - Enforced approval checks in restricted host operations
+	    - Added superuser-specific approval advancement behavior
+	    - Removed token-based workflow path and tightened access control
+	  - Improved approval UI feedback and request usability
+	    - Better pending request display with level links and richer details
+	    - Added post-action navigation links and helpful submission feedback
+	    - Displayed approval level names in overviews and request details
+	  - Added approval-focused test coverage
+	    - New tests: t/05-approval-policy.t and t/06-approval-level-advance.t
 	- Added full CAA record support [svamberg]
 	  - New SQL table: caa_entries and upgrade
 	  - Apex CAA records are managed directly in zone edit form
