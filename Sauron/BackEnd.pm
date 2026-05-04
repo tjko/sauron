@@ -186,6 +186,7 @@ $VERSION = '$Id:$ ';
 	     add_catalog_composition
 	     remove_catalog_composition
 	     update_catalog_compositions
+	     write2log
 	    );
 
 # Catalog zones support (RFC 9432) - six functions exported above

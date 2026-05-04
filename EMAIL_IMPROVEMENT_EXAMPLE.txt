@@ -1,0 +1,55 @@
+#!/usr/bin/perl
+# Example: How the improved approval email looks now
+
+print <<"EOF";
+
+=== STARÝ EMAIL (PŘED OPRÁVOU) ===
+
+Subject: [sauron] Approval needed for DNS change request 42
+
+A DNS change request requires your approval.
+
+Request: #42
+Zone ID: 5
+Operation: A
+
+To review and approve/reject this request, click the link below:
+https://mordor.vm.cesnet.cz/cgi-bin/sauron.cgi?menu=approvals&sub=show_request&req_id=42
+
+Note: You must be logged in to the Sauron system to make a decision.
+
+
+=== NOVÝ EMAIL (PO OPRAVĚ) ===
+
+Subject: [sauron] Approval needed for DNS change request 42
+
+A DNS change request requires your approval.
+
+Request: #42
+Zone: example.com
+Operation: Add
+Record: test19.example.com (Host (A/AAAA))
+
+To review and approve/reject this request, click the link below:
+https://mordor.vm.cesnet.cz/cgi-bin/sauron.cgi?menu=approvals&sub=show_request&req_id=42
+
+Note: You must be logged in to the Sauron system to make a decision.
+
+
+=== ZMĚNY ===
+
+1. Zone ID: 5 → Zone: example.com
+   - Uživatel teď vidí název zóny místo čísla ID
+   
+2. Operation: A → Operation: Add
+   - Místo zkratek (A, M, D) jsou vidět srozumitelné texty
+   - A = Add (přidání)
+   - M = Modify (úprava)
+   - D = Delete (smazání)
+
+3. Nové: Record: test19.example.com (Host (A/AAAA))
+   - Ukazuje konkrétní doménu, kterou se změna týká
+   - Zobrazuje typ záznamu v srozumitelné podobě
+   - Např: Host (A/AAAA), Delegation (NS), MX Record, atd.
+
+EOF

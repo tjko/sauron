@@ -20,6 +20,7 @@ use Sys::Syslog qw(:DEFAULT setlogsock);
 eval { local $SIG{__WARN__} = sub {}; Sys::Syslog::setlogsock('unix') };
 use Net::IP qw(:PROC);
 use Data::Dumper;
+use HTML::Entities;
 use strict;
 use vars qw($VERSION @ISA @EXPORT);
 

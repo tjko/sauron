@@ -20,6 +20,7 @@ $VERSION = '1.0';
 	submit_change_request
 	process_approval_level
 	record_decision
+	record_approval_decision_web
 	apply_change
 	send_reminder_emails
 	get_zone_pending_requests
@@ -173,14 +174,19 @@ sub submit_change_request {
 	$request_id = db_lastid();
 	return undef unless ($request_id > 0);
 
-	_audit($request_id, $requestor_id, undef, 'S', 1, 'Request submitted');
+	# Get requestor username for audit log
+	my @req_user;
+	db_query("SELECT username FROM users WHERE id = \$1", \@req_user, $requestor_id);
+	my $requestor_name = (@req_user > 0 ? $req_user[0][0] : '');
+
+	_audit($request_id, $requestor_id, $requestor_name, 'S', 1, 'Request submitted');
 	process_approval_level($request_id);
 
 	return $request_id;
 }
 
 
-# process_approval_level(request_id)
+# process_approval_level(request_id) - Send approval emails to approvers (web-based, no tokens)
 sub process_approval_level {
 	my ($request_id) = @_;
 	my (@rq, @lv, @ap);
@@ -205,25 +211,25 @@ sub process_approval_level {
 		 \@ap, $level_id);
 	return 0 unless (@ap > 0);
 
+	# Create placeholder entries and send approval emails to all approvers
 	for my $ai (0..$#ap) {
 		my $user_id = $ap[$ai][0];
-		my $token = _generate_token();
-		my $ttl = $main::SAURON_APPROVAL_TOKEN_TTL_HOURS || 72;
+		
+		# Create placeholder entry in dns_change_approval_tokens (token stored but not used for auth)
 		my $res = db_exec("INSERT INTO dns_change_approval_tokens " .
-			 "(request_id, level_id, user_id, token, token_expires) " .
+			 "(request_id, level_id, user_id, token) " .
 			 "VALUES (" .
 			 $request_id . "," .
 			 $level_id . "," .
 			 $user_id . "," .
-			 db_encode_str($token) . "," .
-			 "CURRENT_TIMESTAMP + (INTERVAL '" . $ttl . " hours')) " .
-			 "RETURNING id");
+			 db_encode_str(_generate_token()) . ")");
 		if ($res < 0) {
-			write2log("approval: failed to insert token for request $request_id");
+			write2log("approval: failed to create approval record for request $request_id, user $user_id");
 			next;
 		}
-		my $token_id = db_lastid();
-		_send_approval_email($token_id);
+		
+		# Send email with link to web form
+		_send_approval_email($request_id, $user_id);
 	}
 
 	return 1;
@@ -248,7 +254,7 @@ sub record_decision {
 		my @t; db_query("SELECT (token_expires < CURRENT_TIMESTAMP) " .
 			 "FROM dns_change_approval_tokens WHERE id = \$1", \@t, $token_id);
 		if (@t > 0 && $t[0][0] eq 't') {
-			_audit($request_id, $user_id, undef, 'X', undef, 'Token expired');
+			_audit($request_id, undef, 'system', 'X', undef, 'Token expired');
 			return ('error', 'Token expired');
 		}
 	}
@@ -260,7 +266,12 @@ sub record_decision {
 		       "WHERE id = " . $token_id . " AND decision IS NULL");
 	return ('error', 'Decision already recorded') if ($res < 1);
 
-	_audit($request_id, $user_id, undef, ($decision eq 'A' ? 'A' : 'R'),
+	# Get username for audit log
+	my @user_info;
+	db_query("SELECT username FROM users WHERE id = \$1", \@user_info, $user_id);
+	my $user_name = (@user_info > 0 ? $user_info[0][0] : '');
+
+	_audit($request_id, $user_id, $user_name, ($decision eq 'A' ? 'A' : 'R'),
 	       undef, $reason);
 
 	db_query("SELECT level_type, level_order FROM approval_levels WHERE id = \$1",
@@ -285,24 +296,143 @@ sub record_decision {
 	}
 
 	if ($level_type eq 'O') {
+		# OR: one approval is enough, but any rejection rejects immediately
+		if ($rejected > 0) {
+			return _reject_request($request_id, $reason, $user_id, $user_name);
+		}
 		if ($approved > 0) {
 			return _advance_or_apply($request_id, $level_order);
-		}
-		if ($pending == 0 && $rejected > 0) {
-			return _reject_request($request_id, $reason);
 		}
 		return ('pending', 'Waiting for other approvals');
 	}
 
 	# AND
 	if ($rejected > 0) {
-		return _reject_request($request_id, $reason);
+		return _reject_request($request_id, $reason, $user_id, $user_name);
 	}
 	if ($pending == 0 && $approved > 0) {
 		return _advance_or_apply($request_id, $level_order);
 	}
 
 	return ('pending', 'Waiting for other approvals');
+}
+
+
+# record_approval_decision_web(request_id, user_id, decision, reason) -> (status, message)
+# Web-based approval without tokens - user must be logged in and authorized
+sub record_approval_decision_web {
+	my ($request_id, $user_id, $decision, $reason) = @_;
+	my (@rq, @req, @lv, @all);
+	my ($policy_id, $current_level, $level_id, $level_order, $level_type);
+	my ($pending, $approved, $rejected);
+
+	return ('error', 'Invalid decision') unless ($decision =~ /^[AR]$/);
+	return ('error', 'Invalid request ID') unless ($request_id > 0);
+	return ('error', 'Invalid user ID') unless ($user_id > 0);
+
+	# Get request details
+	db_query("SELECT policy_id, current_level FROM dns_change_requests WHERE id = \$1", \@rq, $request_id);
+	return ('error', 'Request not found') unless (@rq > 0);
+	($policy_id, $current_level) = @{$rq[0]};
+
+	# Get current approval level
+	db_query("SELECT id, level_order, level_type FROM approval_levels " .
+		 "WHERE policy_id = \$1 AND level_order = \$2", \@lv,
+		 $policy_id, $current_level);
+	return ('error', 'Level not found') unless (@lv > 0);
+	($level_id, $level_order, $level_type) = @{$lv[0]};
+
+	# Verify user is approver for this level (security check)
+	my $is_superuser = (defined $main::state{superuser} && $main::state{superuser} eq 'yes');
+	unless ($is_superuser) {
+		my @approver_check;
+		db_query("SELECT user_id FROM approval_level_approvers WHERE level_id = \$1 AND user_id = \$2",
+			 \@approver_check, $level_id, $user_id);
+		return ('error', 'User is not an approver for this level') unless (@approver_check > 0);
+	}
+
+	# Ensure there is a pending approval entry for this user
+	my $token_id;
+	my @tok_pending;
+	db_query("SELECT id FROM dns_change_approval_tokens " .
+		 "WHERE request_id = \$1 AND level_id = \$2 AND user_id = \$3 AND decision IS NULL " .
+		 "ORDER BY id LIMIT 1",
+		 \@tok_pending, $request_id, $level_id, $user_id);
+	if (@tok_pending > 0) {
+		$token_id = $tok_pending[0][0];
+	} else {
+		my @tok_done;
+		db_query("SELECT id FROM dns_change_approval_tokens " .
+			 "WHERE request_id = \$1 AND level_id = \$2 AND user_id = \$3 AND decision IS NOT NULL " .
+			 "ORDER BY id LIMIT 1",
+			 \@tok_done, $request_id, $level_id, $user_id);
+		return ('error', 'Decision already recorded') if (@tok_done > 0);
+
+		my $ins = db_exec("INSERT INTO dns_change_approval_tokens " .
+			 "(request_id, level_id, user_id, token) VALUES (" .
+			 $request_id . "," .
+			 $level_id . "," .
+			 $user_id . "," .
+			 db_encode_str(_generate_token()) . ") RETURNING id");
+		return ('error', 'Failed to create approval record') if ($ins < 0);
+		$token_id = db_lastid();
+		return ('error', 'Failed to create approval record') unless ($token_id && $token_id > 0);
+	}
+
+	# Update decision for this approver (using approval tokens table for storage)
+	my $res = db_exec("UPDATE dns_change_approval_tokens SET " .
+		       "decision = " . db_encode_str($decision) . ", " .
+		       "reason = " . db_encode_str($reason) . ", " .
+		       "decided_at = CURRENT_TIMESTAMP " .
+		       "WHERE id = " . $token_id . " AND decision IS NULL");
+	return ('error', 'Decision already recorded') if ($res < 1);
+
+	# Get username for audit log
+	my @user_info;
+	db_query("SELECT username FROM users WHERE id = \$1", \@user_info, $user_id);
+	my $user_name = (@user_info > 0 ? $user_info[0][0] : '');
+
+	_audit($request_id, $user_id, $user_name, ($decision eq 'A' ? 'A' : 'R'),
+	       undef, $reason);
+
+	# Check all decisions at current level
+	db_query("SELECT decision FROM dns_change_approval_tokens " .
+		 "WHERE request_id = \$1 AND level_id = \$2", \@all,
+		 $request_id, $level_id);
+
+	$pending = 0; $approved = 0; $rejected = 0;
+	for my $i (0..$#all) {
+		my $d = $all[$i][0];
+		if (!defined $d || $d eq '') {
+			$pending++;
+		} elsif ($d eq 'A') {
+			$approved++;
+		} elsif ($d eq 'R') {
+			$rejected++;
+		}
+	}
+
+	# Check if level is complete
+	if ($level_type eq 'O') {
+		# OR: one approval is enough, but any rejection rejects immediately
+		if ($rejected > 0) {
+			return _reject_request($request_id, $reason, $user_id, $user_name);
+		}
+		if ($approved > 0) {
+			return _advance_or_apply($request_id, $level_order);
+		}
+		return ('pending', 'Waiting for other approvals at this level');
+	}
+
+	# AND: all must approve
+	if ($rejected > 0) {
+		return _reject_request($request_id, $reason, $user_id, $user_name);
+	}
+	if ($pending == 0 && $approved > 0) {
+		return _advance_or_apply($request_id, $level_order);
+	}
+
+	return ('pending', 'Waiting for all approvers at this level');
 }
 
 
@@ -325,7 +455,7 @@ sub apply_change {
 	my $rec = _deserialize($change_data);
 	if (!$rec || ref($rec) ne 'HASH') {
 		write2log("approval: invalid change_data for request $request_id");
-		_audit($request_id, undef, undef, 'X', undef, 'Invalid change_data (cannot deserialize)');
+		_audit($request_id, undef, 'system', 'X', undef, 'Invalid change_data (cannot deserialize)');
 		return 0;
 	}
 
@@ -337,7 +467,7 @@ sub apply_change {
 	$conflict_msg = _check_resource_conflict($operation, $host_id, $zone_id, $server_id, $rec, $request_id);
 	if (defined $conflict_msg) {
 		write2log("approval: $conflict_msg for request $request_id");
-		_audit($request_id, undef, undef, 'X', undef, $conflict_msg);
+		_audit($request_id, undef, 'system', 'X', undef, $conflict_msg);
 		db_exec("UPDATE dns_change_requests SET status = 'R' WHERE id = " . $request_id);
 		_send_conflict_email($request_id, $operation, $conflict_msg);
 		return 0;
@@ -354,12 +484,12 @@ sub apply_change {
 
 	if ($status < 0) {
 		write2log("approval: apply failed for request $request_id (status $status)");
-		_audit($request_id, undef, undef, 'X', undef, "Apply failed with error code $status");
+		_audit($request_id, undef, 'system', 'X', undef, "Apply failed with error code $status");
 		return 0;
 	}
 
 	db_exec("UPDATE dns_change_requests SET status = 'A' WHERE id = " . $request_id);
-	_audit($request_id, $requestor_id, $requestor_name, 'P', undef, 'Applied');
+	_audit($request_id, undef, 'system', 'P', undef, 'Applied');
 	_send_decision_email($request_id, 'A');
 	return 1;
 }
@@ -419,7 +549,7 @@ sub _advance_or_apply {
 	my ($request_id, $level_order) = @_;
 	my (@nxt);
 
-	db_query("SELECT id FROM approval_levels l, dns_change_requests r " .
+	db_query("SELECT l.id FROM approval_levels l, dns_change_requests r " .
 		 "WHERE r.id = \$1 AND l.policy_id = r.policy_id AND l.level_order = \$2",
 		 \@nxt, $request_id, $level_order + 1);
 
@@ -438,43 +568,62 @@ sub _advance_or_apply {
 }
 
 sub _reject_request {
-	my ($request_id, $reason) = @_;
+	my ($request_id, $reason, $user_id, $user_name) = @_;
 	db_exec("UPDATE dns_change_requests SET status = 'R' WHERE id = " . $request_id);
-	_audit($request_id, undef, undef, 'R', undef, $reason);
+	_audit($request_id, $user_id, $user_name, 'R', undef, $reason);
 	_send_decision_email($request_id, 'R');
 	return ('rejected', 'Request rejected');
 }
 
 sub _send_approval_email {
-	my ($token_id) = @_;
-	my (@q, $token, $email, $req_id, $zone_id, $operation);
-	my ($base_url, $path, $url);
+	my ($request_id, $user_id) = @_;
+	my (@q, $email, $req_id, $zone_id, $zone_name, $operation, $change_data);
+	my ($base_url, $url, $record_domain, $record_type, $record_type_text);
+	my $op_text;
 
-	return 0 unless ($token_id > 0);
+	return 0 unless ($request_id > 0);
+	return 0 unless ($user_id > 0);
 	return 0 unless ($main::SAURON_MAILER);
 
-	db_query("SELECT t.token, u.email, r.id, r.zone_id, r.operation " .
-		 "FROM dns_change_approval_tokens t, users u, dns_change_requests r " .
-		 "WHERE t.id = \$1 AND t.user_id = u.id AND t.request_id = r.id",
-		 \@q, $token_id);
+	db_query("SELECT u.email, r.id, r.zone_id, r.operation, r.change_data, " .
+		 "z.name " .
+		 "FROM users u, dns_change_requests r, zones z " .
+		 "WHERE u.id = \$1 AND r.id = \$2 AND r.zone_id = z.id",
+		 \@q, $user_id, $request_id);
 	return 0 unless (@q > 0);
-	($token, $email, $req_id, $zone_id, $operation) = @{$q[0]};
+	($email, $req_id, $zone_id, $operation, $change_data, $zone_name) = @{$q[0]};
 
+	# Extract record details from change_data
+	$record_domain = '(unknown)';
+	$record_type = 0;
+	$record_type_text = 'Unknown';
+	if (defined $change_data) {
+		my $rec = _deserialize($change_data);
+		if ($rec && ref($rec) eq 'HASH') {
+			$record_domain = $rec->{domain} if (defined $rec->{domain});
+			$record_type = $rec->{type} if (defined $rec->{type});
+			$record_type_text = _host_type_to_text($record_type);
+		}
+	}
+
+	$op_text = _operation_code_to_text($operation);
 	$base_url = $main::SAURON_BASE_URL || '';
-	$path = $main::SAURON_APPROVE_CGI_PATH || '/cgi-bin/approve.cgi';
-	$url = $base_url . $path . '?token=' . $token;
+	# Web-based approval: link directly to request page in sauron.cgi
+	$url = $base_url . '/cgi-bin/sauron.cgi?menu=approvals&sub=show_request&req_id=' . $request_id;
 
 	return 0 unless ($email);
 	return 0 unless (_send_mail($email,
-		 "[sauron] Approval request",
-		 "Approval required for DNS change request $req_id\n" .
-		 "Zone ID: $zone_id\n" .
-		 "Operation: $operation\n\n" .
-		 "Approve or reject here:\n$url\n"));
+		 "[sauron] Approval needed for DNS change request $request_id",
+		 "A DNS change request requires your approval.\n\n" .
+		 "Request: #$request_id\n" .
+		 "Zone: $zone_name\n" .
+		 "Operation: $op_text\n" .
+		 "Record: $record_domain ($record_type_text)\n\n" .
+		 "To review and approve/reject this request, click the link below:\n" .
+		 "$url\n\n" .
+		 "Note: You must be logged in to the Sauron system to make a decision.\n"));
 
-	db_exec("UPDATE dns_change_approval_tokens SET email_sent = CURRENT_TIMESTAMP " .
-		 "WHERE id = " . $token_id);
-	_audit($req_id, undef, undef, 'E', undef, "Email sent to $email");
+	_audit($request_id, undef, 'system', 'E', undef, "Email sent to $email");
 	return 1;
 }
 
@@ -607,8 +756,46 @@ sub _deserialize {
 	my ($text) = @_;
 	return undef unless (defined $text);
 	my $VAR1;
+	# Handle both $VAR1 = {...} format and terse {...} format
+	$text = '$VAR1 = ' . $text unless ($text =~ /^\$VAR1\s*=/);
 	eval $text;
 	return $@ ? undef : $VAR1;
+}
+
+# _operation_code_to_text($code)
+#   Converts operation code (A/M/D) to human-readable text
+sub _operation_code_to_text {
+	my ($code) = @_;
+	return 'Add' if ($code eq 'A');
+	return 'Modify' if ($code eq 'M');
+	return 'Delete' if ($code eq 'D');
+	return $code;
+}
+
+# _host_type_to_text($type_num)
+#   Converts host type number to human-readable text
+sub _host_type_to_text {
+	my ($type_num) = @_;
+	my %type_names = (
+		0 => 'Any type',
+		1 => 'Host (A/AAAA)',
+		2 => 'Delegation (NS)',
+		3 => 'MX Record',
+		4 => 'Alias (CNAME)',
+		5 => 'Printer',
+		6 => 'Glue',
+		7 => 'AREC Alias',
+		8 => 'SRV',
+		9 => 'DHCP',
+		10 => 'Zone',
+		11 => 'SSHFP',
+		12 => 'TLSA',
+		13 => 'TXT',
+		14 => 'NAPTR',
+		15 => 'CAA',
+		101 => 'Host reservation'
+	);
+	return $type_names{$type_num} || "Type $type_num";
 }
 
 1;

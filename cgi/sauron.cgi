@@ -112,6 +112,7 @@ $debug_mode = $SAURON_DEBUG_MODE;
       'approvals'=>[
           ['Policies','sub=list_policies'],
           ['Pending','sub=pending'],
+          ['All Requests','sub=all_requests'],
           [],
           ['Add Policy','sub=add_policy']
          ],

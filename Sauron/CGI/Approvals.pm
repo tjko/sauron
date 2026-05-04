@@ -45,6 +45,16 @@ sub _example_code {
   return code({-style=>'background-color:#f5f5f5; padding:2px 6px; border:1px solid #ddd; border-radius:3px; font-family:monospace;'}, $text);
 }
 
+sub _bool_to_icon {
+  my ($value, $label) = @_;
+  my $checkmark = chr(0x2705);  # ✅ green checkmark
+  my $cross = chr(0x274C);      # ❌ red cross
+  if ($value eq 't') {
+    return '<span title="' . encode_entities($label || 'Yes') . '" style="cursor:pointer; font-size:1.2em;">' . $checkmark . '</span>';
+  } else {
+    return '<span title="' . encode_entities($label || 'No') . '" style="cursor:pointer; font-size:1.2em;">' . $cross . '</span>';
+  }
+}
 
 my %match_mode_enum = (O=>'OR (any rule)', A=>'AND (all rules)');
 my %level_type_enum = (O=>'OR (any approver)', A=>'AND (all approvers)');
@@ -102,6 +112,15 @@ sub menu_handler {
   my $sub = param('sub') || 'list_policies';
   my $zoneid = $state->{zoneid};
   my $selfurl = $state->{selfurl};
+
+  # Require zone selection for approval management
+  # Only list_policies can show cross-zone view for policy admins
+  if ($zoneid <= 0 && $sub ne 'list_policies') {
+    print h2('Zone selection required');
+    print p('Approval management requires a zone to be selected.');
+    print p(a({-href=>"$selfurl?menu=zones"}, 'Select a zone'));
+    return;
+  }
 
   if ($sub eq 'list_policies') {
     _list_policies($zoneid, $selfurl);
@@ -212,12 +231,15 @@ sub menu_handler {
   elsif ($sub eq 'pending') {
     _list_pending($zoneid, $selfurl);
   }
+  elsif ($sub eq 'all_requests') {
+    _list_all_requests($zoneid, $selfurl);
+  }
   elsif ($sub eq 'show_request') {
     _show_request(scalar param('req_id'), $zoneid, $selfurl);
   }
   elsif ($sub eq 'approve_action') {
     my $req_id = scalar param('req_id');
-    my $action = scalar param('action');
+    my $action = lc(scalar param('action') || '');  # Convert to lowercase
     my $reason = scalar param('decision_reason') || '';
     _process_approval_action($req_id, $action, $reason, $selfurl);
   }
@@ -241,53 +263,116 @@ sub _is_policy_admin {
   return 0;
 }
 
+# _is_user_approver_for_request(req_id) - Check if current logged-in user is an approver
+sub _is_user_approver_for_request {
+  my ($req_id) = @_;
+  my (@req, @level, @approvers);
+  my ($current_user_id, $policy_id, $current_level, $level_id);
+  
+  return 0 unless (defined $req_id && $req_id > 0);
+  return 0 unless (defined $main::state{uid});
+  $current_user_id = $main::state{uid};
+  
+  # Superusers can always approve requests
+  return 1 if ($main::state{superuser} eq 'yes');
+  
+  # Get request's policy and current level
+  db_query("SELECT policy_id, current_level FROM dns_change_requests WHERE id = \$1",
+           \@req, $req_id);
+  return 0 unless (@req > 0);
+  ($policy_id, $current_level) = @{$req[0]};
+  
+  # Get level_id for current approval level
+  db_query("SELECT id FROM approval_levels WHERE policy_id = \$1 AND level_order = \$2",
+           \@level, $policy_id, $current_level);
+  return 0 unless (@level > 0);
+  $level_id = $level[0][0];
+  
+  # Check if current user is an approver for this level
+  db_query("SELECT user_id FROM approval_level_approvers WHERE level_id = \$1 AND user_id = \$2",
+           \@approvers, $level_id, $current_user_id);
+  return (@approvers > 0 ? 1 : 0);
+}
+
 sub _list_policies {
   my ($zoneid, $selfurl) = @_;
   my (@q, @qa, $qsql, $msg);
   my $is_admin = _is_policy_admin();
+  my %zone_names = (); # Cache for zone names
 
   print h2('Approval policies');
-  if ($is_admin) {
-    print p, a({-href=>"$selfurl?menu=approvals&sub=add_policy"}, 'Add policy');
-    print p("How to configure approvals: 1) create policy, 2) add rule(s), 3) add level(s), 4) add approver(s) to each level.");
-  }
-
+  
   if ($zoneid > 0) {
+    if ($is_admin) {
+      print p, a({-href=>"$selfurl?menu=approvals&sub=add_policy"}, 'Add policy');
+      print p("How to configure approvals: 1) create policy, 2) add rule(s), 3) add level(s), 4) add approver(s) to each level.");
+    }
     db_query("SELECT id, zone_id, name, active, on_add, on_modify, on_delete, match_mode " .
              "FROM approval_policies WHERE zone_id = " . int($zoneid) . " ORDER BY name",
              \@q);
     db_query("SELECT id FROM approval_policies ORDER BY id", \@qa);
     if (@q == 0 && @qa > 0) {
-      $msg = "No policies for current zone id=$zoneid. Policies exist in other zones.";
+      $msg = "No policies for current zone. Policies exist in other zones.";
       print p({-style=>'color:#aa0000;'}, $msg);
     }
   } else {
+    # No zone selected - show cross-zone policy view for admins only
+    if (!$is_admin) {
+      print p('Zone selection is required to manage approvals.');
+      print p(a({-href=>"$selfurl?menu=zones"}, 'Select a zone'));
+      return;
+    }
     db_query("SELECT id, zone_id, name, active, on_add, on_modify, on_delete, match_mode " .
              "FROM approval_policies ORDER BY zone_id, name", \@q);
-    print p({-style=>'color:#aa0000;'}, 'Zone is not selected. Showing policies from all zones.');
+    print p({-style=>'color:#aa0000;'}, 'Zone is not selected. Showing policies from all zones (admin view only).');
+    
+    # Load zone names for displaying instead of IDs
+    my @zone_ids;
+    for my $row (@q) {
+      push @zone_ids, $row->[1]; # zone_id is at index 1
+    }
+    if (@zone_ids > 0) {
+      my @zone_rows;
+      my $zone_ids_str = join(',', grep { $_ > 0 } @zone_ids);
+      if ($zone_ids_str) {
+        db_query("SELECT id, name FROM zones WHERE id IN ($zone_ids_str)", \@zone_rows);
+        for my $z (@zone_rows) {
+          $zone_names{$z->[0]} = $z->[1];
+        }
+      }
+    }
   }
 
   print "<TABLE bgcolor=\"#ccccff\" width=\"99%\" cellspacing=1 cellpadding=1 border=0>\n";
-  my @headers = qw(Zone Name Active Add Modify Delete Match View);
+  my @headers;
+  if ($zoneid > 0) {
+    @headers = qw(Name Active Add Modify Delete Match View);
+  } else {
+    @headers = qw(Zone Name Active Add Modify Delete Match View);
+  }
   push @headers, 'Edit' if $is_admin;
   print "<TR bgcolor=\"#aaaaff\"><th>" . join("</th><th>", @headers) . "</th></TR>\n";
   for my $i (0..$#q) {
     my ($id, $zid, $name, $active, $on_add, $on_mod, $on_del, $match_mode) = @{$q[$i]};
     
-    # Map single-letter values to human-readable format
-    my $active_display = ($active eq 't') ? 'true' : 'false';
-    my $on_add_display = ($on_add eq 't') ? 'true' : 'false';
-    my $on_mod_display = ($on_mod eq 't') ? 'true' : 'false';
-    my $on_del_display = ($on_del eq 't') ? 'true' : 'false';
+    # Map single-letter values to human-readable format (with emoji icons)
+    my $active_display = _bool_to_icon($active, 'Active');
+    my $on_add_display = _bool_to_icon($on_add, 'On add');
+    my $on_mod_display = _bool_to_icon($on_mod, 'On modify');
+    my $on_del_display = _bool_to_icon($on_del, 'On delete');
     my $match_display = ($match_mode eq 'A') ? 'AND' : 'OR';
     
     print "<TR bgcolor=\"#bfeebf\">\n";
-    print "  <td>$zid</td>\n";
+    if ($zoneid == 0) {
+      # Show zone name when no zone is selected
+      my $zone_name = $zone_names{$zid} || "Zone $zid";
+      print "  <td>" . encode_entities($zone_name) . "</td>\n";
+    }
     print "  <td>" . encode_entities($name || '') . "</td>\n";
-    print "  <td>$active_display</td>\n";
-    print "  <td>$on_add_display</td>\n";
-    print "  <td>$on_mod_display</td>\n";
-    print "  <td>$on_del_display</td>\n";
+    print "  <td style=\"text-align:center;\">$active_display</td>\n";
+    print "  <td style=\"text-align:center;\">$on_add_display</td>\n";
+    print "  <td style=\"text-align:center;\">$on_mod_display</td>\n";
+    print "  <td style=\"text-align:center;\">$on_del_display</td>\n";
     print "  <td>$match_display</td>\n";
     
     # View links (Rules and Levels) for all users
@@ -721,6 +806,90 @@ sub _list_pending {
   print "</TABLE>\n";
 }
 
+sub _list_all_requests {
+  my ($zoneid, $selfurl) = @_;
+  my @q;
+  my %user_cache;
+  my %status_name = ('P' => 'Pending', 'A' => 'Approved', 'R' => 'Rejected');
+  my %op_name = ('A' => 'Add', 'M' => 'Modify', 'D' => 'Delete');
+
+  print h2('All DNS change requests');
+  
+  # Get ALL requests for the zone, regardless of status
+  db_query("SELECT id, requestor_id, requestor_email, operation, status, current_level, " .
+           "cdate, change_data, policy_id FROM dns_change_requests WHERE zone_id = \$1 " .
+           "ORDER BY cdate DESC", \@q, $zoneid);
+
+  if (@q == 0) {
+    print "<p><i>No requests found.</i></p>\n";
+    print "<p><a href=\"$selfurl?menu=approvals&sub=pending\">Back to Pending Approvals</a></p>\n";
+    return;
+  }
+
+  print "<TABLE bgcolor=\"#e0e0ff\" width=\"99%\" cellspacing=1 cellpadding=1 border=0>\n";
+  print "<TR bgcolor=\"#aaaaff\"><th>Request ID</th><th>Domain / Record</th><th>Requestor</th><th>Operation</th><th>Status</th><th>Level</th><th>Created</th></TR>\n";
+  for my $i (0..$#q) {
+    my ($id, $req_id, $req_email, $op, $status, $level, $cdate, $change_data, $policy_id) = @{$q[$i]};
+    
+    # Get requestor name
+    my $req_name = '';
+    if (!defined $user_cache{$req_id}) {
+      my @usr;
+      db_query("SELECT username FROM users WHERE id = \$1", \@usr, $req_id);
+      $user_cache{$req_id} = (@usr > 0 ? $usr[0][0] : '?');
+    }
+    $req_name = $user_cache{$req_id};
+    
+    # Deserialize change_data to get domain and type
+    my $domain = '?';
+    my $type_name = '?';
+    if (defined $change_data) {
+      my $rec = _deserialize($change_data);
+      if ($rec && ref($rec) eq 'HASH') {
+        $domain = $rec->{domain} || '?';
+        my $type = $rec->{type} || 0;
+        my %type_names = (
+          1 => 'Host (A/AAAA)', 2 => 'Delegation (NS)', 3 => 'Nameserver (MX)', 
+          4 => 'Alias (CNAME)', 5 => 'Printer', 6 => 'Glue', 8 => 'SRV',
+          9 => 'DHCP', 11 => 'SSHFP', 12 => 'TLSA', 13 => 'TXT', 
+          14 => 'NAPTR', 15 => 'CAA', 101 => 'Reservation'
+        );
+        $type_name = $type_names{$type} || "Type $type";
+      }
+    }
+    
+    # Create request link
+    my $request_link = "<a href=\"$selfurl?menu=approvals&sub=show_request&req_id=$id\">$id</a>";
+    
+    # Status color based on status
+    my $status_color;
+    if ($status eq 'P') {
+      $status_color = '#ffffcc';  # Yellow for pending
+    } elsif ($status eq 'A') {
+      $status_color = '#ccffcc';  # Green for approved
+    } elsif ($status eq 'R') {
+      $status_color = '#ffcccc';  # Red for rejected
+    } else {
+      $status_color = '#f0f0f0';  # Gray for unknown
+    }
+    
+    my $status_display = $status_name{$status} || $status;
+    
+    print "<TR bgcolor=\"$status_color\">\n";
+    print "  <td>$request_link</td>\n";
+    print "  <td>" . encode_entities($domain) . " (" . encode_entities($type_name) . ")</td>\n";
+    print "  <td>" . encode_entities($req_name) . " (" . encode_entities($req_email || '') . ")</td>\n";
+    print "  <td>" . encode_entities($op_name{$op} || $op) . "</td>\n";
+    print "  <td>" . encode_entities($status_display) . "</td>\n";
+    print "  <td>$level</td>\n";
+    print "  <td>$cdate</td>\n";
+    print "</TR>\n";
+  }
+  print "</TABLE>\n";
+  
+  print "<p><a href=\"$selfurl?menu=approvals&sub=pending\">Back to Pending Approvals</a></p>\n";
+}
+
 
 # ---- DB helpers -------------------------------------------------------
 
@@ -915,14 +1084,17 @@ sub delete_approver {
 sub _deserialize {
 	my ($text) = @_;
 	return undef unless (defined $text);
-	my $VAR1 = eval $text;
+	my $VAR1;
+	# Handle both $VAR1 = {...} format and terse {...} format
+	$text = '$VAR1 = ' . $text unless ($text =~ /^\$VAR1\s*=/);
+	eval $text;
 	return $@ ? undef : $VAR1;
 }
 
 # Show approval request details
 sub _show_request {
 	my ($req_id, $zoneid, $selfurl) = @_;
-	my (@req, @usr, @lvl);
+	my (@req, @usr, @lvl, @tokens);
 	my ($zone_id, $policy_id, $requestor_id, $requestor_email, $operation, 
 	    $status, $current_level, $host_id, $change_data, $reason, $cdate);
 	my %op_name = ('A' => 'Add', 'M' => 'Modify', 'D' => 'Delete');
@@ -1003,8 +1175,7 @@ sub _show_request {
 
 	# Display approval history (previous decisions at this level)
 	if ($status eq 'P') {
-		my @tokens;
-		db_query("SELECT t.id, t.user_id, t.decision, t.reason, t.decided_at, u.username " .
+		db_query("SELECT t.id, t.user_id, t.decision, t.reason, t.decided_at, u.username, u.name " .
 			 "FROM dns_change_approval_tokens t " .
 			 "LEFT JOIN users u ON t.user_id = u.id " .
 			 "WHERE t.request_id = \$1 AND t.level_id = " .
@@ -1016,11 +1187,13 @@ sub _show_request {
 			print "<TABLE bgcolor=\"#ffffcc\" width=\"99%\" cellspacing=1 cellpadding=2 border=0>\n";
 			print "<TR bgcolor=\"#ffaa00\"><th>Approver</th><th>Decision</th><th>Reason</th><th>Decided</th></TR>\n";
 			for my $t (@tokens) {
-				my ($tid, $uid, $dec, $reason, $decided, $uname) = @$t;
+				my ($tid, $uid, $dec, $reason, $decided, $uname, $fname) = @$t;
+				# Display fullname if available, otherwise username
+				my $approver_display = $fname ? encode_entities("$fname ($uname)") : encode_entities($uname || 'unknown');
 				my $dec_display = (!defined $dec || $dec eq '') ? 'Pending' : ($dec eq 'A' ? 'Approved' : 'Rejected');
 				my $color = (!defined $dec || $dec eq '') ? '#f0f0f0' : ($dec eq 'A' ? '#ccffcc' : '#ffcccc');
 				print "<TR bgcolor=\"$color\">\n";
-				print "  <td>" . encode_entities($uname || 'unknown') . "</td>\n";
+				print "  <td>$approver_display</td>\n";
 				print "  <td>$dec_display</td>\n";
 				print "  <td>" . encode_entities($reason || '') . "</td>\n";
 				print "  <td>" . encode_entities($decided || '') . "</td>\n";
@@ -1030,49 +1203,120 @@ sub _show_request {
 		}
 	}
 
-	# Display approval buttons if user is approver at current level and request is pending
+	# Display approval buttons only if request is pending AND current user is an approver
 	if ($status eq 'P') {
-		print h3('Approval Action');
-		print "<p><b>As an approver, you can approve or reject this request:</b></p>\n";
-		print "<FORM method=\"POST\" action=\"$selfurl\">\n";
-		print "<input type=\"hidden\" name=\"menu\" value=\"approvals\">\n";
-		print "<input type=\"hidden\" name=\"sub\" value=\"approve_action\">\n";
-		print "<input type=\"hidden\" name=\"req_id\" value=\"$req_id\">\n";
-		print "<input type=\"hidden\" name=\"action\" value=\"\">\n";
-		print "<p><label for=\"decision_reason\"><b>Decision Reason (optional):</b></label><br>\n";
-		print "<textarea name=\"decision_reason\" id=\"decision_reason\" rows=\"4\" cols=\"70\" maxlength=\"500\"></textarea></p>\n";
-		print "<input type=\"submit\" name=\"approve\" value=\"Approve\" onclick=\"document.forms[0].elements['action'].value='approve';\">\n";
-		print "<input type=\"submit\" name=\"reject\" value=\"Reject\" onclick=\"document.forms[0].elements['action'].value='reject';\">\n";
-		print "</FORM>\n";
+		if (_is_user_approver_for_request($req_id)) {
+			print h3('Approval Action');
+			print "<p><b>As an approver, you can make a decision below:</b></p>\n";
+			print "<FORM method=\"POST\" action=\"$selfurl\">\n";
+			print "<input type=\"hidden\" name=\"menu\" value=\"approvals\">\n";
+			print "<input type=\"hidden\" name=\"sub\" value=\"approve_action\">\n";
+			print "<input type=\"hidden\" name=\"req_id\" value=\"$req_id\">\n";
+			print "<p><label for=\"decision_reason\"><b>Decision Reason (optional):</b></label><br>\n";
+			print "<textarea name=\"decision_reason\" id=\"decision_reason\" rows=\"4\" cols=\"70\" maxlength=\"500\"></textarea></p>\n";
+			print "<input type=\"submit\" name=\"action\" value=\"Approve\">\n";
+			print "<input type=\"submit\" name=\"action\" value=\"Reject\">\n";
+			print "</FORM>\n";
+		} else {
+			print h3('Approval Workflow');
+			print "<p><b>You are not an approver for this request.</b> An approval notification has been sent to the assigned approvers.</p>\n";
+		}
+	}
+
+	# Display audit log for this request
+	print h3('Audit Log');
+	my @audit_log;
+	db_query("SELECT id, user_id, user_name, event, message, created_at " .
+		 "FROM dns_change_audit_log WHERE request_id = \$1 " .
+		 "ORDER BY id DESC", \@audit_log, $req_id);
+	
+	if (@audit_log > 0) {
+		print "<TABLE bgcolor=\"#ffe0e0\" width=\"99%\" cellspacing=1 cellpadding=2 border=0>\n";
+		print "<TR bgcolor=\"#ff9999\"><th>Event</th><th>User</th><th>Message</th><th>Date/Time</th></TR>\n";
+		
+		my %event_names = (
+			'S' => 'Submitted',
+			'E' => 'Email',
+			'A' => 'Approved',
+			'R' => 'Rejected',
+			'P' => 'Applied',
+			'X' => 'Error',
+			'C' => 'Changed'
+		);
+		
+		for my $audit (@audit_log) {
+			my ($id, $uid, $uname, $event, $msg, $created) = @$audit;
+			my $event_name = $event_names{$event} || "Unknown ($event)";
+			my $event_color = ($event eq 'A' ? '#ccffcc' : 
+						$event eq 'R' ? '#ffcccc' : 
+						$event eq 'P' ? '#ccff99' : 
+						$event eq 'X' ? '#ffcccc' : 
+						'#f0f0f0');
+			print "<TR bgcolor=\"$event_color\">\n";
+			print "  <td>" . encode_entities($event_name) . "</td>\n";
+			print "  <td>" . encode_entities($uname || 'system') . "</td>\n";
+			print "  <td>" . encode_entities($msg || '') . "</td>\n";
+			print "  <td>" . encode_entities($created || '') . "</td>\n";
+			print "</TR>\n";
+		}
+		print "</TABLE>\n";
+	} else {
+		print "<p><i>No audit entries yet.</i></p>\n";
 	}
 
 	print "<p><a href=\"$selfurl?menu=approvals&sub=pending\">Back to Pending Approvals</a></p>\n";
 }
 
 # _process_approval_action(req_id, action, reason, selfurl)
-# Process approval/rejection with decision reason
+# Process approval decision by recording it directly (web-based, no tokens required)
 sub _process_approval_action {
 	my ($req_id, $action, $reason, $selfurl) = @_;
-	my (@req, @tok);
-	my ($zone_id);
+	my (@req, $user_id);
 
 	return unless (defined $req_id && $req_id > 0);
-	return unless (defined $action && ($action eq 'approve' || $action eq 'reject'));
-
-	# Get request info to find zone
-	db_query("SELECT zone_id FROM dns_change_requests WHERE id = \$1", \@req, $req_id);
-	return unless (@req > 0);
-	$zone_id = $req[0][0];
-
-	# Find token for current user at current level
-	# This would need more sophisticated logic to get current user and level
-	# For now, just show message
-	print h2('Approval Action Processed');
-	print p("Action: " . ($action eq 'approve' ? 'APPROVE' : 'REJECT'));
-	if (defined $reason && $reason ne '') {
-		print p("Reason: " . encode_entities($reason));
+	
+	# Validate action parameter
+	unless ($action =~ /^(approve|reject)$/) {
+		print h2('Invalid Action');
+		print p("Invalid approval action. Please use Approve or Reject.");
+		return;
 	}
-	print p("Note: Token-based approval via email link required for final processing.");
+
+	# Get current user ID
+	$user_id = $main::state{uid};
+	return unless ($user_id > 0);
+	
+	# Check if current user is an approver for this request
+	unless (_is_user_approver_for_request($req_id)) {
+		print h2('Access Denied');
+		print p("You are not an authorized approver for this request.");
+		print p, a({-href=>"$selfurl?menu=approvals&sub=show_request&req_id=$req_id"}, 'Back to request');
+		return;
+	}
+
+	# Convert action to decision code: 'approve' -> 'A', 'reject' -> 'R'
+	my $decision_code = ($action eq 'approve' ? 'A' : 'R');
+	
+	# Log the action in audit trail
+	write2log("Approval decision by user_id=$user_id for request $req_id: $action");
+
+	# Record the approval decision
+	my ($status, $msg) = record_approval_decision_web($req_id, $user_id, $decision_code, $reason);
+	
+	# Display result
+	print h2('Approval Decision Recorded');
+	if ($status eq 'ok' || $status eq 'pending' || $status eq 'rejected' || $status eq 'approved') {
+		print p("Your decision: <b>" . ($decision_code eq 'A' ? 'APPROVED' : 'REJECTED') . "</b>");
+		if (defined $reason && $reason ne '') {
+			print p("Reason: " . encode_entities($reason));
+		}
+		print p("Status: " . encode_entities($msg));
+		write2log("User $user_id decision recorded for request $req_id - $msg");
+	} else {
+		print p({-style=>'color:#cc0000;'}, "Error: " . encode_entities($msg));
+		write2log("ERROR: Failed to record decision for request $req_id - $msg");
+	}
+
 	print p, a({-href=>"$selfurl?menu=approvals&sub=show_request&req_id=$req_id"}, 'Back to request');
 }
 
