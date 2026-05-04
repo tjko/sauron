@@ -470,13 +470,15 @@ sub _advance_or_apply {
 	my ($request_id, $level_order) = @_;
 	my (@nxt);
 
-	db_query("SELECT l.id FROM approval_levels l, dns_change_requests r " .
-		 "WHERE r.id = \$1 AND l.policy_id = r.policy_id AND l.level_order = \$2",
-		 \@nxt, $request_id, $level_order + 1);
+	db_query("SELECT l.level_order FROM approval_levels l, dns_change_requests r " .
+		 "WHERE r.id = \$1 AND l.policy_id = r.policy_id AND l.level_order > \$2 " .
+		 "ORDER BY l.level_order LIMIT 1",
+		 \@nxt, $request_id, $level_order);
 
 	if (@nxt > 0) {
+		my $next_level_order = $nxt[0][0];
 		db_exec("UPDATE dns_change_requests SET current_level = " .
-			($level_order + 1) . " WHERE id = " . $request_id);
+			$next_level_order . " WHERE id = " . $request_id);
 		process_approval_level($request_id);
 		return ('ok', 'Advanced to next level');
 	}
