@@ -88,8 +88,6 @@ sub set_defaults() {
   $main::TTL_MAX_SEC = 86400;              # 2021-02-11 TVu
 
   $main::SAURON_BASE_URL = '';
-  $main::SAURON_APPROVE_CGI_PATH = '/cgi-bin/approve.cgi';
-  $main::SAURON_APPROVAL_TOKEN_TTL_HOURS = 72;
   $main::SAURON_APPROVAL_REMINDER_HOURS = 24;
   $main::ALEVEL_APPROVAL_ADMIN = 5;
 

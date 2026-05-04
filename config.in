@@ -44,8 +44,6 @@ $DB_PASSWORD = "bar";
 
 # approval workflow configuration
 # $SAURON_BASE_URL = 'https://sauron.example.com';
-# $SAURON_APPROVE_CGI_PATH = '/cgi-bin/approve.cgi';
-# $SAURON_APPROVAL_TOKEN_TTL_HOURS = 72;
 # $SAURON_APPROVAL_REMINDER_HOURS = 24;
 # $ALEVEL_APPROVAL_ADMIN = 5;
 

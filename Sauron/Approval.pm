@@ -7,7 +7,6 @@ use Sauron::BackEnd;
 use Sauron::Util;
 use Sauron::Sauron;
 use Sauron::SetupIO;
-use Digest::MD5 qw(md5_hex);
 use Data::Dumper;
 use strict;
 use vars qw($VERSION @ISA @EXPORT);
@@ -215,14 +214,13 @@ sub process_approval_level {
 	for my $ai (0..$#ap) {
 		my $user_id = $ap[$ai][0];
 		
-		# Create placeholder entry in dns_change_approval_tokens (token stored but not used for auth)
-		my $res = db_exec("INSERT INTO dns_change_approval_tokens " .
-			 "(request_id, level_id, user_id, token) " .
+		# Create placeholder approval entry for each approver at this level.
+		my $res = db_exec("INSERT INTO dns_change_approvals " .
+			 "(request_id, level_id, user_id) " .
 			 "VALUES (" .
 			 $request_id . "," .
 			 $level_id . "," .
-			 $user_id . "," .
-			 db_encode_str(_generate_token()) . ")");
+			 $user_id . ")");
 		if ($res < 0) {
 			write2log("approval: failed to create approval record for request $request_id, user $user_id");
 			next;
@@ -236,85 +234,10 @@ sub process_approval_level {
 }
 
 
-# record_decision(token, decision, reason) -> (status, message)
+# record_decision(...) -> (status, message)
+# Deprecated: token-based approvals were removed in favor of web-based approvals.
 sub record_decision {
-	my ($token, $decision, $reason) = @_;
-	my (@tok, @lvl, @all);
-	my ($token_id, $request_id, $level_id, $user_id, $expires);
-	my ($level_type, $level_order, $pending, $approved, $rejected);
-
-	return ('error', 'Invalid decision') unless ($decision =~ /^[AR]$/);
-
-	db_query("SELECT id, request_id, level_id, user_id, token_expires " .
-		 "FROM dns_change_approval_tokens WHERE token = \$1", \@tok, $token);
-	return ('error', 'Invalid token') unless (@tok > 0);
-	($token_id, $request_id, $level_id, $user_id, $expires) = @{$tok[0]};
-
-	if (defined $expires) {
-		my @t; db_query("SELECT (token_expires < CURRENT_TIMESTAMP) " .
-			 "FROM dns_change_approval_tokens WHERE id = \$1", \@t, $token_id);
-		if (@t > 0 && $t[0][0] eq 't') {
-			_audit($request_id, undef, 'system', 'X', undef, 'Token expired');
-			return ('error', 'Token expired');
-		}
-	}
-
-	my $res = db_exec("UPDATE dns_change_approval_tokens SET " .
-		       "decision = " . db_encode_str($decision) . ", " .
-		       "reason = " . db_encode_str($reason) . ", " .
-		       "decided_at = CURRENT_TIMESTAMP " .
-		       "WHERE id = " . $token_id . " AND decision IS NULL");
-	return ('error', 'Decision already recorded') if ($res < 1);
-
-	# Get username for audit log
-	my @user_info;
-	db_query("SELECT username FROM users WHERE id = \$1", \@user_info, $user_id);
-	my $user_name = (@user_info > 0 ? $user_info[0][0] : '');
-
-	_audit($request_id, $user_id, $user_name, ($decision eq 'A' ? 'A' : 'R'),
-	       undef, $reason);
-
-	db_query("SELECT level_type, level_order FROM approval_levels WHERE id = \$1",
-		 \@lvl, $level_id);
-	return ('error', 'Level not found') unless (@lvl > 0);
-	($level_type, $level_order) = @{$lvl[0]};
-
-	db_query("SELECT decision FROM dns_change_approval_tokens " .
-		 "WHERE request_id = \$1 AND level_id = \$2", \@all,
-		 $request_id, $level_id);
-
-	$pending = 0; $approved = 0; $rejected = 0;
-	for my $i (0..$#all) {
-		my $d = $all[$i][0];
-		if (!defined $d || $d eq '') {
-			$pending++;
-		} elsif ($d eq 'A') {
-			$approved++;
-		} elsif ($d eq 'R') {
-			$rejected++;
-		}
-	}
-
-	if ($level_type eq 'O') {
-		# OR: one approval is enough, but any rejection rejects immediately
-		if ($rejected > 0) {
-			return _reject_request($request_id, $reason, $user_id, $user_name);
-		}
-		if ($approved > 0) {
-			return _advance_or_apply($request_id, $level_order);
-		}
-		return ('pending', 'Waiting for other approvals');
-	}
-
-	# AND
-	if ($rejected > 0) {
-		return _reject_request($request_id, $reason, $user_id, $user_name);
-	}
-	if ($pending == 0 && $approved > 0) {
-		return _advance_or_apply($request_id, $level_order);
-	}
-
-	return ('pending', 'Waiting for other approvals');
+	return ('error', 'Token-based approvals are no longer supported');
 }
 
 
@@ -354,7 +277,7 @@ sub record_approval_decision_web {
 	# Ensure there is a pending approval entry for this user
 	my $token_id;
 	my @tok_pending;
-	db_query("SELECT id FROM dns_change_approval_tokens " .
+	db_query("SELECT id FROM dns_change_approvals " .
 		 "WHERE request_id = \$1 AND level_id = \$2 AND user_id = \$3 AND decision IS NULL " .
 		 "ORDER BY id LIMIT 1",
 		 \@tok_pending, $request_id, $level_id, $user_id);
@@ -362,25 +285,24 @@ sub record_approval_decision_web {
 		$token_id = $tok_pending[0][0];
 	} else {
 		my @tok_done;
-		db_query("SELECT id FROM dns_change_approval_tokens " .
+		db_query("SELECT id FROM dns_change_approvals " .
 			 "WHERE request_id = \$1 AND level_id = \$2 AND user_id = \$3 AND decision IS NOT NULL " .
 			 "ORDER BY id LIMIT 1",
 			 \@tok_done, $request_id, $level_id, $user_id);
 		return ('error', 'Decision already recorded') if (@tok_done > 0);
 
-		my $ins = db_exec("INSERT INTO dns_change_approval_tokens " .
-			 "(request_id, level_id, user_id, token) VALUES (" .
+		my $ins = db_exec("INSERT INTO dns_change_approvals " .
+			 "(request_id, level_id, user_id) VALUES (" .
 			 $request_id . "," .
 			 $level_id . "," .
-			 $user_id . "," .
-			 db_encode_str(_generate_token()) . ") RETURNING id");
+			 $user_id . ") RETURNING id");
 		return ('error', 'Failed to create approval record') if ($ins < 0);
 		$token_id = db_lastid();
 		return ('error', 'Failed to create approval record') unless ($token_id && $token_id > 0);
 	}
 
 	# Update decision for this approver (using approval tokens table for storage)
-	my $res = db_exec("UPDATE dns_change_approval_tokens SET " .
+	my $res = db_exec("UPDATE dns_change_approvals SET " .
 		       "decision = " . db_encode_str($decision) . ", " .
 		       "reason = " . db_encode_str($reason) . ", " .
 		       "decided_at = CURRENT_TIMESTAMP " .
@@ -396,7 +318,7 @@ sub record_approval_decision_web {
 	       undef, $reason);
 
 	# Check all decisions at current level
-	db_query("SELECT decision FROM dns_change_approval_tokens " .
+	db_query("SELECT decision FROM dns_change_approvals " .
 		 "WHERE request_id = \$1 AND level_id = \$2", \@all,
 		 $request_id, $level_id);
 
@@ -503,15 +425,14 @@ sub send_reminder_emails {
 	$hours = 24 unless ($hours > 0);
 	$count = 0;
 
-	db_query("SELECT id FROM dns_change_approval_tokens " .
-		 "WHERE decision IS NULL AND " .
-		 "(email_sent IS NULL OR email_sent < (CURRENT_TIMESTAMP - (\$1 || ' hours')::interval)) " .
-		 "AND (token_expires IS NULL OR token_expires > CURRENT_TIMESTAMP)",
+	db_query("SELECT DISTINCT t.request_id, t.user_id FROM dns_change_approvals t, dns_change_requests r " .
+		 "WHERE t.request_id = r.id AND r.status = 'P' AND t.decision IS NULL AND " .
+		 "(t.email_sent IS NULL OR t.email_sent < (CURRENT_TIMESTAMP - (\$1 || ' hours')::interval))",
 		 \@q, $hours);
 
 	for $i (0..$#q) {
-		my $token_id = $q[$i][0];
-		if (_send_approval_email($token_id)) {
+		my ($request_id, $user_id) = @{$q[$i]};
+		if (_send_approval_email($request_id, $user_id)) {
 			$count++;
 		}
 	}
@@ -536,7 +457,7 @@ sub get_user_pending_approvals {
 	my ($user_id) = @_;
 	my @q;
 	db_query("SELECT t.request_id, r.zone_id, r.operation, r.cdate " .
-		 "FROM dns_change_approval_tokens t, dns_change_requests r " .
+		 "FROM dns_change_approvals t, dns_change_requests r " .
 		 "WHERE t.user_id = \$1 AND t.decision IS NULL AND t.request_id = r.id " .
 		 "ORDER BY r.cdate", \@q, $user_id);
 	return @q;
@@ -622,6 +543,9 @@ sub _send_approval_email {
 		 "To review and approve/reject this request, click the link below:\n" .
 		 "$url\n\n" .
 		 "Note: You must be logged in to the Sauron system to make a decision.\n"));
+
+	db_exec("UPDATE dns_change_approvals SET email_sent = CURRENT_TIMESTAMP " .
+		"WHERE request_id = " . $request_id . " AND user_id = " . $user_id . " AND decision IS NULL");
 
 	_audit($request_id, undef, 'system', 'E', undef, "Email sent to $email");
 	return 1;
@@ -736,12 +660,6 @@ sub _check_resource_conflict {
 	return undef;
 }
 
-
-sub _generate_token {
-	my $seed1 = time . $$ . rand();
-	my $seed2 = rand() . $$ . time;
-	return md5_hex($seed1) . md5_hex($seed2);
-}
 
 sub _serialize {
 	my ($ref) = @_;

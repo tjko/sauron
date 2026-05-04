@@ -16,7 +16,7 @@ unless (db_connect()) {
 
 print "=== TEST record_approval_decision_web ===\n\n";
 
-# Request 2 has token for user 8
+# Request 2 has a pending approval row for user 8
 my $req_id = 2;
 my $user_id = 8;
 
@@ -31,11 +31,11 @@ if (@current > 0) {
     print "  Request status: " . $current[0][3] . ", Level: " . $current[0][2] . ", Policy: " . $current[0][1] . "\n";
 }
 
-my @tokens;
-db_query("SELECT user_id, decision FROM dns_change_approval_tokens WHERE request_id = \$1",
-         \@tokens, $req_id);
-print "  Tokens: " . scalar(@tokens) . " total\n";
-for my $t (@tokens) {
+my @approvals;
+db_query("SELECT user_id, decision FROM dns_change_approvals WHERE request_id = \$1",
+         \@approvals, $req_id);
+print "  Approvals: " . scalar(@approvals) . " total\n";
+for my $t (@approvals) {
     print "    User $t->[0]: decision=" . ($t->[1] ? $t->[1] : 'PENDING') . "\n";
 }
 
@@ -54,11 +54,11 @@ if (@after > 0) {
     print "  Request status: " . $after[0][3] . ", Level: " . $after[0][2] . ", Policy: " . $after[0][1] . "\n";
 }
 
-my @after_tokens;
-db_query("SELECT user_id, decision, decided_at FROM dns_change_approval_tokens WHERE request_id = \$1",
-         \@after_tokens, $req_id);
-print "  Tokens after:\n";
-for my $t (@after_tokens) {
+my @after_approvals;
+db_query("SELECT user_id, decision, decided_at FROM dns_change_approvals WHERE request_id = \$1",
+         \@after_approvals, $req_id);
+print "  Approvals after:\n";
+for my $t (@after_approvals) {
     print "    User $t->[0]: decision=" . ($t->[1] ? $t->[1] : 'PENDING') . ", decided_at=" . ($t->[2] ? 'YES' : 'NO') . "\n";
 }
 

@@ -100,30 +100,28 @@ CREATE INDEX dns_change_requests_status_index ON dns_change_requests(status);
 CREATE INDEX dns_change_requests_requestor_index ON dns_change_requests(requestor_id);
 
 
-/* approval tokens (emailed links) */
-CREATE TABLE dns_change_approval_tokens (
+/* approval decisions per approver */
+CREATE TABLE dns_change_approvals (
        id            SERIAL PRIMARY KEY,
        request_id    INT4 NOT NULL,
        level_id      INT4 NOT NULL,
        user_id       INT4 NOT NULL,
-       token         CHAR(64) UNIQUE NOT NULL,
-       token_expires TIMESTAMP,
        decision      CHAR(1) CHECK(decision ~ '^[AR]$'),
        reason        TEXT,
        decided_at    TIMESTAMP,
        email_sent    TIMESTAMP,
 
-       CONSTRAINT dns_change_approval_tokens_request_fk
+       CONSTRAINT dns_change_approvals_request_fk
            FOREIGN KEY (request_id) REFERENCES dns_change_requests(id) ON DELETE CASCADE,
-       CONSTRAINT dns_change_approval_tokens_level_fk
+       CONSTRAINT dns_change_approvals_level_fk
            FOREIGN KEY (level_id) REFERENCES approval_levels(id) ON DELETE CASCADE,
-       CONSTRAINT dns_change_approval_tokens_user_fk
+       CONSTRAINT dns_change_approvals_user_fk
            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) INHERITS(pokemon);
 
-CREATE INDEX dns_change_approval_tokens_request_index ON dns_change_approval_tokens(request_id);
-CREATE INDEX dns_change_approval_tokens_user_index ON dns_change_approval_tokens(user_id);
-CREATE INDEX dns_change_approval_tokens_decision_index ON dns_change_approval_tokens(decision);
+CREATE INDEX dns_change_approvals_request_index ON dns_change_approvals(request_id);
+CREATE INDEX dns_change_approvals_user_index ON dns_change_approvals(user_id);
+CREATE INDEX dns_change_approvals_decision_index ON dns_change_approvals(decision);
 
 
 /* audit log for approval workflow */
@@ -149,5 +147,5 @@ ALTER TABLE approval_rules OWNER TO sauron;
 ALTER TABLE approval_levels OWNER TO sauron;
 ALTER TABLE approval_level_approvers OWNER TO sauron;
 ALTER TABLE dns_change_requests OWNER TO sauron;
-ALTER TABLE dns_change_approval_tokens OWNER TO sauron;
+ALTER TABLE dns_change_approvals OWNER TO sauron;
 ALTER TABLE dns_change_audit_log OWNER TO sauron;

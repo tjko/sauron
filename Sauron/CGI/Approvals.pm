@@ -327,6 +327,16 @@ sub _is_user_approver_for_request {
   return (@approvers > 0 ? 1 : 0);
 }
 
+sub _can_view_request {
+  my ($selected_zone_id, $request_zone_id) = @_;
+
+  return 1 if ($main::state{superuser} eq 'yes');
+  return 0 unless ($selected_zone_id > 0 && $request_zone_id > 0);
+  return 0 unless ($selected_zone_id == $request_zone_id);
+
+  return (check_perms('zone', 'R', 1) == 0 ? 1 : 0);
+}
+
 sub _list_policies {
   my ($zoneid, $selfurl) = @_;
   my (@q, @qa, $qsql, $msg);
@@ -1150,6 +1160,13 @@ sub _show_request {
 	($zone_id, $policy_id, $requestor_id, $requestor_email, $operation, 
 	 $status, $current_level, $host_id, $change_data, $reason, $cdate) = @{$req[0]};
 
+  unless (_can_view_request($zoneid, $zone_id)) {
+    print h2('Access Denied');
+    print p('This request is outside your current zone access.');
+    print "<p><a href=\"$selfurl?menu=approvals&sub=pending\">Back to Pending Approvals</a></p>\n";
+    return;
+  }
+
 	# Deserialize change_data
 	my $rec = _deserialize($change_data);
 	return unless ($rec && ref($rec) eq 'HASH');
@@ -1216,8 +1233,8 @@ sub _show_request {
 
 	# Display approval history (previous decisions at this level)
 	if ($status eq 'P') {
-		db_query("SELECT t.id, t.user_id, t.decision, t.reason, t.decided_at, u.username, u.name " .
-			 "FROM dns_change_approval_tokens t " .
+    db_query("SELECT t.id, t.user_id, t.decision, t.reason, t.decided_at, u.username, u.name " .
+       "FROM dns_change_approvals t " .
 			 "LEFT JOIN users u ON t.user_id = u.id " .
 			 "WHERE t.request_id = \$1 AND t.level_id = " .
 			 "(SELECT id FROM approval_levels WHERE policy_id = \$2 AND level_order = \$3) " .

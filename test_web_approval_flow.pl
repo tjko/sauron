@@ -24,17 +24,17 @@ db_query("SELECT id, zone_id, policy_id, status, current_level FROM dns_change_r
 my $latest_id = $latest[0][0] if (@latest > 0);
 print "Latest request ID: $latest_id\n\n" if ($latest_id);
 
-# Test 2: Get approval tokens for the latest request
-print "Step 2: Check approval tokens for request $latest_id\n";
-my @tokens;
-db_query("SELECT request_id, level_id, user_id, decision, decided_at FROM dns_change_approval_tokens WHERE request_id = \$1 ORDER BY user_id", 
-         \@tokens, $latest_id);
+# Test 2: Get approval rows for the latest request
+print "Step 2: Check approvals for request $latest_id\n";
+my @approvals;
+db_query("SELECT request_id, level_id, user_id, decision, decided_at FROM dns_change_approvals WHERE request_id = \$1 ORDER BY user_id", 
+         \@approvals, $latest_id);
 
-if (@tokens == 0) {
-    print "No approval tokens found. Request may not need approval or hasn't been submitted yet.\n\n";
+if (@approvals == 0) {
+    print "No approvals found. Request may not need approval or hasn't been submitted yet.\n\n";
 } else {
-    print "Found " . scalar(@tokens) . " approval token(s):\n";
-    for my $t (@tokens) {
+    print "Found " . scalar(@approvals) . " approval row(s):\n";
+    for my $t (@approvals) {
         print "  Request: $t->[0], Level: $t->[1], Approver: $t->[2], Decision: " . 
               ($t->[3] ? $t->[3] : 'PENDING') . "\n";
     }
@@ -44,26 +44,26 @@ if (@tokens == 0) {
 # Test 3: Check if there are any pending approvals (decisions not yet recorded)
 print "Step 3: Check for pending approvals\n";
 my @pending;
-db_query("SELECT id, user_id, level_id FROM dns_change_approval_tokens WHERE decision IS NULL", \@pending);
+db_query("SELECT id, user_id, level_id FROM dns_change_approvals WHERE decision IS NULL", \@pending);
 
 if (@pending == 0) {
     print "No pending approvals.\n\n";
 } else {
     print "Found " . scalar(@pending) . " pending approval(s):\n";
     for my $p (@pending) {
-        print "  Token ID: $p->[0], Approver user_id: $p->[1], Level: $p->[2]\n";
+        print "  Approval ID: $p->[0], Approver user_id: $p->[1], Level: $p->[2]\n";
     }
     
     # Test the web-based approval function with first pending approval
-    my $test_token = $pending[0];
-    my $req_id = $test_token->[0];  # This won't work directly, need to get from query
+    my $test_approval = $pending[0];
+    my $req_id = $test_approval->[0];  # This won't work directly, need to get from query
     
-    # Get request_id for this token
+    # Get request_id for this approval row
     my @req_info;
-    db_query("SELECT request_id FROM dns_change_approval_tokens WHERE id = \$1", \@req_info, $test_token->[0]);
+    db_query("SELECT request_id FROM dns_change_approvals WHERE id = \$1", \@req_info, $test_approval->[0]);
     if (@req_info > 0) {
         $req_id = $req_info[0][0];
-        my $test_user_id = $test_token->[1];
+        my $test_user_id = $test_approval->[1];
         
         print "\n  Test record_approval_decision_web for request $req_id, user $test_user_id\n";
         
@@ -74,7 +74,7 @@ if (@pending == 0) {
         
         # Check what happened
         my @check;
-        db_query("SELECT decision, decided_at FROM dns_change_approval_tokens WHERE request_id = \$1 AND user_id = \$2", 
+        db_query("SELECT decision, decided_at FROM dns_change_approvals WHERE request_id = \$1 AND user_id = \$2", 
                  \@check, $req_id, $test_user_id);
         if (@check > 0) {
             print "  DB Check: decision=" . ($check[0][0] || 'NULL') . ", decided_at=" . ($check[0][1] || 'NULL') . "\n";
