@@ -21,6 +21,7 @@ my $dbh = db_connect();
 die "Cannot connect to database!" unless $dbh;
 
 my $zone_id = 5;  # acad.cz
+my $host_type;
 
 # Check 1: Host test19
 pout "Check 1: Finding host test19 in zone acad.cz (zone_id=$zone_id)\n";
@@ -30,7 +31,7 @@ db_query("SELECT id, domain, type FROM hosts WHERE domain = 'test19' AND zone = 
 if (@hosts) {
   pout "✓ FOUND: host_id=" . $hosts[0][0] . ", domain='" . $hosts[0][1] . "', type=" . $hosts[0][2] . "\n";
   my $host_id = $hosts[0][0];
-  my $host_type = $hosts[0][2];
+  $host_type = $hosts[0][2];
   
   # Check 2: Approval policies
   pout "\nCheck 2: Finding approval policies for acad.cz\n";
@@ -111,7 +112,9 @@ pout "If 'NO APPROVAL REQUIRED' appears in Check 3, then one of these is true:\n
 pout "  1. No approval policies exist for acad.cz\n";
 pout "  2. Policies exist but are inactive (active != true)\n";
 pout "  3. Policies have on_add=false\n";
-pout "  4. Policies exist but rules don't match type $host_type (Host) or domain 'test19'\n";
+pout "  4. Policies exist but rules don't match type " .
+  (defined $host_type ? $host_type : '(unknown)') .
+  " (Host) or domain 'test19'\n";
 pout "\nMost likely: Approval rules are configured incorrectly\n";
 pout "Check that record_types in rules contains '1', 'HOST', 'A', or 'AAAA'\n";
 

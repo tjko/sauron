@@ -12,7 +12,7 @@ my %policies = (
 		zone_id => 1,
 		match_mode => 'O',
 		on_add => 1,
-		on_modify => 1,
+		on_modify => 0,
 		on_delete => 0,
 		rules => [
 			{ record_types => '1', domain_regexp => '' },
@@ -42,7 +42,7 @@ my %policies = (
 	}
 );
 
-no warnings 'redefine';
+no warnings qw(redefine prototype);
 *Sauron::Approval::db_query = sub {
 	my ($sql, $aref, @params) = @_;
 	@$aref = ();
