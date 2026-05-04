@@ -346,11 +346,14 @@ sub record_approval_decision_web {
 		return ('pending', 'Waiting for other approvals at this level');
 	}
 
-	# AND: all must approve
+	# AND: all must approve (superuser approval overrides all pending decisions)
 	if ($rejected > 0) {
 		return _reject_request($request_id, $reason, $user_id, $user_name);
 	}
 	if ($pending == 0 && $approved > 0) {
+		return _advance_or_apply($request_id, $level_order);
+	}
+	if ($is_superuser && $decision eq 'A') {
 		return _advance_or_apply($request_id, $level_order);
 	}
 
