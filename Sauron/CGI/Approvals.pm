@@ -1270,7 +1270,7 @@ sub _show_request {
 			print "<input type=\"hidden\" name=\"menu\" value=\"approvals\">\n";
 			print "<input type=\"hidden\" name=\"sub\" value=\"approve_action\">\n";
 			print "<input type=\"hidden\" name=\"req_id\" value=\"$req_id\">\n";
-			print "<p><label for=\"decision_reason\"><b>Decision Reason (povinné):</b></label><br>\n";
+			print "<p><label for=\"decision_reason\"><b>Decision Reason (required):</b></label><br>\n";
 			print "<textarea name=\"decision_reason\" id=\"decision_reason\" rows=\"4\" cols=\"70\" maxlength=\"500\" required></textarea></p>\n";
 			print "<input type=\"submit\" name=\"action\" value=\"Approve\">\n";
 			print "<input type=\"submit\" name=\"action\" value=\"Reject\">\n";
