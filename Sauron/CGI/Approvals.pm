@@ -1270,8 +1270,8 @@ sub _show_request {
 			print "<input type=\"hidden\" name=\"menu\" value=\"approvals\">\n";
 			print "<input type=\"hidden\" name=\"sub\" value=\"approve_action\">\n";
 			print "<input type=\"hidden\" name=\"req_id\" value=\"$req_id\">\n";
-			print "<p><label for=\"decision_reason\"><b>Decision Reason (optional):</b></label><br>\n";
-			print "<textarea name=\"decision_reason\" id=\"decision_reason\" rows=\"4\" cols=\"70\" maxlength=\"500\"></textarea></p>\n";
+			print "<p><label for=\"decision_reason\"><b>Decision Reason (povinné):</b></label><br>\n";
+			print "<textarea name=\"decision_reason\" id=\"decision_reason\" rows=\"4\" cols=\"70\" maxlength=\"500\" required></textarea></p>\n";
 			print "<input type=\"submit\" name=\"action\" value=\"Approve\">\n";
 			print "<input type=\"submit\" name=\"action\" value=\"Reject\">\n";
 			print "</FORM>\n";
@@ -1337,6 +1337,14 @@ sub _process_approval_action {
 	unless ($action =~ /^(approve|reject)$/) {
 		print h2('Invalid Action');
 		print p("Invalid approval action. Please use Approve or Reject.");
+		return;
+	}
+	
+	# Validate that reason is not empty (required field)
+	unless (defined $reason && $reason =~ /\S/) {
+		print h2('Missing Required Field');
+		print p("Decision reason is required. Please provide a justification for your decision.");
+		print p, a({-href=>"$selfurl?menu=approvals&sub=show_request&req_id=$req_id"}, 'Back to request');
 		return;
 	}
 
