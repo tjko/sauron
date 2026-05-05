@@ -1,8 +1,6 @@
-Unreleased
-
 0.9.0 (beta)
-    Approvals (new feature) [svamberg]
-      - Added a full web-based DNS approval workflow
+	- Approvals (new feature) [svamberg]
+	  - Added a full web-based DNS approval workflow
 	    - New modules: Sauron::Approval and Sauron::CGI::Approvals
 	    - New CGI handlers and menu integration for approval requests,
 		  decision pages, and request detail views
