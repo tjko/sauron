@@ -1,5 +1,10 @@
 0.9.0 (beta)
 	- Approvals (new feature) [svamberg]
+	  - Mandatory justification requirement for approval requests
+	    - Two-step submission workflow: users must provide justification
+	      before approval request is created in the database
+	    - Prevents accidental submissions without proper documentation
+	    - Improves audit trail and reviewer context
 	  - Added a full web-based DNS approval workflow
 	    - New modules: Sauron::Approval and Sauron::CGI::Approvals
 	    - New CGI handlers and menu integration for approval requests,

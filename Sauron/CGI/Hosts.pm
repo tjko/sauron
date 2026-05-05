@@ -21,6 +21,8 @@ eval { local $SIG{__WARN__} = sub {}; Sys::Syslog::setlogsock('unix') };
 use Net::IP qw(:PROC);
 use Data::Dumper;
 use HTML::Entities;
+use MIME::Base64 qw(encode_base64 decode_base64);
+use Digest::MD5 qw(md5_hex);
 use strict;
 use vars qw($VERSION @ISA @EXPORT);
 
@@ -41,9 +43,189 @@ sub write2log{
 } # End of write2log
 
 
+sub _approval_serialize {
+  my ($ref) = @_;
+  my $d;
+
+  return undef unless (defined $ref);
+  $d = Data::Dumper->new([$ref]);
+  $d->Terse(1);
+  $d->Indent(0);
+  return $d->Dump();
+}
+
+
+sub _approval_deserialize {
+  my ($text) = @_;
+  my $VAR1;
+
+  return undef unless (defined $text && $text ne '');
+  $text = '$VAR1 = ' . $text unless ($text =~ /^\$VAR1\s*=/);
+  eval $text;
+  return $@ ? undef : $VAR1;
+}
+
+
+sub _approval_payload_signature {
+  my ($state, $payload_b64) = @_;
+  my $secret = (defined($main::SAURON_KEY) ? $main::SAURON_KEY : '');
+
+  return md5_hex($secret . '|' . int($state->{uid} || 0) . '|' . $payload_b64);
+}
+
+
+sub _approval_operation_text {
+  my ($operation) = @_;
+
+  return 'Add new record' if ($operation eq 'A');
+  return 'Modify existing record' if ($operation eq 'M');
+  return 'Delete record' if ($operation eq 'D');
+  return $operation;
+}
+
+
+sub _render_approval_reason_form {
+  my ($state, $pending_ref, $reason, $error_msg) = @_;
+  my ($selfurl, $payload_text, $payload_b64, $payload_sig, $type_text);
+
+  $selfurl = $state->{selfurl} || '';
+  $payload_text = _approval_serialize($pending_ref);
+  $payload_b64 = encode_base64(($payload_text || ''), '');
+  $payload_sig = _approval_payload_signature($state, $payload_b64);
+  $type_text = $host_types{$pending_ref->{host_type}} || $pending_ref->{host_type};
+
+  print h2("Change submitted for approval");
+  print p("This change requires approval. Please provide a mandatory justification before the request is created.");
+  print p("<b>Operation:</b> " . encode_entities(_approval_operation_text($pending_ref->{operation} || '')));
+  print p("<b>Record type:</b> " . encode_entities($type_text));
+  print p("<b>Domain:</b> " . encode_entities($pending_ref->{domain} || ''));
+  print p({-style=>'color:#cc0000; font-weight:bold;'}, encode_entities($error_msg))
+    if (defined $error_msg && $error_msg ne '');
+
+  print start_form(-method=>'POST', -action=>$selfurl),
+    hidden('menu','hosts'),
+    hidden('sub','approval_submit'),
+    hidden('approval_payload',$payload_b64),
+    hidden('approval_sig',$payload_sig),
+    p('<b>Approval justification (required):</b>'),
+    textarea(-name=>'approval_reason', -default=>($reason || ''), -rows=>5, -columns=>80),
+    p(submit(-name=>'approval_submit_btn', -value=>'Submit for approval') . ' ' .
+      submit(-name=>'approval_cancel', -value=>'Cancel')),
+    end_form;
+}
+
+
+sub _render_approval_submitted {
+  my ($state, $req_id, $operation, $domain, $reason) = @_;
+  my $selfurl = $state->{selfurl} || '';
+
+  print h2("Change submitted for approval (request $req_id)");
+  print p("Your change has been submitted for approval and is waiting for review.");
+  print h3('Summary of submitted change:');
+  print p("<b>Operation:</b> " . encode_entities(_approval_operation_text($operation)));
+  print p("<b>Domain:</b> " . encode_entities($domain));
+  print p("<b>Justification:</b> " . encode_entities($reason));
+
+  print p("Links:");
+  print ul(
+    li("<a href=\"$selfurl?menu=approvals&sub=pending\">View pending approvals</a>"),
+    li("<a href=\"$selfurl?menu=approvals&sub=show_request&req_id=$req_id\">View this request details</a>")
+  );
+}
+
+
+sub _submit_pending_approval_request {
+  my ($state) = @_;
+  my ($payload_b64, $payload_sig, $payload_text, $pending_ref);
+  my ($operation, $host_type, $domain, $host_id, $policy_id, $reason);
+  my ($change_ref, $original_ref, %user, $email, $req_id);
+
+  if (param('approval_cancel')) {
+    print h2("Approval request canceled.");
+    print p("No approval request has been created.");
+    return 1;
+  }
+
+  $payload_b64 = param('approval_payload') || '';
+  $payload_sig = param('approval_sig') || '';
+
+  unless ($payload_b64 ne '' &&
+          $payload_sig eq _approval_payload_signature($state, $payload_b64)) {
+    alert1("Invalid or expired approval submission context.");
+    return 1;
+  }
+
+  $payload_text = decode_base64($payload_b64);
+  $pending_ref = _approval_deserialize($payload_text);
+  unless ($pending_ref && ref($pending_ref) eq 'HASH') {
+    alert1("Cannot read pending approval request data.");
+    return 1;
+  }
+
+  unless (int($pending_ref->{zoneid} || 0) == int($state->{zoneid} || 0)) {
+    alert1("Approval request data does not match current zone.");
+    return 1;
+  }
+
+  $reason = param('approval_reason');
+  $reason = '' unless (defined $reason);
+  $reason =~ s/^\s+//;
+  $reason =~ s/\s+$//;
+  if ($reason eq '') {
+    _render_approval_reason_form($state, $pending_ref, param('approval_reason'),
+                                 "Justification is required.");
+    return 1;
+  }
+
+  $operation = $pending_ref->{operation} || '';
+  $host_type = int($pending_ref->{host_type} || 0);
+  $domain = $pending_ref->{domain} || '';
+  $host_id = int($pending_ref->{host_id} || 0);
+
+  unless ($operation =~ /^[AMD]$/) {
+    alert1("Invalid approval operation.");
+    return 1;
+  }
+
+  $policy_id = check_approval_needed($state->{zoneid}, $operation, $host_type, $domain);
+  unless ($policy_id) {
+    alert1("Approval is no longer required for this change. Submit the change again.");
+    return 1;
+  }
+
+  $change_ref = _approval_deserialize($pending_ref->{change_data});
+  unless ($change_ref && ref($change_ref) eq 'HASH') {
+    alert1("Invalid change data for approval request.");
+    return 1;
+  }
+
+  if (defined($pending_ref->{original_data}) && $pending_ref->{original_data} ne '') {
+    $original_ref = _approval_deserialize($pending_ref->{original_data});
+    unless (defined $original_ref && ref($original_ref) eq 'HASH') {
+      alert1("Invalid original data for approval request.");
+      return 1;
+    }
+  }
+
+  get_user($state->{user}, \%user);
+  $email = $user{email} || '';
+
+  $req_id = submit_change_request($state->{zoneid}, $policy_id, $state->{uid},
+                                  $email, $operation, $host_id,
+                                  $change_ref, $original_ref, $reason);
+  if ($req_id) {
+    _render_approval_submitted($state, $req_id, $operation, $domain, $reason);
+    return 1;
+  }
+
+  alert1("Failed to submit approval request");
+  return 1;
+}
+
+
 sub _maybe_submit_approval {
   my ($state, $operation, $host_type, $domain, $host_id, $change_ref, $original_ref) = @_;
-  my ($policy_id, %user, $email, $req_id, $selfurl);
+  my ($policy_id, %pending);
 
   # DEBUG: Log approval check parameters
   write2log("DEBUG: check_approval_needed(zone=$state->{zoneid}, op=$operation, type=$host_type, domain=$domain)");
@@ -55,42 +237,18 @@ sub _maybe_submit_approval {
   
   return 0 unless ($policy_id);
 
-  get_user($state->{user}, \%user);
-  $email = $user{email} || '';
+  %pending = (
+    zoneid => int($state->{zoneid} || 0),
+    operation => $operation,
+    host_type => int($host_type || 0),
+    domain => ($domain || ''),
+    host_id => int($host_id || 0),
+    change_data => _approval_serialize($change_ref),
+    original_data => _approval_serialize($original_ref)
+  );
 
-  $req_id = submit_change_request($state->{zoneid}, $policy_id, $state->{uid},
-                                  $email, $operation, $host_id,
-                                  $change_ref, $original_ref, param('approval_reason'));
-  if ($req_id) {
-    $selfurl = $state->{selfurl} || '';
-    print h2("Change submitted for approval (request $req_id)");
-    print p("Your change has been submitted for approval and is waiting for review.");
-    
-    # Display summary of what was submitted
-    print h3('Summary of submitted change:');
-    if ($operation eq 'A') {
-      print p("<b>Operation:</b> Add new record");
-    } elsif ($operation eq 'M') {
-      print p("<b>Operation:</b> Modify existing record");
-    } else {
-      print p("<b>Operation:</b> Delete record");
-    }
-    print p("<b>Domain:</b> " . encode_entities($domain));
-    
-    if (param('approval_reason')) {
-      print p("<b>Justification:</b> " . encode_entities(param('approval_reason')));
-    }
-    
-    print p("Links:");
-    print ul(
-      li("<a href=\"$selfurl?menu=approvals&sub=pending\">View pending approvals</a>"),
-      li("<a href=\"$selfurl?menu=approvals&sub=show_request&req_id=$req_id\">View this request details</a>")
-    );
-    return 1;
-  }
-
-  alert1("Failed to submit approval request");
-  return -1;
+  _render_approval_reason_form($state, \%pending, param('approval_reason'), '');
+  return 1;
 }
 
 
@@ -334,9 +492,9 @@ my %host_form = (
    iff=>['type','14']},
 
   {ftype=>0, name=>'Record info', no_edit=>0},
-  {ftype=>1, tag=>'approval_reason', name=>'Approval Justification (if change needs approval)', 
+  {ftype=>1, tag=>'approval_reason', name=>'Approval Justification (pre-fill)',
    type=>'text', len=>60, maxlen=>500, empty=>1, whitesp=>'P',
-   title=>'Optional: provide justification for this change - reviewers will see this'},
+   title=>'Optional: if approval is required, this text pre-fills the mandatory justification form'},
   {ftype=>4, name=>'Record created', tag=>'cdate_str', no_edit=>1},
   {ftype=>4, name=>'Last modified', tag=>'mdate_str', no_edit=>1},
   {ftype=>1, name=>'Expiration date', tag=>'expiration', len=>30,
@@ -1008,6 +1166,15 @@ sub menu_handler {
   }
 
   my $sub=param('sub');
+
+  if ($sub eq 'approval_submit' ||
+      defined(param('approval_payload')) ||
+      defined(param('approval_submit_btn')) ||
+      defined(param('approval_cancel'))) {
+    _submit_pending_approval_request($state);
+    return;
+  }
+
   $host_form{alias_l_url}="$selfurl?menu=hosts&h_id=";
   $host_form{alias_a_url}="$selfurl?menu=hosts&h_id=";
   $host_form{alias_d_url}="$selfurl?menu=hosts&h_id=";
@@ -1051,7 +1218,6 @@ sub menu_handler {
 
     if (_maybe_submit_approval($state, 'D', $host{type}, $host{domain}, $host{id},
                                {id=>$host{id}, domain=>$host{domain}}, \%host)) {
-      show_host_record($state,$perms);
       return;
     }
 
