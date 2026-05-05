@@ -30,6 +30,8 @@ $VERSION = '$Id:$ ';
 	     ip_in_use
 	     domain_in_use
 	     hostname_in_use
+	     ip_in_use_with_pending
+	     domain_in_use_with_pending
 	     new_sid
 	     get_host_network_settings
 
@@ -184,6 +186,7 @@ $VERSION = '$Id:$ ';
 	     add_catalog_composition
 	     remove_catalog_composition
 	     update_catalog_compositions
+	     write2log
 	    );
 
 # Catalog zones support (RFC 9432) - six functions exported above
@@ -353,6 +356,82 @@ sub hostname_in_use($$) {
 	   "WHERE h.zone=$zoneid AND domain ~* " . db_encode_str("^$domain(\\.|\$)") . ";",\@q);
   return $q[0][0] if ($q[0][0] > 0);
   return 0;
+}
+
+# ip_in_use_with_pending($serverid, $ip, $exclude_request_id) -> ($conflict_source, $conflict_id)
+# Check if IP is in use in hosts OR in pending/approved dns_change_requests
+# Returns: (undef, undef) if free, ('hosts', host_id) if in hosts, ('pending', req_id) if in pending request
+sub ip_in_use_with_pending($$$) {
+  my($serverid,$ip,$exclude_request_id)=@_;
+  my(@q);
+
+  return (-1, -1) unless ($serverid > 0);
+  return (-2, -2) unless (is_cidr($ip));
+
+  # Check in hosts table (including a_entries)
+  db_query("SELECT a.host FROM hosts h, a_entries a, zones z " .
+	   "WHERE z.server=$serverid AND h.zone=z.id AND a.host=h.id " .
+	   " AND a.ip = " . db_encode_str($ip) . " LIMIT 1;",\@q);
+  if (@q > 0 && $q[0][0] > 0) {
+    return ('hosts', $q[0][0]);
+  }
+
+  # Check in pending/approved dns_change_requests
+  # Look for IP in change_data JSON
+  undef @q;
+  my $exclude_clause = ($exclude_request_id > 0) ? " AND id != $exclude_request_id" : "";
+  db_query("SELECT id, change_data FROM dns_change_requests " .
+	   "WHERE status IN ('P','A') AND zone_id = " .
+	   "(SELECT zone FROM hosts WHERE id = (SELECT host FROM a_entries WHERE ip = " . db_encode_str($ip) . " LIMIT 1)) " .
+	   $exclude_clause,\@q);
+  
+  # Parse change_data for IP match
+  for my $i (0..$#q) {
+    my $req_id = $q[$i][0];
+    my $change_data = $q[$i][1];
+    # Simple string search - if IP appears in change_data, it's likely in the request
+    if (defined $change_data && $change_data =~ /\Q$ip\E/) {
+      return ('pending', $req_id);
+    }
+  }
+
+  return (undef, undef);
+}
+
+# domain_in_use_with_pending($zoneid, $domain, $exclude_request_id) -> ($conflict_source, $conflict_id)
+# Check if domain is in use in hosts OR in pending/approved dns_change_requests
+# Returns: (undef, undef) if free, ('hosts', host_id) if in hosts, ('pending', req_id) if in pending request
+sub domain_in_use_with_pending($$$) {
+  my($zoneid,$domain,$exclude_request_id)=@_;
+  my(@q);
+
+  return (-1, -1) unless ($zoneid > 0);
+
+  # Check in hosts table
+  db_query("SELECT h.id FROM hosts h ".
+	   "WHERE h.zone=$zoneid AND domain=" . db_encode_str($domain) . " LIMIT 1;",\@q);
+  if (@q > 0 && $q[0][0] > 0) {
+    return ('hosts', $q[0][0]);
+  }
+
+  # Check in pending/approved dns_change_requests
+  undef @q;
+  my $exclude_clause = ($exclude_request_id > 0) ? " AND id != $exclude_request_id" : "";
+  db_query("SELECT id, change_data FROM dns_change_requests " .
+	   "WHERE status IN ('P','A') AND zone_id = $zoneid " .
+	   $exclude_clause,\@q);
+  
+  # Parse change_data for domain match
+  for my $i (0..$#q) {
+    my $req_id = $q[$i][0];
+    my $change_data = $q[$i][1];
+    # Search for domain in change_data (simple string match)
+    if (defined $change_data && $change_data =~ /['"]\Q$domain\E['"]/i) {
+      return ('pending', $req_id);
+    }
+  }
+
+  return (undef, undef);
 }
 
 sub new_sid() {

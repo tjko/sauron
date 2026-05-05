@@ -169,3 +169,48 @@ CREATE TABLE servers (
 - Keep unit tests in fast CI stages and integration/E2E tests in DB-enabled CI stages.
 
 **When to Use:** Creating unit tests, testing database conversions, validating import scripts.
+
+---
+
+## DatabaseDiagnostics
+**Purpose:** Access Sauron PostgreSQL database from shell scripts and diagnostics.
+
+**Expertise:**
+- PostgreSQL command-line client (`psql`) usage
+- Disabling pager output for scriptable results
+- Database connection management for diagnostic queries
+- Avoiding terminal buffer/pager issues during automation
+- Redirecting SQL output to files for processing
+
+**Connection Method:**
+For all database access from shell scripts, use:
+```bash
+sudo -u postgres -- psql sauron -P pager=off -c 'SELECT ...;'
+```
+
+Key flags:
+- `sudo -u postgres` - Run as postgres system user (required for peer authentication)
+- `--` - Separator before psql command (recommended)
+- `-P pager=off` - Disable pager mode (essential for scripts)
+- `-c '...'` - Execute command and exit
+- Output redirection: `> /tmp/output.txt 2>&1` - Capture to file if needed
+
+**Common Patterns:**
+```bash
+# Simple query with output to stdout
+sudo -u postgres -- psql sauron -P pager=off -c "SELECT * FROM hosts WHERE domain='test19';"
+
+# Query with file output (for large results or processing)
+sudo -u postgres -- psql sauron -P pager=off -c "SELECT ..." > /tmp/result.txt 2>&1
+
+# Pipe output to head/tail for filtering
+sudo -u postgres -- psql sauron -P pager=off -c "SELECT ..." | head -20
+```
+
+**Troubleshooting:**
+- If output goes into pager mode: Add `-P pager=off` flag
+- If psql hangs: The `-c` flag should exit immediately after query
+- If authentication fails: Verify running as postgres user with `sudo -u postgres`
+- Large result sets: Always redirect to file or use LIMIT in query
+
+**When to Use:** Database diagnostics, approval workflow debugging, schema verification, query testing during development.

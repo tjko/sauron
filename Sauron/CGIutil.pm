@@ -525,8 +525,8 @@ sub form_check_form($$$) {
       $val = '*.' . $val if ($wild); # Restore value. TVu 2020-06-11
 
       if ($rec->{chr} == 1) {
-	return 1 if (chr_check_field($rec->{tag},$val,$form->{chr_group})
-		     ne '');
+       return 1 if (chr_check_field($rec->{tag},$val,$form->{chr_group})
+                    ne '');
       }
 #     print p,"$p changed! '",$data->{$tag},"' '",param($p),"'\n" if ($data->{$tag} ne param($p));
       if ($rec->{type} eq 'expiration') {
@@ -643,8 +643,15 @@ sub form_check_form($$$) {
       }
     }
     elsif ($type == 6 || $type == 7 || $type == 10) {
-      return 6 unless (param($p) =~ /^-?\d+$/);
-      $data->{$tag}=param($p);
+      my $val = param($p);
+      # Allow empty value if field has empty=>1
+      if ($val eq '' && $rec->{empty}) {
+        $data->{$tag} = -1;  # Set to -1 for empty optional groups
+      } elsif ($val =~ /^-?\d+$/) {
+        $data->{$tag}=param($p);
+      } else {
+        return 6;
+      }
     }
     elsif ($type == 13) { # Textarea (check input) 12 Apr 2017 TVu
 # Some sources say that line breaks in textarea depend on the client.

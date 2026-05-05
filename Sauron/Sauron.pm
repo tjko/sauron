@@ -87,6 +87,10 @@ sub set_defaults() {
   $main::TTL_MIN_SEC = 600;                # 2021-02-11 TVu
   $main::TTL_MAX_SEC = 86400;              # 2021-02-11 TVu
 
+  $main::SAURON_BASE_URL = '';
+  $main::SAURON_APPROVAL_REMINDER_HOURS = 24;
+  $main::ALEVEL_APPROVAL_ADMIN = 5;
+
   $main::SAURON_RHF{huser}    = 0; # User
   $main::SAURON_RHF{dept}     = 0; # Dept.
   $main::SAURON_RHF{location} = 0; # Location

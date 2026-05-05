@@ -60,6 +60,7 @@ $debug_mode = $SAURON_DEBUG_MODE;
 @menulist = (
 	  ['Hosts','menu=hosts',0],
 	  ['Zones','menu=zones',0],
+    ['Approvals','menu=approvals',0],
 	  ['Nets','menu=nets',0],
 	  ['Templates','menu=templates',0],
 	  ['Groups','menu=groups',0],
@@ -76,6 +77,7 @@ $debug_mode = $SAURON_DEBUG_MODE;
 	  'zones'=>'Sauron::CGI::Zones',
 	  'login'=>'Sauron::CGI::Login',
 	  'hosts'=>'Sauron::CGI::Hosts',
+    'approvals'=>'Sauron::CGI::Approvals',
 	  'nets'=>'Sauron::CGI::Nets',
 	  'templates'=>'Sauron::CGI::Templates'
 );
@@ -107,6 +109,13 @@ $debug_mode = $SAURON_DEBUG_MODE;
 		      ['Catalog Groups','sub=CatalogGroups','root'],
 		      ['Add Default Zones','sub=AddDefaults','root']
 		     ],
+      'approvals'=>[
+          ['Policies','sub=list_policies'],
+          ['Pending','sub=pending'],
+          ['All Requests','sub=all_requests'],
+          [],
+          ['Add Policy','sub=add_policy']
+         ],
 	    'nets'=>[
 		     ['Networks',''],
 		     ['&nbsp; + Subnets','list=sub'],
