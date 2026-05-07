@@ -949,6 +949,10 @@ sub restricted_add_host($) {
     alert1("You don't have permission to add TLSA records");
     return -109;
   }
+  if ($rec->{type} == 13 && check_perms('flags','TXT',1)) {
+    alert1("You don't have permission to add TXT records");
+    return -112;
+  }
   if ($rec->{type} == 14 && check_perms('flags','NAPTR',1)) {
     alert1("You don't have permission to add NAPTR records");
     return -110;
@@ -1204,6 +1208,22 @@ sub menu_handler {
 	if ($host{type} == 8 && check_perms('flags','SRV',1)) {
 	    alert1("You don't have permission to delete SRV records");
 	    return -108;
+	}
+	if ($host{type} == 11 && check_perms('flags','SSHFP',1)) {
+	    alert1("You don't have permission to delete SSHFP records");
+	    return -110;
+	}
+	if ($host{type} == 12 && check_perms('flags','TLSA',1)) {
+	    alert1("You don't have permission to delete TLSA records");
+	    return -111;
+	}
+	if ($host{type} == 13 && check_perms('flags','TXT',1)) {
+	    alert1("You don't have permission to delete TXT records");
+	    return -112;
+	}
+	if ($host{type} == 14 && check_perms('flags','NAPTR',1)) {
+	    alert1("You don't have permission to delete NAPTR records");
+	    return -113;
 	}
   if ($host{type} == 15 && check_perms('flags','CAA',1)) {
       alert1("You don't have permission to delete CAA records");
@@ -1577,6 +1597,22 @@ sub menu_handler {
 	if ($host{type} == 8 && check_perms('flags','SRV',1)) {
 	    alert1("You don't have permission to edit SRV records");
 	    return -108;
+	}
+	if ($host{type} == 11 && check_perms('flags','SSHFP',1)) {
+	    alert1("You don't have permission to edit SSHFP records");
+	    return -110;
+	}
+	if ($host{type} == 12 && check_perms('flags','TLSA',1)) {
+	    alert1("You don't have permission to edit TLSA records");
+	    return -111;
+	}
+	if ($host{type} == 13 && check_perms('flags','TXT',1)) {
+	    alert1("You don't have permission to edit TXT records");
+	    return -112;
+	}
+	if ($host{type} == 14 && check_perms('flags','NAPTR',1)) {
+	    alert1("You don't have permission to edit NAPTR records");
+	    return -113;
 	}
   if ($host{type} == 15 && check_perms('flags','CAA',1)) {
       alert1("You don't have permission to edit CAA records");
@@ -2447,6 +2483,7 @@ sub menu_handler {
       elsif ($type==9) { return if check_perms('flags','DHCP'); }
       elsif ($type==11) { return if check_perms('flags','SSHFP'); }
       elsif ($type==12) { return if check_perms('flags','TLSA'); }
+      elsif ($type==13) { return if check_perms('flags','TXT'); }
       elsif ($type==14) { return if check_perms('flags','NAPTR'); }
       elsif ($type==15) { return if check_perms('flags','CAA'); }
       elsif ($type==101) {
