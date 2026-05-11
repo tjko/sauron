@@ -53,7 +53,7 @@ unless ($opt_user) {
   $i=1;
 }
 fatal("Invalid username '$opt_user'!")
-  unless ($opt_user =~ /^[a-z0-9\-\.@]{1,321}$/);
+  unless ($opt_user =~ /^[a-z0-9\-\.@]+$/);
 fatal("User already exists!") unless (get_user($opt_user,\%user));
 undef %user;
 

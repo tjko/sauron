@@ -93,7 +93,7 @@ my %session_id_form=(
 my %history_form=(
  data=>[
   {ftype=>0, name=>'History search'},
-  {ftype=>1, tag=>'user', name=>'User', type=>'text', len=>10, maxlen=>8, empty=>1 },
+  {ftype=>1, tag=>'user', name=>'User', type=>'text', len=>20, empty=>1 },
   {ftype=>1, tag=>'date', name=>'Dates', type=>'daterange', len=>20, empty=>1,
    extrainfo=>'Enter date range as -YYYYMMDD, YYYYMMDD- or YYYYMMDD-YYYYMMDD' },
   {ftype=>3, tag=>'type', name=>'Type', type=>'enum', len=>8,

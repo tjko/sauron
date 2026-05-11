@@ -2,11 +2,11 @@
 /* (this requires PostgreSQL v7.3 or later) */
 
 
-/* resize user login */
-ALTER TABLE common_fields ALTER COLUMN cuser TYPE CHAR(321);
+/* remove fixed length limit from audit user field */
+ALTER TABLE common_fields ALTER COLUMN cuser TYPE TEXT;
 
-/* resize user login */
-ALTER TABLE common_fields ALTER COLUMN muser TYPE CHAR(321);
+/* remove fixed length limit from audit user field */
+ALTER TABLE common_fields ALTER COLUMN muser TYPE TEXT;
 
 
 /** This table contains SSHFP record entries. **/
@@ -203,9 +203,9 @@ ALTER TABLE catalog_group_defs OWNER TO sauron;
 /* virtual table; generic fields for most of the tables */
 CREATE TABLE IF NOT EXISTS pokemon (
     cdate      TIMESTAMP DEFAULT CURRENT_TIMESTAMP, /* creation date */
-    cuser      CHAR(321) DEFAULT 'unknown',         /* creating user */
+    cuser      TEXT DEFAULT 'unknown',              /* creating user */
     mdate      TIMESTAMP DEFAULT CURRENT_TIMESTAMP, /* modification date */
-    muser      CHAR(321) DEFAULT 'unknown',         /* last changed by this user */
+    muser      TEXT DEFAULT 'unknown',              /* last changed by this user */
     expiration TIMESTAMP
 );
 

@@ -717,7 +717,7 @@ if ($modgroup) {
 
   if ($opt_username) { # 2019-02-04 TVu
       fatal("Invalid username '$opt_username'!")
-	  unless ($opt_username =~ /^[a-z0-9]{1,8}$/);
+  	  unless ($opt_username =~ /^[a-z0-9\-\.@]+$/);
       $res = db_exec("UPDATE users SET username = '$opt_username' " .
 		     "WHERE id = $id;");
       fatal("Cannot update user's username!") if ($res < 0);

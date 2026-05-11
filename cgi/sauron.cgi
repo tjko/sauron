@@ -579,7 +579,7 @@ sub login_form($$) {
 	"<TR><TD colspan=2 bgcolor=\"#efefff\">";
 
   print start_form(-target=>'_top'),"<BR><CENTER>",h2($msg),p,"<TABLE>",
-        Tr,td("Login:"),td(textfield(-id=>"login",-name=>'login_name',-maxlength=>'8')),
+        Tr,td("Login:"),td(textfield(-id=>"login",-name=>'login_name')),
         Tr,td("Password:"),
 #                  td(password_field(-name=>'login_pwd',-maxlength=>'30')),
 #                  td(password_field(-name=>'login_pwd', -size=>40)), # 2020-10-19 TVu
@@ -633,7 +633,7 @@ sub login_auth() {
 
   $p=~s/\ \t\n//g;
   print "<P><CENTER>";
-  if (! (valid_safe_string($u,255) && valid_safe_string($p,255))) {
+  if (! (valid_safe_string($u,0) && valid_safe_string($p,255))) {
     print p,h1("Invalid arguments!");
   }
   if ($u eq '' || $p eq '') {

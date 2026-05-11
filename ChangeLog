@@ -105,8 +105,11 @@
 	- Added Sauron::SetupIO module for correct encoding settings,
 	  sets encoding transport layers according to system settings
 	  (locale for STDIN, STDOUT, STDERR) using Encode::Locale [svamberg]
-	- Increased maximum login length to 321 characters to allow storage 
-	  of eduPersonUniqueId according to RFC4512. [svamberg]
+	- Removed fixed username length limits for account creation, account
+	  modification, and web login/history filters while keeping existing
+	  allowed-character validation rules. [svamberg]
+	- Changed audit user fields cuser and muser from CHAR(321) to TEXT in
+	  schema templates and conversion scripts. [svamberg]
 	- Removed 'WITH OIDS' from SQL table creation; not supported since 
 	  version 12. [svamberg]
 	- change libcrypt-cb5-perl to libcryptx-perl [svamberg]
