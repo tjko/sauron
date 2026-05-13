@@ -42,6 +42,30 @@ sub write2log{
   Sys::Syslog::closelog();
 } # End of write2log
 
+sub _has_active_txt_entries($) {
+  my($txt_l) = @_;
+
+  return 0 unless (ref($txt_l) eq 'ARRAY');
+
+  for my $row (@{$txt_l}) {
+    next unless (ref($row) eq 'ARRAY');
+
+    # Skip header rows from get_array_field() (e.g. ["Text","Comments"]).
+    my $id = $$row[0];
+    next if (defined($id) && $id !~ /^\d+$/);
+
+    my $state = (defined($$row[3]) ? $$row[3] : 0);
+    next if ($state == -1); # Marked for deletion.
+
+    my $txt = (defined($$row[1]) ? $$row[1] : '');
+    next if ($txt =~ /^\s*$/);
+
+    return 1;
+  }
+
+  return 0;
+}
+
 
 sub _approval_serialize {
   my ($ref) = @_;
@@ -1668,6 +1692,11 @@ sub menu_handler {
 	} else {
 	  $update_ok=1;
 
+	  if ($host{type} == 13 && !_has_active_txt_entries($host{txt_l})) {
+	    alert2("TXT record must contain at least one TXT entry.");
+	    $update_ok=0;
+	  }
+
 	  if ($host{type}==1 || $host{type}==101) {
 	    for $i (1..($#{$host{ip}})) {
 	      #print "<p>check $i, $old_ips[$i], $host{ip}[$i][1]";
@@ -2555,7 +2584,9 @@ sub menu_handler {
 	  }
 	  $data{ip}=$ip;
 	}
-	if ($data{net} eq 'MANUAL' && not is_cidr($data{ip})) {
+	if ($data{type} == 13 && !_has_active_txt_entries($data{txt_l})) {
+	  alert1("TXT record must contain at least one TXT entry.");
+	} elsif ($data{net} eq 'MANUAL' && not is_cidr($data{ip})) {
 	  alert1("IP number must be specified if using Manual IP!");
 	} elsif ($u_id=domain_in_use($zoneid,$data{domain})) {
 	  alert1("Domain name already in use!");

@@ -2505,6 +2505,30 @@ sub get_host($$) {
   return 0;
 }
 
+sub _host_has_txt_entries($) {
+  my($txt_l) = @_;
+
+  return 0 unless (ref($txt_l) eq 'ARRAY');
+
+  for my $row (@{$txt_l}) {
+    next unless (ref($row) eq 'ARRAY');
+
+    # Skip header rows from get_array_field() (e.g. ["Text","Comments"]).
+    my $id = $$row[0];
+    next if (defined($id) && $id !~ /^\d+$/);
+
+    my $state = (defined($$row[3]) ? $$row[3] : 0);
+    next if ($state == -1); # Marked for deletion.
+
+    my $txt = (defined($$row[1]) ? $$row[1] : '');
+    next if ($txt =~ /^\s*$/);
+
+    return 1;
+  }
+
+  return 0;
+}
+
 
 sub update_host($) {
   my($rec) = @_;
@@ -2527,6 +2551,10 @@ sub update_host($) {
   $rec->{alias} = -1 if ($rec->{cname_txt});
 
   $rec->{domain}=lc($rec->{domain}) if (defined $rec->{domain});
+
+  if ($rec->{type} == 13 && !_host_has_txt_entries($rec->{txt_l})) {
+    return -27;
+  }
 
   db_begin();
   $r=update_record('hosts',$rec);
@@ -2715,6 +2743,10 @@ sub add_host($) {
   # Catalog zones cannot have hosts added (RFC 9432)
   if (is_catalog_zone($rec->{zone})) {
     return -999;  # ERROR: Cannot add hosts to catalog zones
+  }
+
+  if ($rec->{type} == 13 && !_host_has_txt_entries($rec->{txt_l})) {
+    return -15;
   }
 
   db_begin();
