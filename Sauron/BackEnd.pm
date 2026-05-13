@@ -2524,6 +2524,7 @@ sub update_host($) {
   delete $rec->{dhcp_info};
   delete $rec->{dhcp_date_str};
   delete $rec->{fqdn};
+  delete $rec->{approval_reason};
   $rec->{alias} = -1 if ($rec->{cname_txt});
 
   $rec->{domain}=lc($rec->{domain}) if (defined $rec->{domain});
@@ -2709,6 +2710,7 @@ sub add_host($) {
 
   delete $rec->{cname_alias};
   delete $rec->{static_alias};
+  delete $rec->{approval_reason};
 
   return -100 unless ($rec->{zone} > 0);
 
