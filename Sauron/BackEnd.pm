@@ -2505,28 +2505,113 @@ sub get_host($$) {
   return 0;
 }
 
-sub _host_has_txt_entries($) {
-  my($txt_l) = @_;
+sub _host_has_active_list_entries($$) {
+  my($list, $value_index) = @_;
 
-  return 0 unless (ref($txt_l) eq 'ARRAY');
+  return 0 unless (ref($list) eq 'ARRAY');
 
-  for my $row (@{$txt_l}) {
+  for my $row (@{$list}) {
     next unless (ref($row) eq 'ARRAY');
 
     # Skip header rows from get_array_field() (e.g. ["Text","Comments"]).
     my $id = $$row[0];
-    next if (defined($id) && $id !~ /^\d+$/);
+    next if (defined($id) && $id !~ /^-?\d+$/);
 
-    my $state = (defined($$row[3]) ? $$row[3] : 0);
-    next if ($state == -1); # Marked for deletion.
+    my $state = $$row[$#{$row}];
+    next if (defined($state) && $state =~ /^-1$/); # Marked for deletion.
 
-    my $txt = (defined($$row[1]) ? $$row[1] : '');
-    next if ($txt =~ /^\s*$/);
+    if (defined($value_index)) {
+      my $val = $$row[$value_index];
+      next unless (defined($val) && $val !~ /^\s*$/);
+    }
 
     return 1;
   }
 
   return 0;
+}
+
+sub _host_has_ip_entries($) {
+  my($rec) = @_;
+
+  return 0 unless (ref($rec) eq 'HASH');
+  return 0 unless (defined($rec->{ip}));
+
+  if (ref($rec->{ip}) eq 'ARRAY') {
+    return _host_has_active_list_entries($rec->{ip}, 1);
+  }
+
+  return ($rec->{ip} !~ /^\s*$/ && is_cidr($rec->{ip}));
+}
+
+sub host_required_data_error($) {
+  my($rec) = @_;
+  my($type, $alias, $cname_txt);
+
+  return 'Invalid host record data.' unless (ref($rec) eq 'HASH');
+
+  $type = int($rec->{type} || 0);
+
+  if (($type == 1 || $type == 6 || $type == 9 || $type == 101) &&
+      !_host_has_ip_entries($rec)) {
+    return 'Host record requires at least one IP address.';
+  }
+
+  if ($type == 2 && !_host_has_active_list_entries($rec->{ns_l}, 1)) {
+    return 'Delegation record requires at least one NS entry.';
+  }
+
+  if ($type == 3) {
+    return '' if ($rec->{mx} && $rec->{mx} > 0);
+    return 'Plain MX record requires MX template or at least one MX entry.'
+      unless (_host_has_active_list_entries($rec->{mx_l}, 2));
+  }
+
+  if ($type == 4) {
+    $alias = int($rec->{alias} || 0);
+    $cname_txt = (defined($rec->{cname_txt}) ? $rec->{cname_txt} : '');
+    $cname_txt =~ s/^\s+//;
+    $cname_txt =~ s/\s+$//;
+    if ($alias <= 0 && $cname_txt eq '') {
+      return 'Alias record requires alias target.';
+    }
+  }
+
+  if ($type == 5 && !_host_has_active_list_entries($rec->{printer_l}, 1)) {
+    return 'Printer record requires at least one PRINTER entry.';
+  }
+
+  if ($type == 7 &&
+      int($rec->{alias} || 0) <= 0 &&
+      !_host_has_active_list_entries($rec->{alias_a}, 1)) {
+    return 'AREC Alias record requires at least one target host.';
+  }
+
+  if ($type == 8 && !_host_has_active_list_entries($rec->{srv_l}, 1)) {
+    return 'SRV record requires at least one SRV entry.';
+  }
+
+  if ($type == 11 && !_host_has_active_list_entries($rec->{sshfp_l}, 1)) {
+    return 'SSHFP record requires at least one SSHFP entry.';
+  }
+
+  if ($type == 12 && !_host_has_active_list_entries($rec->{tlsa_l}, 1)) {
+    return 'TLSA record requires at least one TLSA entry.';
+  }
+
+  if ($type == 13 && !_host_has_active_list_entries($rec->{txt_l}, 1)) {
+    return 'TXT record requires at least one TXT entry.';
+  }
+
+  if ($type == 14 && !_host_has_active_list_entries($rec->{naptr_l}, 1)) {
+    return 'NAPTR record requires at least one NAPTR entry.';
+  }
+
+  if ($type == 15 && !_host_has_active_list_entries($rec->{caa_l}, 1)) {
+    return 'CAA record requires at least one CAA entry.';
+  }
+
+  return '';
 }
 
 
@@ -2552,7 +2637,7 @@ sub update_host($) {
 
   $rec->{domain}=lc($rec->{domain}) if (defined $rec->{domain});
 
-  if ($rec->{type} == 13 && !_host_has_txt_entries($rec->{txt_l})) {
+  if (host_required_data_error($rec) ne '') {
     return -27;
   }
 
@@ -2745,8 +2830,8 @@ sub add_host($) {
     return -999;  # ERROR: Cannot add hosts to catalog zones
   }
 
-  if ($rec->{type} == 13 && !_host_has_txt_entries($rec->{txt_l})) {
-    return -15;
+  if (host_required_data_error($rec) ne '') {
+    return -27;
   }
 
   db_begin();

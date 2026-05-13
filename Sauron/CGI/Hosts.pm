@@ -42,28 +42,10 @@ sub write2log{
   Sys::Syslog::closelog();
 } # End of write2log
 
-sub _has_active_txt_entries($) {
-  my($txt_l) = @_;
+sub _host_required_data_error($) {
+  my($rec) = @_;
 
-  return 0 unless (ref($txt_l) eq 'ARRAY');
-
-  for my $row (@{$txt_l}) {
-    next unless (ref($row) eq 'ARRAY');
-
-    # Skip header rows from get_array_field() (e.g. ["Text","Comments"]).
-    my $id = $$row[0];
-    next if (defined($id) && $id !~ /^\d+$/);
-
-    my $state = (defined($$row[3]) ? $$row[3] : 0);
-    next if ($state == -1); # Marked for deletion.
-
-    my $txt = (defined($$row[1]) ? $$row[1] : '');
-    next if ($txt =~ /^\s*$/);
-
-    return 1;
-  }
-
-  return 0;
+  return Sauron::BackEnd::host_required_data_error($rec);
 }
 
 
@@ -952,6 +934,7 @@ sub make_net_list($$$$$$) {
 
 sub restricted_add_host($) {
   my($rec)=@_;
+  my($required_error);
 
   if (check_perms('host',$rec->{domain},1)) {
     alert1("Invalid hostname: does not conform to your restrictions");
@@ -984,6 +967,12 @@ sub restricted_add_host($) {
   if ($rec->{type} == 15 && check_perms('flags','CAA',1)) {
     alert1("You don't have permission to add CAA records");
     return -111;
+  }
+
+  $required_error = _host_required_data_error($rec);
+  if ($required_error ne '') {
+    alert1($required_error);
+    return -112;
   }
 
   # Check approval workflow before adding the host record
@@ -1692,8 +1681,9 @@ sub menu_handler {
 	} else {
 	  $update_ok=1;
 
-	  if ($host{type} == 13 && !_has_active_txt_entries($host{txt_l})) {
-	    alert2("TXT record must contain at least one TXT entry.");
+	  my $required_error = _host_required_data_error(\%host);
+	  if ($required_error ne '') {
+	    alert2($required_error);
 	    $update_ok=0;
 	  }
 
@@ -2583,101 +2573,107 @@ sub menu_handler {
 	    return;
 	  }
 	  $data{ip}=$ip;
-	}
-	if ($data{type} == 13 && !_has_active_txt_entries($data{txt_l})) {
-	  alert1("TXT record must contain at least one TXT entry.");
-	} elsif ($data{net} eq 'MANUAL' && not is_cidr($data{ip})) {
-	  alert1("IP number must be specified if using Manual IP!");
-	} elsif ($u_id=domain_in_use($zoneid,$data{domain})) {
-	  alert1("Domain name already in use!");
-	  print "Conflicting host: ",
-	     "<a href=\"$selfurl?menu=hosts&h_id=$u_id\">$data{domain}</a>.";
-	} elsif (is_cidr($data{ip}) && ip_in_use($serverid,$data{ip})) {
-	  alert1("IP number already in use!");
-	} elsif (check_perms('host',$data{domain},1)) {
-	  alert1("Invalid hostname: does not conform to your restrictions");
-	} elsif (is_cidr($data{ip}) && check_perms('ip',$data{ip},1)) {
-	  alert1("Invalid IP number: outside allowed range(s): $data{ip}");
-	} else {
-	  print h2("Add");
-	  if ($data{type} == 1 || $data{type} == 101) {
-	    $ip=$data{ip}; delete $data{ip};
-	    $data{ip}=[[0,$ip,'t','t','']];
-	  } elsif ($data{type} == 6) {
-	    $ip=$data{glue}; delete $data{glue};
-	    $data{ip}=[[0,$ip,'t','t','']];
-	  } elsif ($data{type} == 9) {
-	    $ip=$data{ip}; delete $data{ip};
-	    $data{ip}=[[0,$ip,'f','f','']] if (is_cidr($ip));
-	  }
-	  delete $data{net};
-	  #show_hash(\%data);
-	  if ($perms->{elimit} > 0) { # enforce expiration limit, if it exists
-	    $tmp=time()+$perms->{elimit}*86400;
-	    $data{expiration}=$tmp
-	      unless ($data{expiration} > 0 && $data{expiration} < $tmp)
-	  }
+  }
+  if ($data{net} eq 'MANUAL' && not is_cidr($data{ip})) {
+    alert1("IP number must be specified if using Manual IP!");
+  } elsif ($u_id=domain_in_use($zoneid,$data{domain})) {
+    alert1("Domain name already in use!");
+    print "Conflicting host: ",
+       "<a href=\"$selfurl?menu=hosts&h_id=$u_id\">$data{domain}</a>.";
+  } elsif (is_cidr($data{ip}) && ip_in_use($serverid,$data{ip})) {
+    alert1("IP number already in use!");
+  } elsif (check_perms('host',$data{domain},1)) {
+    alert1("Invalid hostname: does not conform to your restrictions");
+  } elsif (is_cidr($data{ip}) && check_perms('ip',$data{ip},1)) {
+    alert1("Invalid IP number: outside allowed range(s): $data{ip}");
+  } else {
+    my $required_error;
+
+    print h2("Add");
+    if ($data{type} == 1 || $data{type} == 101) {
+      $ip=$data{ip}; delete $data{ip};
+      $data{ip}=[[0,$ip,'t','t','']];
+    } elsif ($data{type} == 6) {
+      $ip=$data{glue}; delete $data{glue};
+      $data{ip}=[[0,$ip,'t','t','']];
+    } elsif ($data{type} == 9) {
+      $ip=$data{ip}; delete $data{ip};
+      $data{ip}=[[0,$ip,'f','f','']] if (is_cidr($ip));
+    }
+    delete $data{net};
+
+    $required_error = _host_required_data_error(\%data);
+    if ($required_error ne '') {
+      alert1($required_error);
+    } else {
+      #show_hash(\%data);
+      if ($perms->{elimit} > 0) { # enforce expiration limit, if it exists
+        $tmp=time()+$perms->{elimit}*86400;
+        $data{expiration}=$tmp
+          unless ($data{expiration} > 0 && $data{expiration} < $tmp)
+      }
 
     if (_maybe_submit_approval($state, 'A', $data{type}, $data{domain}, undef,
              \%data, undef)) {
       return;
     }
-	  $res=add_host(\%data);
-	  if ($res > 0) {
-	    update_history($state->{uid},$state->{sid},1,
-			   "ADD: $host_types{$data{type}} ",
-			   "domain: $data{domain}",$res);
-	    print h2("Host added successfully");
+      $res=add_host(\%data);
+      if ($res > 0) {
+        update_history($state->{uid},$state->{sid},1,
+           "ADD: $host_types{$data{type}} ",
+           "domain: $data{domain}",$res);
+        print h2("Host added successfully");
 
-            # check reverse zone only if defined IP address
-            if (defined $data{ip}[0][1]) {
-              # check if exists revers zone
-              db_query("SELECT COUNT(name) " .
-                       "FROM zones " .
-                       "WHERE reverse=true " .
-                       " AND server=$serverid " .
-                       " AND '$data{ip}[0][1]' << reversenet", \@q);
-              if ($q[0][0] == 0) {
-                warning1('There is no reverse zone for this IP address. ' .
-                         'It will not be possible to create a PTR record.');
+              # check reverse zone only if defined IP address
+              if (defined $data{ip}[0][1]) {
+                # check if exists revers zone
+                db_query("SELECT COUNT(name) " .
+                         "FROM zones " .
+                         "WHERE reverse=true " .
+                         " AND server=$serverid " .
+                         " AND '$data{ip}[0][1]' << reversenet", \@q);
+                if ($q[0][0] == 0) {
+                  warning1('There is no reverse zone for this IP address. ' .
+                           'It will not be possible to create a PTR record.');
+                }
               }
-            }
 
-	    param('h_id',$res);
-	    show_host_record($state,$perms);
-	    return;
-	  } else {
-	    alert1("Cannot add host record!");
-	    if (db_lasterrormsg() =~ /ether_key/) {
-	      alert2("Duplicate MAC (Ethernet) address $data{ether}");
-	      db_query("SELECT id,domain FROM hosts " .
-		       "WHERE ether='$data{ether}' AND zone=$zoneid",\@q);
-	      if ($q[0][0] > 0) {
-		print "Conflicting host: ",
-  	          "<a href=\"$selfurl?menu=hosts&h_id=$q[0][0]\">$q[0][1]</a>";
-	      }
-	    } elsif(db_lasterrormsg() =~ /duid_key/) {
-              alert2("Duplicate DUID $data{duid}");
-              db_query("SELECT id,domain FROM hosts " .
-                       "WHERE duid='$data{duid}' AND zone=$zoneid",\@q);
-              if ($q[0][0] > 0) {
-                print "Conflicting host: ",
-                  "<a href=\"$selfurl?menu=hosts&h_id=$q[0][0]\">$q[0][1]</a>";
+        param('h_id',$res);
+        show_host_record($state,$perms);
+        return;
+      } else {
+        alert1("Cannot add host record!");
+        if (db_lasterrormsg() =~ /ether_key/) {
+    alert2("Duplicate MAC (Ethernet) address $data{ether}");
+    db_query("SELECT id,domain FROM hosts " .
+       "WHERE ether='$data{ether}' AND zone=$zoneid",\@q);
+    if ($q[0][0] > 0) {
+      print "Conflicting host: ",
+  	            "<a href=\"$selfurl?menu=hosts&h_id=$q[0][0]\">$q[0][1]</a>";
+    }
+        } elsif(db_lasterrormsg() =~ /duid_key/) {
+                alert2("Duplicate DUID $data{duid}");
+                db_query("SELECT id,domain FROM hosts " .
+                         "WHERE duid='$data{duid}' AND zone=$zoneid",\@q);
+                if ($q[0][0] > 0) {
+                  print "Conflicting host: ",
+                    "<a href=\"$selfurl?menu=hosts&h_id=$q[0][0]\">$q[0][1]</a>";
+                }
               }
-            }
-          elsif(db_lasterrormsg() =~ /duid_iaid_key/) {
-              alert2("Duplicate DUID+IAID $data{duid} - $data{'iaid'}");
-              db_query("SELECT id,domain FROM hosts " .
-                       "WHERE duid='$data{duid}' AND iaid='$data{'iaid'}' AND zone=$zoneid",\@q);
-              if ($q[0][0] > 0) {
-                print "Conflicting host: ",
-                  "<a href=\"$selfurl?menu=hosts&h_id=$q[0][0]\">$q[0][1]</a>";
-              }
-            } else {
-	      alert2(db_lasterrormsg());
-	    }
-	  }
-	}
+            elsif(db_lasterrormsg() =~ /duid_iaid_key/) {
+                alert2("Duplicate DUID+IAID $data{duid} - $data{'iaid'}");
+                db_query("SELECT id,domain FROM hosts " .
+                         "WHERE duid='$data{duid}' AND iaid='$data{'iaid'}' AND zone=$zoneid",\@q);
+                if ($q[0][0] > 0) {
+                  print "Conflicting host: ",
+                    "<a href=\"$selfurl?menu=hosts&h_id=$q[0][0]\">$q[0][1]</a>";
+                }
+              } else {
+    alert2(db_lasterrormsg());
+        }
+      }
+    }
+  }
       } else {
 	alert1("Invalid data in form! (code: $res)");
       }
