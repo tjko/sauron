@@ -6,6 +6,8 @@
 	    CGI add/edit/restricted-add flows
 	  - Prevents semantically empty records from being saved
 	    (e.g. TXT without TXT entries, SRV without SRV entries)
+	  - Added dbcheck hosts consistency check for records missing required
+	    type-specific values (reports issues, no automatic fix)
 	- Approvals (new feature) [svamberg]
 	  - Mandatory justification requirement for approval requests
 	    - Two-step submission workflow: users must provide justification
@@ -361,8 +363,9 @@
 	  groups is purely historical. Properly, the current concept of Group
 	  should be discarded and Subgroups should be renamed Groups. [TVu]
 
-0.9.0 (beta)
-	- Generalized required-data validation for host record types [svamberg]
+0.8.0 (beta)
+
+	- For Host aliases, the "Alias for" field maxlen prperty has been
 	  extended to 254 characters to accomodate aliases provided by Google.
 	  [Riku Meskanen & TVu]
 	- Zone comment field has been widenend from 60 to 80 characters, but
