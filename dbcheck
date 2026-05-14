@@ -47,6 +47,7 @@ my @funcs = (
     [ \&get_groups_h,         \&fix_groups_h,         2, 'hosts' ],
 
     [ \&get_base_group_dhcp,  \&generic_nofix,        3, 'hosts' ], # ** 2021-??-??
+    [ \&get_hosts_missing_values, \&generic_nofix,    3, 'hosts' ],
 
     [ \&get_int_stat_aliases, \&fix_int_stat_aliases, 2, 'aliases' ],
     [ \&get_ext_stat_aliases, \&generic_nofix,        3, 'aliases' ],
@@ -685,6 +686,42 @@ sub fix_base_group_dhcp($) {
 # - generic_insert to add subgroup memberships to group_entries
 # - generic_update to set base group in hosts to -1
 
+}
+
+# Get hosts with missing required values for their record type.
+sub get_hosts_missing_values($$$) {
+
+	my ($arr, $msg, $titles) = @_;
+	my ($sql, $ind1, $id, $fqdn, $err);
+	my (%host, %host_types, @hosts);
+
+	${$msg} = 'host records missing required values for their type';
+	@{$titles} = ('Host Id', 'Host', 'Type', 'Missing value');
+
+	%host_types = get_host_types();
+
+	$sql = "select h.id, h.domain || '.' || z.name " .
+	"from hosts h, zones z " .
+	"where h.zone = z.id and " .
+	"h.type = any ( array[ 1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 101 ] ) " .
+	"order by 2;";
+
+	undef @hosts;
+	db_query($sql, \@hosts);
+	return 0 if (!@hosts);
+
+	for $ind1 (0 .. $#hosts) {
+	$id = $hosts[$ind1][0];
+	$fqdn = $hosts[$ind1][1];
+	undef %host;
+	next if (get_host($id, \%host) < 0);
+	$err = Sauron::BackEnd::host_required_data_error(\%host);
+	next if ($err eq '');
+	push @{$arr}, [ $id, $fqdn, ($host_types{$host{type}} || $host{type}), $err ];
+	}
+
+	return 0 if (!@{$arr});
+	return $#{$arr} + 1;
 }
 
 # ------------------------------------------------------------------------------
