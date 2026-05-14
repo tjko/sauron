@@ -29,8 +29,15 @@ jobs:
             libnet-dns-perl libnet-ip-perl libnetaddr-ip-perl \
             libnet-netmask-perl libtext-table-perl \
             libcryptx-perl libjson-perl libjson-maybexs-perl \
+            libtest-simple-perl \
             libpath-tiny-perl libpg-perl libparse-recdescent-perl \
             libdate-manip-perl libencode-locale-perl
+        shell: bash
+
+      - name: Verify core Perl test modules
+        run: |
+          set -e
+          perl -MTest::More -MJSON::PP -e 'print "Perl test modules OK\n"'
         shell: bash
 
       - name: Create DB.pm symlink
@@ -106,8 +113,15 @@ jobs:
             libnet-dns-perl libnet-ip-perl libnetaddr-ip-perl \
             libnet-netmask-perl libtext-table-perl \
             libcryptx-perl libjson-perl libjson-maybexs-perl \
+            libtest-simple-perl \
             libpath-tiny-perl libpg-perl libparse-recdescent-perl \
             libdate-manip-perl libencode-locale-perl
+        shell: bash
+
+      - name: Verify core Perl test modules
+        run: |
+          set -e
+          perl -MTest::More -MJSON::PP -e 'print "Perl test modules OK\n"'
         shell: bash
 
       - name: Wait for PostgreSQL

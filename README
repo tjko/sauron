@@ -100,9 +100,9 @@ INSTALLATION
 	Copy images under icons/ directory to sauron/icons/ directory
 	under your web server root directory (or just make a symbolic link)
 
-  9) now you can use the web interface to create a server and zones, or
-     you can import existing named/dhcpd configurations using
-     import/iport-dhcp utilities. Or you can try out the demo database
+    9) now you can use the web interface to create a server and zones, or
+      you can import existing named/dhcpd/KEA configurations using
+      import/import-dhcp utilities. Or you can try out the demo database
      that can be found under test/ directory in source tree.
 
 
@@ -149,7 +149,8 @@ COMMANDS
    new server and related zones into Sauron.
 
  import-dhcp
-   Utility for updating existing server using dhcpd configuration; 
+   Utility for updating existing server using ISC dhcpd or KEA JSON
+  DHCP configuration;
    adds Ethernet addressess for hosts and to builds network map for
    the server.
 

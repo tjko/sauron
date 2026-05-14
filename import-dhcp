@@ -1,6 +1,6 @@
 #!/usr/bin/perl -I/usr/local/sauron
 #
-# import-dhcp - imports ISC DHCPD configuration
+# import-dhcp - imports ISC DHCPD or KEA DHCP configuration
 #
 # Copyright (c) Michal Kostenec <kostenec@civ.zcu.cz> 2013-2014.
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>  2002,2003.
@@ -25,12 +25,14 @@ load_config();
 ##############################
 
 GetOptions("help|h","verbose|v","dir=s","notransaction","chaosnet=s",
-	   "global","dhcp6");
+	   "global","dhcp6","kea")
+  or fatal("invalid command-line options");
 
 if ($opt_help || @ARGV < 2) {
-    print "syntax: $0 [options] <servername> <dhcpd.conf file>\n";
+    print "syntax: $0 [options] <servername> <dhcp config file>\n";
     print "options:\n",
           "\t--dhcp6\t\t\timport DHCPv6 configuration\t\n",
+          "\t--kea\t\t\timport KEA JSON configuration\n",
           "\t--dir=<directory>\tdirectory where included files are located\n",
 	  "\t\t\t\t(if not in directory specified in dhcpd.conf)\n",
 	  "\t--chaosnet=<name>\ttreat this shared-network as default VLAN\n",
@@ -49,6 +51,7 @@ $dhcpdf = $ARGV[1];
 $user = (getpwuid($<))[0];
 $chaosnet = ($opt_chaosnet ? $opt_chaosnet : 'CHAOS');
 $opt_dhcp6 = ($opt_dhcp6 ? 1 : 0);
+$opt_kea = ($opt_kea ? 1 : 0);
 
 
 fatal("cannot read dhcpd.conf ($dhcpdf)") unless (-r $dhcpdf);
@@ -67,7 +70,13 @@ if ($dhcpdf =~ /(^.*\/)/) {
 
 # parse named.conf
 undef %data;
-process_dhcpdconf($dhcpdf,\%data,$opt_dhcp6);
+if ($opt_kea || is_kea_dhcpconf($dhcpdf)) {
+  print "Detected KEA DHCP configuration\n" if ($opt_verbose);
+  process_kea_dhcpconf($dhcpdf,\%data,$opt_dhcp6);
+}
+else {
+  process_dhcpdconf($dhcpdf,\%data,$opt_dhcp6);
+}
 
 unless ($opt_notransaction) {
   db_begin();

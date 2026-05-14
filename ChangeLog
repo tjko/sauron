@@ -1,4 +1,8 @@
 0.9.0 (beta)
+	- Added KEA DHCP configuration import support: parses KEA JSON 
+	  configs (DHCPv4/DHCPv6) and converts subnets, pools, reservations, 
+	  shared-networks and options to ISC-like internal format used 
+	  by import-dhcp [svamberg]
 	- Approvals (new feature) [svamberg]
 	  - Mandatory justification requirement for approval requests
 	    - Two-step submission workflow: users must provide justification

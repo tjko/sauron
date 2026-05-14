@@ -47,6 +47,15 @@ subtest 'import-dhcp' => sub {
     is($? >> 8, 0, "import-dhcp exits 0") or diag($out);
 };
 
+subtest 'import-dhcp KEA' => sub {
+    my $conf = "$testdata/kea-dhcp.json";
+    plan skip_all => 'test/kea-dhcp.json not found' unless -r $conf;
+
+    my $cmd = "$install_dir/import-dhcp --kea --global example $conf 2>&1";
+    my $out = `$cmd`;
+    is($? >> 8, 0, "import-dhcp --kea exits 0") or diag($out);
+};
+
 # =========================================================================
 # generate configs (bind, dhcp, dhcp6)
 # =========================================================================

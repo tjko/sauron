@@ -1,0 +1,59 @@
+{
+  "Dhcp4": {
+    "option-data": [
+      {
+        "name": "domain-name-servers",
+        "data": "ns1.middle.earth,ns2.middle.earth"
+      }
+    ],
+    "shared-networks": [
+      {
+        "name": "kea-lab",
+        "subnet4": [
+          {
+            "subnet": "10.250.1.0/24",
+            "option-data": [
+              {
+                "name": "routers",
+                "data": "10.250.1.1"
+              }
+            ],
+            "pools": [
+              {
+                "pool": "10.250.1.100 - 10.250.1.110"
+              }
+            ],
+            "reservations": [
+              {
+                "hostname": "kea-ws1.middle.earth",
+                "hw-address": "00:30:40:50:60:70",
+                "ip-address": "10.250.1.10"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "Dhcp6": {
+    "subnet6": [
+      {
+        "subnet": "2001:db8:250::/64",
+        "pools": [
+          {
+            "pool": "2001:db8:250::100 - 2001:db8:250::1ff"
+          }
+        ],
+        "reservations": [
+          {
+            "hostname": "kea-host6.middle.earth",
+            "duid": "00030001001122334455",
+            "ip-addresses": [
+              "2001:db8:250::10"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
