@@ -184,9 +184,6 @@ $DB_PASSWORD = "bar";
 #      (user sees only zones she has explicitly given read (write) access)
 # $SAURON_PRIVILEGE_MODE = 1
 
-# set 1 to use hardcoded DTD instead the one genereated by CGI module
-# $SAURON_DTD_HACK = 0;
-
 # Set this to change behaviour of HINFO edit fields (for hosts):
 #    1 = Allow empty values (last in the drop-down list)
 #   -1 = Allow emptry values (first in the drop-down list)
@@ -242,6 +239,15 @@ $DB_PASSWORD = "bar";
 
 #$SAURON_TOPMENU_BGCOLOR="#002d5f"; # default: #002d5f
 #$SAURON_TOPMENU_FONTCOLOR="white"; # default: white
+
+# Short label identifying the running environment (e.g. PROD, STAGING,
+# DEV). When set it is shown next to the Sauron title and is exposed to
+# CSS as --s-env-name. Combine with $SAURON_TOPMENU_BGCOLOR to give each
+# environment a distinct top bar; reduces the chance of editing the
+# wrong instance by mistake.
+#$SAURON_ENV_NAME = "PROD";    # production deployment
+#$SAURON_ENV_NAME = "STAGING"; # paired with e.g. $SAURON_TOPMENU_BGCOLOR="#7d3c98"
+#$SAURON_ENV_NAME = "DEV";     # paired with e.g. $SAURON_TOPMENU_BGCOLOR="#0d6efd"
 
 # $LOOPBACK_NET = "127.0.0.0/24";
 # $LOOPBACK_ZONE = "loopback.";

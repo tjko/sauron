@@ -28,7 +28,6 @@ use vars qw(
     @search_types $key
     $BROWSER_CONF $BROWSER_HELP $BROWSER_MAX $BROWSER_CHARSET $BROWSER_SHOW_FIELDS
     $BROWSER_HIDE_PRIVATE $BROWSER_HIDE_FIELDS
-    $bgcolor
 );
 
 $CGI::DISABLE_UPLOADS = 1; # no uploads
@@ -135,7 +134,6 @@ load_browser_config();
   {ftype=>4, name=>'Record created', tag=>'cdate_str', no_edit=>1},
   {ftype=>4, name=>'Last modified', tag=>'mdate_str', no_edit=>1}
  ],
- tbl_bgcolor => '#ccccff'
 );
 
 
@@ -156,11 +154,12 @@ $remote_addr = $ENV{'REMOTE_ADDR'};
 $remote_host = remote_host();
 
 set_muser('browser');
-$bgcolor='white';
 
 print header(-charset=>$BROWSER_CHARSET),
-      start_html(-title=>"Sauron DNS Browser $VER",-BGCOLOR=>$bgcolor,
-		 -meta=>{'keywords'=>'GNU Sauron DNS DHCP tool'}),
+      start_html(-title=>"Sauron DNS Browser $VER",
+		 -meta=>{'keywords'=>'GNU Sauron DNS DHCP tool'},
+		 theme_stylesheet_args()),
+      theme_style_block(),
       "\n\n<!-- Sauron DNS Browser v$VER -->\n",
       "<!-- Copyright (c) Timo Kokkonen <tjko\@iki.fi>  2001-2005. -->\n\n";
 
@@ -205,15 +204,16 @@ $show_max=($BROWSER_MAX > 0 ? $BROWSER_MAX : 100);
 $timestamp = sprintf "%d.%d.%d %02d:%02d",$mday,$mon+1,$year+1900,$hour,$min;
 
 
-print "<TABLE width=\"100%\" cellpadding=3 cellspacing=0 border=0 ",
-      " bgcolor=\"#aaaaaa\">",
-      "<TR bgcolor=\"#002d5f\">",
-      "<TD height=24><FONT color=\"#ffffff\">Sauron DNS browser</FONT>",
-      "</TD><TD><FONT color=\"#ffffff\">Zone: $zone</FONT></TD>",
-      "<TD align=\"right\"><FONT color=\"#ffffff\">$timestamp</FONT>",
-      "</TD></TR>",
-      "<TR><TD colspan=3 align=\"right\">$help_str</TD></TR>",
-      "<TR><TD colspan=3>";
+print '<a class="s-skip-link" href="#main">Skip to content</a>', "\n";
+print '<header class="s-topbar s-topbar--browser">',
+      '<h1 class="s-topbar__title">Sauron DNS browser</h1>',
+      '<span class="s-topbar__env">Zone: ', encode_entities($zone), '</span>',
+      '<div class="s-topbar__server">', encode_entities($timestamp), '</div>',
+      "</header>\n";
+
+print '<main class="s-main" id="main">';
+
+print '<div class="s-browser__help">', $help_str, "</div>\n" if ($help_str ne '&nbsp;');
 
 @search_types=('Host (regexp)',
 	       'IP (or CIDR)',
@@ -226,14 +226,14 @@ if (param('reset')) {
   param('id','');
 }
 
-print start_form(-method=>'POST',-action=>$selfurl),
-      "Search type: ",
-      popup_menu(-name=>'type',-values=>\@search_types), " ",
-      textfield(-name=>'mask',-size=>30,-maxlength=>40), " ",
-      submit(-name=>'search',-value=>'Search'), " ",
-      submit(-name=>'reset',-value=>'Clear'),
-      end_form,"</TD></TR>",
-      "</TABLE>\n";
+print start_form(-method=>'POST',-action=>$selfurl,-class=>'s-browser__form'),
+      '<label>Search type: ',
+      popup_menu(-name=>'type',-values=>\@search_types), '</label> ',
+      textfield(-name=>'mask',-size=>30,-maxlength=>40,
+		'-aria-label'=>'Search term'), ' ',
+      submit(-name=>'search',-value=>'Search',-class=>'s-btn s-btn--primary'), ' ',
+      submit(-name=>'reset',-value=>'Clear',-class=>'s-btn s-btn--secondary'),
+      end_form, "\n";
 
 {
     my $id = int(param('id'));
@@ -246,7 +246,7 @@ print start_form(-method=>'POST',-action=>$selfurl),
 
 
 if ($debug_mode) {
-  print "<hr><FONT size=-1><p>script_name: " . script_name(),
+  print "<hr><p>script_name: " . script_name(),
   print "<br>path_info: " . path_info(),
         "<br>s_url='$s_url' '$selfurl'\n",
         "<br>url()=" . url(),
@@ -257,6 +257,10 @@ if ($debug_mode) {
   print "<hr><p>\n";
 }
 
+print "</main>\n",
+      '<footer class="s-footer">Sauron DNS Browser ',
+      encode_entities($VER),
+      "</footer>\n";
 print "\n<!-- end of page -->\n", end_html();
 exit;
 
@@ -268,7 +272,7 @@ sub do_search() {
     my ($info_search, $order, $mask_str, $rule, $alias, @irules);
     my ($sql, $sql2, $sql2b, $sql3, $sortparam);
     my (@q, $count, $url);
-    my (@nlist, $i, $color);
+    my (@nlist, $i);
     # variables used later when printing rows
     my ($name, $ip, $ether, $info);
   unless (valid_safe_string($type,255) and valid_safe_string($mask,255)) {
@@ -381,23 +385,23 @@ sub do_search() {
   $url=self_url();
   $url =~ s/&sort=\d//g;
 
-  print "<TABLE width=\"100%\" cellspacing=1 cellpadding=1 border=0>",
-        "<TR><TD height=2></TD></TR></TABLE>";
-
     # counter for printed rows
     my $printcount = 0;
-  print "<TABLE width=\"100%\" cellspacing=1 cellpadding=1 border=0 " .
-        "  bgcolor=\"#ccccff\">\n",
-        "<TR bgcolor=\"aaaaee\">",th("#"),
+  print '<table class="s-list s-list--browser">',
+        '<tr class="s-list__head">',
+        th('#'),
 	th("<a href=\"$url&sort=1\">Domain</a>"),
 	th("<a href=\"$url&sort=2\">IP (or alias)</a>"),
 	th("<a href=\"$url&sort=3\">Ether</a>"),
 	th("<a href=\"$url&sort=4\">Info</a>"),
-	"</TR>";
+	'</tr>';
 
   unless ($count > 0) {
-    print "</TABLE>";
-    alert2("No matching records found.");
+    print "</table>\n";
+    print '<div class="s-empty-state">',
+          '<p class="s-empty-state__title">No matching records found</p>',
+          '<p class="s-empty-state__hint">Try a different search term or pattern.</p>',
+          '</div>';
     return;
   }
 
@@ -413,7 +417,6 @@ sub do_search() {
   }
 
   for $i (0..($count-1)) {
-    $color = (($i % 2) ? "#eeeeee" : "#ffffcc");
     $name="<a href=\"$url&id=$q[$i][0]\">$q[$i][2]</a>";
     $type = $q[$i][1];
     if ($type == 1 || $type == 9) {
@@ -460,13 +463,13 @@ sub do_search() {
       $info="&nbsp;";
     }
 
-    print "<TR bgcolor=\"$color\">",td(($i+1)."."),
-          td($name),td($ip),td($ether),td('<font size=-1>'.$info.'</font>'),
-          "</TR>\n";
+    print '<tr class="s-list__row">', td(($i+1).'.'),
+          td($name), td($ip), td($ether),
+          td('<small>'.$info.'</small>'),
+          "</tr>\n";
     $printcount++;
   }
-  #print "<TR bgcolor=\"#aaaaee\"><TD colspan=5>&nbsp;</TD></TR>";
-  print "</TABLE>\n";
+  print "</table>\n";
 
   unless ($printcount > 0) {
     alert2("No matching records found.");
