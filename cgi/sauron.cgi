@@ -24,9 +24,9 @@ use open ':locale';
 # variables used globally; needed with strict
 use vars qw(
     $debug_mode @menulist %menus %menuhooks %menuhash
-    $frame_mode $pathinfo $script_name $script_path $s_url $selfurl
+    $pathinfo $script_name $script_path $s_url $selfurl
     $menu $remote_addr $remote_host $remote_user
-    $scookie $new_cookie $server $serverid $zone $zoneid $res $bgcolor $refresh
+    $scookie $new_cookie $server $serverid $zone $zoneid $res $refresh
     $hook @names $var $menuref $arg $arg_str
     $login_debug $login_time $login_debug_log $ticks $pwd_chk $last_from
     $msg $date $i $u
@@ -37,8 +37,8 @@ use vars qw(
 # configuration globals populated by load_config()
 use vars qw(
     $SAURON_DEBUG_MODE $ALEVEL_SHOW_UNALLOCATED_CIDRS $ALEVEL_HISTORY_SEARCH
-    $SAURON_TOPMENU_BGCOLOR $SAURON_TOPMENU_FONTCOLOR
-    $SAURON_ICON_PATH $SAURON_DTD_HACK $SAURON_CHARSET
+    $SAURON_TOPMENU_BGCOLOR $SAURON_TOPMENU_FONTCOLOR $SAURON_ENV_NAME
+    $SAURON_ICON_PATH $SAURON_CHARSET
     $SERVER_ID $SAURON_USER_TIMEOUT $SAURON_AUTH_MODE
     $SAURON_NO_REMOTE_ADDR_AUTH $LOG_DIR $SAURON_PLUGINS $PROG_DIR
     %SAURON_RHF $SAURON_TEMP_LOCK $SAURON_SECURE_COOKIES
@@ -182,19 +182,17 @@ $debug_mode = $SAURON_DEBUG_MODE;
 		      ['News (motd)','sub=motd'],
 		      [],
 		      ['Login','sub=login',['equal',[$main::SAURON_AUTH_MODE, '0']]],
-		      ['Logout','sub=logout',['equal',[$main::SAURON_AUTH_MODE, '0']]],
 		      [],
 		      ['Change password','sub=passwd',['equal',[$main::SAURON_AUTH_MODE, '0']]],
 		      ['Edit settings','sub=edit'],
 		      ['Save defaults','sub=save'],
 		      ['Clear defaults','sub=clear'],
-		      ['Frames OFF','FRAMEOFF','frames'],
-		      ['Frames ON','FRAMEON','noframes'],
 		      [],
 		      ['Lastlog','sub=lastlog','root'],
 		      ['Session Info','sub=session','root'],
 		      ['History Search','sub=history', $ALEVEL_HISTORY_SEARCH || 'root'],
-		      ['Add news msg','sub=addmotd','root']
+		      ['Add news msg','sub=addmotd','root'],
+		      ['Deployment theme','sub=theme','root']
 		     ],
 	    'about'=>[
 		      ['About',''],
@@ -209,16 +207,11 @@ sub login_auth();
 sub logout($); # **** 2020-09-16 TVu
 sub top_menu($);
 sub left_menu($);
-sub frame_set();
-sub frame_set2();
-sub frame_1();
-sub frame_2();
 sub init_plugins($);
 sub is_superuser();
 
 #####################################################################
 
-$frame_mode=0;
 $pathinfo = path_info();
 $script_name = script_name();
 ($script_path = $script_name) =~ s/[^\/]+$//;
@@ -259,7 +252,8 @@ unless ($scookie) {
   logmsg("notice","new connection from: $remote_addr ($scookie)");
   print header(-cookie=>$new_cookie,-charset=>$SAURON_CHARSET,
 	       -target=>'_top',-expires=>'now'),
-        start_html(-title=>"Sauron Login",-BGCOLOR=>'white');
+        start_html(-title=>"Sauron Login",theme_stylesheet_args());
+  print theme_style_block();
   login_auth() if ($SAURON_AUTH_MODE==1);
   login_form("Welcome",$scookie);
 }
@@ -267,7 +261,8 @@ unless ($scookie) {
 if ($state{'mode'} eq '1' && (param('login') // '') eq 'yes') {
   logmsg("debug","login authentication: $remote_addr");
   print header(-charset=>$SAURON_CHARSET,-target=>'_top',-expires=>'now'),
-        start_html(-title=>"Sauron Login",-BGCOLOR=>'white');
+        start_html(-title=>"Sauron Login",theme_stylesheet_args());
+  print theme_style_block();
   login_auth();
 }
 
@@ -275,7 +270,8 @@ if ($state{'auth'} ne 'yes' || $pathinfo eq '/login') {
   logmsg("notice","reconnect from: $remote_addr");
   update_lastlog($state{uid},$state{sid},4,$remote_addr,$remote_host);
   print header(-charset=>$SAURON_CHARSET,-target=>'_top',-expires=>'now'),
-        start_html(-title=>"Sauron Login",-BGCOLOR=>'white');
+        start_html(-title=>"Sauron Login",theme_stylesheet_args());
+  print theme_style_block();
   login_auth() if ($SAURON_AUTH_MODE==1);
   login_form("Welcome (again)",$scookie);
 }
@@ -286,7 +282,8 @@ if ($SAURON_AUTH_MODE==0) {
 	   $state{'user'});
     update_lastlog($state{uid},$state{sid},3,$remote_addr,$remote_host);
     print header(-charset=>$SAURON_CHARSET,-target=>'_top',-expires=>'now'),
-      start_html(-title=>"Sauron Login",-BGCOLOR=>'white');
+      start_html(-title=>"Sauron Login",theme_stylesheet_args());
+  print theme_style_block();
     login_form("Your session timed out. Login again",$scookie);
   }
 }
@@ -315,20 +312,18 @@ unless ($menu) {
 init_plugins($SAURON_PLUGINS);
 
 if ($pathinfo ne '') {
-  $frame_mode=1 if ($pathinfo =~ /^\/frame/);
   logout(1) if ($pathinfo eq '/logout'); # **** 2020-09-16 TVu
-  frame_set() if ($pathinfo eq '/frames');
-  frame_set2() if ($pathinfo eq '/frames2');
-  frame_1() if ($pathinfo eq '/frame1');
-  frame_2() if ($pathinfo =~ /^\/frame2/);
+  # Frameset URLs from very old bookmarks land at the script root.
+  if ($pathinfo =~ m{^/frames?\d?$}) {
+      print redirect($script_name);
+      exit 0;
+  }
 }
 
 
 cgi_util_set_zone($zoneid,$zone);
 cgi_util_set_server($serverid,$server);
 set_muser($state{user});
-$bgcolor='black';
-$bgcolor='white' if ($frame_mode);
 
 unless (is_superuser()) {
   html_error("cannot get permissions!")
@@ -351,36 +346,48 @@ if (param('csv')) {
   #exit(0);
 } else {
   print header(-charset=>$SAURON_CHARSET,-expires=>'now');
-  if ($SAURON_DTD_HACK) {
-    print "<!DOCTYPE HTML PUBLIC \"-//IETF//DTD HTML//EN\">\n",
-          "<html><head><title>Sauron ($SERVER_ID)</title>\n",
-          "<meta NAME=\"keywords\" CONTENT=\"Sauron DNS DHCP tool\">\n",
-          "</head><body bgcolor=\"$bgcolor\">\n";
-  } else {
-    $refresh=meta({-http_equiv=>'Refresh',-content=>'1800'})
-	if (is_superuser() && (defined(param('menu')) && param('menu') eq 'login') &&
-	    (defined(param('sub')) && param('sub') eq 'who'));
-    print start_html(-charset=>$SAURON_CHARSET,-title=>"Sauron ($SERVER_ID)",-BGCOLOR=>$bgcolor,
-		     -meta=>{keywords=>'Sauron DNS DHCP tool'},
-		     -head=>$refresh);
-  }
+  $refresh=meta({-http_equiv=>'Refresh',-content=>'1800'})
+      if (is_superuser() && (defined(param('menu')) && param('menu') eq 'login') &&
+	  (defined(param('sub')) && param('sub') eq 'who'));
+  my $page_title = "Sauron" . ($SAURON_ENV_NAME ? " [$SAURON_ENV_NAME]" : '') . " \x{2014} $SERVER_ID";
+  print start_html(-charset=>$SAURON_CHARSET,-title=>$page_title,
+		   -meta=>{keywords=>'Sauron DNS DHCP tool'},
+		   theme_stylesheet_args(),
+		   -head=>$refresh);
+  print theme_style_block();
+  print '<a class="s-skip-link" href="#main">Skip to content</a>', "\n";
 
   print "\n\n<!-- Generated by Sauron v" . sauron_version() . " at " .
         localtime(time()) . " -->\n\n",
         "<!-- Copyright (c) Timo Kokkonen <tjko\@iki.fi>  2000-2003.\n",
         "     All Rights Reserved. -->\n\n";
 
-  unless ($frame_mode) {
-    top_menu(0);
-    print "<TABLE bgcolor=\"black\" border=\"0\" cellspacing=\"0\" " .
-          "width=\"100%\">\n" .
-	  "<TR><TD align=\"left\" valign=\"top\" bgcolor=\"white\" " .
-          "width=\"15%\">\n";
-    left_menu(0);
-    print "</TD><TD align=\"left\" valign=\"top\" bgcolor=\"#ffffff\">\n<br>";
-  } else {
-    #print "<TABLE width=100%><TR bgcolor=\"#ffffff\"><TD>";
+  top_menu(0);
+
+  # Context bar: shows server/zone breadcrumb between the topbar and the
+  # shell grid so operators always know which context they are operating in.
+  print '<div class="s-context-bar">';
+  print '<nav class="s-context-bar__crumb" aria-label="Context"',
+        ' data-serverid="', ($serverid+0), '"',
+        ' data-zoneid="', ($zoneid+0), '">';
+  if ($server) {
+      print '<span class="s-context-bar__label">Server</span>',
+            '<span class="s-context-bar__segment">', encode_entities($server), '</span>';
   }
+  if ($zone) {
+      print '<span class="s-context-bar__sep" aria-hidden="true">&rsaquo;</span>',
+            '<span class="s-context-bar__label">Zone</span>',
+            '<span class="s-context-bar__segment">', encode_entities($zone), '</span>';
+  }
+  print '</nav>';
+  print '<div class="s-context-bar__actions"></div>';
+  print "</div>\n";
+
+  print "<div class=\"s-shell\">\n",
+        "<aside class=\"s-sidebar\">\n";
+  left_menu(0);
+  print "</aside>\n",
+        "<main class=\"s-main\" id=\"main\">\n";
 }
 
 
@@ -411,7 +418,7 @@ elsif ($menuref=$menus{$menu}) {
     alert2("Failed to load module: $module");
   }
   else {
-    $state{selfurl}=$selfurl;
+    $state{selfurl} = $selfurl;
     # call menu_hanlder() routine in the module
     $menuref .= '::menu_handler(\%state,\%perms)';
 #   print "$menuref<BR>";
@@ -427,9 +434,8 @@ else { print p,"Unknown menu '" . encode_entities($menu) . "'"; }
 
 
 if ($debug_mode) {
-  print "<hr><FONT size=-1><p>script name: " . script_name(),
-        ", script_path: $script_path, frame_mode=$frame_mode",
-	" (DTD_HACK=$SAURON_DTD_HACK ",
+  print "<hr><p>script name: " . script_name(),
+        ", script_path: $script_path",
 	" (NO_REMOTE_ADDR_AUTH=$SAURON_NO_REMOTE_ADDR_AUTH) ",
         "<br>path_info: " . path_info(),
         "<br>cookie='$scookie'\n",
@@ -445,12 +451,10 @@ if ($debug_mode) {
   print "</table></td></tr></table><hr><p>\n";
 }
 
-unless ($frame_mode) {
-  print "</TD></TR><TR bgcolor=\"#002d5f\">",
-        "<TD height=\"20\" colspan=\"2\" color=white align=\"right\">",
-        "&nbsp;";
-  print "</TD></TR></TABLE>\n";
-}
+print "</main>\n",
+      "</div>\n",
+      '<footer class="s-footer">&nbsp;</footer>',
+      "\n";
 print "\n<!-- end of page -->\n";
 print end_html();
 
@@ -469,46 +473,76 @@ sub about_menu() {
 
   if ($sub eq 'copyright') {
     open(FILE,"$PROG_DIR/COPYRIGHT") || return;
-    print "<PRE>\n\n";
-    while (<FILE>) { print " $_"; }
-    print "</PRE>";
+    print '<article class="s-document"><pre>';
+    while (<FILE>) { print encode_entities($_); }
+    print '</pre></article>';
   }
   elsif ($sub eq 'copying') {
     open(FILE,"$PROG_DIR/COPYING") || return;
-    print "<FONT size=\"-1\"><PRE>";
-    while (<FILE>) { print " $_"; }
-    print "</PRE></FONT>";
+    my $text = do { local $/; <FILE> };
+    close(FILE);
+    print '<article class="s-document s-document--license" lang="en">', "\n";
+    for my $block (split /\n{2,}/, $text) {
+      $block =~ s/\r//g;
+      next unless $block =~ /\S/;
+      my @lines = split(/\n/, $block);
+      my $max_ind = 0;
+      for my $ln (@lines) {
+        my $li = ($ln =~ /^( +)/) ? length($1) : 0;
+        $max_ind = $li if $li > $max_ind;
+      }
+      if ($max_ind >= 8) {
+        # Heading block — each non-empty line as its own <p>
+        for my $line (@lines) {
+          $line =~ s/^\s+|\s+$//g;
+          next unless $line;
+          print '<p class="center">', encode_entities($line), "</p>\n";
+        }
+      } else {
+        my $indent = ($block =~ /^( +)/) ? length($1) : 0;
+        $block =~ s/\n/ /g;
+        $block =~ s/ {2,}/ /g;
+        $block =~ s/^\s+|\s+$//g;
+        next unless $block;
+        my $cls = $block =~ /^[a-z]\)/ ? 'subitem' : 'just';
+        my $ti = ($cls eq 'just' && $indent >= 2)
+          ? sprintf(' style="text-indent:%.1fem"', $indent * 0.5) : '';
+        print '<p class="', $cls, '"', $ti, '>', encode_entities($block), "</p>\n";
+      }
+    }
+    print '</article>';
   }
   else {
     $SAURON_CGI_VER =~ s/(\$|\d{1,2}:\d{1,2}:\d{1,2})//g;
     $VER=sauron_version();
 
-    print "<P><BR><CENTER>",
-        "<a href=\"https://github.com/tjko/sauron/\" target=\"sauron\">",
-        "<IMG src=\"$SAURON_ICON_PATH/logo_large.png\" border=\"0\" ",
-	"  alt=\"Sauron\">",
-        "</a><BR>Version $VER<BR>(CGI $SAURON_CGI_VER)<P>",
-        "A Free DNS & DHCP Management System<p>",
+    print '<article class="s-about">',
+        '<div class="s-about__hero">',
+        '<a href="https://github.com/tjko/sauron/" target="sauron">',
+        '<img src="', $SAURON_ICON_PATH, '/logo_large.png" ',
+        '  alt="Sauron" class="s-about__logo"></a>',
+        '<p class="s-about__version">Version ', $VER, '<br>',
+        '<small>CGI ', $SAURON_CGI_VER, '</small></p>',
+        '<p class="s-about__tagline">A Free DNS &amp; DHCP Management System</p>',
+        '</div>',
 
-       "<hr noshade width=\"50%\"><b>Original Author:</b>",
-        "<br>Timo Kokkonen <i>&lt;tjko\@iki.fi&gt;</i>",
+        '<hr class="s-about__divider">',
+        '<h3>Original Author</h3>',
+        '<p>Timo Kokkonen <i>&lt;tjko@iki.fi&gt;</i></p>',
 
-        "<hr width=\"40%\"><b>Further Development by:</b>",
-        "<br>Michal Kostenec <i>&lt;kostenec\@civ.zcu.cz&gt;</i>",
-        "<br>Ales Padrta <i>&lt;apadrta\@civ.zcu.cz&gt;</i>",
-        "<br>(IPv6 Support)</i>",
-        "<br>Riku Meskanen <i>&lt;mesrik\@iki.fi&gt;</i>",
-        "<br>Teppo Vuori <i>&lt;sauron\@teppovuori.fi&gt;</i>",
-        "<br>(Additional Features)</i>",
+        '<hr class="s-about__divider">',
+        '<h3>Further Development</h3>',
+        '<p>Michal Kostenec <i>&lt;kostenec@civ.zcu.cz&gt;</i><br>',
+        'Ales Padrta <i>&lt;apadrta@civ.zcu.cz&gt;</i> (IPv6 Support)<br>',
+        'Riku Meskanen <i>&lt;mesrik@iki.fi&gt;</i><br>',
+        'Teppo Vuori <i>&lt;sauron@teppovuori.fi&gt;</i> (Additional Features)<br>',
+        'Tapani Tarvainen <i>&lt;sauron@tapanitarvainen.fi&gt;</i></p>',
 
-        "<br><br><b>With Support from:</b>",
-        "<br>Tapani Tarvainen <i>&lt;sauron\@tapanitarvainen.fi&gt;</i>",
+        '<hr class="s-about__divider">',
+        '<h3>Logo Design</h3>',
+        '<p>Teemu L&auml;hteenm&auml;ki <i>&lt;tola@iki.fi&gt;</i></p>',
 
-        "<hr width=\"40%\"><b>Logo Design by:</b>",
-        "<br>Teemu L&auml;hteenm&auml;ki <i>&lt;tola\@iki.fi&gt;</i>",
-
-        "<hr noshade width=\"50%\"><p>",
-	"</CENTER><BR><BR>";
+        '</article>';
 
   }
 }
@@ -533,32 +567,23 @@ sub logout($) { # **** 2020-09-16 TVu
 	    -secure=>($SAURON_SECURE_COOKIES ? 1 :0));
   remove_state($scookie);
 
-# print header(-charset=>$SAURON_CHARSET,-target=>'_top',-cookie=>$c),
-#       start_html(-title=>"Sauron Logout",-BGCOLOR=>'white'),
-#       "<CENTER><TABLE width=\"50%\" cellspacing=0 border=0>",
-#       "<TR bgcolor=\"#002d5f\">",
-#       "<TD><FONT color=\"white\"> &nbsp; Sauron",
-#       "</FONT></TD><TD align=\"right\"><FONT color=\"white\">",
-#       "$host &nbsp;</FONT></TD></FONT>",
-#       "<TR><TD colspan=2 bgcolor=\"#efefff\"><CENTER>",
-#       h2("You have been logged out."),p
-#       a({-href=>script_name},"Click to enter login screen again."),
-#       "</CENTER></TD></TR></CENTER>",,end_html();
-
 # Headers etc. not needed if user is logged out because web interface is blocked.
   if ($full) { # **** 2020-09-16 TVu
       print header(-charset=>$SAURON_CHARSET,-target=>'_top',-cookie=>$c),
-            start_html(-title=>"Sauron Logout",-BGCOLOR=>'white'),
+            start_html(-title=>"Sauron Logout",theme_stylesheet_args());
+      print theme_style_block();
   }
-  print "<CENTER><TABLE width=\"50%\" cellspacing=0 border=0>",
-        "<TR bgcolor=\"#002d5f\">",
-        "<TD><FONT color=\"white\"> &nbsp; Sauron",
-        "</FONT></TD><TD align=\"right\"><FONT color=\"white\">",
-        "$host &nbsp;</FONT></TD></FONT>",
-        "<TR><TD colspan=2 bgcolor=\"#efefff\"><CENTER>",
-        h2("You have been logged out."),p
+  print '<div class="s-login-wrap">',
+        '<div class="s-login-card">',
+        '<header class="s-login-card__head">',
+        '<span>Sauron</span>',
+        '<span>', encode_entities($host), '</span>',
+        '</header>',
+        '<div class="s-login-card__body">',
+        h2("You have been logged out."), p,
         a({-href=>script_name},"Click to enter login screen again."),
-	"</CENTER></TD></TR></CENTER>",,end_html();
+        '</div></div></div>',
+        end_html();
 
   exit;
 }
@@ -567,35 +592,36 @@ sub login_form($$) {
   my($msg,$c)=@_;
   my($host,$arg);
 
-  $host='localhost???';
-  $host=$1 if (self_url =~ /https?\:\/\/([^\/]+)\//);
+  $host = (self_url =~ /https?\:\/\/([^\/]+)\//) ? $1 : $SERVER_ID;
 
-  print "<FONT color=\"blue\">";
-  print "<CENTER><TABLE width=\"50%\" cellspacing=0 border=0>",
-        "<TR bgcolor=\"#002d5f\">",
-        "<TD><FONT color=\"white\"> &nbsp; Sauron",
-        "</FONT></TD><TD align=\"right\"><FONT color=\"white\">",
-	"$host &nbsp;</FONT></TD></FONT>",
-	"<TR><TD colspan=2 bgcolor=\"#efefff\">";
+  print '<div class="s-login-wrap">',
+        '<div class="s-login-card">',
+        '<header class="s-login-card__head">',
+        '<span>Sauron</span>',
+        '<span>', encode_entities($host), '</span>',
+        '</header>',
+        '<div class="s-login-card__body">';
 
-  print start_form(-target=>'_top'),"<BR><CENTER>",h2($msg),p,"<TABLE>",
-        Tr,td("Login:"),td(textfield(-id=>"login",-name=>'login_name')),
-        Tr,td("Password:"),
-#                  td(password_field(-name=>'login_pwd',-maxlength=>'30')),
-#                  td(password_field(-name=>'login_pwd', -size=>40)), # 2020-10-19 TVu
-                   td(password_field(-name=>'login_pwd', -maxlength=>'40', -size=>20)), # 2024-07-08 mesrik
-              "</TABLE>",
+  # Show errors (failed login, timeout) as alert; welcome messages as heading.
+  my $msg_html = ($msg =~ /failed|timed out/i) ? do { alert1($msg); '' } : h2($msg);
+  print start_form(-action=>$s_url,-target=>'_top'), $msg_html,
+        '<div class="s-login-fields">',
+        '<label for="login">Login:</label>',
+        textfield(-id=>"login",-name=>'login_name'),
+        '<label for="login_pwd">Password:</label>',
+        password_field(-name=>'login_pwd', -id=>'login_pwd',
+                       -maxlength=>'40', -size=>20),
+        '</div>',
         hidden(-name=>'login',-default=>'yes'),
-        submit(-name=>'submit',-value=>'Login'),
-        p,"<br><br>You need to have cookies enabled for this site...",
-        "<br></CENTER></TD></TR></TABLE>";
+        submit(-name=>'submit',-value=>'Login',-class=>'s-btn s-btn--primary'),
+        p, '<small>You need to have cookies enabled for this site.</small>',
+        '</div></div></div>';
 
   # save arguments (allows linking to "pages" in Sauron)
   foreach $arg (multi_param()) { print hidden($arg,scalar(param($arg))); }
 
   print end_form,
-  "\n<script type='text/JavaScript'>document.getElementById('login').focus();</script>",
-  end_html();
+        end_html();
 
   $state{'mode'}='1';
   $state{'auth'}='no';
@@ -632,15 +658,14 @@ sub login_auth() {
   }
 
   $p=~s/\ \t\n//g;
-  print "<P><CENTER>";
   if (! (valid_safe_string($u,0) && valid_safe_string($p,255))) {
-    print p,h1("Invalid arguments!");
+    alert1("Invalid arguments!");
   }
   if ($u eq '' || $p eq '') {
-    print p,h1("Username or password empty!");
+    alert1("Username or password empty!");
   }
   elsif ($u !~ /^[a-zA-Z0-9\-\.@]+$/) {
-    print p,h1("Invalid username!");
+    alert1("Invalid username!");
   }
   else {
     unless (get_user($u,\%user)) {
@@ -682,57 +707,50 @@ sub login_auth() {
 	  $arg_str .= hidden($arg,scalar(param($arg)));
 	}
 
-	print "<TABLE border=0 cellspacing=0 bgcolor=\"#efefff\" " .
-	      " width=\"70%\">",
-	      "<TR bgcolor=\"#002d5f\">",
-	      "<td width=\"80\"><IMG src=\"$SAURON_ICON_PATH/logo.png\" " .
-		" alt=\"\" width=\"80\" height=\"70\" border=0></td>",
-	      "<td valign=\"bottom\" align=\"left\">",
-	      "<font color=\"white\"> &nbsp; Sauron v".sauron_version().
-	      "</font></td>",
-	      "<td valign=\"bottom\" align=\"right\">",
-	      "<font color=\"white\">$SERVER_ID &nbsp; </font></td>",
-	      "</TR><TR><TD colspan=3><CENTER>\n";
+	print '<div class="s-login-wrap">',
+	      '<div class="s-login-card">',
+	      '<header class="s-login-card__head">',
+	      '<span><img src="', $SAURON_ICON_PATH, '/logo.png"',
+	      ' alt="Sauron" width="56" height="50"> Sauron v',
+	      sauron_version(), '</span>',
+	      '<span>', encode_entities($SERVER_ID), '</span>',
+	      '</header>',
+	      '<div class="s-login-card__body">';
 
 # Is login allowed to superusers only?
 	if ($SAURON_TEMP_LOCK && !is_superuser()) {
-	    print '<br><h1>Sorry, Sauron is temporarily closed</h1></center></td></table>';
+	    alert1("Sauron is temporarily closed.");
 	    logout(0);
 	}
 
-	print h1("Login ok!"),p,"<TABLE><TR><TD>",
-	      start_form(-method=>'POST',-action=>$s_url),$arg_str || '',
-	      submit(-name=>'submit',-value=>'No Frames',
-		     autofocus=>'true'),end_form, # Autofocus 2020-06-16 TVu
-	      "</TD><TD> ",
-	      start_form(-method=>'POST',-action=>"$s_url/frames"),$arg_str || '',
-	      submit(-name=>'submit',-value=>'Frames'),end_form,
-	      "</TD></TR></TABLE>";
+	print h1("Login ok!"), p,
+	      start_form(-method=>'POST',-action=>$s_url), $arg_str || '',
+	      submit(-name=>'submit',-value=>'Continue',
+		     autofocus=>'true'), end_form;
 
 	# warn about expiring account
 	if (defined($user{expiration}) && ($user{expiration} > 0) &&
 	     ($user{expiration} < time() + 14*86400) ) {
-	  print "<FONT color=\"red\">",
-	        h2("NOTE! Your account will expire soon!"),
-	        "(account expiration date: " . localtime($user{expiration}) .
-		")</FONT><p><br>";
+	  warning1("NOTE! Your account will expire soon (" .
+		   localtime($user{expiration}) . ").");
 	}
 
 	# print news/MOTD stuff
 	my @newslist;
 	get_news_list($state{serverid},3,\@newslist);
 	if (@newslist > 0) {
-	  print h2("Message(s) of the day:"),
-	        "<TABLE width=\"80%\" bgcolor=\"#eaeaff\">";
+	  print '<section class="s-motd" aria-label="Messages of the day">',
+	        '<h2 class="s-motd__heading">Message(s) of the day</h2>',
+	        '<ul class="s-motd__list">';
 	  for $i (0..$#newslist) {
 	    $msg=$newslist[$i][3];
-	    #$msg =~ s/\n/<BR>/g;
 	    $date=localtime($newslist[$i][0]);
-	    print
-	      Tr(td($msg . "<FONT size=-1><I>" .
-                  "<BR> &nbsp; &nbsp; -- $newslist[$i][1] $date </I></FONT>"));
+	    print '<li class="s-motd__item">', $msg,
+	          '<div class="s-motd__byline">',
+	          encode_entities("-- $newslist[$i][1] $date"),
+	          '</div></li>';
 	  }
-	  print "</TABLE><BR>";
+	  print "</ul></section>\n";
 	}
 
 	# advertise "save defaults" option for users not having any defaults...
@@ -741,7 +759,7 @@ sub login_auth() {
 		   "the \"Save Defaults\" command in Login menu.");
 	}
 
-	print "</CENTER></td></tr></table>\n";
+	print '</div></div></div>', "\n";
 	logmsg("notice","user ($u) logged in from: $remote_addr");
 	$last_from = db_encode_str($remote_addr);
 	db_exec("UPDATE users SET last=$ticks,last_from=$last_from " .
@@ -756,12 +774,12 @@ sub login_auth() {
     }
   }
 
-  print p,h1("Login failed."),p,"<a href=\"$selfurl\">try again</a>"
-    unless ($state{'auth'} eq 'yes');
+  unless ($state{'auth'} eq 'yes') {
+    login_form("Login failed.", $scookie);
+    # login_form() exits — lines below only reached on successful auth
+  }
 
-  print p,p,"</CENTER>";
-
-  print "</TABLE>\n" unless ($frame_mode);
+  print '</div></div></div>', "\n";
   print end_html();
   save_state($scookie,\%state);
   load_state($scookie,\%state) if ($SAURON_AUTH_MODE==1);
@@ -770,63 +788,34 @@ sub login_auth() {
 }
 
 sub top_menu($) {
-  my($mode)=@_;
-  my($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst,$i);
-  my $bgcolor = $SAURON_TOPMENU_BGCOLOR || '#002d5f';
-  my $fontcolor = $SAURON_TOPMENU_FONTCOLOR || 'white';
+  my ($mode) = @_;
+  my ($sec, $min, $hour, $mday, $mon, $year) = localtime(time);
+  my $env = $SAURON_ENV_NAME // '';
 
-  ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime(time);
-
-  if ($frame_mode) {
-    print '<TABLE bgcolor="' . $bgcolor . '" border="0" cellspacing="0" width="100%">',
-          '<TR><TD rowspan=2>',
-          '<a href="https://github.com/tjko/sauron/" target="sauron">',
-          '<IMG src="' .$SAURON_ICON_PATH .
-	  '/logo.png" width="80" height="70" border="0" alt=""></a></TD>',
-          '<TD colspan=2><FONT size=+2 color="' . $fontcolor . '">Sauron</WHITE></TD></TR>',
-	  '<TR align="left" valign="center">',
-          '<TD><FONT color="' . $fontcolor  . '">';
+  print '<header class="s-topbar">',
+        '<a class="s-topbar__logo" href="https://github.com/tjko/sauron/" target="sauron">',
+        '<img src="', $SAURON_ICON_PATH, '/logo.png" width="56" height="50" ',
+            'alt="Sauron - DNS/DHCP management">',
+        '</a>',
+        '<h1 class="s-topbar__title">Sauron</h1>';
+  print '<span class="s-topbar__env">', encode_entities($env), '</span>' if (length $env);
+  print '<nav class="s-topbar__nav" aria-label="Primary">';
+  for my $i (0..$#menulist) {
+    my $active = ($menulist[$i][1] =~ /menu=\Q$menu\E(?:&|$)/) ? ' s-topbar__link--active' : '';
+    print '<a class="s-topbar__link', $active, '" href="', $s_url, '?', $menulist[$i][1], '">',
+          encode_entities($menulist[$i][0]), '</a>';
   }
-  else {
-    print '<TABLE bgcolor="' . $bgcolor . '" border="0" cellspacing="0" width="100%">',
-          '  <TR>',
-          '    <TD rowspan="2">',
-          '      <A href="https://github.com/tjko/sauron/" target="sauron">',
-          '        <IMG src="' .$SAURON_ICON_PATH . '/logo.png"',
-          '             width="80" height="70" border="0" alt=""></A></TD>',
-          '    <TD colspan="2">',
-          '      <FONT size=+2 color="' . $fontcolor . '">Sauron</FONT></TD>',
-          '  </TR>',
-          '  <TR>',
-          '    <TD><FONT color="' . $fontcolor . '">';
-  }
+  print '</nav>';
+  printf '<div class="s-topbar__server">%s &nbsp; %d.%d.%d %02d:%02d</div>',
+         encode_entities($SERVER_ID), $mday, $mon+1, $year+1900, $hour, $min;
+  print '<a class="s-topbar__logout" href="', $s_url, '/logout" target="_top">Logout</a>';
+  print '</header>';
 
-  for $i (0..$#menulist) {
-    print
-	"<A HREF=\"$s_url?$menulist[$i][1]\"><FONT size=-1 color=\"$fontcolor\">",
-	"$menulist[$i][0]</FONT></A>";
-    print " | " if ($i < $#menulist);
-  }
-
-  print  "<TD align=\"right\"><FONT color=\"$fontcolor\">";
-  if ($frame_mode) { print "$SERVER_ID &nbsp;"; }
-  else {
-    printf "%s &nbsp; &nbsp; %d.%d.%d %02d:%02d ",
-           $SERVER_ID,$mday,$mon+1,$year+1900,$hour,$min;
-  }
-
-# Warn users if web interface will soon be closed.
   if ($SAURON_TEMP_LOCK == 1 && !is_superuser()) {
-      print '</td><tr><td colspan=3><center><font color="' . $fontcolor . '"><h3>Please ' .
-       'log out from Sauron &ndash; maintenance break imminent!</h3></font></center>';
+      warning1('Please log out from Sauron - maintenance break imminent!');
   }
-
-  print "</FONT></TD></TR></TABLE>";
-
-# Terminate session if not superuser and only superusers allowed.
   if ($SAURON_TEMP_LOCK == 2 && !is_superuser()) {
-      print '<center><br><font color="#ffffff"><h1>' .
-	  'Sorry, Sauron is temporarily closed</h1></font></center>';
+      alert1('Sorry, Sauron is temporarily closed');
       logout(0);
   }
 }
@@ -834,133 +823,55 @@ sub top_menu($) {
 
 
 sub left_menu($) {
-  my($mode)=@_;
-  my($url,$w,$l,$i,$name,$u,$ref,$target);
+  my ($mode) = @_;
+  my $url = "$s_url?menu=$menu";
+  my $l = $menuhash{$menu};
 
-  $w="\"100\"";
-
-  $url=$s_url;
-  print "<TABLE width=$w bgcolor=\"#002d5f\" border=\"0\" " .
-        "cellspacing=\"3\" cellpadding=\"0\">", # Tr,th(h4("$menu")),
-        "<TR><TD><TABLE width=\"100%\" cellspacing=\"2\" cellpadding=\"1\" " ,
-	 "border=\"0\">",
-         "<TR><TH><FONT color=\"#ffffff\">$menu</FONT></TH></TR>",
-	  "<TR><TD BGCOLOR=\"#eeeeee\"><FONT size=\"-1\">";
-  #print "<p>mode=$mode";
-  print "<TABLE width=\"100%\" bgcolor=\"#cccccc\" cellpadding=1 " .
-        " cellspacing=3 border=0>";
-
-  $l=$menuhash{$menu};
-  $url.="?menu=$menu";
+  print '<nav class="s-sidebar__menu" aria-label="', encode_entities($menu), '">',
+        '<h2 class="s-sidebar__heading">', encode_entities($menu), '</h2>',
+        '<ul class="s-sidebar__list">';
   if (defined $l) {
-    for $i (0..$#{$l}) {
+    for my $i (0..$#{$l}) {
       next if (ref($$l[$i][2]) eq 'ARRAY') and check_perms($$l[$i][2][0], $$l[$i][2][1], 1);
       if ($#{$$l[$i]} < 1) {
-	print Tr({-bgcolor=>'#cccccc',-height=>5},td(''));
-	next;
+        # Separator row from %menuhash (empty array).
+        print '<li class="s-sidebar__sep" aria-hidden="true"></li>';
+        next;
       }
       next if (defined($$l[$i][2]) && $$l[$i][2] =~ /(^|\|)root/ && !is_superuser());
-      next if (defined($$l[$i][2]) && $$l[$i][2] =~ /(^|\|)noframes/ && $frame_mode);
-      next if (defined($$l[$i][2]) && $$l[$i][2] =~ /(^|\|)frames/ && not $frame_mode);
-      # Show / hide menuitem based on auth level.
+      next if (defined($$l[$i][2]) && $$l[$i][2] =~ /(^|\|)noframes/);
+      next if (defined($$l[$i][2]) && $$l[$i][2] =~ /(^|\|)frames/);
       next if (defined($$l[$i][2]) && $$l[$i][2] =~ /(^|\|)(\d{1,3})$/ && check_perms('level', $2, 1));
-      $name=$$l[$i][0];
-      $ref=$$l[$i][1];
-      $u="$url";
-      $u.="&".$ref if ($ref);
-      $target='';
-      if ($ref eq 'FRAMEOFF') {
-	$target='target="_top"';
-	$u=$script_name;
+      my $name   = $$l[$i][0];
+      my $ref    = $$l[$i][1];
+      my $u      = $ref ? "$url&$ref" : $url;
+      my $cur_sub = param('sub') // '';
+      my $active  = '';
+      if ($ref) {
+        # All key=value pairs in the ref must match the current CGI params.
+        # This handles sub=browse&lastsearch=1 vs sub=browse&bh_re_edit=1
+        # and sub=add&type=1 vs sub=add&type=4 without special-casing.
+        my $match = 1;
+        for my $pair (split /&/, $ref) {
+          my ($k, $v) = split /=/, $pair, 2;
+          $v //= '';
+          unless ((param($k) // '') eq $v) { $match = 0; last; }
+        }
+        $active = ' s-sidebar__link--active' if $match;
+      } else {
+        # Empty ref = default view; active only when sub is also empty.
+        $active = ' s-sidebar__link--active' if $cur_sub eq '';
       }
-      elsif ($ref eq 'FRAMEON') {
-	$target='target="_top"';
-	$u="$s_url/frames";
-      }
-
-      print Tr({-bgcolor=>'#bbbbbb'},td("<a href=\"$u\" $target>$name</a>"));
+      print '<li class="s-sidebar__item">',
+            '<a class="s-sidebar__link', $active, '" href="', $u, '">',
+            $name, '</a>',
+            '</li>';
     }
   } else {
-    print Tr(td('empty menu'));
+    print '<li class="s-sidebar__empty">empty menu</li>';
   }
-
-  print "</TABLE></FONT></TR></TABLE></TD></TABLE><BR>";
-
-  print "<TABLE width=$w bgcolor=\"#002d5f\" border=\"0\" cellspacing=\"3\" " .
-        "cellpadding=\"0\">", #<TR><TD><H4>Current selections</H4></TD></TR>",
-        "<TR><TD><TABLE width=\"100%\" cellspacing=\"2\" cellpadding=\"1\" " .
-	"border=\"0\">",
-	"<TR><TH><FONT color=white size=-1>Current selections</FONT></TH></TR>",
-	"<TR><TD BGCOLOR=\"#eeeeee\">";
-
-  print "<FONT size=-1>",
-        "Server: $server<br>Zone: $zone<br>SID: $state{sid}<br></FONT>";
-
-  print "</FONT></TABLE></TD></TR></TABLE><BR>";
-
-}
-
-sub frame_set() {
-  print header(-charset=>$SAURON_CHARSET);
-
-  print "<HTML>" .
-        "<HEAD><TITLE>Sauron ($SERVER_ID)</TITLE></HEAD>" .
-        "<FRAMESET border=\"0\" rows=\"90,*\" >\n" .
-        "  <FRAME src=\"$script_name/frame1\" noresize scrolling=\"no\" " .
-	"   frameborder=\"0\" marginheight=\"5\" marginwidth=\"5\">\n" .
-        "  <FRAME src=\"$script_name/frames2\" name=\"bottom\" " .
-	"   frameborder=\"0\" marginheight=\"0\" marginwidth=\"0\">\n" .
-        "  <NOFRAMES>\n" .
-        "    Frame free version available \n" .
-	"      <A HREF=\"$script_name\">here</A> \n" .
-        "  </NOFRAMES>\n" .
-        "</FRAMESET></HTML>\n";
-
-  exit 0;
-}
-
-sub frame_set2() {
-  print header(-charset=>$SAURON_CHARSET);
-  $menu="?menu=$menu" if ($menu);
-
-  print "<HTML>" .
-        "<FRAMESET border=\"0\" cols=\"120,*\">\n" .
-#        "  <TITLE>Sauron ($SERVER_ID)</TITLE>" .
-	"  <FRAME src=\"$script_name/frame2$menu\" name=\"menu\" noresize " .
-	"   scrolling=\"no\" frameborder=\"0\" " .
-	"   marginheight=\"5\" marginwidth=\"5\">\n" .
-        "  <FRAME src=\"$script_name/frame3$menu\" name=\"main\" " .
-	"   frameborder=\"0\" marginheight=\"5\" marginwidth=\"5\">\n" .
-        "  <NOFRAMES>\n" .
-        "    Frame free version available \n" .
-	"      <A HREF=\"$script_name\">here</A> \n" .
-        "  </NOFRAMES>\n" .
-        "</FRAMESET></HTML>\n";
-  exit 0;
-}
-
-
-sub frame_1() {
-  print header(-charset=>$SAURON_CHARSET),
-        start_html(-title=>"sauron: top menu",-BGCOLOR=>'#efefff',
-		   -target=>'bottom');
-
-  $s_url .= '/frames2';
-  top_menu(1);
-
-  print end_html();
-  exit 0;
-}
-
-sub frame_2() {
-  print header(-charset=>$SAURON_CHARSET),
-        start_html(-title=>"sauron: left menu",-BGCOLOR=>'#efefff',
-		   -target=>'main');
-
-  $s_url .= '/frame3';
-  left_menu(1);
-  print end_html();
-  exit 0;
+  print '</ul></nav>';
+  # Server/zone context moved to .s-context-bar above the shell grid.
 }
 
 sub init_plugins($) {

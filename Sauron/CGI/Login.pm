@@ -6,6 +6,7 @@
 package Sauron::CGI::Login;
 require Exporter;
 use CGI qw/:standard *table -utf8/;
+use HTML::Entities;
 use Sauron::DB;
 use Sauron::Util;
 use Sauron::CGIutil;
@@ -114,12 +115,12 @@ sub display_rows($) { # TVu 2021-03-15
 
     for $i (0..$#{$list}) {
 	$row++;
-	print "<TR bgcolor='#eeeebf'><TD ALIGN='RIGHT'>$row</TD>";
+	print '<tr class="s-list__row"><td align="right">', $row, '</td>';
 	for $j (0..2) {
 	    $val = $$list[$i][$j];
 	    print td($val ne '' ? $val : '&nbsp;');
 	}
-	print "</TR>\n";
+	print "</tr>\n";
     }
 }
 
@@ -274,29 +275,27 @@ sub show_user_info($$)
   if ($main::menuhooks{'login'}->{'Pl_Users_Users'} && param('user_id')) { # TVu 2021-04-19
     my $par_menu = param('menu');
     my $par_sub = param('sub');
-    print "\n<table><tr><td>";
+    print '<div class="s-action-bar"><div class="s-action-bar__left">';
     print start_form(-method=>'GET', -action=>$selfurl);
     param('menu', 'login'); print hidden('menu', 'login');
     param('sub', 'Edit-user'); print hidden('sub', 'Edit-user');
     print hidden('user_id', param('user_id'));
     print submit(-name=>'foobar', -value=>'Edit');
-    print end_form,"\n";
-    print "</td>\n<td>";
+    print end_form,' ';
     print start_form(-method=>'GET', -action=>$selfurl);
     param('menu', 'login'); print hidden('menu', 'login');
     param('sub', 'Copy-user'); print hidden('sub', 'Copy-user');
     print hidden('user_id', param('user_id'));
     print submit(-name=>'foobar', -value=>'Copy');
-    print end_form,"\n";
-    print "</td>\n<td>";
+    print end_form,' ';
     print start_form(-method=>'GET', -action=>$selfurl);
     param('menu', 'login'); print hidden('menu', 'login');
     param('sub', 'Anonymize-user'); print hidden('sub', 'Anonymize-user');
     print hidden('user_id', param('user_id'));
     print submit(-name=>'foobar', -value=>'Anonymize', -title=>
 		 'To completely delete a user, use command-line tool deluser');
-    print end_form,"\n";
-    print "</td></table>\n";
+    print end_form;
+    print '</div></div>';
     param('menu', $par_menu);
     param('sub', $par_sub);
     # ** Button to lock or unlock user.
@@ -306,160 +305,22 @@ sub show_user_info($$)
   # is viewd on two or more computers at the same time, line numbers are the same for everybody!
 
   print h3("Individual permissions:");
-  print '<TABLE BGCOLOR="#ccccff" BORDER="0" cellspacing="1" cellpadding="1">' .
-    '<TR bgcolor="#aaaaff"><TD>#</TD><TD>Type</TD><TD>Ref.</TD><TD>Permissions</TD>';
+  print '<table class="s-list">',
+        '<tr class="s-list__head"><th>#</th><th>Type</th><th>Ref.</th><th>Permissions</th></tr>';
   list_privs($user{'id'}, 2);
-  print '</TABLE>';
+  print '</table>';
 
   for my $ind1 (sort split(',', $state->{groupname})) { # TVu 2021-03-15
     db_query("SELECT id, comment FROM user_groups WHERE name='$ind1'",\@q);
     my $gid = $q[0][0];
     print h3("Permissions via group $ind1<BR>($q[0][1]):");
-    print '<TABLE BGCOLOR="#ccccff" BORDER="0" cellspacing="1" cellpadding="1">' .
-      '<TR bgcolor="#aaaaff"><TD>#</TD><TD>Type</TD><TD>Ref.</TD><TD>Permissions</TD>';
+    print '<table class="s-list">',
+          '<tr class="s-list__head"><th>#</th><th>Type</th><th>Ref.</th><th>Permissions</th></tr>';
     list_privs($gid, 1);
-    print '</TABLE>';
+    print '</table>';
   }
 
   print "<P>";
-  # No longer showing combined permissions. 2021-04-14 TVu
-  if (0) {
-    my($tmp,$s);
-
-    print h3("Combined permissions:"),"<TABLE border=0 cellspacing=1>",
-      "<TR bgcolor=\"#aaaaff\"><TD>Type</TD><TD>Ref.</TD>",
-      "<TD>Permissions</TD></TR>";
-
-    # Server permissions
-    foreach my $s (keys %{$perms->{server}}) {
-      undef @q;
-      db_query("SELECT name FROM servers WHERE id=$s;",\@q);
-      $tmp=$q[0][0];
-      print "<TR bgcolor=\"#dddddd\">",td("Server"),td("$tmp"),
-	td($perms->{server}->{$s}." &nbsp;"),"</TR>";
-    }
-
-    # Zone permissions
-    foreach my $s (keys %{$perms->{zone}}) {
-      undef @q;
-      db_query("SELECT s.name,z.name FROM zones z, servers s " .
-	       "WHERE z.server=s.id AND z.id=$s;",\@q);
-      $tmp="$q[0][0]: $q[0][1]";
-      print "<TR bgcolor=\"#dddddd\">",td("Zone"),td("$tmp"),
-	td($perms->{zone}->{$s}." &nbsp;"),"</TR>";
-    }
-
-    # Net permissions
-    # FIXME:  output is not sorted properly raising order server:cidr
-    #foreach $s (keys %{$perms->{net}}) {
-    #  undef @q;
-    #  db_query("SELECT s.name,n.net,n.range_start,n.range_end " .
-    #       "FROM servers s, nets n WHERE n.server=s.id AND n.id=$s;",\@q);
-    #  $tmp="$q[0][0]:$q[0][1]";
-    #  print "<TR bgcolor=\"#dddddd\">",td("Net"),td("$tmp"),
-    #     td($perms->{net}->{$s}[0]." - ".$perms->{net}->{$s}[1]),"</TR>";
-    #}
-
-    # Net permissions
-    # Fixed better than previous, but still a bit hack
-    $s = join(',',(keys %{$perms->{net}})) . "\n";
-    if ($s) { # Empty $s caused sql errors 13.03.2017 TVu
-      undef @q;
-      db_query("SELECT s.name,n.net,n.range_start,n.range_end " .
-	       "FROM servers s, nets n WHERE n.server=s.id AND " .
-	       "n.id in ($s) ORDER BY name,net;",\@q);
-      for $s (0..$#q) {
-	$tmp="$q[$s][0]: $q[$s][1]";
-	print "<TR bgcolor=\"#dddddd\">",td("Net"),td("$tmp"),
-	  td($q[$s][2]." - ".$q[$s][3]),"</TR>";
-      }
-    }
-
-    # Host permissions
-    foreach $s (@{$perms->{hostname}}) {
-      if (@{$s}[0] != -1) {
-	undef @q;
-	db_query("SELECT z.name FROM zones z, servers s " .
-		 "WHERE z.server=s.id AND z.id=@{$s}[0];",\@q);
-	$tmp="$q[0][0]: @{$s}[1]";
-      } else {
-	$tmp="@{$s}[1]";
-      }
-      print "<TR bgcolor=\"#dddddd\">",
-	td("Hostmask"),td("$tmp"),td("(Hostname constraint)"),
-	"</TR>";
-    }
-
-    # IP mask permissions
-    foreach $s (@{$perms->{ipmask}}) {
-      print "<TR bgcolor=\"#dddddd\">",td("IP mask"),td("$s"),
-	td("(IP address constraint)"),"</TR>";
-    }
-
-    # Delete mask permissions
-    foreach $s (@{$perms->{delmask}}) {
-      if (@{$s}[0] != -1) {
-	undef @q;
-	db_query("SELECT z.name FROM zones z, servers s " .
-		 "WHERE z.server=s.id AND z.id=@{$s}[0];",\@q);
-	$tmp="$q[0][0]: @{$s}[1]";
-      } else {
-	$tmp="@{$s}[1]";
-      }
-      print "<TR bgcolor=\"#dddddd\">",
-	td("Delmask"),td("$tmp"),td("(Delete host mask)"),
-	"</TR>";
-    }
-
-    # Expiration limit ** TVu 2021-04-07
-    if (defined $perms->{'elimit'}) {
-      print "<TR bgcolor=\"#dddddd\">",td("Elimit"),td($perms->{'elimit'}),
-	td("(Expiration limit, days)"),"</TR>";
-    }
-
-    # Default department ** TVu 2021-04-07
-    if ($perms->{'defdept'}) {
-      print "<TR bgcolor=\"#dddddd\">",td("DefDept"),td($perms->{'defdept'}),
-	td("(Default department string)"),"</TR>";
-    }
-
-    # Default hostname ** TVu 2021-04-07
-    if ($perms->{'defhost'}) {
-      print "<TR bgcolor=\"#dddddd\">",td("DefHost"),td($perms->{'defhost'}),
-	td("(Default hostname template)"),"</TR>";
-    }
-
-    # Template masks
-    foreach $s (@{$perms->{tmplmask}}) {
-      print "<TR bgcolor=\"#dddddd\">",td("Template mask"),td("$s"),
-	td("(Template modify mask)"),"</TR>";
-    }
-
-    # Group masks
-    foreach $s (@{$perms->{grpmask}}) {
-      print "<TR bgcolor=\"#dddddd\">",td("GrpMask"),td("$s"),
-	td("(Group modify mask)"),"</TR>";
-    }
-
-    # Required host fields
-    foreach $s (sort keys %{$perms->{rhf}}) {
-      print "<TR bgcolor=\"#dddddd\">",td("ReqHostField"),td("$s"),
-	td(($perms->{rhf}->{$s} ? 'Optional':'Required')),"</TR>";
-    }
-
-    # Flags
-    foreach $s (sort keys %{$perms->{flags}}) {
-      print "<TR bgcolor=\"#dddddd\">",td("Flag"),td("$s"),
-	td('(Permission to add / modify)'),"</TR>";
-    }
-
-    # Alevel permission
-    print "<TR bgcolor=\"#dddddd\">",td("Level"),td($perms->{alevel}),
-      td("(Authorization level)"),"</TR>";
-
-    print "</TABLE><P>&nbsp;";
-  }
-
 
   return 0;
 }
@@ -485,13 +346,13 @@ sub menu_handler {
 
   if ($sub eq 'login') {
     print h2("Login as another user?"),p,
-          "Click <a href=\"$s_url/login\" target=\"_top\">here</a> ",
-          "if you want to login as another user.";
+          a({-href=>"$s_url/login", -target=>'_top',
+             -class=>'s-btn s-btn--secondary'}, 'Switch user');
   }
   elsif ($sub eq 'logout') {
     print h2("Logout from the system?"),p,
-          "Click <a href=\"$s_url/logout\" target=\"_top\">here</a> ",
-          "if you want to logout.";
+          a({-href=>"$s_url/logout", -target=>'_top',
+             -class=>'s-btn s-btn--secondary'}, 'Logout');
   }
   elsif ($sub eq 'passwd') {
     if ($main::SAURON_AUTH_PROG) {
@@ -506,25 +367,23 @@ sub menu_handler {
     elsif (param('passwd_submit') ne '') {
       unless (($res=form_check_form('passwd',\%h,\%change_passwd_form))) {
 	if (param('passwd_new1') ne param('passwd_new2')) {
-	  print "<FONT color=\"red\">",h2("New passwords don't match!"),
-	        "</FONT>";
+	  alert1("New passwords don't match!");
 	} else {
 	  unless (pwd_check(param('passwd_old'),$user{password})) {
 	    my $password=pwd_make(param('passwd_new1'),$main::SAURON_PWD_MODE);
 	    my $ticks=time();
 	    if (db_exec("UPDATE users SET password='$password', " .
 			"last_pwd=$ticks WHERE id=$state->{uid};") < 0) {
-	      print "<FONT color=\"red\">",
-	             h2("Password update failed!"),"</FONT>";
+	      alert1("Password update failed!");
 	      return;
 	    }
 	    print p,h2("Password changed successfully.");
 	    return;
 	  }
-	  print "<FONT color=\"red\">",h2("Invalid password!"),"</FONT>";
+	  alert1("Invalid password!");
 	}
       } else {
-	print "<FONT color=\"red\">",h2("Invalid data in form!"),"</FONT>";
+	alert1("Invalid data in form!");
       }
     }
     print h2("Change password:"),p,
@@ -621,7 +480,7 @@ sub menu_handler {
 	print submit(-name=>'session_inc_submit',-value=>'Next SID');
 	print submit(-name=>'session_dec_submit',-value=>'Previous SID');
     }
-    print end_form, "<HR>";
+    print end_form;
     if (param('session_sid') > 0) {
       my $session_id=param('session_sid');
       undef @q;
@@ -629,14 +488,15 @@ sub menu_handler {
 	       "FROM lastlog l, users u " .
 	       "WHERE l.uid=u.id AND l.sid=?;",\@q, [$session_id]);
       if (@q > 0) {
-	print "<TABLE bgcolor=\"#ccccff\" width=\"99%\" cellspacing=1>",
-              "<TR bgcolor=\"#aaaaff\">",th("SID"),th("User"),th("Login"),
-	      th("Logout"),th("From"),"</TR>";
-	my $date1=localtime($q[0][1]);
-	my $date2=($q[0][2] > 0 ? localtime($q[0][2]) : '&nbsp;');
-	print "<TR bgcolor=\"#eeeebf\">",
-	         td($session_id),td($q[0][4]),td($date1),td($date2),
-		 td($q[0][3]),"</TR></TABLE>";
+	print '<table class="s-list">',
+	      '<tr class="s-list__head">',
+	      th("SID"), th("User"), th("Login"), th("Logout"), th("From"),
+	      '</tr>';
+	my $date1 = localtime($q[0][1]);
+	my $date2 = ($q[0][2] > 0 ? localtime($q[0][2]) : '&nbsp;');
+	print '<tr class="s-list__row">',
+	      td($session_id), td($q[0][4]), td($date1), td($date2),
+	      td($q[0][3]), '</tr></table>';
       }
 
       undef @q;
@@ -652,7 +512,7 @@ sub menu_handler {
     form_magic('history',\%h,\%history_form);
     print submit(-name=>'history_submit',-value=>'Search') . "\n";
     print "<input type='reset' value='Clear'>\n";
-   print end_form, "<HR>";
+    print end_form;
 # No search criterion, no search.
     if (param('history_user') !~ /\S/ && param('history_date') !~ /\S/ && param('history_type') == 0 &&
 	param('history_ref') <= 0 && param('history_action') !~ /\S/ && param('history_info') !~ /\S/) {
@@ -712,19 +572,18 @@ sub menu_handler {
   elsif ($sub eq 'motd') {
     print h2("News & motd (message of the day) messages:");
     get_news_list($serverid,10,\@list);
-    print "<TABLE width=\"99%\" cellspacing=1 cellpadding=4 " .
-          " bgcolor=\"#ccccff\">";
-    print "<TR bgcolor=\"#aaaaff\"><TH width=\"70%\">Message</TH>",
-          th("Date"),th("Type"),th("By"),"</TR>";
+    print '<table class="s-list">',
+          '<tr class="s-list__head">',
+          '<th style="width:70%">Message</th>',
+          th("Date"), th("Type"), th("By"), '</tr>';
     for $i (0..$#list) {
-      my $date=localtime($list[$i][0]);
-      my $type=($list[$i][2] < 0 ? 'Global' : 'Local');
-      my $msg=$list[$i][3];
-      #$msg =~ s/\n/<BR>/g;
-      print "<TR bgcolor=\"#ddeeff\"><TD>$msg</TD>",
-		   td($date),td($type),td($list[$i][1]),"</TR>";
+      my $date = localtime($list[$i][0]);
+      my $type = ($list[$i][2] < 0 ? 'Global' : 'Local');
+      my $msg  = $list[$i][3];
+      print '<tr class="s-list__row">', td($msg),
+            td($date), td($type), td($list[$i][1]), '</tr>';
     }
-    print "</TABLE><br>";
+    print "</table><br>";
   }
   elsif ($sub eq 'addmotd') {
     return if (check_perms('superuser',''));
@@ -739,10 +598,147 @@ sub menu_handler {
 
     return;
   }
+  elsif ($sub eq 'theme') {
+    _handle_theme($state, $perms, $selfurl);
+    return;
+  }
   else {
     show_user_info($state,$perms);
   }
 
+}
+
+# -------------------------------------------------
+# Write $SAURON_TOPMENU_BGCOLOR / _FONTCOLOR / ENV_NAME back to the
+# config file so the change survives a restart. Superuser-only.
+#
+sub _handle_theme {
+  my ($state, $perms, $selfurl) = @_;
+  return if (check_perms('superuser', ''));
+
+  my $conf_path = $Sauron::Sauron::CONF_FILE_PATH;
+  $conf_path = '/etc/sauron' if ($conf_path =~ /^__CONF/);
+  my $conf_file = "$conf_path/config";
+
+  my $bg   = $main::SAURON_TOPMENU_BGCOLOR   // '#002d5f';
+  my $fg   = $main::SAURON_TOPMENU_FONTCOLOR // 'white';
+  my $name = $main::SAURON_ENV_NAME          // '';
+
+  my $theme_file = "$conf_path/theme";
+  my $save_ok  = undef;
+  my $save_err = '';
+  my $reset_ok = undef;
+
+  if (param('theme_reset')) {
+    # Write an empty config (just "1;") rather than deleting so we
+    # only need write permission on the file, not on the directory.
+    if (open(my $fh, '>', $theme_file)) {
+      print $fh "1;\n";
+      close($fh);
+      $reset_ok = 1;
+      $main::SAURON_TOPMENU_BGCOLOR   = undef;
+      $main::SAURON_TOPMENU_FONTCOLOR = undef;
+      $main::SAURON_ENV_NAME          = '';
+      $bg = '#002d5f'; $fg = 'white'; $name = '';
+    } else {
+      $save_err = "Cannot write theme file ($theme_file): $! — "
+                . "check that the file is writable by the web process: "
+                . "chown root:www-data $theme_file && chmod 664 $theme_file";
+    }
+  } elsif (param('theme_submit')) {
+    my $new_bg   = param('theme_bgcolor')  // $bg;
+    my $new_fg   = param('theme_fgcolor')  // $fg;
+    my $new_name = param('theme_envname')  // $name;
+
+    $new_bg   = $bg unless ($new_bg   =~ /^#[0-9a-fA-F]{3,8}$|^[a-zA-Z]+$/);
+    $new_fg   = $fg unless ($new_fg   =~ /^#[0-9a-fA-F]{3,8}$|^[a-zA-Z]+$/);
+    $new_name =~ s/[^A-Za-z0-9 _\-]//g;
+    $new_name =~ s/^\s+|\s+$//g;
+    $new_name = substr($new_name, 0, 32);
+
+    $bg = $new_bg; $fg = $new_fg; $name = $new_name;
+
+    if (open(my $fh, '>', $theme_file)) {
+
+      print $fh "# Deployment theme — managed via web UI\n";
+      print $fh "\$SAURON_TOPMENU_BGCOLOR   = \"$bg\";\n";
+      print $fh "\$SAURON_TOPMENU_FONTCOLOR = \"$fg\";\n";
+      print $fh "\$SAURON_ENV_NAME = \"$name\";\n" if ($name ne '');
+      print $fh "1;\n";
+      close($fh);
+      $save_ok = 1;
+      $main::SAURON_TOPMENU_BGCOLOR   = $bg;
+      $main::SAURON_TOPMENU_FONTCOLOR = $fg;
+      $main::SAURON_ENV_NAME          = $name;
+    } else {
+      $save_err = "Cannot write theme file ($theme_file): $!. "
+                . "Create it and make it writable by the web process: "
+                . "touch $theme_file && chown root:www-data $theme_file && chmod 664 $theme_file";
+    }
+  }
+
+  my $bg_safe   = encode_entities($bg);
+  my $fg_safe   = encode_entities($fg);
+  my $name_safe = encode_entities($name);
+  my $bg_hex    = ($bg   =~ /^#/) ? $bg   : '#002d5f';
+  my $fg_hex    = ($fg   =~ /^#/) ? $fg   : '#ffffff';
+
+  my $server_id_safe = encode_entities($main::SERVER_ID // '');
+
+  # On save: emit a <meta> that init() in sauron.js will pick up and apply.
+  # <script> inside innerHTML (AJAX swap) is never executed by browsers.
+  if ($save_ok || $reset_ok) {
+    print '<meta id="s-theme-update"',
+          ' data-bg="',   encode_entities($bg),   '"',
+          ' data-fg="',   encode_entities($fg),   '"',
+          ' data-name="', encode_entities($name), '">';
+  }
+
+  print h2("Deployment theme"),
+        ($save_ok  ? '<div class="s-alert s-alert--success" role="alert">Theme saved.</div>' : ''),
+        ($reset_ok ? '<div class="s-alert s-alert--success" role="alert">Theme reset to server defaults.</div>' : ''),
+        ($save_err ? '<div class="s-alert s-alert--error" role="alert">' . encode_entities($save_err) . '</div>' : ''),
+        p("Set the top bar colour and environment label for this deployment."
+          . " Saved settings apply to all browsers instantly without a server restart.");
+
+  # Live preview — shown first so the user sees what they are editing.
+  print '<div class="s-theme-preview">',
+        '<div id="s-theme-prev-bar" class="s-theme-preview__bar" style="background:', $bg_safe, ';color:', $fg_safe, '">',
+        '<span>Sauron</span>',
+        ($name ? '<span class="s-topbar__env">' . $name_safe . '</span>' : ''),
+        '<span class="s-theme-preview__server">', $server_id_safe, '</span>',
+        '</div>',
+        '<p class="s-theme-preview__hint">Preview updates live as you type</p>',
+        '</div>';
+
+  print '<div class="s-theme-form" id="s-theme-ui">',
+
+        '<label for="t_bg">Top bar colour</label>',
+        '<input type="text" id="t_bg" value="', $bg_safe, '" size="10" maxlength="20">',
+        '<input type="color" id="t_bg_p" value="', $bg_hex, '">',
+
+        '<label for="t_fg">Text colour</label>',
+        '<input type="text" id="t_fg" value="', $fg_safe, '" size="10" maxlength="20">',
+        '<input type="color" id="t_fg_p" value="', $fg_hex, '">',
+
+        '<label for="t_nm">Environment label</label>',
+        '<input type="text" id="t_nm" value="', $name_safe, '" size="18" maxlength="32"',
+        ' placeholder="PROD / STAGING / DEV">',
+        '<small class="s-theme-form__hint">',
+        'e.g. PROD, STAGING, DEV (empty hides the badge)</small>',
+
+        '</div>',
+        start_form(-method=>'POST',-action=>$selfurl),
+        hidden('menu','login'), hidden('sub','theme'),
+        hidden('theme_bgcolor',''), hidden('theme_fgcolor',''), hidden('theme_envname',''),
+        '<div class="s-theme-form__actions">',
+        submit(-name=>'theme_submit',-value=>'Save for all users',-class=>'s-btn s-btn--primary'),
+        submit(-name=>'theme_reset',-value=>'Reset to default',-class=>'s-btn s-btn--secondary'),
+        '</div>',
+        end_form;
+
+  # Picker JS lives in sauron.js (attachThemeForm) — called by init() so
+  # it works after AJAX swap. No inline <script> needed here.
 }
 
 1;
