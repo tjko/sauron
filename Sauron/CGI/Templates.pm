@@ -382,8 +382,7 @@ sub menu_handler {
 	  return;
 	}
 	if (delete_mx_template($mx_id) < 0) {
-	  print "<FONT color=\"red\">",h1("MX template delete failed!"),
-	        "</FONT>";
+	  alert1("MX template delete failed!");
 	  return;
 	}
 	print h2("MX template successfully deleted.");
@@ -431,8 +430,7 @@ sub menu_handler {
 	  return;
 	}
 	if (delete_wks_template($wks_id) < 0) {
-	  print "<FONT color=\"red\">",h1("WKS template delete failed!"),
-	        "</FONT>";
+	  alert1("WKS template delete failed!");
 	  return;
 	}
 	print h2("WKS template successfully deleted.");

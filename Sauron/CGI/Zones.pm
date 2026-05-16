@@ -301,15 +301,15 @@ sub select_zone($$)
 	     "$state->{'zone'}'>$state->{'zone'}</a>");
   }
 
-  print start_form(-method=>'GET',-action=>$selfurl),
+  print start_form(-method=>'GET',-action=>$selfurl,-class=>'s-inline-form'),
         hidden('menu','zones'),hidden('sub','select'),"Zone display filter: ",
 	textfield(-name=>'select_filter',-size=>20,-maxlength=>80),"  ",
 	submit(-name=>'filter',-value=>'Go'),end_form,
         h2("Select zone:"),
 #       ((@{$list} > $zlimit && ! param('select_filter')) ? # Limit removed.
 #        "(only first $zlimit zones displayed)":""),
-	p,"<TABLE width=98% bgcolor=white border=0>",
-        "<TR bgcolor=\"#aaaaff\">",th(['#','Zone','Type','Reverse','Comments']);
+	p, '<table class="s-list">',
+        '<tr class="s-list__head">', th(['#','Zone','Type','Reverse','Comments']);
 
   my $ord = 1;
 
@@ -347,22 +347,26 @@ sub select_zone($$)
 
 # If the comment is an URL, show it as a link. TVu
     $comment = url2link($comment);
-    print "<TR bgcolor=\"$color\">",td([$ord,
-	"<a href=\"$selfurl?menu=zones&selected_zone=$name\"" .
-	" title=\"$title\">$name</a>",$type,$rev,$comment]);
+    print '<tr class="s-list__row" data-zone-type="', lc($$list[$i][2] || 'M'),
+          '" data-zone-expiry="',
+          ($expires > 0 && $expires < time() ? 'expired' :
+           $expires > 0 ? 'expiring' : ''),
+          '" title="', encode_entities($title || ''), '">',
+          td([$ord, "<a href=\"$selfurl?menu=zones&selected_zone=$name\">$name</a>",
+               $type, $rev, $comment]);
     $ord++;
     $zonelist{$name}=$id;
   }
-  print "</TABLE><BR>";
+  print "</table>";
 
-  print "<table width='99%'><tr align=right><td>";
-  print start_form(-method=>'POST',-action=>$selfurl),
-  hidden('menu','zones'),hidden('sub','select'),
-  hidden('select_filter',scalar(param('select_filter'))),
-  hidden('csv','1'),
-  submit(-name=>'results.csv',-value=>'Download CSV');
-  print end_form;
-  print "</td></tr></table>\n";
+  print '<div class="s-action-bar"><div class="s-action-bar__right">',
+        start_form(-method=>'POST',-action=>$selfurl),
+        hidden('menu','zones'),hidden('sub','select'),
+        hidden('select_filter',scalar(param('select_filter'))),
+        hidden('csv','1'),
+        submit(-name=>'results.csv',-value=>'Download CSV'),
+        end_form,
+        "</div></div>\n";
 
   get_server($serverid,\%server);
   if ($server{masterserver} > 0) {
@@ -370,8 +374,8 @@ sub select_zone($$)
     %ztypenames=(M=>'Slave (Master)',S=>'Slave',F=>'Forward',H=>'Hint',C=>'Catalog',A=>'Aggregate');
 
     print h4("Zones from master server:"),
-          p,"<TABLE width=98% bgcolor=white border=0>",
-        "<TR bgcolor=\"#aaaaff\">",th(['Zone','Type','Reverse','Comments']);
+          p, '<table class="s-list">',
+          '<tr class="s-list__head">', th(['Zone','Type','Reverse','Comments']);
     # 2022-08-10 mesrik: add no_expired arg
     # $list=get_zone_list($server{masterserver},0,0);
     $list=get_zone_list($server{masterserver},0,0,0);
@@ -388,9 +392,10 @@ sub select_zone($$)
       next if ($zonelist{$name});
 # If the comment is an URL, show it as a link. TVu
       $comment = url2link($comment);
-      print "<TR bgcolor=$color>",td([$name,$type,$rev,$comment]);
+      print '<tr class="s-list__row" data-zone-type="', lc($$list[$i][2] || 'S'), '">',
+            td([$name, $type, $rev, $comment]);
     }
-    print "</TABLE><BR>";
+    print "</table>";
 
   }
 
@@ -465,7 +470,7 @@ sub display_zone($$)
     # Add manage groups link for catalog zones
     if ($data{type} && $data{type} eq 'C') {
       $data{catalog_group_manage_link} =
-        "<a href=\"$selfurl?menu=zones&sub=CatalogGroups\"><B>[ Manage Groups ]</B></a>";
+        "<a href=\"$selfurl?menu=zones&sub=CatalogGroups\"><strong>[ Manage Groups ]</strong></a>";
     }
 
     # Format catalog zones selected list with links (for Member of catalog zones field)
@@ -600,15 +605,14 @@ sub menu_handler {
 
 	$res=add_zone(\%data);
 	if ($res < 0) {
-	  print "<FONT color=\"red\">",h1("Adding Zone record failed!"),
-	      "result code=$res</FONT>";
+	  alert1("Adding Zone record failed! (result code=$res)");
 	} else {
 	  param('selected_zone',$data{name});
 	  display_zone($state,$perms);
 	  return;
 	}
       } else {
-	print "<FONT color=\"red\">",h2("Invalid data in form!"),"</FONT>";
+	alert1("Invalid data in form!");
       }
     }
     new_zone_edit($state,\%data);
@@ -666,14 +670,13 @@ sub menu_handler {
 	print p,"Copying zone...please wait few minutes (or hours :)";
 	$res=copy_zone($zoneid,$serverid,$data{name},1);
     if ($res < 0) {
-	  print '<FONT color="red">',h2("Zone copy failed! ($res)"),
-	        '</FONT>';
+	  alert1("Zone copy failed! ($res)");
 	} else {
 	  print h2("Zone successfully copied (id=$res).");
 	}
 	return;
       } else {
-	print '<FONT color="red">',h2('Invalid data in form!'),'</FONT>';
+	alert1("Invalid data in form!");
       }
     }
 
@@ -746,17 +749,17 @@ sub menu_handler {
       $new_comment =~ s/^\s+|\s+$//g;
 
       if ($new_name eq '') {
-        print "<FONT color=\"red\">",h3("Group name cannot be empty!"),"</FONT>";
+        alert1("Group name cannot be empty!");
       } elsif ($new_name =~ /[^a-zA-Z0-9_\-.]/) {
-        print "<FONT color=\"red\">",h3("Group name can only contain letters, digits, hyphens, dots and underscores!"),"</FONT>";
+        alert1("Group name can only contain letters, digits, hyphens, dots and underscores!");
       } else {
         $res = add_catalog_group_def($zoneid, $new_name, $new_comment);
         if ($res == -10) {
-          print "<FONT color=\"red\">",h3("Group '$new_name' already exists!"),"</FONT>";
+          alert1("Group '$new_name' already exists!");
         } elsif ($res < 0) {
-          print "<FONT color=\"red\">",h3("Failed to add group (error: $res)"),"</FONT>";
+          alert1("Failed to add group (error: $res)");
         } else {
-          print h3("Group '<B>$new_name</B>' added successfully.");
+          print h3("Group '<strong>$new_name</strong>' added successfully.");
         }
       }
     }
@@ -769,9 +772,9 @@ sub menu_handler {
       if ($del_name ne '') {
         $res = delete_catalog_group_def($zoneid, $del_name);
         if ($res < 0) {
-          print "<FONT color=\"red\">",h3("Failed to delete group (error: $res)"),"</FONT>";
+          alert1("Failed to delete group (error: $res)");
         } else {
-          print h3("Group '<B>$del_name</B>' deleted.");
+          print h3("Group '<strong>$del_name</strong>' deleted.");
         }
       }
     }
@@ -790,8 +793,8 @@ sub menu_handler {
               hidden('menu','zones'),hidden('sub','CatalogGroups');
 
         if ($usage{count} > 0) {
-          print "<FONT color=\"red\"><B>Warning:</B> This group is currently assigned to $usage{count} zone(s):</FONT>",
-                "<UL>";
+          warning1("This group is currently assigned to $usage{count} zone(s):");
+          print "<UL>";
           my %zone_type_names = (M=>'master', S=>'slave', F=>'forward', H=>'hint');
           for my $zu (@{$usage{zones}}) {
             my $zu_name = $zu->[1];
@@ -799,7 +802,7 @@ sub menu_handler {
             print "<LI><a href=\"$selfurl?menu=zones&selected_zone=$zu_name\">$zu_name</a> ($zu_type)</LI>";
           }
           print "</UL>",
-                "<P>Deleting this group will <B>remove it from all these zones</B>.</P>";
+                "<P>Deleting this group will <strong>remove it from all these zones</strong>.</P>";
         } else {
           print p,"This group is not assigned to any zone.";
         }
@@ -821,8 +824,8 @@ sub menu_handler {
     get_catalog_group_defs($zoneid, \%gdefs);
 
     # Display existing groups as a table
-    print "<TABLE width=\"80%\" bgcolor=\"white\" border=0>",
-          "<TR bgcolor=\"#aaaaff\">",th(['#','Group Name','Comment','Usage','Actions']),"</TR>";
+    print '<table class="s-list">',
+          '<tr class="s-list__head">', th(['#','Group Name','Comment','Usage','Actions']), '</tr>';
 
     if ($gdefs{count} > 0) {
       my $ord = 1;
@@ -835,8 +838,8 @@ sub menu_handler {
         my %usage;
         get_catalog_group_usage($zoneid, $gname, \%usage);
         my $usage_str = $usage{count} > 0
-            ? "<FONT color=\"#cc6600\">$usage{count} zone(s)</FONT>"
-            : "<FONT color=\"green\">unused</FONT>";
+            ? '<span class="s-badge--warning">' . $usage{count} . ' zone(s)</span>'
+            : '<span class="s-badge--success">unused</span>';
 
         # Delete button in a mini-form
         my $del_form = "<FORM method=POST action=\"$selfurl\" style=\"display:inline\">" .
@@ -846,32 +849,38 @@ sub menu_handler {
                        "<INPUT type=hidden name=grp_del_name value=\"" . encode_entities($gname) . "\">" .
                        "<INPUT type=submit value=Delete></FORM>";
 
-        print "<TR bgcolor=\"#f0f0f0\">",
-              td([$ord, "<B>$gname</B>", $gcomment, $usage_str, $del_form]),
-              "</TR>";
+        print '<tr class="s-list__row">',
+              td([$ord, "<strong>$gname</strong>", $gcomment, $usage_str, $del_form]),
+              '</tr>';
         $ord++;
       }
     } else {
-      print "<TR><TD colspan=5 align=center><I>No groups defined for this catalog zone.</I></TD></TR>";
+      print '<tr class="s-list__row"><td colspan="5" class="s-muted"><em>No groups defined for this catalog zone.</em></td></tr>';
     }
-    print "</TABLE><BR>";
+    print "</table>";
 
     # Add group form
     print h3("Add New Group"),
           start_form(-method=>'POST',-action=>$selfurl),
           hidden('menu','zones'),hidden('sub','CatalogGroups'),
           hidden('grp_action','add'),
-          "<TABLE>",
-          "<TR><TD>Group name:</TD><TD>",
+          '<table class="s-form">',
+          '<tr class="s-form__row">',
+          '<td class="s-form__label">Group name:</td>',
+          '<td class="s-form__value">',
           textfield(-name=>'grp_new_name',-size=>30,-maxlength=>63),
-          "</TD></TR>",
-          "<TR><TD>Comment:</TD><TD>",
+          "</td></tr>",
+          '<tr class="s-form__row">',
+          '<td class="s-form__label">Comment:</td>',
+          '<td class="s-form__value">',
           textfield(-name=>'grp_new_comment',-size=>50,-maxlength=>200),
-          "</TD></TR>",
-          "<TR><TD></TD><TD>",
+          "</td></tr>",
+          '<tr class="s-form__row">',
+          '<td></td>',
+          '<td class="s-form__value">',
           submit(-name=>'grp_add_submit',-value=>'Add Group'),
-          "</TD></TR>",
-          "</TABLE>",
+          "</td></tr>",
+          "</table>",
           end_form;
 
     # Link back to zone display

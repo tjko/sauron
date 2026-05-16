@@ -42,17 +42,15 @@ sub _audit_user {
 
 sub _example_code {
   my ($text) = @_;
-  return code({-style=>'background-color:#f5f5f5; padding:2px 6px; border:1px solid #ddd; border-radius:3px; font-family:monospace;'}, $text);
+  return '<code class="s-code">' . encode_entities($text) . '</code>';
 }
 
 sub _bool_to_icon {
   my ($value, $label) = @_;
-  my $checkmark = chr(0x2705);  # ✅ green checkmark
-  my $cross = chr(0x274C);      # ❌ red cross
   if ($value eq 't') {
-    return '<span title="' . encode_entities($label || 'Yes') . '" style="cursor:pointer; font-size:1.2em;">' . $checkmark . '</span>';
+    return '<span class="s-bool s-bool--yes" aria-label="' . encode_entities($label || 'Yes') . '" title="' . encode_entities($label || 'Yes') . '"></span>';
   } else {
-    return '<span title="' . encode_entities($label || 'No') . '" style="cursor:pointer; font-size:1.2em;">' . $cross . '</span>';
+    return '<span class="s-bool s-bool--no"  aria-label="' . encode_entities($label || 'No')  . '" title="' . encode_entities($label || 'No')  . '"></span>';
   }
 }
 
@@ -359,7 +357,7 @@ sub _list_policies {
     db_query("SELECT id FROM approval_policies ORDER BY id", \@qa);
     if (@q == 0 && @qa > 0) {
       $msg = "No policies for current zone. Policies exist in other zones.";
-      print p({-style=>'color:#aa0000;'}, $msg);
+      warning1($msg);
     }
   } else {
     # No zone selected - show cross-zone policy view for admins only
@@ -370,7 +368,7 @@ sub _list_policies {
     }
     db_query("SELECT id, zone_id, name, active, on_add, on_modify, on_delete, match_mode " .
              "FROM approval_policies ORDER BY zone_id, name", \@q);
-    print p({-style=>'color:#aa0000;'}, 'Zone is not selected. Showing policies from all zones (admin view only).');
+    warning1('Zone is not selected. Showing policies from all zones (admin view only).');
     
     # Load zone names for displaying instead of IDs
     my @zone_ids;
@@ -389,7 +387,7 @@ sub _list_policies {
     }
   }
 
-  print "<TABLE bgcolor=\"#ccccff\" width=\"99%\" cellspacing=1 cellpadding=1 border=0>\n";
+  print '<table class="s-list">', "\n";
   my @headers;
   if ($zoneid > 0) {
     @headers = qw(Name Active Add Modify Delete Match View);
@@ -397,7 +395,9 @@ sub _list_policies {
     @headers = qw(Zone Name Active Add Modify Delete Match View);
   }
   push @headers, 'Edit' if $is_admin;
-  print "<TR bgcolor=\"#aaaaff\"><th>" . join("</th><th>", @headers) . "</th></TR>\n";
+  print '<tr class="s-list__head">',
+        (join("", map { "<th>$_</th>" } @headers)),
+        "</tr>\n";
   for my $i (0..$#q) {
     my ($id, $zid, $name, $active, $on_add, $on_mod, $on_del, $match_mode) = @{$q[$i]};
     
@@ -408,17 +408,17 @@ sub _list_policies {
     my $on_del_display = _bool_to_icon($on_del, 'On delete');
     my $match_display = ($match_mode eq 'A') ? 'AND' : 'OR';
     
-    print "<TR bgcolor=\"#bfeebf\">\n";
+    print '<tr class="s-list__row">', "\n";
     if ($zoneid == 0) {
       # Show zone name when no zone is selected
       my $zone_name = $zone_names{$zid} || "Zone $zid";
       print "  <td>" . encode_entities($zone_name) . "</td>\n";
     }
     print "  <td>" . encode_entities($name || '') . "</td>\n";
-    print "  <td style=\"text-align:center;\">$active_display</td>\n";
-    print "  <td style=\"text-align:center;\">$on_add_display</td>\n";
-    print "  <td style=\"text-align:center;\">$on_mod_display</td>\n";
-    print "  <td style=\"text-align:center;\">$on_del_display</td>\n";
+    print "  <td>$active_display</td>\n";
+    print "  <td>$on_add_display</td>\n";
+    print "  <td>$on_mod_display</td>\n";
+    print "  <td>$on_del_display</td>\n";
     print "  <td>$match_display</td>\n";
     
     # View links (Rules and Levels) for all users
@@ -504,13 +504,13 @@ sub _list_rules {
            "FROM approval_rules WHERE policy_id = " . int($policy_id) . " ORDER BY id",
            \@q);
 
-  print "<TABLE bgcolor=\"#ccccff\" width=\"99%\" cellspacing=1 cellpadding=1 border=0>\n";
+  print '<table class="s-list">', "\n";
   my @headers = ('Record types', 'Domain regexp', 'Comment');
   push @headers, 'Actions' if $is_admin;
-  print "<TR bgcolor=\"#aaaaff\"><th>" . join("</th><th>", @headers) . "</th></TR>\n";
+  print '<tr class="s-list__head">', (join("", map { "<th>$_</th>" } @headers)), "</tr>\n";
   for my $i (0..$#q) {
     my ($id, $types, $re, $comment) = @{$q[$i]};
-    print "<TR bgcolor=\"#bfeebf\">\n";
+    print '<tr class="s-list__row">', "\n";
     print "  <td>" . encode_entities($types || '') . "</td>\n";
     print "  <td>" . encode_entities($re || '') . "</td>\n";
     print "  <td>" . encode_entities($comment || '') . "</td>\n";
@@ -588,10 +588,10 @@ sub _list_levels {
            "WHERE policy_id = " . int($policy_id) . " ORDER BY level_order",
            \@q);
 
-  print "<TABLE bgcolor=\"#ccccff\" width=\"99%\" cellspacing=1 cellpadding=1 border=0>\n";
+  print '<table class="s-list">', "\n";
   my @headers = qw(Order Name Type Approvers);
   push @headers, 'Actions' if $is_admin;
-  print "<TR bgcolor=\"#aaaaff\"><th>" . join("</th><th>", @headers) . "</th></TR>\n";
+  print '<tr class="s-list__head">', (join("", map { "<th>$_</th>" } @headers)), "</tr>\n";
   
   for my $i (0..$#q) {
     my ($id, $order, $name, $type) = @{$q[$i]};
@@ -616,7 +616,7 @@ sub _list_levels {
     
     # First row with level info
     my $rowspan = scalar(@approver_list) || 1;  # At least 1 row even with no approvers
-    print "<TR bgcolor=\"#bfeebf\">\n";
+    print '<tr class="s-list__row">', "\n";
     print "  <td rowspan=$rowspan>$order</td>\n";
     print "  <td rowspan=$rowspan>" . encode_entities($name || '') . "</td>\n";
     print "  <td rowspan=$rowspan>$type_desc</td>\n";
@@ -638,7 +638,7 @@ sub _list_levels {
     
     # Additional rows for remaining approvers
     for my $j (1..$#approver_list) {
-      print "<TR bgcolor=\"#bfeebf\">\n";
+      print '<tr class="s-list__row">', "\n";
       print "  <td>" . $approver_list[$j] . "</td>\n";
       print "</TR>\n";
     }
@@ -703,13 +703,13 @@ sub _list_approvers {
            "WHERE a.level_id = " . int($level_id) . " AND a.user_id = u.id ORDER BY u.username",
            \@q);
 
-  print "<TABLE bgcolor=\"#ccccff\" width=\"99%\" cellspacing=1 cellpadding=1 border=0>\n";
+  print '<table class="s-list">', "\n";
   my @headers = qw(User Name Comment);
   push @headers, 'Actions' if $is_admin;
-  print "<TR bgcolor=\"#aaaaff\"><th>" . join("</th><th>", @headers) . "</th></TR>\n";
+  print '<tr class="s-list__head">', (join("", map { "<th>$_</th>" } @headers)), "</tr>\n";
   for my $i (0..$#q) {
     my ($id, $username, $name, $comment) = @{$q[$i]};
-    print "<TR bgcolor=\"#bfeebf\">\n";
+    print '<tr class="s-list__row">', "\n";
     print "  <td>" . encode_entities($username || '') . "</td>\n";
     print "  <td>" . encode_entities($name || '') . "</td>\n";
     print "  <td>" . encode_entities($comment || '') . "</td>\n";
@@ -821,8 +821,8 @@ sub _list_pending {
   # Load policies for zone to get policy_id -> level_id mapping
   db_query("SELECT id FROM approval_policies WHERE zone_id = \$1", \@policies, $zoneid);
 
-  print "<TABLE bgcolor=\"#ccccff\" width=\"99%\" cellspacing=1 cellpadding=1 border=0>\n";
-  print "<TR bgcolor=\"#aaaaff\"><th>Request ID</th><th>Domain / Record</th><th>Requestor</th><th>Operation</th><th>Level</th><th>Created</th></TR>\n";
+  print '<table class="s-list">', "\n";
+  print '<tr class="s-list__head"><th>Request ID</th><th>Domain / Record</th><th>Requestor</th><th>Operation</th><th>Level</th><th>Created</th></tr>', "\n";
   for my $i (0..$#q) {
     my ($id, $req_id, $req_email, $op, $status, $level, $cdate, $change_data, $policy_id) = @{$q[$i]};
     my $level_name = _get_level_name($policy_id, $level, \%level_name_cache);
@@ -864,7 +864,7 @@ sub _list_pending {
       $level_link = "<a href=\"$selfurl?menu=approvals&sub=levels&policy_id=$policy_id\">$level_display</a>";
     }
     
-    print "<TR bgcolor=\"#bfeebf\">\n";
+    print '<tr class="s-list__row">', "\n";
     print "  <td>$request_link</td>\n";
     print "  <td>" . encode_entities($domain) . " (" . encode_entities($type_name) . ")</td>\n";
     print "  <td>" . encode_entities($req_name) . " (" . encode_entities($req_email || '') . ")</td>\n";
@@ -892,13 +892,13 @@ sub _list_all_requests {
            "ORDER BY cdate DESC", \@q, $zoneid);
 
   if (@q == 0) {
-    print "<p><i>No requests found.</i></p>\n";
+    print "<p><em>No requests found.</em></p>\n";
     print "<p><a href=\"$selfurl?menu=approvals&sub=pending\">Back to Pending Approvals</a></p>\n";
     return;
   }
 
-  print "<TABLE bgcolor=\"#e0e0ff\" width=\"99%\" cellspacing=1 cellpadding=1 border=0>\n";
-  print "<TR bgcolor=\"#aaaaff\"><th>Request ID</th><th>Domain / Record</th><th>Requestor</th><th>Operation</th><th>Status</th><th>Level</th><th>Created</th></TR>\n";
+  print '<table class="s-list">', "\n";
+  print '<tr class="s-list__head"><th>Request ID</th><th>Domain / Record</th><th>Requestor</th><th>Operation</th><th>Status</th><th>Level</th><th>Created</th></tr>', "\n";
   for my $i (0..$#q) {
     my ($id, $req_id, $req_email, $op, $status, $level, $cdate, $change_data, $policy_id) = @{$q[$i]};
     my $level_name = _get_level_name($policy_id, $level, \%level_name_cache);
@@ -934,21 +934,11 @@ sub _list_all_requests {
     # Create request link
     my $request_link = "<a href=\"$selfurl?menu=approvals&sub=show_request&req_id=$id\">$id</a>";
     
-    # Status color based on status
-    my $status_color;
-    if ($status eq 'P') {
-      $status_color = '#ffffcc';  # Yellow for pending
-    } elsif ($status eq 'A') {
-      $status_color = '#ccffcc';  # Green for approved
-    } elsif ($status eq 'R') {
-      $status_color = '#ffcccc';  # Red for rejected
-    } else {
-      $status_color = '#f0f0f0';  # Gray for unknown
-    }
-    
-    my $status_display = $status_name{$status} || $status;
-    
-    print "<TR bgcolor=\"$status_color\">\n";
+    my %status_keys = (P => 'pending', A => 'approved', R => 'rejected');
+    my $status_key     = $status_keys{$status} || 'pending';
+    my $status_display = $status_name{$status}  || $status;
+
+    print '<tr class="s-list__row" data-status="', $status_key, '">', "\n";
     print "  <td>$request_link</td>\n";
     print "  <td>" . encode_entities($domain) . " (" . encode_entities($type_name) . ")</td>\n";
     print "  <td>" . encode_entities($req_name) . " (" . encode_entities($req_email || '') . ")</td>\n";
@@ -1247,48 +1237,60 @@ sub _show_request {
 
 	print h2('Approval Request Details');
 
-	# Display request information
-	print "<TABLE bgcolor=\"#ccccff\" width=\"99%\" cellspacing=1 cellpadding=2 border=0>\n";
-	print "<TR bgcolor=\"#aaaaff\"><th colspan=\"2\">Request Information</th></TR>\n";
-	print "<TR bgcolor=\"#bfeebf\"><td>Request ID:</td><td>$req_id</td></TR>\n";
-	print "<TR bgcolor=\"#bfeebf\"><td>Domain:</td><td>" . encode_entities($rec->{domain} || '?') . "</td></TR>\n";
-	print "<TR bgcolor=\"#bfeebf\"><td>Record Type:</td><td>" . encode_entities($type_name) . "</td></TR>\n";
-	print "<TR bgcolor=\"#bfeebf\"><td>Operation:</td><td>" . encode_entities($op_name{$operation} || $operation) . "</td></TR>\n";
-  print "<TR bgcolor=\"#bfeebf\"><td>Status:</td><td>" . encode_entities($status_name{$status} || $status) . "</td></TR>\n";
-  print "<TR bgcolor=\"#bfeebf\"><td>Current Level:</td><td>$current_level_display</td></TR>\n";
-	print "<TR bgcolor=\"#bfeebf\"><td>Requestor:</td><td>" . encode_entities($requestor_name) . " (" . encode_entities($requestor_email || '') . ")</td></TR>\n";
-	print "<TR bgcolor=\"#bfeebf\"><td>Created:</td><td>$cdate</td></TR>\n";
+	# Approval status drives both colour and an icon prefix in CSS, so the
+	# meaning carries through to operators who can't tell tints apart.
+	my %status_data = (
+		'P' => 'pending',
+		'A' => 'approved',
+		'R' => 'rejected',
+	);
+	my $status_key = $status_data{$status} || 'pending';
+
+	print '<section class="s-approval" data-status="', $status_key, '">';
+	print '<table class="s-list s-approval__info">',
+	      '<tr class="s-list__head"><th colspan="2">Request Information</th></tr>',
+	      '<tr class="s-list__row"><td>Request ID:</td><td>', $req_id, '</td></tr>',
+	      '<tr class="s-list__row"><td>Domain:</td><td>', encode_entities($rec->{domain} || '?'), '</td></tr>',
+	      '<tr class="s-list__row"><td>Record Type:</td><td>', encode_entities($type_name), '</td></tr>',
+	      '<tr class="s-list__row"><td>Operation:</td><td>', encode_entities($op_name{$operation} || $operation), '</td></tr>',
+	      '<tr class="s-list__row"><td>Status:</td><td><span class="s-approval__badge">',
+	      encode_entities($status_name{$status} || $status), '</span></td></tr>',
+	      '<tr class="s-list__row"><td>Current Level:</td><td>', $current_level_display, '</td></tr>',
+	      '<tr class="s-list__row"><td>Requestor:</td><td>',
+	      encode_entities($requestor_name), ' (', encode_entities($requestor_email || ''), ')</td></tr>',
+	      '<tr class="s-list__row"><td>Created:</td><td>', $cdate, '</td></tr>';
 	if (defined $reason && $reason ne '') {
-		print "<TR bgcolor=\"#bfeebf\"><td>Reason:</td><td>" . encode_entities($reason) . "</td></TR>\n";
+		print '<tr class="s-list__row"><td>Reason:</td><td>',
+		      encode_entities($reason), '</td></tr>';
 	}
-	print "</TABLE>\n";
+	print "</table>\n";
 
-	# Display record data in a structured format
+	# Display record data in a structured format.
 	print h3('Record Data');
-	print "<TABLE bgcolor=\"#e0e0e0\" width=\"99%\" cellspacing=1 cellpadding=2 border=0>\n";
-	print "<TR bgcolor=\"#aaaaaa\"><th align=\"left\" colspan=\"2\"><FONT color=\"white\">Fields</FONT></th></TR>\n";
+	print '<table class="s-list s-approval__fields">';
+	print '<tr class="s-list__head"><th colspan="2">Fields</th></tr>';
 
-	# Display key fields from change_data
 	my @fields = ('domain', 'type', 'ether', 'email', 'comment', 'info');
 	for my $field (@fields) {
 		next unless (defined $rec->{$field});
 		next if ($field eq 'domain' || $field eq 'type'); # Already shown above
 		my $val = $rec->{$field};
-		next if ($val eq '' || !defined $val);
-		print "<TR bgcolor=\"#f0f0f0\"><td>" . encode_entities($field) . ":</td><td>" . encode_entities($val) . "</td></TR>\n";
+		next if (!defined $val || $val eq '');
+		print '<tr class="s-list__row"><td>', encode_entities($field),
+		      ':</td><td>', encode_entities($val), "</td></tr>\n";
 	}
 
-	# Display IP addresses if present
 	if (defined $rec->{ip} && ref($rec->{ip}) eq 'ARRAY' && @{$rec->{ip}} > 0) {
-		print "<TR bgcolor=\"#aaaaaa\"><th align=\"left\" colspan=\"2\"><FONT color=\"white\">IP Addresses</FONT></th></TR>\n";
+		print '<tr class="s-list__head"><th colspan="2">IP Addresses</th></tr>';
 		for my $ip_entry (@{$rec->{ip}}) {
 			if (ref($ip_entry) eq 'ARRAY' && @$ip_entry > 0) {
-				print "<TR bgcolor=\"#f0f0f0\"><td>IP:</td><td>" . encode_entities($ip_entry->[1]) . "</td></TR>\n";
+				print '<tr class="s-list__row"><td>IP:</td><td>',
+				      encode_entities($ip_entry->[1]), "</td></tr>\n";
 			}
 		}
 	}
 
-	print "</TABLE>\n";
+	print "</table>\n";
 
 	# Display approval history (previous decisions at this level)
 	if ($status eq 'P') {
@@ -1301,39 +1303,50 @@ sub _show_request {
 		
 		if (@tokens > 0) {
 			print h3('Approvals at current level');
-			print "<TABLE bgcolor=\"#ffffcc\" width=\"99%\" cellspacing=1 cellpadding=2 border=0>\n";
-			print "<TR bgcolor=\"#ffaa00\"><th>Approver</th><th>Decision</th><th>Reason</th><th>Decided</th></TR>\n";
+			print '<table class="s-list s-approval__decisions">',
+			      '<tr class="s-list__head">',
+			      '<th>Approver</th><th>Decision</th>',
+			      '<th>Reason</th><th>Decided</th></tr>';
 			for my $t (@tokens) {
 				my ($tid, $uid, $dec, $reason, $decided, $uname, $fname) = @$t;
-				# Display fullname if available, otherwise username
-				my $approver_display = $fname ? encode_entities("$fname ($uname)") : encode_entities($uname || 'unknown');
-				my $dec_display = (!defined $dec || $dec eq '') ? 'Pending' : ($dec eq 'A' ? 'Approved' : 'Rejected');
-				my $color = (!defined $dec || $dec eq '') ? '#f0f0f0' : ($dec eq 'A' ? '#ccffcc' : '#ffcccc');
-				print "<TR bgcolor=\"$color\">\n";
-				print "  <td>$approver_display</td>\n";
-				print "  <td>$dec_display</td>\n";
-				print "  <td>" . encode_entities($reason || '') . "</td>\n";
-				print "  <td>" . encode_entities($decided || '') . "</td>\n";
-				print "</TR>\n";
+				my $approver_display = $fname
+					? encode_entities("$fname ($uname)")
+					: encode_entities($uname || 'unknown');
+				my $dec_key = (!defined $dec || $dec eq '') ? 'pending'
+				            : ($dec eq 'A' ? 'approved' : 'rejected');
+				my $dec_display = ucfirst($dec_key);
+				print '<tr class="s-list__row" data-decision="', $dec_key, '">',
+				      '<td>', $approver_display, '</td>',
+				      '<td>', $dec_display, '</td>',
+				      '<td>', encode_entities($reason || ''), '</td>',
+				      '<td>', encode_entities($decided || ''), "</td></tr>\n";
 			}
-			print "</TABLE>\n";
+			print "</table>\n";
 		}
 	}
 
 	# Display approval buttons only if request is pending AND current user is an approver
 	if ($status eq 'P') {
 		if (_is_user_approver_for_request($req_id)) {
-			print h3('Approval Action');
-			print "<p><b>As an approver, you can make a decision below:</b></p>\n";
-			print "<FORM method=\"POST\" action=\"$selfurl\">\n";
-			print "<input type=\"hidden\" name=\"menu\" value=\"approvals\">\n";
-			print "<input type=\"hidden\" name=\"sub\" value=\"approve_action\">\n";
-			print "<input type=\"hidden\" name=\"req_id\" value=\"$req_id\">\n";
-			print "<p><label for=\"decision_reason\"><b>Decision Reason (required):</b></label><br>\n";
-			print "<textarea name=\"decision_reason\" id=\"decision_reason\" rows=\"4\" cols=\"70\" maxlength=\"500\" required></textarea></p>\n";
-			print "<input type=\"submit\" name=\"action\" value=\"Approve\">\n";
-			print "<input type=\"submit\" name=\"action\" value=\"Reject\">\n";
-			print "</FORM>\n";
+			print start_form(-method=>'POST', -action=>$selfurl),
+			      hidden(-name=>'menu', -value=>'approvals', -override=>1),
+			      hidden(-name=>'sub', -value=>'approve_action', -override=>1),
+			      hidden(-name=>'req_id', -value=>$req_id, -override=>1),
+			      '<table class="s-form">',
+			      '<tr class="s-form__section">',
+			      '<th class="s-form__heading" colspan="2">Approval Action</th></tr>',
+			      '<tr class="s-form__row">',
+			      '<td class="s-form__label">Decision reason</td>',
+			      '<td class="s-form__value">',
+			      '<textarea name="decision_reason" id="decision_reason" ',
+			      'rows="4" cols="70" maxlength="500" required></textarea>',
+			      '<p class="s-form__hint">Required. Max 500 characters.</p>',
+			      '</td></tr></table>',
+			      '<div class="s-btn-group">',
+			      '<input type="submit" name="action" value="Approve">',
+			      '<input type="submit" name="action" value="Reject">',
+			      '</div>',
+			      end_form;
 		} else {
 			print h3('Approval Workflow');
 			print "<p><b>You are not an approver for this request.</b> An approval notification has been sent to the assigned approvers.</p>\n";
@@ -1348,9 +1361,10 @@ sub _show_request {
 		 "ORDER BY id DESC", \@audit_log, $req_id);
 	
 	if (@audit_log > 0) {
-		print "<TABLE bgcolor=\"#ffe0e0\" width=\"99%\" cellspacing=1 cellpadding=2 border=0>\n";
-		print "<TR bgcolor=\"#ff9999\"><th>Event</th><th>User</th><th>Message</th><th>Date/Time</th></TR>\n";
-		
+		print '<table class="s-list s-approval__audit">',
+		      '<tr class="s-list__head">',
+		      '<th>Event</th><th>User</th><th>Message</th><th>Date/Time</th></tr>';
+
 		my %event_names = (
 			'S' => 'Submitted',
 			'E' => 'Email',
@@ -1360,28 +1374,28 @@ sub _show_request {
 			'X' => 'Error',
 			'C' => 'Changed'
 		);
-		
+		my %event_state = (
+			'A' => 'approved', 'P' => 'approved',
+			'R' => 'rejected', 'X' => 'rejected',
+		);
+
 		for my $audit (@audit_log) {
 			my ($id, $uid, $uname, $event, $msg, $created) = @$audit;
-			my $event_name = $event_names{$event} || "Unknown ($event)";
-			my $event_color = ($event eq 'A' ? '#ccffcc' : 
-						$event eq 'R' ? '#ffcccc' : 
-						$event eq 'P' ? '#ccff99' : 
-						$event eq 'X' ? '#ffcccc' : 
-						'#f0f0f0');
-			print "<TR bgcolor=\"$event_color\">\n";
-			print "  <td>" . encode_entities($event_name) . "</td>\n";
-			print "  <td>" . encode_entities($uname || 'system') . "</td>\n";
-			print "  <td>" . encode_entities($msg || '') . "</td>\n";
-			print "  <td>" . encode_entities($created || '') . "</td>\n";
-			print "</TR>\n";
+			my $event_name  = $event_names{$event} || "Unknown ($event)";
+			my $event_state = $event_state{$event} || 'info';
+			print '<tr class="s-list__row" data-event="', $event_state, '">',
+			      '<td>', encode_entities($event_name), '</td>',
+			      '<td>', encode_entities($uname || 'system'), '</td>',
+			      '<td>', encode_entities($msg || ''), '</td>',
+			      '<td>', encode_entities($created || ''), "</td></tr>\n";
 		}
-		print "</TABLE>\n";
+		print "</table>\n";
 	} else {
-		print "<p><i>No audit entries yet.</i></p>\n";
+		print "<p><em>No audit entries yet.</em></p>\n";
 	}
 
 	print "<p><a href=\"$selfurl?menu=approvals&sub=pending\">Back to Pending Approvals</a></p>\n";
+	print "</section>\n";
 }
 
 # _process_approval_action(req_id, action, reason, selfurl)
@@ -1431,14 +1445,14 @@ sub _process_approval_action {
 	# Display result
 	print h2('Approval Decision Recorded');
 	if ($status eq 'ok' || $status eq 'pending' || $status eq 'rejected' || $status eq 'approved') {
-		print p("Your decision: <b>" . ($decision_code eq 'A' ? 'APPROVED' : 'REJECTED') . "</b>");
+		print p("Your decision: <strong>" . ($decision_code eq 'A' ? 'APPROVED' : 'REJECTED') . "</strong>");
 		if (defined $reason && $reason ne '') {
 			print p("Reason: " . encode_entities($reason));
 		}
 		print p("Status: " . encode_entities($msg));
 		write2log("User $user_id decision recorded for request $req_id - $msg");
 	} else {
-		print p({-style=>'color:#cc0000;'}, "Error: " . encode_entities($msg));
+		alert1("Error: " . $msg);
 		write2log("ERROR: Failed to record decision for request $req_id - $msg");
 	}
 

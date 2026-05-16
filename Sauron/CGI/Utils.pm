@@ -393,16 +393,17 @@ sub edit_magic($$$$$$$) {
     unless (($res=form_check_form($prefix,\%h,$form))) {
       $res=&$update_func(\%h);
       if ($res < 0) {
-	print "<FONT color=\"red\">",h1("$name record update failed! ($res)"),
-	      "</FONT>";
+        my $dbmsg = db_lasterrormsg();
+        my $detail = ($dbmsg && $dbmsg ne '') ? $dbmsg : "result code=$res";
+        alert1("$name record update failed: $detail");
       } else {
-	print h2("$name record successfully updated");
+	print '<div class="s-alert s-alert--success" role="alert">', encode_entities("$name record successfully updated"), '</div>';
 	#&$get_func($id,\%h);
 	#display_form(\%h,$form);
 	return 1;
       }
     } else {
-      print "<FONT color=\"red\">",h2("Invalid data in form!"),"</FONT>";
+      alert1("Invalid data in form!");
     }
   }
 
@@ -438,14 +439,15 @@ sub add_magic($$$$$$) {
     unless (($res=form_check_form($prefix,$data,$form))) {
       $res=&$add_func($data);
       if ($res < 0) {
-	print "<FONT color=\"red\">",h1("Adding $name record failed! ($res)"),
-	      "</FONT>";
+        my $dbmsg = db_lasterrormsg();
+        my $detail = ($dbmsg && $dbmsg ne '') ? $dbmsg : "result code=$res";
+        alert1("Adding $name record failed: $detail");
       } else {
-	print h3("$name record successfully added");
+	print '<div class="s-alert s-alert--success" role="alert">', encode_entities("$name record successfully added"), '</div>';
 	return $res;
       }
     } else {
-      print "<FONT color=\"red\">",h2("Invalid data in form!"),"</FONT>";
+      alert1("Invalid data in form!");
     }
   }
 
@@ -481,19 +483,19 @@ sub delete_magic($$$$$$$;$) {
 
     $res=&$del_func($id);
     if ($res < 0) {
-      my $err_detail = '';
+      my $detail;
       if ($error_func) {
         my $msg = &$error_func($res);
-        if (defined $msg && $msg ne '') {
-          $err_detail = "<br>" . encode_entities($msg);
-        }
+        $detail = $msg if (defined $msg && $msg ne '');
       }
-
-      print "<FONT color=\"red\">",h1("$name record delete failed!"),
-      "<br>result code=$res$err_detail</FONT>";
+      unless (defined $detail) {
+        my $dbmsg = db_lasterrormsg();
+        $detail = ($dbmsg && $dbmsg ne '') ? $dbmsg : "result code=$res";
+      }
+      alert1("$name record delete failed: $detail");
       return -10;
     } else {
-      print h2("$name record successfully deleted");
+      print '<div class="s-alert s-alert--success" role="alert">', encode_entities("$name record successfully deleted"), '</div>';
       return 1;
     }
   }
@@ -504,14 +506,14 @@ sub delete_magic($$$$$$$;$) {
     return -3;
   }
 
-  print h2("Delete $name:"),p,
-          start_form(-method=>'POST',-action=>$selfurl),
+  print h2("Delete $name:");
+  display_form(\%h,$form);
+  print start_form(-method=>'POST',-action=>$selfurl),
           hidden('menu',$menu),hidden('sub','Delete'),
           hidden('select_ip', scalar(param('select_ip'))),
           hidden($prefix . "_id",$id);
   print submit(-name=>$prefix . '_confirm',-value=>'Delete'),"  ",
         submit(-name=>$prefix . '_cancel',-value=>'Cancel'),end_form;
-  display_form(\%h,$form);
   return 0;
 }
 

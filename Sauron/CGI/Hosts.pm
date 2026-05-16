@@ -102,18 +102,17 @@ sub _render_approval_reason_form {
 
   print h2("Change submitted for approval");
   print p("This change requires approval. Please provide a mandatory justification before the request is created.");
-  print p("<b>Operation:</b> " . encode_entities(_approval_operation_text($pending_ref->{operation} || '')));
-  print p("<b>Record type:</b> " . encode_entities($type_text));
-  print p("<b>Domain:</b> " . encode_entities($pending_ref->{domain} || ''));
-  print p({-style=>'color:#cc0000; font-weight:bold;'}, encode_entities($error_msg))
-    if (defined $error_msg && $error_msg ne '');
+  print p("<strong>Operation:</strong> " . encode_entities(_approval_operation_text($pending_ref->{operation} || '')));
+  print p("<strong>Record type:</strong> " . encode_entities($type_text));
+  print p("<strong>Domain:</strong> " . encode_entities($pending_ref->{domain} || ''));
+  alert1($error_msg) if (defined $error_msg && $error_msg ne '');
 
   print start_form(-method=>'POST', -action=>$selfurl),
     hidden('menu','hosts'),
     hidden('sub','approval_submit'),
     hidden('approval_payload',$payload_b64),
     hidden('approval_sig',$payload_sig),
-    p('<b>Approval justification (required):</b>'),
+    p('<strong>Approval justification (required):</strong>'),
     textarea(-name=>'approval_reason', -default=>($reason || ''), -rows=>5, -columns=>80),
     p(submit(-name=>'approval_submit_btn', -value=>'Submit for approval') . ' ' .
       submit(-name=>'approval_cancel', -value=>'Cancel')),
@@ -128,9 +127,9 @@ sub _render_approval_submitted {
   print h2("Change submitted for approval (request $req_id)");
   print p("Your change has been submitted for approval and is waiting for review.");
   print h3('Summary of submitted change:');
-  print p("<b>Operation:</b> " . encode_entities(_approval_operation_text($operation)));
-  print p("<b>Domain:</b> " . encode_entities($domain));
-  print p("<b>Justification:</b> " . encode_entities($reason));
+  print p("<strong>Operation:</strong> " . encode_entities(_approval_operation_text($operation)));
+  print p("<strong>Domain:</strong> " . encode_entities($domain));
+  print p("<strong>Justification:</strong> " . encode_entities($reason));
 
   print p("Links:");
   print ul(
@@ -621,7 +620,7 @@ my %new_host_form = (
   {ftype=>3, tag=>'net', name=>'Subnet', type=>'enum', preselectnet=>1,
    enum=>\%new_host_nets,elist=>\@new_host_netsl, iff=>['type','(1|101)']},
   {ftype=>1, tag=>'ip', macnotify=>1,
-   name=>'IP <FONT size=-1>(only if "Manual IP" selected from above)</FONT>',
+   name=>'IP', extrainfo=>'Only if "Manual IP" selected from above',
    type=>'ip', len=>39, empty=>1, iff=>['type','(1|101)']},
   {ftype=>1, tag=>'ip', name=>'IP',
    type=>'ip', len=>39, empty=>1, iff=>['type','9']},
@@ -743,7 +742,7 @@ my %restricted_new_host_form = (
   {ftype=>3, tag=>'net', name=>'Subnet', type=>'enum', preselectnet=>1,
    enum=>\%new_host_nets,elist=>\@new_host_netsl, iff=>['type','1']},
   {ftype=>1, tag=>'ip', macnotify=>1,
-   name=>'IP <FONT size=-1>(only if "Manual IP" selected from above)</FONT>',
+   name=>'IP', extrainfo=>'Only if "Manual IP" selected from above',
    type=>'ip', len=>30, empty=>1, iff=>['type','1']},
   {ftype=>1, tag=>'ip', name=>'IP',
    type=>'ip', len=>39, empty=>1, iff=>['type','9']},
@@ -1003,37 +1002,38 @@ sub show_host_record($$)
     return 1;
   }
 
-  $host_form{bgcolor}='#ffcccc'
+  # Host-type tinting: the form picks up an extra modifier class so the
+  # background colour can be themed in CSS instead of an inline bgcolor.
+  $host_form{cssclass} = 's-form s-form--expired'
     if ($host{expiration} > 0 && $host{expiration} < time());
-  # The following line was previously commented out. Why? TVu 20.09.2016
-  $host_form{bgcolor}='#ccffff' if ($host{type}==101);
+  $host_form{cssclass} = 's-form s-form--alias'
+    if ($host{type} == 101);
   print p,start_form(-method=>'GET',-action=>$selfurl),
     hidden('menu','hosts'),hidden('h_id',$id);
-  print "<table width=\"99%\"><tr><td align=\"left\">",
-    submit(-name=>'sub',-value=>'Refresh')," &nbsp; ";
-  print submit(-name=>'sub',-value=>'-> This Subnet')," &nbsp; " if ($host{type} == 1);
+  print '<div class="s-action-bar">',
+    '<div class="s-action-bar__left">',
+    submit(-name=>'sub',-value=>'Refresh'),' ';
+  print submit(-name=>'sub',-value=>'-> This Subnet'),' ' if ($host{type} == 1);
 
-  # This drop-down list is not strictly for IPv6, but will probably be useful with it.
-  # It is used to select IP for "This subnet", "Ping", "Traceroute", "Copy" and "Move"
-  # when a host has multiple IP addresses, especially both IPv4 and IPv6.
+  # Drop-down for selecting IP when a host has multiple addresses.
   my @opt;
   for my $ind1 (1..$#{$host{ip}}) {
     push @opt, $host{ip}[$ind1][1];
   }
   if (@opt) { print popup_menu('select_ip', \@opt); }
 
-  print "</td><td align=\"right\">";
-  print submit(-name=>'sub',-value=>'History'), " "
+  print '</div><div class="s-action-bar__right">';
+  print submit(-name=>'sub',-value=>'History'), ' '
     if (!check_perms('level',$main::ALEVEL_HISTORY,1));
-  print submit(-name=>'sub',-value=>'Network Settings'), " "
+  print submit(-name=>'sub',-value=>'Network Settings'), ' '
     if ($host{type} == 1);
-  print submit(-name=>'sub',-value=>'Ping'), " "
+  print submit(-name=>'sub',-value=>'Ping'), ' '
     if ($host{type} == 1 && $main::SAURON_PING_PROG &&
 	!check_perms('level',$main::ALEVEL_PING,1));
   print submit(-name=>'sub',-value=>'Traceroute')
     if ($host{type} == 1 && $main::SAURON_TRACEROUTE_PROG &&
 	!check_perms('level',$main::ALEVEL_TRACEROUTE,1));
-  print "</td></tr></table>";
+  print '</div></div>';
   my %fqdnzone; # ****
   if (get_zone($host{zone}, \%fqdnzone) == 0) {
     $host{fqdn} = $host{domain} . '.' . $fqdnzone{name} . '.';
@@ -1134,8 +1134,10 @@ sub browse_hosts($$)
           hidden('menu','hosts'),hidden('sub','browse'),
           hidden('bh_page','0');
   form_magic('bh',\%bdata,\%browse_hosts_form);
-  print submit(-name=>'bh_submit',-value=>'Search')," &nbsp;&nbsp; ",
+  print '<div class="s-btn-group">',
+        submit(-name=>'bh_submit',-value=>'Search'),' ',
         submit(-name=>'bh_submit',-value=>'Clear'),
+        '</div>';
         end_form;
 
   return 0;
@@ -1282,10 +1284,9 @@ sub menu_handler {
       my $old_list = param('list');
       my $old_net_id = param('net_id');
 
-      print "\n<table><tr><td>";
+      print '<div class="s-action-bar"><div class="s-action-bar__left">';
 
       if ($select_ip) {
-
 	  param('menu', 'hosts');
 	  param('sub', 'browse');
 	  param('bh_net', $net_cidr);
@@ -1293,18 +1294,14 @@ sub menu_handler {
 	  hidden('menu', 'hosts'), hidden('sub', 'browse'),
 	  hidden('bh_net', $net_cidr);
 	  print submit(-name=>'foobar', -value=>'Browse This Subnet');
-	  print end_form,"\n";
-
-	  print "</td><td>";
+	  print end_form,' ';
 
 	  param('menu', 'nets');
 	  param('net_id', $net_id);
 	  print start_form(-method=>'GET', -action=>$selfurl),
 	  hidden('menu', 'nets'), hidden('net_id', $net_id);
 	  print submit(-name=>'foobar', -value=>'Go to This Subnet');
-	  print end_form,"\n";
-
-	  print "</td><td>";
+	  print end_form,' ';
 
 	  param('menu', 'nets');
 	  param('sub', 'Net Info');
@@ -1313,13 +1310,9 @@ sub menu_handler {
 	  hidden('menu', 'nets'), hidden('sub', 'Net Info'),
 	  hidden('net_id', $net_id);
 	  print submit(-name=>'foobar', -value=>'Go to Net Info');
-	  print end_form,"\n";
-
-	  print "</td><td>";
-
+	  print end_form,' ';
       }
 
-# If a CNAME alias was deleted, create a button to navigate to the host the alias referred to.
       if ($host{type} == 4 && $host{cname_alias} == 1 &&
 	  $host{alias} > 0 && $host{alias_d}) {
 	  param('menu', 'hosts');
@@ -1327,10 +1320,7 @@ sub menu_handler {
 	  print start_form(-method=>'GET', -action=>$selfurl),
 	  hidden('menu', 'hosts'), hidden('h_id', $host{alias});
 	  print submit(-name=>'foobar', -value=>"Go to $host{alias_d}", autofocus=>'true');
-	  print end_form,"\n";
-
-	  print "</td><td>";
-
+	  print end_form,' ';
       }
 
       param('menu', 'nets');
@@ -1338,9 +1328,9 @@ sub menu_handler {
       print start_form(-method=>'GET', -action=>$selfurl),
       hidden('menu', 'nets'), hidden('list', 'all');
       print submit(-name=>'foobar', -value=>'Go to Nets/All');
-      print end_form,"\n";
+      print end_form;
 
-      print "</td></table>";
+      print '</div></div>';
 
       param('menu', $old_menu);
       param('sub', $old_sub);
@@ -1485,27 +1475,32 @@ sub menu_handler {
       print p,start_form(-method=>'GET',-action=>$selfurl),
             hidden('menu','hosts'),hidden('h_id',$id),hidden('sub','Move'),
             hidden('select_ip', param('select_ip')),
-            hidden('move_confirm'),hidden('move_net'),p,"<TABLE>",
-# Support for moving hosts with multiple IPs.
-	    Tr(td("Current IP:"),
-	       td(param('select_ip'))),
-	    Tr(td("New IP:"),
-	       td(textfield(-name=>'new_ip',-size=>40, -maxlength=>40,
-			    -default=>$newip))),
-	    Tr(td("New User:"),
-	       td(textfield(-name=>'new_user',-size=>40,-maxlength=>40,
-			 -default=>$host{huser}))),
-	    Tr(td("New Department:"),
-	       td(textfield(-name=>'new_dept',-size=>30,-maxlength=>30,
-			 -default=>$host{dept}))),
-	    Tr(td("New Location:"),
-	       td(textfield(-name=>'new_loc',-size=>30,-maxlength=>30,
-			    -default=>$host{location}))),
-	    Tr(td("New Info:"),
-	       td(textfield(-name=>'new_info',-size=>30,-maxlength=>30,
-			    -default=>$host{info}))),
-	    "</TR></TABLE><BR>",
-	    submit(-name=>'move_confirm2',-value=>'Update'), " ",
+            hidden('move_confirm'),hidden('move_net'),p,
+	    '<table class="s-form">',
+	    '<tr class="s-form__row"><td class="s-form__label">Current IP:</td>',
+	    '<td class="s-form__value">',param('select_ip'),'</td></tr>',
+	    '<tr class="s-form__row"><td class="s-form__label">New IP:</td>',
+	    '<td class="s-form__value">',
+	    textfield(-name=>'new_ip',-size=>40,-maxlength=>40,-default=>$newip),
+	    '</td></tr>',
+	    '<tr class="s-form__row"><td class="s-form__label">New User:</td>',
+	    '<td class="s-form__value">',
+	    textfield(-name=>'new_user',-size=>40,-maxlength=>40,-default=>$host{huser}),
+	    '</td></tr>',
+	    '<tr class="s-form__row"><td class="s-form__label">New Department:</td>',
+	    '<td class="s-form__value">',
+	    textfield(-name=>'new_dept',-size=>30,-maxlength=>30,-default=>$host{dept}),
+	    '</td></tr>',
+	    '<tr class="s-form__row"><td class="s-form__label">New Location:</td>',
+	    '<td class="s-form__value">',
+	    textfield(-name=>'new_loc',-size=>30,-maxlength=>30,-default=>$host{location}),
+	    '</td></tr>',
+	    '<tr class="s-form__row"><td class="s-form__label">New Info:</td>',
+	    '<td class="s-form__value">',
+	    textfield(-name=>'new_info',-size=>30,-maxlength=>30,-default=>$host{info}),
+	    '</td></tr>',
+	    '</table>',
+	    submit(-name=>'move_confirm2',-value=>'Update'), ' ',
 	    submit(-name=>'move_cancel',-value=>'Cancel'),p,
 	    end_form;
       display_form(\%host,\%host_form);
@@ -1573,16 +1568,21 @@ sub menu_handler {
           hidden('menu','hosts'),hidden('h_id',$id),
           hidden('select_ip', param('select_ip')),
           hidden('sub','Move'),
-          "Move host to: <TABLE><TR><TD>",
+          '<table class="s-form">',
+          '<tr class="s-form__row"><td class="s-form__label">Move to subnet:</td>',
+          '<td class="s-form__value">',
           popup_menu(-name=>'move_net',-values=>\@netkeys,
-		     -default=>$q[0][0],-labels=>\%nethash),"</TD><TD>",
+		     -default=>$q[0][0],-labels=>\%nethash),' ',
           submit(-name=>'move_confirm',-value=>'Move (to another subnet)'),
-          "</TD></TR><TR><TD>",
+          '</td></tr>',
+          '<tr class="s-form__row"><td class="s-form__label">Move to zone:</td>',
+          '<td class="s-form__value">',
           popup_menu(-name=>'move_zone',-values=>\@zonelist,
-		     -default=>$host{zone},-labels=>\%zonehash),"</TD><TD>",
+		     -default=>$host{zone},-labels=>\%zonehash),' ',
           submit(-name=>'move_confirm2',-value=>'Move (to another zone)'),
-          "</TD></TR></TABLE>",
-          submit(-name=>'move_cancel',-value=>'Cancel'), " ",
+          '</td></tr>',
+          '</table>',
+          submit(-name=>'move_cancel',-value=>'Cancel'), ' ',
           end_form;
     display_form(\%host,\%host_form);
     return;
@@ -1814,7 +1814,7 @@ sub menu_handler {
         display_form(\%data,\%host_net_info_form);
         print "<br>";
     }
-    print "<br><hr noshade><br>";
+    print '<div class="s-section-sep"></div>';
     show_host_record($state,$perms);
     return;
   }
@@ -1839,8 +1839,8 @@ sub menu_handler {
 	$res= run_command($main::SAURON_PING_PROG,[$main::SAURON_PING_ARGS,$ip],
 			 $main::SAURON_PING_TIMEOUT);
 	print "</pre><br>";
-	print "<FONT color=\"red\">PING TIMED OUT!</FONT><BR>"
-	  if (($res& 255) == 14);
+	print '<span class="s-form__error">PING TIMED OUT!</span><br>'
+	  if (($res & 255) == 14);
       } else {
 	alert2("Missing/invalid IP address");
       }
@@ -1873,8 +1873,8 @@ sub menu_handler {
 	$res= run_command($main::SAURON_TRACEROUTE_PROG,\@arguments,
 			 $main::SAURON_TRACEROUTE_TIMEOUT);
 	print "</pre><br>";
-	print "<FONT color=\"red\">TRACEROUTE TIMED OUT!</FONT><BR>"
-	  if (($res& 255) == 14);
+	print '<span class="s-form__error">TRACEROUTE TIMED OUT!</span><br>'
+	  if (($res & 255) == 14);
       } else {
 	alert2("Missing/invalid IP address");
       }
@@ -2214,9 +2214,11 @@ sub menu_handler {
     db_query($sql,\@q);
     my $count=scalar @q;
     if ($count < 1) {
-#     alert2("No matching records found.");
-      alert2('No matching records found' .
-	     (param('bh_domain_anydom') eq 'on' ? '' : ' in this zone') . '.'); # 14 Jun 2017 TVu
+      my $scope = param('bh_domain_anydom') eq 'on' ? 'any zone' : 'this zone';
+      print '<div class="s-empty-state">',
+            '<p class="s-empty-state__title">No hosts found</p>',
+            '<p class="s-empty-state__hint">No records matched your search in ', $scope, '.</p>',
+            '</div>';
       browse_hosts($state,$perms);
       return;
     }
@@ -2263,21 +2265,18 @@ sub menu_handler {
       return;
     }
 
-    #    print "<TABLE width=\"99%\" cellspacing=1 cellpadding=1 border=0 " .
-    #          "BGCOLOR=\"ffffff\">",
-    #          "<TR><TD><B>Zone:</B> $zone</TD>",
-    #          "<TD align=right>Page: ".($page+1)."</TD></TR></TABLE>";
-
-    print "<TABLE width=\"99%\" cellspacing=1 cellpadding=1 border=0 " .
-	  "BGCOLOR=\"ffffff\"><TR>"; # ****
-    print "<TD><B>Zone:</B> $zone</TD>" unless (param('bh_domain_anydom') eq 'on'); # ****
-    if (param('bh_net') && param('bh_net') ne 'ANY') { # ****
+    print '<div class="s-results-bar">';
+    print '<span class="s-results-bar__crumb"><b>Zone:</b> ' . encode_entities($zone) . '</span>'
+	unless (param('bh_domain_anydom') eq 'on');
+    if (param('bh_net') && param('bh_net') ne 'ANY') {
 	my @net;
 	db_query("SELECT netname, name FROM nets " .
 		 "WHERE net = " . db_encode_str(param('bh_net')), \@net);
-	print '<TD><B>Net:</B> ' . param('bh_net') . " &ndash; $net[0][0] &ndash; $net[0][1]<TD>";
+	print '<span class="s-results-bar__crumb"><b>Net:</b> ' .
+              encode_entities(param('bh_net')) . " &ndash; $net[0][0] &ndash; $net[0][1]</span>";
     }
-    print "<TD align=right>Page: ".($page+1)."</TD></TR></TABLE>"; # ****
+    print '<span class="s-results-bar__page">Page ' . ($page+1) . '</span>';
+    print '</div>';
 
     my %nmaphash;
     my $pingsweep=0;
@@ -2317,8 +2316,8 @@ sub menu_handler {
 
     my $sorturl="$selfurl?menu=hosts&sub=browse&lastsearch=1";
     print
-      "<TABLE width=\"99%\" border=0 cellspacing=1 cellpadding=1 ".
-      " BGCOLOR=\"#ccccff\"><TR bgcolor=#aaaaff>",
+      '<table class="s-list">',
+      '<tr class="s-list__head">',
       th([($pingsweep ? 'Status':'#'),
 	  "<a href=\"$sorturl&bh_order=1\">Hostname</a>",
 	  'Type',
@@ -2338,15 +2337,15 @@ sub menu_handler {
 		    ipv6compress(cidr64ok($ip) ? ipv64unmix($ip) : $ip) eq '::');
       my $ether=$q[$i][5];
       # $ether =~  s/^(..)(..)(..)(..)(..)(..)$/\1:\2:\3:\4:\5:\6/;
-      $ether='<font color="#009900">ALIASED</font>' if ($q[$i][11] > 0);
-      $ether='<font color="#990000">N/A</a>' unless($ether);
+      $ether='<span class="s-badge--success">ALIASED</span>' if ($q[$i][11] > 0);
+      $ether='<span class="s-muted">N/A</span>' unless($ether);
       my $duid = $q[$i][12];
-      $duid = '<font color="#990000">N/A</a>' unless($duid);
+      $duid = '<span class="s-muted">N/A</span>' unless($duid);
       my $iaid = $q[$i][13];
       my $iaidhex;
 
       unless($iaid) {
-        $iaid = '<font color="#990000">N/A</a>';
+        $iaid = '<span class="s-muted">N/A</span>';
         $iaidhex = '';
       }
       else {
@@ -2357,23 +2356,22 @@ sub menu_handler {
 	        "$q[$i][4]</A>";
       my $info = join_strings(', ',(@{$q[$i]})[6,7,8,9]);
 
-      my $trcolor='#eeeeee';
-      $trcolor='#ffffcc' if ($i % 2 == 0);
-      $trcolor='#ffcccc' if ($q[$i][10] > 0 && $q[$i][10] < time());
-      $trcolor='#ccffff' if (param('bh_type')==1 && $type == 101);
+      my $host_state = '';
+      $host_state = 'expired'     if ($q[$i][10] > 0 && $q[$i][10] < time());
+      $host_state = 'reservation' if (param('bh_type')==1 && $type == 101);
 
       if ($pingsweep) {
 	if ($type == 1) {
 	  if ($nmaphash{$ip} =~ /^Up/) {
-	    $nro = "<FONT color=\"green\" size=-1>Up</FONT>";
+	    $nro = '<span class="s-badge--success">Up</span>';
 	  } else {
-	    $nro = "<FONT color=\"red\" size=-1>Down $nmaphash{$ip}</FONT>";
+	    $nro = '<span class="s-badge--danger">Down ' . encode_entities($nmaphash{$ip}) . '</span>';
 	  }
 	} else {
 	  $nro = "&nbsp;";
 	}
       } else {
-	$nro = "<FONT size=-1>".($i+1)."</FONT>";
+	$nro = ($i+1);
       }
       my $host_ty = $host_types{$q[$i][3]};
       if ($host_ty eq 'Alias') { # TVu 08.04.2016
@@ -2381,47 +2379,47 @@ sub menu_handler {
 	  if ($host{'cname_alias'}) { $host_ty = 'CNAME Alias'; }
 	  else { $host_ty = 'Static Alias'; }
       }
-      print "<TR bgcolor=\"$trcolor\">",
+      print '<tr class="s-list__row"',
+	    ($host_state ? ' data-host-state="'.$host_state.'"' : ''), '>',
 	    td([$nro, $hostname,
-#		"<FONT size=-1>$host_types{$q[$i][3]}</FONT>",$ip,
-		"<FONT size=-1>$host_ty</FONT>",$ip,
-	        "<font size=-3 face=\"courier\">$ether&nbsp;</font>",
-	        "<font size=-3 face=\"courier\">$duid&nbsp;</font>",
-	        "<font size=-3 face=\"courier\">$iaid $iaidhex</font>",
-	        "<FONT size=-1>".$info."&nbsp;</FONT>"]),"</TR>";
+		"<small>$host_ty</small>", $ip,
+	        "<small><code>$ether&nbsp;</code></small>",
+	        "<small><code>$duid&nbsp;</code></small>",
+	        "<small><code>$iaid $iaidhex</code></small>",
+	        "<small>".$info."&nbsp;</small>"]), '</tr>';
 
     }
-    print "</TABLE><BR><CENTER>[";
+    print '</table>';
 
     my $params="bh_type=".param('bh_type')."&bh_order=".param('bh_order').
              "&bh_net=".param('bh_net')."&bh_cidr=".param('bh_cidr').
 	     "&bh_stype=".param('bh_stype')."&bh_pattern=".param('bh_pattern').
-	     "&bh_search_txt=".param('bh_search_txt'). # TVu 2020-11-03
-	     "&bh_domain=".param('bh_domain')."&bh_domain_anydom=".param('bh_domain_anydom'). # ****
+	     "&bh_search_txt=".param('bh_search_txt').
+	     "&bh_domain=".param('bh_domain')."&bh_domain_anydom=".param('bh_domain_anydom').
 	     "&bh_size=".param('bh_size')."&bh_grp=".param('bh_grp');
 
+    print '<nav class="s-pagination">';
     my $npage;
     if ($page > 0) {
-      $npage=$page-1;;
-      print "<A HREF=\"$selfurl?menu=hosts&sub=browse&bh_page=$npage&".
-	      "$params\">prev</A>";
-    } else { print "prev"; }
-    print "] [";
+      $npage=$page-1;
+      print "<a class=\"s-pagination__link\" href=\"$selfurl?menu=hosts&sub=browse&bh_page=$npage&".
+	      "$params\">&lsaquo; prev</a>";
+    } else { print '<span class="s-pagination__link is-disabled">&lsaquo; prev</span>'; }
     if ($count >= $limit) {
       $npage=$page+1;
-      print "<A HREF=\"$selfurl?menu=hosts&sub=browse&bh_page=$npage&".
-	      "$params\">next</A>";
-    } else { print "next"; }
+      print "<a class=\"s-pagination__link\" href=\"$selfurl?menu=hosts&sub=browse&bh_page=$npage&".
+	      "$params\">next &rsaquo;</a>";
+    } else { print '<span class="s-pagination__link is-disabled">next &rsaquo;</span>'; }
 
 #    print "]</CENTER><BR>",
 #          "<div align=right><font size=-2>",
 #          "<a title=\"foo.csv\" href=\"$sorturl&csv=1\">",
 #          "[Download results in CSV format]</a> &nbsp;</font></div>";
 
-    print "]</CENTER><BR>\n";
+    print '</nav>';
 
-    print "<table width=100% border=0 cellspacing=5 cellpadding=5 align=top>" .
-	"<tr><td>"; #  width=50%
+    print '<div class="s-action-bar">';
+    print '<div class="s-action-bar__left">';
 
     if ($main::SAURON_NMAP_PROG && param('bh_type') == 1 &&
 	!check_perms('level',$main::ALEVEL_NMAP,1)) {
@@ -2430,44 +2428,41 @@ sub menu_handler {
 	hidden('bh_page',$page),
 	hidden('lastsearch','1'),hidden('pingsweep','1');
 	print submit(-name=>'foobar',-value=>'Ping Sweep');
-	print end_form;
+	print end_form,' ';
     }
-# Create buttons for Net and Net Info if a cidr was passed as parameter.
+
     if (param('bh_net') && is_cidr(param('bh_net'))) {
 	my $old_menu = param('menu');
 	my $old_sub = param('sub');
 	param('menu', 'nets');
-	param('sub', 'Net Info');
-	print "</td><td>";
-	print "\n\n",start_form(-method=>'GET',-action=>$selfurl),
-	hidden('menu','nets'),"\n",
-	hidden('net_id',get_net_by_cidr($serverid, param('bh_net'))),"\n";
-	print submit(-name=>'foobar',-value=>'Net');
-	print end_form,"\n\n";
-	print "</td><td>";
 	print start_form(-method=>'GET',-action=>$selfurl),
-	hidden('menu','nets'),"\n",hidden('sub','Net Info'),"\n",
-	hidden('net_id',get_net_by_cidr($serverid, param('bh_net'))),"\n";
+	hidden('menu','nets'),
+	hidden('net_id',get_net_by_cidr($serverid, param('bh_net')));
+	print submit(-name=>'foobar',-value=>'Net');
+	print end_form,' ';
+	param('sub', 'Net Info');
+	print start_form(-method=>'GET',-action=>$selfurl),
+	hidden('menu','nets'),hidden('sub','Net Info'),
+	hidden('net_id',get_net_by_cidr($serverid, param('bh_net')));
 	print submit(-name=>'foobar',-value=>'Net Info');
-	print end_form,"\n\n";
+	print end_form;
 	param('menu', $old_menu);
 	param('sub', $old_sub);
     }
 
-    print "</td><td><div align=right>";
+    print '</div><div class="s-action-bar__right">';
 
     my $csv_timestamp_v=[sort keys %csv_timestamp];
-    print start_form(-method=>'POST',-action=>$selfurl),
+    print start_form(-method=>'POST',-action=>$selfurl,-class=>'s-inline-form'),
 	    hidden('menu','hosts'),hidden('sub','browse'),
             hidden('lastsearch','1'),
             "CSV Timestamps&nbsp;",
             popup_menu(-name=>'csv',-values=>$csv_timestamp_v,
 		       -labels=>\%csv_timestamp),
             submit(-name=>'results.csv',-value=>'Download CSV');
-
     print end_form;
 
-    print "</div></td></tr></table>\n";
+    print '</div></div>';
 
     return;
   }

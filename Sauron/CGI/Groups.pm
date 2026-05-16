@@ -128,7 +128,10 @@ sub browse_groups($$)
   db_query("SELECT id,name,comment,type,alevel FROM groups " .
 	   "WHERE server=$serverid ORDER BY name;",\@q);
   if (@q < 1) {
-    print h2("No groups found!");
+    print '<div class="s-empty-state">',
+          '<p class="s-empty-state__title">No groups found</p>',
+          '<p class="s-empty-state__hint">No groups are defined for this server.</p>',
+          '</div>';
     return;
   }
 
@@ -246,8 +249,7 @@ sub menu_handler {
       db_ignore_begin_and_commit(1);
       my $del_err;
       if (($del_err = delete_group($id)) < 0) {
-	print "<FONT color=\"red\">",h1("Group delete failed! $del_err"),
-	        "</FONT>";
+	alert1("Group delete failed! $del_err");
 	db_ignore_begin_and_commit(0);
 	db_rollback();
 	return;

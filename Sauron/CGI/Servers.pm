@@ -218,11 +218,6 @@ my %server_form = (
   {ftype=>4, name=>'Record created', tag=>'cdate_str', no_edit=>1},
   {ftype=>4, name=>'Last modified', tag=>'mdate_str', no_edit=>1}
  ]
-# bgcolor=>'#eeeebf',
-# border=>'0',
-# width=>'100%',
-# nwidth=>'30%',
-# heading_bg=>'#aaaaff'
 );
 
 my %master_servers;
@@ -265,9 +260,10 @@ sub select_server($$)
     start_form(-method=>'POST',-action=>$selfurl),
     hidden('menu','servers'),p,
     "Available servers:",p,
-    scrolling_list(-width=>'100%',-name=>'server_list',-size=>'10',-values=>\@l,-labels=>\%srec),
-    br,
+    '<div class="s-server-select">',
+    scrolling_list(-name=>'server_list',-size=>'10',-values=>\@l,-labels=>\%srec),
     submit(-name=>'server_select_submit',-value=>'Select server'),
+    '</div>',
     end_form;
 
   return 0;
