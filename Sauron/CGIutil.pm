@@ -341,13 +341,17 @@ sub form_get_defaults($) {
   my($form) = @_;
 
   return unless ($form);
-  $form->{tbl_bgcolor}='#ccccff' unless ($form->{tbl_bgcolor});
-  $form->{bgcolor}="#eeeebf" unless ($form->{bgcolor});
-  $form->{heading_bg}="#aaaaff" unless ($form->{heading_bg});
-  $form->{ro_color}="#646464" unless ($form->{ro_color});
-  $form->{border}=0 unless ($form->{border});
-  $form->{width}="99%" unless ($form->{width});
-  $form->{nwidth}="30%" unless ($form->{nwidth});
+  # Per-instance background tinting (e.g. host-type colour coding in
+  # Sauron::CGI::Hosts) goes through $form->{cssclass} now; the bgcolor
+  # keys are kept defined-but-empty so existing callers do not warn.
+  $form->{tbl_bgcolor} = '' unless (defined $form->{tbl_bgcolor});
+  $form->{bgcolor}     = '' unless (defined $form->{bgcolor});
+  $form->{heading_bg}  = '' unless (defined $form->{heading_bg});
+  $form->{ro_color}    = '' unless (defined $form->{ro_color});
+  $form->{border}      = 0  unless ($form->{border});
+  $form->{width}       = '' unless (defined $form->{width});
+  $form->{nwidth}      = '' unless (defined $form->{nwidth});
+  $form->{cssclass}    = 's-form' unless (defined $form->{cssclass});
 }
 
 #####################################################################
@@ -764,9 +768,8 @@ sub form_field_enum($$$$) {
   if ($update > 0) {
     my $tmp=param($n);
     $tmp=param($n."_enum") if ($tmp eq '');
-    print "<FONT size=-1 color=\"red\"><BR>",
-      form_check_field($rec,$tmp,$k),
-      "</FONT>";
+    my $err=form_check_field($rec,$tmp,$k);
+    print '<br><span class="s-form__error">'.$err.'</span>' if $err;
   }
   print "</TD>";
 }
@@ -915,13 +918,10 @@ sub form_magic($$$) {
   }
 
   #generate form fields
-  print hidden($prefix."_re_edit",1),"\n<TABLE ";
-  print "BGCOLOR=\"" . $form->{tbl_bgcolor} . "\" " if ($form->{tbl_bgcolor});
-  print "FGCOLOR=\"" . $form->{fgcolor} . "\" " if ($form->{fgcolor});
-# netscape sekoilee muuten no-frame modessa...
-#  print "WIDTH=\"" . $form->{width} . "\" " if ($form->{width});
-  print "BORDER=\"" . ($form->{border}>0?$form->{border}:0) . "\" ";
-  print " cellspacing=\"1\" cellpadding=\"1\">\n";
+  my $cls = $form->{cssclass} || 's-form';
+  my $fm_section_open = 0;
+  print hidden($prefix."_re_edit",1),"\n",
+        '<div class="', $cls, '-sections">', "\n";
 
 #  print Dumper(\%{$data});
 
@@ -953,46 +953,61 @@ sub form_magic($$$) {
 
     next if is_hidden_form_field($rec);
 
-    print "<TR ".($form->{bgcolor}?" bgcolor=\"$form->{bgcolor}\" ":'').">";
-
     if ($rec->{ftype} == 0) {
-      print "<TH COLSPAN=2 ALIGN=\"left\" FGCOLOR=\"$rec->{ro_color}\"",
-            "  BGCOLOR=\"$h_bg\">",$rec->{name},"</TH>\n";
-#   } elsif ($rec->{ftype} == 1) {
-    } elsif ($rec->{ftype} == 1 ||
+      print "</TABLE>\n" if $fm_section_open;
+      print "<TABLE class=\"$cls s-form--edit\">\n";
+      $fm_section_open = 1;
+      print "<TR class=\"s-form__section\">",
+            "<TH class=\"s-form__heading\" COLSPAN=2>", $rec->{name}, "</TH>",
+            "</TR>\n";
+      next;
+    }
+    unless ($fm_section_open) {
+      print "<TABLE class=\"$cls s-form--edit\">\n";
+      $fm_section_open = 1;
+    }
+
+    my $rowcls = 's-form__row';
+    print "<TR class=\"$rowcls\">";
+
+    if ($rec->{ftype} == 1 ||
 	     $rec->{tag} eq 'cname_txt' && $data->{'static_alias'}) { # 2020-12-17 TVu
       $maxlen=$rec->{len};
       $maxlen=$rec->{maxlen} if ($rec->{maxlen} > 0);
+      my $label_html = '<label for="' . $p1 . '">' .
+                       encode_entities($rec->{name}) . '</label>';
       if ($rec->{title}) { # Added if to handle titles. TVu 2020-11-03
-	  print "<TD TITLE='$rec->{title}'>$rec->{name}</TD><TD>";
+	  print "<TD class=\"s-form__label\" TITLE='$rec->{title}'>$label_html</TD>",
+	        "<TD class=\"s-form__value\">";
       } else {
-	  print td($rec->{name}),"<TD>";
+	  print td({-class=>'s-form__label'}, $label_html),
+	        "<TD class=\"s-form__value\">";
       }
       if ($rec->{type} eq 'passwd') {
-	print password_field(-name=>$p1,-size=>$rec->{len},
+	print password_field(-name=>$p1,-id=>$p1,-size=>$rec->{len},
 			     -maxlength=>$maxlen,-value=>scalar(param($p1)));
       } elsif ($rec->{type} eq 'textarea') {
-	print textarea(-name=>$p1,-rows=>$rec->{rows},
+	print textarea(-name=>$p1,-id=>$p1,-rows=>$rec->{rows},
 		       -columns=>$rec->{columns},-value=>scalar(param($p1)));
       } else {
-	print textfield(-name=>$p1,-size=>$rec->{len},-maxlength=>$maxlen,
+	print textfield(-name=>$p1,-id=>$p1,-size=>$rec->{len},-maxlength=>$maxlen,
 		    -value=>scalar(param($p1)));
 	if ($data->{'static_alias'}) { # 2020-12-17 TVu
 	    print hidden(-name=>$prefix.'_static_alias',-value=>1);
 	}
       }
       if ($rec->{extrainfo}) {
-	print '<BR><FONT size=-2 color="blue">'.$rec->{extrainfo}.'</FONT>';
+	print '<br><span class="s-form__hint">' . encode_entities($rec->{extrainfo}) . '</span>';
       } elsif ($rec->{type} eq 'expiration') {
-	print '<BR><FONT size=-1 color="blue">' .
-	      'Enter expiration date as DD-MM-YYYY '.
+	print '<br><span class="s-form__hint">' .
+	      'Enter expiration date as DD-MM-YYYY ' .
               'or +&lt;number&gt;d (Days), +&lt;number&gt;m (Months), ' .
-              ' +&lt;number&gt;y (Years)</FONT>';
+              ' +&lt;number&gt;y (Years)</span>';
       }
       if ($rec->{definfo}) {
 	$def_info=$rec->{definfo}[0];
 	$def_info='empty' if ($def_info eq '');
-	print "<FONT size=-1 color=\"blue\"> ($def_info = default)</FONT>";
+	print '<span class="s-form__hint"> (' . encode_entities($def_info) . ' = default)</span>';
       }
 # Can search hosts in any zone the user has access to.
       if ($rec->{anydomain}) {
@@ -1017,17 +1032,16 @@ sub form_magic($$$) {
 				($data->{'cname_alias'} or
 				 $data->{'static_alias'}) and
 				$no_aster =~ /^\*\./);
-      print "<FONT size=-1 color=\"red\"><BR> " .
-	  form_check_field($rec, $no_aster, 0) . "</FONT>";
+      { my $err=form_check_field($rec, $no_aster, 0);
+        print '<br><span class="s-form__error"> '.$err.'</span>' if $err; }
 
       if ($rec->{chr} == 1) {
-	print "<FONT size=-1 color=\"red\">" .
-	      chr_check_field($rec->{tag},param($p1),$form->{chr_group}) .
-	      "</FONT>";
+	my $err=chr_check_field($rec->{tag},param($p1),$form->{chr_group});
+	print '<span class="s-form__error">'.$err.'</span>' if $err;
       }
       print "</TD>";
     } elsif ($rec->{ftype} == 2) {
-      print td($rec->{name}),"<TD><TABLE><TR>";
+      print td($rec->{name}),'<td><table class="s-form__multi"><tr>';
       $a=param($p1."_count");
       if (param($p1."_add") ne '') {
 	$a=$a+1;
@@ -1037,7 +1051,7 @@ sub form_magic($$$) {
       #if ($a > 50) { $a = 50; }
       print hidden(-name=>$p1."_count",-value=>$a);
       for $k (1..$rec->{fields}) {
-	print "<TH><FONT size=-2>",${$rec->{elabels}}[$k-1],"</FONT></TH>";
+	print "<TH>",encode_entities(${$rec->{elabels}}[$k-1]),"</TH>";
       }
       print "</TR>";
       for $j (1..$a) {
@@ -1061,13 +1075,13 @@ sub form_magic($$$) {
           else {
 	      print "<TD>",textfield(-name=>$n,-size=>${$rec->{len}}[$k-1],
 				     -maxlength=>$maxlen,-value=>scalar(param($n)));
-   	      print "<FONT size=-1 color=\"red\"><BR>",
-                     form_check_field($rec,param($n),$k),"</FONT></TD>";
+   	      { my $err=form_check_field($rec,param($n),$k);
+                print '<br><span class="s-form__error">'.$err.'</span>' if $err; }
+	      print "</TD>";
 	  }
         }
-        print td("<FONT size=-2>",checkbox(-label=>'Delete',
-		     -name=>$p2."_del",-checked=>scalar(param($p2."_del"))),
-		 "</FONT>"),
+        print td(checkbox(-label=>'Delete',
+		     -name=>$p2."_del",-checked=>scalar(param($p2."_del")))),
 	       "</TR>";
       }
       print "<TR>";
@@ -1100,7 +1114,7 @@ sub form_magic($$$) {
 
       print "</TR></TABLE>\n"; # 2020-07-21 TVu
       if ($rec->{extrainfo}) {
-	print '<FONT color="blue">'.$rec->{extrainfo}.'</FONT>';
+	print '<span class="s-form__hint">' . encode_entities($rec->{extrainfo}) . '</span>';
       }
       print "</TD>\n";
 
@@ -1124,21 +1138,23 @@ sub form_magic($$$) {
       if ($rec->{preselectnet} && $selection eq 'MANUAL') {
 	  $selection = $data->{preselectnet};
       }
-      print td($rec->{name}),
-	    td(popup_menu(-name=>$p1,-values=>$values,
+      print td({-class=>'s-form__label'},
+	       '<label for="' . $p1 . '">' . encode_entities($rec->{name}) . '</label>'),
+	    td({-class=>'s-form__value'},
+	       popup_menu(-name=>$p1,-id=>$p1,-values=>$values,
 			  -override=>1,
 			  -default=>"$selection",
 			  -labels=>$enum));
     } elsif ($rec->{ftype} == 4) {
       $val=param($p1);
       $val=${$rec->{enum}}{$val}  if ($rec->{type} eq 'enum');
-#     print td($rec->{name}),"<TD><FONT color=\"$form->{ro_color}\">",
-      print "<td title='$rec->{title}'>$rec->{name}</td>","<TD><FONT color=\"$form->{ro_color}\">",
-	  "$val</FONT></TD>", hidden($p1,scalar(param($p1)));
+      print "<td class='s-form__label' title='$rec->{title}'>$rec->{name}</td>",
+            "<TD class='s-form__value is-readonly'>$val</TD>",
+            hidden($p1,scalar(param($p1)));
     } elsif ($rec->{ftype} == 5) {
       $rec->{fields}=5;
       $rec->{type}=['ip','text','text','text'];
-      print td($rec->{name}),"<TD><TABLE><TR>";
+      print td($rec->{name}),'<td><table class="s-form__multi"><tr>';
       $a=param($p1."_count");
       if (param($p1."_add") ne '') {
 	$a=$a+1;
@@ -1162,10 +1178,11 @@ sub form_magic($$$) {
 	    param($n, param('subnetlist'));
 	}
 	print "<TD>",textfield(-name=>$n,-size=>40,-value=>scalar(param($n)));
-        print "<FONT size=-1 color=\"red\"><BR>",
-              #Value to be deleted won't be checked.
-              (param($p2."_del") eq 'on' ? '' : form_check_field($rec,param($n),1)),"</FONT></TD>";
-              #form_check_field($rec,param($n),1),"</FONT></TD>";
+        if (param($p2."_del") ne 'on') {
+          my $err=form_check_field($rec,param($n),1);
+          print '<br><span class="s-form__error">'.$err.'</span>' if $err;
+        }
+        print '</TD>';
 	if ($rec->{restricted_mode}) {
 	  $n=$p2."_3";
 	  print hidden(-name=>$n,-value=>scalar(param($n))),
@@ -1204,30 +1221,30 @@ sub form_magic($$$) {
     } elsif ($rec->{ftype} == 6) {
       get_mx_template_list($CGI_UTIL_zoneid,\%lsth,\@lst,$form->{alevel});
       get_mx_template(param($p1),\%tmpl_rec);
-      print td($rec->{name}),"<TD><TABLE WIDTH=\"99%\">\n<TR>",
+      print td($rec->{name}),"<TD><table class=\"s-form__template\">\n<TR>",
 	    td(popup_menu(-name=>$p1,-values=>\@lst,
 	                  -default=>scalar(param($p1)),-labels=>\%lsth),
             submit(-name=>$prefix."_".$rec->{tag}."_update",
 		      -value=>'Update')),"</TR>\n<TR>",
 	    "<TD>";
       print_mx_template(\%tmpl_rec);
-      print "</TD></TR></TABLE></TD>";
+      print "</TD></TR></table></TD>";
     } elsif ($rec->{ftype} == 7) {
       get_wks_template_list($CGI_UTIL_serverid,\%lsth,\@lst,$form->{alevel});
       get_wks_template(param($p1),\%tmpl_rec);
-      print td($rec->{name}),"<TD><TABLE WIDTH=\"99%\">\n<TR>",
+      print td($rec->{name}),"<TD><table class=\"s-form__template\">\n<TR>",
 	    td(popup_menu(-name=>$p1,-values=>\@lst,
 	                  -default=>scalar(param($p1)),-labels=>\%lsth),
             submit(-name=>$prefix."_".$rec->{tag}."_update",
 		      -value=>'Update')),"</TR>\n<TR>",
 	    "<TD>";
       print_wks_template(\%tmpl_rec);
-      print "</TD></TR></TABLE></TD>";
+      print "</TD></TR></table></TD>";
     } elsif ($rec->{ftype} == 8) {
       next unless ($rec->{arec});
       # do nothing...unless editing arec aliases
 
-      print td($rec->{name}),"<TD><TABLE><TR>";
+      print td($rec->{name}),'<td><table class="s-form__multi"><tr>';
       $a=param($p1."_count");
       if (param($p1."_add") ne '') {
 	if (($id=domain_in_use($CGI_UTIL_zoneid,
@@ -1258,9 +1275,9 @@ sub form_magic($$$) {
       $j=$a+1;
       $n=$prefix."_".$rec->{tag}."_".$j."_2";
       print "<TR><TD>",textfield(-name=>$n,-size=>25,-value=>scalar(param($n)));
-      print "<BR><FONT color=\"red\">Unknown host!</FONT>"
+      print '<br><span class="s-form__error">Unknown host!</span>'
 	if ($unknown_host);
-      print "<BR><FONT color=\"red\">Invalid host!</FONT>"
+      print '<br><span class="s-form__error">Invalid host!</span>'
 	if ($invalid_host);
       print "</TD>",
 	td(submit(-name=>$prefix."_".$rec->{tag}."_add",-value=>'Add'));
@@ -1333,11 +1350,8 @@ sub form_magic($$$) {
 	get_acl_list($serverid,\%aml_acl_h,\@aml_acl_l,
 		     ($rec->{acl_mode} == 1 ? param($prefix."_id") : 0));
 	get_key_list($serverid,\%aml_key_h,\@aml_key_l,157);
-	print td($rec->{name}),"<TD><TABLE><TR>",
- 	      th(["<FONT size=-2>Type</FONT>",
-		  "<FONT size=-2>Op</FONT>",
-		  "<FONT size=-2>Rule</FONT>",
-		  "<FONT size=-2>Comments</FONT>"]);
+	print td($rec->{name}),'<td><table class="s-form__multi"><tr>',
+	      th(["Type","Op","Rule","Comments"]);
 	$a=param($p1."_count");
 	if (param($p1."_add") ne '') {
 	    my $addmode=param($p1."_add");
@@ -1388,46 +1402,58 @@ sub form_magic($$$) {
 	    elsif ($aml_mode == 1) {
 		print popup_menu(-name=>$p2."_3",-default=>$aml_acl,
 				 -values=>\@aml_acl_l,-labels=>\%aml_acl_h),
-		      "<FONT size=-2> ACL</FONT> ",
+		      " ACL ",
 		      hidden(-name=>$p2."_2",$aml_cidr),
   		      hidden(-name=>$p2."_4",$aml_key);
 	    }
 	    else {
 		print popup_menu(-name=>$p2."_4",-default=>$aml_key,
 				 -values=>\@aml_key_l,-labels=>\%aml_key_h),
-		      "<FONT size=-2> Key</FONT> ",
+		      " Key ",
 		      hidden(-name=>$p2."_2",$aml_cidr),
   		      hidden(-name=>$p2."_3",$aml_acl);
 	    }
 	    print "</TD>",
 	          td(textfield(-name=>$p2."_6",-size=>25,-maxlength=>80,
 			       -value=>$aml_comment)),
-	          td("<FONT size=-2>",checkbox(-label=>'Delete',
-	             -name=>$p2."_del",-checked=>scalar(param($p2."_del")) ),
-		     "</FONT>"),
+	          td(checkbox(-label=>'Delete',
+	             -name=>$p2."_del",-checked=>scalar(param($p2."_del")))),
 	          "</TR>";
 	}
 	# add line...
 	$j=$a+1;
 	$p2=$p1."_".$j;
-	print "<TR><TD rowspan=3>&nbsp;</TD>",
-	      "<TD rowspan=3 bgcolor=\"#efefef\">",
+	# Each row is visually complete. Op and Comments are functional only in
+	# the CIDR row; rows ACL and KEY carry nameless disabled placeholders so
+	# the form layout is uniform. Disabled/nameless inputs do not submit.
+	print '<tr>',
+	      '<td class="s-acl__ph"></td>',
+	      '<td class="s-acl__input">',
 	      popup_menu(-name=>$p2."_5",-default=>'0',
-			    -values=>[0,1],-labels=>{0=>' ',1=>'NOT'}),"</TD>",
-	      "<TD>",textfield(-name=>$p2."_2",-size=>43,-maxlength=>43,
-			   -value=>''),
-	      "</TD><TD rowspan=3 bgcolor=\"#efefef\">",
+			    -values=>[0,1],-labels=>{0=>' ',1=>'NOT'}),'</td>',
+	      '<td>', textfield(-name=>$p2."_2",-size=>43,-maxlength=>43,
+			   -value=>''),'</td>',
+	      '<td class="s-acl__input">',
 	      textfield(-name=>$p2."_6",-size=>25,-maxlength=>80,
-			       -value=>''),"</TD>",
-	      td(submit(-name=>$p1."_add",-value=>"Add CIDR")),"</TR><TR>",
-	      "<TD bgcolor=\"#efefef\">",
+			       -value=>''),'</td>',
+	      td(submit(-name=>$p1."_add",-value=>"Add CIDR")),
+	      '</tr><tr>',
+	      '<td class="s-acl__ph"></td>',
+	      '<td class="s-acl__ph"></td>',
+	      '<td class="s-acl__input">',
 	      popup_menu(-name=>$p2."_3",-default=>-1,
-			 -values=>\@aml_acl_l,-labels=>\%aml_acl_h),"</TD>",
-	      td(submit(-name=>$p1."_add",-value=>'Add ACL')),"</TR><TR>",
-	      "<TD bgcolor=\"#efefef\">",
+			 -values=>\@aml_acl_l,-labels=>\%aml_acl_h),'</td>',
+	      '<td class="s-acl__ph"></td>',
+	      td(submit(-name=>$p1."_add",-value=>'Add ACL')),
+	      '</tr><tr>',
+	      '<td class="s-acl__ph"></td>',
+	      '<td class="s-acl__ph"></td>',
+	      '<td class="s-acl__input">',
 	      popup_menu(-name=>$p2."_4",-default=>-1,
-			 -values=>\@aml_key_l,-labels=>\%aml_key_h),"</TD>",
-	      td(submit(-name=>$p1."_add",-value=>'Add KEY')),"</TR>";
+			 -values=>\@aml_key_l,-labels=>\%aml_key_h),'</td>',
+	      '<td class="s-acl__ph"></td>',
+	      td(submit(-name=>$p1."_add",-value=>'Add KEY')),
+	      '</tr>';
 
 	print "</TABLE></TD>";
     }
@@ -1442,17 +1468,18 @@ sub form_magic($$$) {
       }
       @tx = split(/\n/, join("\n", @tx));
       if (param($p1 . '_id')) { @id = split(/,/, param($p1 . '_id')); }
-      print '<TD bgcolor="#e0e0e0">' .
+      print '<td class="s-form__value s-form__value--area">' .
 	  hidden(-name=>$p1 . '_id', -value=>join(',', @id)) .
 	  "<TEXTAREA NAME='$p1' ROWS=$rec->{rows} COLS=$rec->{cols}>" .
 	  join("\n", @tx) . '</TEXTAREA>';
-	  print "<FONT size=-1 color=\"red\">",
-                form_check_field($rec, \@tx, 0),"</FONT></TD>";
+	  { my $err=form_check_field($rec, \@tx, 0);
+            print '<span class="s-form__error">'.$err.'</span>' if $err; }
+          print '</TD>';
       param($p1 . '_id', join(",", @id));
       param($p1, join("\n", @tx));
     }
     elsif ($rec->{ftype} == 14) { # Checkbox group (edit)
-      print td($rec->{name}), "<TD><TABLE>";
+      print td($rec->{name}), '<td><table class="s-form__multi">';
       my $available = $data->{'available_catalogs'} || [];
       my $selected = $data->{$rec->{tag}} || [];
       my %sel_hash = map { $_ => 1 } @{$selected};
@@ -1496,7 +1523,7 @@ sub form_magic($$$) {
       print "</TABLE></TD>";
     }
     elsif ($rec->{ftype} == 15) { # Catalog group checkboxes (edit)
-      print td($rec->{name}), "<TD><TABLE>";
+      print td($rec->{name}), '<td><table class="s-form__multi">';
       my $available = $data->{'available_catalogs'} || [];
       my $group_defs = $data->{'catalog_group_defs'} || {};
       my $member_groups = $data->{$rec->{tag}} || {};
@@ -1556,7 +1583,7 @@ sub form_magic($$$) {
       print "</TABLE></TD>";
     }
     elsif ($rec->{ftype} == 16) { # Catalog composition editor (edit)
-      print td($rec->{name}), "<TD><TABLE>";
+      print td($rec->{name}), '<td><table class="s-form__multi">';
       my $available = $data->{'available_source_catalogs'} || [];
       my $selected = $data->{$rec->{tag}} || [];
       my %sel_hash = map { $_ => 1 } @{$selected};
@@ -1579,9 +1606,9 @@ sub form_magic($$$) {
       }
 
       print hidden(-name=>$p1."_count",-value=>$total_count);
-      print "<TR bgcolor=\"#cccccc\">",
-            "<TD><B>Select</B></TD><TD><B>Catalog Zone</B></TD>",
-            "<TD><B>Priority</B></TD><TD><B>Comment</B></TD></TR>";
+      print '<tr class="s-list__head">',
+            '<td>Select</td><td>Catalog Zone</td>',
+            '<td>Priority</td><td>Comment</td></tr>';
 
       for $j (0..$#{$available}) {
         my $cat_id = $$available[$j][0];
@@ -1599,9 +1626,9 @@ sub form_magic($$$) {
                         -override=>1),
               "</TD><TD>$cat_comment</TD></TR>";
       }
-      print "<tr><td colspan=4><font size=-1 color=\"blue\">",
+      print '<tr><td colspan=4><span class="s-form__hint">',
             "Priority is used to determine the order of catalogs in the composition. Lower values have higher priority.",
-            "</font></td></tr>",
+            '</span></td></tr>',
             "</TABLE></TD>";
     }
     elsif ($rec->{ftype} == 101) {
@@ -1639,12 +1666,14 @@ sub form_magic($$$) {
 
       $tmp=param($p1);
       $tmp=param($p1."_l") if ($tmp eq '');
-      print "<FONT size=-1 color=\"red\"><BR> ",
-	    form_check_field($rec,$tmp,0),"</FONT></TD>";
+      { my $err=form_check_field($rec,$tmp,0);
+        print '<br><span class="s-form__error"> '.$err.'</span>' if $err; }
+      print '</TD>';
     }
     print "</TR>\n";
   }
-  print "</TABLE>\n";
+  print "</TABLE>\n" if $fm_section_open;
+  print "</div>\n";
 }
 
 #####################################################################
@@ -1656,26 +1685,22 @@ sub display_form($$) {
   my($data,$form) = @_;
   my($i,$j,$k,$a,$rec,$formdata,$h_bg,$val,$e);
   my($ip,$ipinfo,$com,$url);
+  my $section_open = 0;
 
 
   form_get_defaults($form);
   $formdata=$form->{data};
 
-  print "\n<TABLE border=\"0\" cellspacing=\"0\" cellpadding=\"1\" ";
-  print "WIDTH=\"" . $form->{width} . "\" " if ($form->{width});
-  print "><TR><TD>\n";
-  print "<TABLE ";
-  print "BGCOLOR=\"" . $form->{tbl_bgcolor} . "\" " if ($form->{tbl_bgcolor});
-  print "FGCOLOR=\"" . $form->{fgcolor} . "\" " if ($form->{fgcolor});
-  #print "WIDTH=\"" . $form->{width} . "\" " if ($form->{width});
-  print "BORDER=\"" . ($form->{border}>0?$form->{border}:0) . "\" ";
-  print " width=\"100%\" cellspacing=\"1\" cellpadding=\"1\">\n";
+  my $cls = $form->{cssclass} || 's-form';
+  print "\n<div class=\"${cls}-outer\"";
+  print " style=\"width:" . $form->{width} . "\"" if ($form->{width});
+  print ">\n";
 
   for $i (0..$#{$formdata}) {
     $rec=$$formdata[$i];
 
     if ($form->{heading_bg}) { $h_bg=$form->{heading_bg}; }
-    else { $h_bg='#ddddff'; }
+    else { $h_bg=''; }
 
     next if ($rec->{hidden});
     if ($rec->{restricted}) {
@@ -1706,12 +1731,24 @@ sub display_form($$) {
 	$val = ($data->{static_alias} || $data->{alias} == -1 ? 'Static ' : 'CNAME ') . $val;
     }
 
-    print "<TR ".($form->{bgcolor}?" bgcolor=\"$form->{bgcolor}\" ":'').">\n";
-
     if ($rec->{ftype} == 0) {
-      print "<TH COLSPAN=2 ALIGN=\"left\" BGCOLOR=\"$h_bg\">",
-            $rec->{name},"</TH>\n";
-    } elsif ($rec->{ftype} == 1 || $rec->{ftype} == 101) {
+      print "</TABLE>\n" if $section_open;
+      print "<TABLE class=\"$cls\">\n";
+      $section_open = 1;
+      print "<TR class=\"s-form__section\">",
+            "<TH class=\"s-form__heading\" COLSPAN=2>", $rec->{name}, "</TH>",
+            "</TR>\n";
+      next;
+    }
+    unless ($section_open) {
+      print "<TABLE class=\"$cls\">\n";
+      $section_open = 1;
+    }
+
+    my $rowcls = $rec->{no_edit} ? 's-form__row is-readonly' : 's-form__row';
+    print "<TR class=\"$rowcls\">\n";
+
+    if ($rec->{ftype} == 1 || $rec->{ftype} == 101) {
       next if ($rec->{no_empty} && $val eq '');
 
       $val =~ s/\/32$// if ($rec->{type} eq 'ip');
@@ -1719,32 +1756,34 @@ sub display_form($$) {
       $val = $val . sprintf(" (0x%0" . $rec->{extrahex} . "x)", $val) if ($rec->{extrahex} and $val ne "");
       if ($rec->{type} eq 'expiration') {
 	unless ($val > 0) {
-	  $val = '<FONT color="blue">NO expiration date set</FONT>';
+	  $val = '<span class="s-form__hint">NO expiration date set</span>';
 	} else {
-	  $val = (time() > $ val ?  localtime($val) .
-		  ' <FONT color="red"> (EXPIRED!) </FONT>' : localtime($val));
+	  $val = (time() > $val ? localtime($val) .
+		  ' <span class="s-form__badge--danger">EXPIRED</span>' : localtime($val));
 	}
       }
 
       #print Tr,td([$rec->{name},$data->{$rec->{tag}}]);
       if ($rec->{definfo}) {
 	if ($val eq $rec->{definfo}[0]) {
-	  $val="<FONT color=\"blue\">$rec->{definfo}[1]</FONT>";
+	  $val='<span class="s-form__hint">' . encode_entities($rec->{definfo}[1]) . '</span>';
 	}
       }
 # If there is an URL, show it as a link, when requested. TVu
       if ($rec->{anchor}) { $val = url2link($val); }
       $val='&nbsp;' if ($val eq '');
-      print "<TD WIDTH=\"",$form->{nwidth},"\">",$rec->{name},"</TD><TD>",
-            "$val</TD>";
+      print "<TD class=\"s-form__label\"",
+            ($form->{nwidth} ? " WIDTH=\"$form->{nwidth}\"" : ''),
+            ">", $rec->{name}, "</TD>",
+            "<TD class=\"s-form__value\">$val</TD>";
     } elsif ($rec->{ftype} == 2) {
       $a=$data->{$rec->{tag}};
       next if ($rec->{no_empty} && @{$a}<2);
       print td($rec->{name}),
-	    "<TD><TABLE width=\"100%\" bgcolor=\"#e0e0e0\">",
-            "<TR bgcolor=\"#efefef\">";
+            '<td><table class="s-form__multi">',
+            '<tr class="s-list__head">';
       for $k (1..$rec->{fields}) {
-	print "<TH><FONT size=-2>&nbsp;",$$a[0][$k-1],"&nbsp;</FONT></TH>";
+	print "<TH>",encode_entities($$a[0][$k-1]),"</TH>";
       }
       print "</TR>";
       for $j (1..$#{$a}) {
@@ -1795,10 +1834,10 @@ sub display_form($$) {
             "$val</TD>";
     } elsif ($rec->{ftype} == 4) {
       $val='&nbsp;' if ($val eq '');
-      print "<TD WIDTH=\"",$form->{nwidth},"\" TITLE=\"",$rec->{title},"\">",$rec->{name},"</TD><TD>",
-            "<FONT color=\"$form->{ro_color}\">$val</FONT></TD>";
+      print "<TD class=\"s-form__label\" WIDTH=\"",$form->{nwidth},"\" TITLE=\"",$rec->{title},"\">",$rec->{name},"</TD>",
+            "<TD class=\"s-form__value\">$val</TD>";
     } elsif ($rec->{ftype} == 5) {
-      print td($rec->{name}),"<TD><TABLE>";
+      print td($rec->{name}),'<td><table class="s-form__multi">';
       $a=$data->{$rec->{tag}};
       for $j (1..$#{$a}) {
 	#$com=$$a[$j][4];
@@ -1826,7 +1865,7 @@ sub display_form($$) {
       $url=$form->{$rec->{tag}."_url"};
       next unless (defined $a);
       next unless (@{$a}>1);
-      print td($rec->{name}),"<TD><TABLE><TR>";
+      print td($rec->{name}),'<td><table class="s-form__multi"><tr>';
       #for $k (1..$rec->{fields}) { print "<TH>",$$a[0][$k-1],"</TH>";  }
       for $j (1..$#{$a}) {
 	$k=' ';
@@ -1864,12 +1903,10 @@ sub display_form($$) {
       print "</TD>";
     } elsif ($rec->{ftype} == 12) {
 	print td($rec->{name}),
-	      "<TD><TABLE width=\"100%\" bgcolor=\"#e0e0e0\">",
-	      "<TR bgcolor=\"#efefef\">",
-  	     th(["<FONT size=-2>Type</FONT>",
-		 "<FONT size=-2>Op</FONT>",
-		 "<FONT size=-2>Rule</FONT>",
-		 "<FONT size=-2>Comments</FONT>"]),"</TR>";
+	      '<td><table class="s-form__multi">',
+	      '<tr class="s-list__head">',
+	      th(["<small>Type</small>", "<small>Op</small>",
+		   "<small>Rule</small>", "<small>Comments</small>"]), '</tr>';
 	$a=$data->{$rec->{tag}};
 	for $j (1..$#{$a}) {
 	    if ($$a[$j][1] == 0) { $val=$$a[$j][2]; }
@@ -1894,7 +1931,7 @@ sub display_form($$) {
       $a = join("\n", @tx);
       $a =~ s/\n/<br>\n/g;
       $a =~ s/^(\s+)/'&nbsp;' x (length($1) * 2)/emg; # Prserve indentation.
-      print "<TD bgcolor='#e0e0e0'>$a</TD>";
+      print '<td class="s-form__value s-form__value--area">', $a, '</td>';
     } elsif ($rec->{ftype} == 14) { # Checkbox group (show)
       print td($rec->{name});
 
@@ -1918,10 +1955,10 @@ sub display_form($$) {
           if (@names) {
             print "<TD>" . join(", ", sort @names) . "</TD>";
           } else {
-            print "<TD><FONT color='blue'>None selected</FONT></TD>";
+            print '<TD><span class="s-form__hint">None selected</span></TD>';
           }
         } else {
-          print "<TD><FONT color='blue'>None selected</FONT></TD>";
+          print '<TD><span class="s-form__hint">None selected</span></TD>';
         }
       }
     } elsif ($rec->{ftype} == 15) { # Catalog group checkboxes (show)
@@ -1946,10 +1983,10 @@ sub display_form($$) {
         if (@parts) {
           print "<TD>" . join('<BR>', @parts) . "</TD>";
         } else {
-          print "<TD><FONT color='blue'>No groups assigned</FONT></TD>";
+          print '<TD><span class="s-form__hint">No groups assigned</span></TD>';
         }
       } else {
-        print "<TD><FONT color='blue'>No groups assigned</FONT></TD>";
+        print '<TD><span class="s-form__hint">No groups assigned</span></TD>';
       }
     } else {
       error("internal error (display_form)");
@@ -1957,7 +1994,8 @@ sub display_form($$) {
     print "</TR>\n";
   }
 
-  print "</TABLE></TD></TR></TABLE>\n";
+  print "</TABLE>\n" if $section_open;
+  print "</div>\n";
 }
 
 sub print_mx_template($) {
@@ -1965,14 +2003,13 @@ sub print_mx_template($) {
   my($i,$l);
 
   return unless ($rec);
-  print "<TABLE WIDTH=\"95%\" BGCOLOR=\"#aaeae0\">",
-        "<TR bgcolor=\"#afffe0\"><TD colspan=\"2\">",
-        $rec->{name},"</TH></TR>";
+  print '<table class="s-list s-form__template">',
+        '<tr class="s-list__head"><td colspan="2">', $rec->{name}, '</td></tr>';
   $l=$rec->{mx_l};
   for $i (1..$#{$l}) {
-    print "<TR>",td($$l[$i][1]),td($$l[$i][2]),"</TR>";
+    print '<tr class="s-list__row">', td($$l[$i][1]), td($$l[$i][2]), '</tr>';
   }
-  print "</TABLE>";
+  print "</table>";
 }
 
 sub print_wks_template($) {
@@ -1980,14 +2017,13 @@ sub print_wks_template($) {
   my($i,$l);
 
   return unless ($rec);
-  print "<TABLE WIDTH=\"95%\" BGCOLOR=\"#aaeae0\">",
-        "<TR bgcolor=\"#afffe0\"><TD colspan=\"2\">",
-        $rec->{name},"</TD></TR>";
+  print '<table class="s-list s-form__template">',
+        '<tr class="s-list__head"><td colspan="2">', $rec->{name}, '</td></tr>';
   $l=$rec->{wks_l};
   for $i (1..$#{$l}) {
-    print "<TR>",td($$l[$i][1]),td($$l[$i][2]),"</TR>";
+    print '<tr class="s-list__row">', td($$l[$i][1]), td($$l[$i][2]), '</tr>';
   }
-  print "</TABLE>";
+  print "</table>";
 }
 
 
@@ -2010,14 +2046,18 @@ sub display_dialog($$$$$) {
     alert2("Invalid data in form!");
   }
 
-  print h2($msg);
-  print start_form(-method=>'POST',-action=>$self_url);
+  print '<div class="s-dialog">';
+  print h2({-class=>'s-dialog__title'},$msg);
+  print start_form(-method=>'POST',-action=>$self_url,-class=>'s-dialog__form');
   @f=split(',',$hidden);
   for $i (0..$#f) { print hidden($f[$i]); }
   form_magic('DIALOG',$data,$form);
-  print submit(-name=>'dialog_ok',-value=>'OK'),
-        submit(-name=>'dialog_cancel',-value=>'Cancel'),
+  print '<div class="s-dialog__actions">',
+        submit(-name=>'dialog_ok',    -value=>'OK',    -class=>'s-btn s-btn--primary'),
+        submit(-name=>'dialog_cancel',-value=>'Cancel',-class=>'s-btn s-btn--secondary'),
+        '</div>',
 	end_form();
+  print '</div>';
   return 0;
 }
 
@@ -2028,14 +2068,19 @@ sub display_list($$$)
 
   $offset = 0 unless ($offset > 0);
   $cols = $#{$header};
-  print "<TABLE width=\"99%\" bgcolor=\"#ccccff\" cellspacing=1>\n",
-        "<TR bgcolor=\"#aaaaff\">";
+  # Zebra striping is done in CSS so data rows no longer carry an
+  # alternating bgcolor= attribute.
+  # data-sortable opts into the progressive-enhancement layer in
+  # icons/sauron.js, which adds aria-sort + click handlers on the header
+  # cells and bails out cleanly if the table is too large.
+  print "<TABLE class=\"s-list\" data-sortable>\n",
+        "<TR class=\"s-list__head\">";
   for $i (0..$cols) {
-    print th(($$header[$i] ? $$header[$i] : '&nbsp;'));
+    print th(($$header[$i] ? ($$header[$i] =~ /</ ? $$header[$i] : encode_entities($$header[$i])) : ''));
   }
   print "</TR>\n";
   for $i (0..$#{$list}) {
-    print "<TR bgcolor=\"#eeeebf\">";
+    print "<TR class=\"s-list__row\">";
     for $j (0..$cols) {
       $val = $$list[$i][$offset+$j];
       if ($$header[$j] =~ /Date/) {
@@ -2054,29 +2099,42 @@ sub display_list($$$)
 ########################################################################
 
 sub alert1($) {
-  my($msg)=@_;
-  print "<H2><FONT color=\"red\">" . encode_entities($msg) . "</FONT></H2>";
+  my ($msg) = @_;
+  print '<div class="s-alert s-alert--error" role="alert">',
+        encode_entities($msg),
+        "</div>\n";
 }
 
 sub alert2($) {
-  my($msg)=@_;
-  print "<H3><FONT color=\"red\">" . encode_entities($msg) . "</FONT></H3>";
+  my ($msg) = @_;
+  print '<div class="s-alert s-alert--error s-alert--inline" role="alert">',
+        encode_entities($msg),
+        "</div>\n";
 }
 
 sub warning1($) {
-  my($msg)=@_;
-  print "<H2><FONT color=\"orange\">" . encode_entities($msg) . "</FONT></H2>";
+  my ($msg) = @_;
+  print '<div class="s-alert s-alert--warning" role="alert">',
+        encode_entities($msg),
+        "</div>\n";
 }
 
 sub html_error($) {
-  my($msg)=@_;
-  print header(),start_html("CGI: error"),h1("Error: $msg"),end_html();
+  my ($msg) = @_;
+  print header(), start_html("CGI: error"),
+        '<div class="s-alert s-alert--error" role="alert">',
+        'Error: ', encode_entities($msg),
+        "</div>\n",
+        end_html();
   exit;
 }
 
 sub html_error2($) {
-  my($msg)=@_;
-  print h1("Error: $msg"),end_html();
+  my ($msg) = @_;
+  print '<div class="s-alert s-alert--error" role="alert">',
+        'Error: ', encode_entities($msg),
+        "</div>\n",
+        end_html();
   exit;
 }
 
