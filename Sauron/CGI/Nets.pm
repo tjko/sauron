@@ -317,7 +317,7 @@ sub show_net_record($$)
   my(%net, @vlan_list);
 
   if (get_net($id,\%net)) {
-    print h2("Cannot get net record (id=$id)!");
+    alert1("Cannot get net record (id=$id).");
     return;
   }
   if (check_perms('level',$main::ALEVEL_VLANS,1)) {
@@ -581,7 +581,7 @@ sub menu_handler {
   my $vm_id=param('vmps_id');
 
   unless ($serverid > 0) {
-    print h2("Server not selected!");
+    alert1("Server not selected.");
     return;
   }
   return if (check_perms('server','R'));
@@ -902,7 +902,7 @@ sub menu_handler {
   }
   elsif ($sub eq 'Ping Sweep') {
     if (get_net($id,\%net)) {
-      print h2("Cannot get net record (id=$id)!");
+      alert1("Cannot get net record (id=$id).");
       return;
     }
     print h3("Ping Sweep for $net{net}...");

@@ -419,7 +419,7 @@ sub display_zone($$)
     #display selected zone info
     my $zoneid=get_zone_id($zone,$serverid);
     if ($zoneid < 1) {
-      print h3("Cannot select zone '" . encode_entities($zone) . "'!"),p;
+      alert1("Cannot select zone ''.");
       select_zone($state,$perms);
       return;
     }
@@ -547,7 +547,7 @@ sub menu_handler {
   my $sub=param('sub');
 
   unless ($serverid > 0) {
-    print h2("Server not selected!");
+    alert1("Server not selected.");
     return;
   }
   return if (check_perms('server','R'));
@@ -590,7 +590,7 @@ sub menu_handler {
 	    }
 	  my $new_net=arpa2cidr($data{name});
 	  if ($new_net eq '0.0.0.0/0') {
-	    print h2('Invalid name for reverse zone!');
+	    alert1('Invalid name for reverse zone.');
 	    new_zone_edit($state,\%data);
 	    return;
 	  }
@@ -657,11 +657,11 @@ sub menu_handler {
     return if (check_perms('superuser',''));
 
     if ($zoneid < 1) {
-      print h2("No zone selected!");
+      alert1("No zone selected.");
       return;
     }
     if (param('copy_cancel')) {
-      print h2("Zone copy cancelled.");
+      warning1("Zone copy cancelled.");
       return;
     }
     if (param('copy_confirm')) {
@@ -672,7 +672,7 @@ sub menu_handler {
     if ($res < 0) {
 	  alert1("Zone copy failed! ($res)");
 	} else {
-	  print h2("Zone successfully copied (id=$res).");
+	  success1("Zone successfully copied (id=$res).");
 	}
 	return;
       } else {
@@ -722,7 +722,7 @@ sub menu_handler {
     return if (check_perms('superuser',''));
 
     if ($zoneid < 1) {
-      print h2("No zone selected!");
+      alert1("No zone selected.");
       select_zone($state,$perms);
       return;
     }
@@ -730,7 +730,7 @@ sub menu_handler {
     # Verify this is a catalog zone
     my $is_cat = is_catalog_zone($zoneid);
     if ($is_cat != 1) {
-      print h2("Selected zone is not a catalog zone."),
+      alert1("Selected zone is not a catalog zone.");print
             p,"Only catalog zones (type C) can have group definitions.",
             p,"<a href=\"$selfurl?menu=zones&sub=select\">Select a zone</a>";
       return;
@@ -759,7 +759,7 @@ sub menu_handler {
         } elsif ($res < 0) {
           alert1("Failed to add group (error: $res)");
         } else {
-          print h3("Group '<strong>$new_name</strong>' added successfully.");
+          success1("Group '$new_name' added successfully.");
         }
       }
     }
@@ -774,7 +774,7 @@ sub menu_handler {
         if ($res < 0) {
           alert1("Failed to delete group (error: $res)");
         } else {
-          print h3("Group '<strong>$del_name</strong>' deleted.");
+          success1("Group '$del_name' deleted.");
         }
       }
     }

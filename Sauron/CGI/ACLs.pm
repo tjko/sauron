@@ -47,7 +47,7 @@ sub show_acl_record($$) {
     my(%acl);
     
     if (get_acl($id,\%acl)) {
-	print h2("Cannot get ACL record (id=$id)!");
+	alert1("Cannot get ACL record (id=$id).");
 	return;
     }
 
@@ -65,7 +65,7 @@ sub browse_acls($$$) {
     db_query("SELECT id,name,comment,server FROM acls " .
 	     "WHERE server=$serverid OR server=-1 ORDER BY server,id;",\@q);
     if (@q < 1) {
-	print h2("No ACLs found!");
+	warning1("No ACLs found.");
 	return;
     }
 
@@ -86,7 +86,7 @@ sub browse_keys($$$) {
     db_query("SELECT id,name,algorithm,keysize,mode,comment,cdate,mdate " .
 	     "FROM keys WHERE type=1 AND ref=$serverid ORDER BY name;",\@q);
     if (@q < 1) {
-	print h2("No Keys found!");
+	warning1("No Keys found.");
 	return;
     }
 
@@ -131,7 +131,7 @@ sub menu_handler {
   my $id=param('acl_id');
 
   unless ($serverid > 0) {
-    print h2("Server not selected!");
+    alert1("Server not selected.");
     return;
   }
   return if (check_perms('server','R'));
@@ -165,12 +165,12 @@ sub menu_handler {
       return if (check_perms('superuser',''));
       my %acl;
       if (get_acl($id,\%acl)) {
-	  print h2("Cannot get group (id=$id)");
+	  alert1("Cannot get group (id=$id).");
 	  return;
       }
      
       if (param('acl_cancel')) {
-	  print h2("ACL not removed");
+	  alert1("ACL not removed.");
 	  show_acl_record($id,$selfurl);
 	  return;
       }
@@ -187,7 +187,7 @@ sub menu_handler {
 	      alert1("ACL delete failed!");
 	      return;
 	  }
-	  print h2("ACL successfully removed.");
+	  success1("ACL successfully removed.");
 	  return;
       }
       

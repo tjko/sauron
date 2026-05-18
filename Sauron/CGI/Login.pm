@@ -361,7 +361,7 @@ sub menu_handler {
       return;
     }
     if (param('passwd_cancel')) {
-      print h2("Password not changed.");
+      alert1("Password not changed.");
       return;
     }
     elsif (param('passwd_submit') ne '') {
@@ -377,7 +377,7 @@ sub menu_handler {
 	      alert1("Password update failed!");
 	      return;
 	    }
-	    print p,h2("Password changed successfully.");
+	    success1("Password changed successfully.");
 	    return;
 	  }
 	  alert1("Invalid password!");
@@ -401,9 +401,9 @@ sub menu_handler {
             "WHERE id=$uid;";
     $res=db_exec($sqlstr);
     if ($res < 0) {
-      print h3('Saving defaults failed!');
+      alert1('Saving defaults failed.');
     } else {
-      print h3('Defaults saved successfully!');
+      success1('Defaults saved successfully.');
     }
   }
   elsif ($sub eq 'clear') {
@@ -412,9 +412,9 @@ sub menu_handler {
     $sqlstr="UPDATE users SET server=NULL,zone=NULL WHERE id=$uid;";
     $res=db_exec($sqlstr);
     if ($res < 0) {
-      print h3('Clearing defaults failed!');
+      alert1('Clearing defaults failed.');
     } else {
-      print h3('Defaults cleared successfully!');
+      success1('Defaults cleared successfully.');
     }
   }
   elsif ($sub eq 'edit') {
@@ -428,21 +428,20 @@ sub menu_handler {
 	      "flags=$tmp WHERE id=$state->{uid}";
       $res=db_exec($sqlstr);
       if ($res < 0) {
-	print h3("Cannot save personal settings!");
+	alert1("Cannot save personal settings.");
       } else {
-	print h3("Personal settings successfully updated.");
+	success1("Personal settings successfully updated.");
       }
       show_user_info($state,$perms);
       return;
     } elsif ($res == -1) {
-      print h2("No changes made.");
+      warning1("No changes made.");
     }
   }
   elsif ($sub eq 'who') {
     my $timeout=$main::SAURON_USER_TIMEOUT;
     unless ($timeout > 0) {
-      print h2("error: $main::SAURON_USER_TIMEOUT " .
-	       "not defined in configuration!");
+      alert1("SAURON_USER_TIMEOUT not defined in configuration.");
       return;
     }
     undef @wholist;
@@ -694,10 +693,11 @@ sub _handle_theme {
           ' data-name="', encode_entities($name), '">';
   }
 
-  print h2("Deployment theme"),
-        ($save_ok  ? '<div class="s-alert s-alert--success" role="alert">Theme saved.</div>' : ''),
-        ($reset_ok ? '<div class="s-alert s-alert--success" role="alert">Theme reset to server defaults.</div>' : ''),
-        ($save_err ? '<div class="s-alert s-alert--error" role="alert">' . encode_entities($save_err) . '</div>' : ''),
+  print h2("Deployment theme");
+  success1("Theme saved.")                       if $save_ok;
+  success1("Theme reset to server defaults.")    if $reset_ok;
+  alert1($save_err)                              if $save_err;
+  print
         p("Set the top bar colour and environment label for this deployment."
           . " Saved settings apply to all browsers instantly without a server restart.");
 

@@ -38,6 +38,7 @@ $VERSION = '$Id:$ ';
 	     alert1
 	     alert2
 	     warning1
+	     success1
 	     html_error
 	     html_error2
 	    );
@@ -2115,6 +2116,13 @@ sub alert2($) {
 sub warning1($) {
   my ($msg) = @_;
   print '<div class="s-alert s-alert--warning" role="alert">',
+        encode_entities($msg),
+        "</div>\n";
+}
+
+sub success1($) {
+  my ($msg) = @_;
+  print '<div class="s-alert s-alert--success" role="alert">',
         encode_entities($msg),
         "</div>\n";
 }

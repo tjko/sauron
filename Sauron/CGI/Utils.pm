@@ -376,18 +376,18 @@ sub edit_magic($$$$$$$) {
   my $selfurl = script_name() . path_info();
 
   if (($id eq '') || ($id < 1)) {
-    print h2("$name id not specified!");
+    alert1("$name id not specified.");
     return -1;
   }
 
   if (param($prefix . '_cancel') ne '') {
-    print h2("No changes made to $name record.");
+    warning1("No changes made to $name record.");
     return 2;
   }
 
   if (param($prefix . '_submit') ne '') {
     if(&$get_func($id,\%h) < 0) {
-      print h2("Cannot find $name record anymore! ($id)");
+      alert1("Cannot find $name record anymore! ($id).");
       return -2;
     }
     unless (($res=form_check_form($prefix,\%h,$form))) {
@@ -397,7 +397,7 @@ sub edit_magic($$$$$$$) {
         my $detail = ($dbmsg && $dbmsg ne '') ? $dbmsg : "result code=$res";
         alert1("$name record update failed: $detail");
       } else {
-	print '<div class="s-alert s-alert--success" role="alert">', encode_entities("$name record successfully updated"), '</div>';
+	success1("$name record successfully updated");
 	#&$get_func($id,\%h);
 	#display_form(\%h,$form);
 	return 1;
@@ -409,7 +409,7 @@ sub edit_magic($$$$$$$) {
 
   unless (param($prefix . '_re_edit') eq '1') {
     if (&$get_func($id,\%h)) {
-      print h2("Cannot get $name record (id=\"" . encode_entities($id) . "\")!");
+      alert1("Cannot get $name record (id=$id).");
       return -3;
     }
   }
@@ -431,7 +431,7 @@ sub add_magic($$$$$$) {
   my $selfurl = script_name() . path_info();
 
   if (param($prefix . '_cancel')) {
-    print h2("$name record not created!");
+    alert1("$name record not created.");
     return -1;
   }
 
@@ -443,7 +443,7 @@ sub add_magic($$$$$$) {
         my $detail = ($dbmsg && $dbmsg ne '') ? $dbmsg : "result code=$res";
         alert1("Adding $name record failed: $detail");
       } else {
-	print '<div class="s-alert s-alert--success" role="alert">', encode_entities("$name record successfully added"), '</div>';
+	success1("$name record successfully added");
 	return $res;
       }
     } else {
@@ -466,18 +466,18 @@ sub delete_magic($$$$$$$;$) {
   my $selfurl = script_name() . path_info();
 
   if (($id eq '') || ($id < 1)) {
-    print h2("$name id not specified!");
+    alert1("$name id not specified.");
     return -1;
   }
 
   if (param($prefix . '_cancel') ne '') {
-    print h2("$name record not deleted.");
+    alert1("$name record not deleted.");
     return 2;
   }
 
   if (param($prefix . '_confirm') ne '') {
     if(&$get_func($id,\%h) < 0) {
-      print h2("Cannot find $name record anymore! (" . encode_entities($id) . ")");
+      alert1("Cannot find $name record anymore! ($id).");
       return -2;
     }
 
@@ -495,14 +495,14 @@ sub delete_magic($$$$$$$;$) {
       alert1("$name record delete failed: $detail");
       return -10;
     } else {
-      print '<div class="s-alert s-alert--success" role="alert">', encode_entities("$name record successfully deleted"), '</div>';
+      success1("$name record successfully deleted");
       return 1;
     }
   }
 
 
   if (&$get_func($id,\%h)) {
-    print h2("Cannot get $name record (id=\"" . encode_entities($id) . "\")!");
+    alert1("Cannot get $name record (id=$id).");
     return -3;
   }
 

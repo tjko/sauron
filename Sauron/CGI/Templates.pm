@@ -159,7 +159,7 @@ sub show_mxt_record($$)
   my(%mxhash);
 
   if (get_mx_template($mx_id,\%mxhash)) {
-    print h2("Cannot get MX template (id=$mx_id)!");
+    alert1("Cannot get MX template (id=$mx_id).");
     return 1;
   }
   display_form(\%mxhash,\%mx_template_form);
@@ -181,7 +181,7 @@ sub show_wkst_record($$)
   my(%wkshash);
 
   if (get_wks_template($wks_id,\%wkshash)) {
-    print h2("Cannot get WKS template (id=$wks_id)!");
+    alert1("Cannot get WKS template (id=$wks_id).");
     return 1;
   }
   display_form(\%wkshash,\%wks_template_form);
@@ -203,7 +203,7 @@ sub show_pc_record($$)
   my(%pchash);
 
   if (get_printer_class($pc_id,\%pchash)) {
-    print h2("Cannot get PRINTER class (id=$pc_id)!");
+    alert1("Cannot get PRINTER class (id=$pc_id).");
     return 1;
   }
   display_form(\%pchash,\%printer_class_form);
@@ -225,7 +225,7 @@ sub show_hinfo_record($$)
   my(%hinfohash);
 
   if (get_hinfo_template($hinfo_id,\%hinfohash)) {
-    print h2("Cannot get HINFO template (id=$hinfo_id)!");
+    alert1("Cannot get HINFO template (id=$hinfo_id).");
     return;
   }
   display_form(\%hinfohash,\%hinfo_template_form);
@@ -255,11 +255,11 @@ sub menu_handler {
   my $selfurl = $state->{selfurl};
 
   unless ($serverid > 0) {
-    print h2("Server not selected!");
+    alert1("Server not selected.");
     return;
   }
   unless ($zoneid > 0) {
-    print h2("Zone not selected!");
+    alert1("Zone not selected.");
     return;
   }
   return if (check_perms('server','R'));
@@ -359,33 +359,32 @@ sub menu_handler {
   elsif ($sub eq 'Delete') {
     if ($mx_id > 0) {
       if (get_mx_template($mx_id,\%h)) {
-	print h2("Cannot get mx template (id=$mx_id)");
+	alert1("Cannot get mx template (id=$mx_id).");
 	return;
       }
       return if (check_perms('tmplmask',$h{name}));
       if (param('mx_cancel')) {
-	print h2('MX template not removed');
+	alert1('MX template not removed.');
 	show_mxt_record($state, $mx_id);
 	return;
       }
       elsif (param('mx_confirm')) {
 	$new_id=int(param('mx_new'));
 	if ($new_id eq $mx_id) {
-	  print h2("Cannot change host records to point template " .
-		   "being deleted!");
+	  alert1("Cannot change host records to point to the template being deleted.");
 	  show_mxt_record($state, $mx_id);
 	  return;
 	}
 	$new_id=-1 unless ($new_id > 0);
 	if (db_exec("UPDATE hosts SET mx=$new_id WHERE mx=$mx_id;") < 0) {
-	  print h2('Cannot update records pointing to this template!');
+	  alert1('Cannot update records pointing to this template.');
 	  return;
 	}
 	if (delete_mx_template($mx_id) < 0) {
 	  alert1("MX template delete failed!");
 	  return;
 	}
-	print h2("MX template successfully deleted.");
+	success1("MX template successfully deleted.");
 	return;
       }
 
@@ -408,32 +407,31 @@ sub menu_handler {
     } elsif ($wks_id > 0) {
       return if (check_perms('superuser',''));
       if (get_wks_template($wks_id,\%h)) {
-	print h2("Cannot get wks template (id=$wks_id)");
+	alert1("Cannot get wks template (id=$wks_id).");
 	return;
       }
       if (param('wks_cancel')) {
-	print h2('WKS template not removed');
+	alert1('WKS template not removed.');
 	show_wkst_record($state, $wks_id);
 	return;
       }
       elsif (param('wks_confirm')) {
 	$new_id=int(param('wks_new'));
 	if ($new_id eq $wks_id) {
-	  print h2("Cannot change host records to point template " .
-		   "being deleted!");
+	  alert1("Cannot change host records to point to the template being deleted.");
 	  show_wkst_record($state, $wks_id);
 	  return;
 	}
 	$new_id=-1 unless ($new_id > 0);
 	if (db_exec("UPDATE hosts SET wks=$new_id WHERE wks=$wks_id;") < 0) {
-	  print h2('Cannot update records pointing to this template!');
+	  alert1('Cannot update records pointing to this template.');
 	  return;
 	}
 	if (delete_wks_template($wks_id) < 0) {
 	  alert1("WKS template delete failed!");
 	  return;
 	}
-	print h2("WKS template successfully deleted.");
+	success1("WKS template successfully deleted.");
 	return;
       }
 

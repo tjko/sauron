@@ -277,7 +277,7 @@ sub display_new_server($$$$)
 
   #display selected server info
   unless ($serverid > 0) {
-    print h3("Cannot select server!"),p;
+    alert1('Cannot select server.');
     select_server($state,$perms);
     return 1;
   }
@@ -348,9 +348,9 @@ sub menu_handler {
 
     if (param('srvdel_submit') ne '') {
       if (delete_server($serverid) < 0) {
-	print h2("Cannot delete server!");
+	alert1("Cannot delete server.");
       } else {
-	print h2('Server deleted successfully!');
+	success1('Server deleted successfully.');
 	$state->{'zone'}=''; $state->{'zoneid'}=-1;
 	$state->{'server'}=''; $state->{'serverid'}=-1;
 	save_state($scookie,$state);

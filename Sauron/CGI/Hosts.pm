@@ -146,7 +146,7 @@ sub _submit_pending_approval_request {
   my ($change_ref, $original_ref, %user, $email, $req_id);
 
   if (param('approval_cancel')) {
-    print h2("Approval request canceled.");
+    warning1("Approval request canceled.");
     print p("No approval request has been created.");
     return 1;
   }
@@ -1351,7 +1351,7 @@ sub menu_handler {
 		       "DISABLE: $host_types{$host{type}} ",
 		       "domain: $host{domain}, ip:$host{ip}[1][1], " .
 		       "ether: $host{ether}",$host{id});
-	print h3("Host disabled (converted to a host reservation)");
+	success1("Host disabled (converted to a host reservation).");
       }
     }
     show_host_record($state,$perms);
@@ -1407,7 +1407,7 @@ sub menu_handler {
     #     return;
     #   }
     if (param('move_cancel')) {
-      print h2("Host record not moved");
+      alert1("Host record not moved.");
       show_host_record($state,$perms);
       return;
     } elsif (param('move_confirm')) {
@@ -1447,7 +1447,7 @@ sub menu_handler {
 			   "MOVE: $host_types{$host{type}} ",
 			   "domain: $host{domain}, IP: $old_ip --> $host{ip}[$ind2][1]",
 			   $host{id});
-	    print h2('Host moved.');
+	    success1('Host moved.');
 	    show_host_record($state,$perms);
 	    return;
 	  } else {
@@ -1544,7 +1544,7 @@ sub menu_handler {
 			       "MOVE: $host_types{$host{type}} ",
 			       "domain: $host{domain} move: $zone --> " .
 			       "$newzone{name}",$host{id});
-		print h2("Host moved from $zone to $newzone{name}");
+		success1("Host moved from $zone to $newzone{name}.");
 		return;
 	    }
 	    alert1("Failed to move host to another zone ($res)");
@@ -1657,7 +1657,7 @@ sub menu_handler {
     }
 
     if (param('h_cancel')) {
-      print h2("No changes made to host record.");
+      warning1("No changes made to host record.");
       show_host_record($state,$perms);
       return;
     }
@@ -1774,7 +1774,7 @@ sub menu_handler {
 			     ($host{ip}[1][1] ne $old_ips[1] ?
 			      "ip: $old_ips[1] --> $host{ip}[1][1] ":""),
 			     $host{id});
-	      print h2("Host record successfully updated.");
+	      success1("Host record successfully updated.");
 	      show_host_record($state,$perms);
 	      return;
 	    }
@@ -1965,7 +1965,7 @@ sub menu_handler {
 	param('bh_domain_anydom',$10);
 	param('bh_search_txt',$11) if ($11); # TVu 2020-11-03
       } else {
-	print h2('No previous search found');
+	warning1('No previous search found.');
 	browse_hosts($state,$perms);
 	return;
       }
@@ -2537,7 +2537,7 @@ sub menu_handler {
     }
 
     if (param('addhost_cancel')) {
-      print h2("$host_types{$type} record creation canceled.");
+      warning1("$host_types{$type} record creation canceled.");
       if (param('copy_id')) {
 	param('h_id',param('copy_id'));
 	show_host_record($state,$perms);
@@ -2617,7 +2617,7 @@ sub menu_handler {
         update_history($state->{uid},$state->{sid},1,
            "ADD: $host_types{$data{type}} ",
            "domain: $data{domain}",$res);
-        print h2("Host added successfully");
+        success1("Host added successfully.");
 
               # check reverse zone only if defined IP address
               if (defined $data{ip}[0][1]) {

@@ -1408,7 +1408,7 @@ sub _process_approval_action {
 	
 	# Validate action parameter
 	unless ($action =~ /^(approve|reject)$/) {
-		print h2('Invalid Action');
+		alert1('Invalid action.');
 		print p("Invalid approval action. Please use Approve or Reject.");
 		return;
 	}

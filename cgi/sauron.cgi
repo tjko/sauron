@@ -723,7 +723,7 @@ sub login_auth() {
 	    logout(0);
 	}
 
-	print h1("Login ok!"), p,
+	success1("Login ok."); print p,
 	      start_form(-method=>'POST',-action=>$s_url), $arg_str || '',
 	      submit(-name=>'submit',-value=>'Continue',
 		     autofocus=>'true'), end_form;
