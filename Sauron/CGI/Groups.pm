@@ -217,13 +217,13 @@ sub menu_handler {
 # Update may create two kinds of duplicates, which are deleted next.
       if ($new_id > 0) {
 	  if (db_exec("UPDATE group_entries SET grp = $new_id WHERE grp = $id;") < 0) {
-	      alert1('Cannot update group_entries pointing to this group.');
+	      alert1('Cannot update group_entries (subgroups) pointing to this group.');
 	      db_rollback();
 	      return;
 	  }
       } else {
 	  if (db_exec("delete from group_entries WHERE grp = $id or grp = -1;") < 0) {
-	      alert1('Cannot delete group_entries pointing to this group.');
+	      alert1('Cannot delete group_entries (subgroups) pointing to this group.');
 	      db_rollback();
 	      return;
 	  }

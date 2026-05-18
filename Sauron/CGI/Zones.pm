@@ -419,7 +419,7 @@ sub display_zone($$)
     #display selected zone info
     my $zoneid=get_zone_id($zone,$serverid);
     if ($zoneid < 1) {
-      alert1("Cannot select zone ''.");
+      alert1("Cannot select zone '$zone'.");
       select_zone($state,$perms);
       return;
     }

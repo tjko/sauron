@@ -117,7 +117,7 @@ sub menu_handler {
   # Require zone selection for approval management
   # Only list_policies can show cross-zone view for policy admins
   if ($zoneid <= 0 && $sub ne 'list_policies') {
-    print h2('Zone selection required');
+    alert1('Zone selection required.');
     print p('Approval management requires a zone to be selected.');
     print p(a({-href=>"$selfurl?menu=zones"}, 'Select a zone'));
     return;
@@ -1210,7 +1210,7 @@ sub _show_request {
 	 $status, $current_level, $host_id, $change_data, $reason, $cdate) = @{$req[0]};
 
   unless (_can_view_request($zoneid, $zone_id)) {
-    print h2('Access Denied');
+    alert1('Access Denied.');
     print p('This request is outside your current zone access.');
     print "<p><a href=\"$selfurl?menu=approvals&sub=pending\">Back to Pending Approvals</a></p>\n";
     return;
@@ -1415,7 +1415,7 @@ sub _process_approval_action {
 	
 	# Validate that reason is not empty (required field)
 	unless (defined $reason && $reason =~ /\S/) {
-		print h2('Missing Required Field');
+		alert1('Missing Required Field.');
 		print p("Decision reason is required. Please provide a justification for your decision.");
 		print p, a({-href=>"$selfurl?menu=approvals&sub=show_request&req_id=$req_id"}, 'Back to request');
 		return;
@@ -1427,7 +1427,7 @@ sub _process_approval_action {
 	
 	# Check if current user is an approver for this request
 	unless (_is_user_approver_for_request($req_id)) {
-		print h2('Access Denied');
+		alert1('Access Denied.');
 		print p("You are not an authorized approver for this request.");
 		print p, a({-href=>"$selfurl?menu=approvals&sub=show_request&req_id=$req_id"}, 'Back to request');
 		return;
@@ -1443,7 +1443,7 @@ sub _process_approval_action {
 	my ($status, $msg) = record_approval_decision_web($req_id, $user_id, $decision_code, $reason);
 	
 	# Display result
-	print h2('Approval Decision Recorded');
+	success1('Approval decision recorded.');
 	if ($status eq 'ok' || $status eq 'pending' || $status eq 'rejected' || $status eq 'approved') {
 		print p("Your decision: <strong>" . ($decision_code eq 'A' ? 'APPROVED' : 'REJECTED') . "</strong>");
 		if (defined $reason && $reason ne '') {
