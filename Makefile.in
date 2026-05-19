@@ -124,7 +124,8 @@ CONTRIB_FILES = contrib/additional-ether-codes.txt \
 PLUGINS = sample
 
 CGIFILES = cgi/sauron.cgi cgi/browser.cgi
-LOGOFILES = icons/logo.png icons/logo_large.png
+LOGOFILES = icons/logo.png icons/logo_large.png \
+		icons/sauron.css icons/sauron.js
 MISCFILES = COPYING COPYRIGHT
 
 DIRNAME = $(shell basename `pwd`)
