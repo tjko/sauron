@@ -155,6 +155,31 @@
 	- Add $SAURON_TOPMENU_BGCOLOR and $SAURON_TOPMENU_FONTCOLOR
 	  for customizing top menu. [svamberg]
 	- Unified appearance of the top menu (ON/OFF frames) [svamberg]
+	- Frontend redesign: semantic HTML, CSS design system, progressive
+	  JS enhancement [sysrow]
+	  - Replaced legacy HTML 3.2 table-based layout with semantic markup
+	    using CSS grid (s-shell, s-sidebar, s-main, s-topbar); top bar
+	    colour and per-environment label driven by CSS custom property
+	  - Added icons/sauron.css: CSS custom property foundation, full
+	    component library, WCAG 2.1 AA focus indicators
+	  - Added icons/sauron.js (no framework, no build step): sortable
+	    tables, inline row filter, keyboard navigation, login auto-focus,
+	    AJAX form handling
+	  - Added semantic class output to CGIutil display primitives
+	    (display_form, form_magic, display_list, display_dialog, alerts)
+	  - Added success1() helper alongside alert1/alert2/warning1 and
+	    converted ad-hoc h1/h2/h3 status messages across all CGI handler
+	    modules to the semantic helpers
+	  - Replaced inline bgcolor/FONT attributes with semantic classes
+	    across all CGI handler modules; applied s-list classes to plugin
+	    tables and removed dead code
+	  - Removed frame_mode, DTD_HACK and FRAMEON/FRAMEOFF; registered
+	    new $SAURON_ENV_NAME config variable for per-environment
+	    labelling in the top bar
+	  - Wired icons/sauron.css and icons/sauron.js into LOGOFILES so
+	    `make install` copies them to $(bindir)/icons
+	  - Fall back to '.' when srcdir is unset in Makefile.in test
+	    targets, allowing `make test-unit` directly from a clone
 
 0.8.5
 
