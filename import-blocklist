@@ -161,7 +161,8 @@ sub parse_json_config {
     my $json;
     eval {
         require JSON;
-        $json = decode_json($content);
+        my $decoder = JSON->new->utf8(0);
+        $json = $decoder->decode($content);
         1;
     } or do {
         # Fallback to simple parser
@@ -198,6 +199,7 @@ sub parse_simple_json {
                 my $cols_str = $1;
                 $source{csv_columns} = {};
                 $source{csv_columns}{domain} = $1 if $cols_str =~ /"domain"\s*:\s*"([^"]+)"/;
+                $source{csv_columns}{wildcard} = $1 if $cols_str =~ /"wildcard"\s*:\s*"([^"]+)"/;
                 $source{csv_columns}{date_added} = $1 if $cols_str =~ /"date_added"\s*:\s*"([^"]+)"/;
                 $source{csv_columns}{date_removed} = $1 if $cols_str =~ /"date_removed"\s*:\s*"([^"]+)"/;
                 $source{csv_columns}{source} = $1 if $cols_str =~ /"source"\s*:\s*"([^"]+)"/;
@@ -274,7 +276,7 @@ sub process_source {
         
         if (exists $existing{$domain}) {
             # Check if modification needed
-            if (entry_changed($existing{$domain}, $entry, $src)) {
+            if (entry_changed($existing{$domain}, $entry, $src, $zoneid)) {
                 $to_modify{$domain} = $entry;
             }
             delete $existing{$domain};  # Mark as still needed
@@ -575,8 +577,17 @@ sub resolve_cname_target {
     return undef;
 }
 
+sub wildcard_host_exists {
+    my ($zoneid, $domain) = @_;
+
+    return 0 unless ($zoneid > 0);
+    return 0 unless ($domain);
+
+    return get_host_id($zoneid, "*.$domain") > 0 ? 1 : 0;
+}
+
 sub entry_changed {
-    my ($existing, $new, $src) = @_;
+    my ($existing, $new, $src, $zoneid) = @_;
     
     # Get expected CNAME target from source config
     my $expected_cname = resolve_cname_target($new, $src);
@@ -592,6 +603,14 @@ sub entry_changed {
     # Check if info/metadata is missing
     if (!defined $existing->{info} || $existing->{info} eq '') {
         return 1;
+    }
+
+    # When wildcard is requested in source data, ensure wildcard host exists.
+    # Older imports may contain only base domain and need one-time sync.
+    if ($new->{wildcard}) {
+        if (!wildcard_host_exists($zoneid, $new->{domain})) {
+            return 1;
+        }
     }
     
     return 0;  # No significant changes
@@ -690,7 +709,7 @@ sub update_rpz_entry {
     if ($wildcard) {
         my $wildcard_domain = "*.$domain";
         print "    UPDATE WILDCARD: $wildcard_domain\n" if $opt_verbose;
-        update_host_entry($zoneid, $wildcard_domain, $cname, $comment, $info);
+        create_or_update_host($zoneid, $wildcard_domain, $cname, $comment, $info);
     }
     
     return $result;
