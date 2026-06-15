@@ -100,6 +100,9 @@ $opt_remove_expired = $config->{global_settings}{remove_expired}
 set_encoding();
 load_config();
 
+my $import_user = $ENV{SUDO_USER} || $ENV{LOGNAME} || $ENV{USER} || getlogin() || 'import-blocklist';
+set_muser($import_user);
+
 ######################
 # Connect to database
 ######################
@@ -866,10 +869,13 @@ sub create_or_update_host {
     my $existing_id = get_host_id($zoneid, $domain);
     if ($existing_id > 0) {
         # Domain exists - update it
+        my $now = time();
         my $query = "UPDATE hosts SET " .
                     "cname_txt = " . db_encode_str($cname) . ", " .
                     "comment = " . db_encode_str($comment) . ", " .
-                    "info = " . db_encode_str($info) . " " .
+                    "info = " . db_encode_str($info) . ", " .
+                    "mdate = $now, " .
+                    "muser = " . db_encode_str($import_user) . " " .
                     "WHERE id = $existing_id AND type = 4";
         
         my $result = db_exec($query);

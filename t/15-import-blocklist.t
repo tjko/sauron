@@ -418,6 +418,43 @@ subtest 'Generated TXT records and wildcard suppression' => sub {
 };
 
 # =========================================================================
+# Test 9: Updated entry is marked pending
+# =========================================================================
+subtest 'Updated entry is marked pending' => sub {
+    my $csv_file = "$tmpdir/test9.csv";
+    my $config_file = "$tmpdir/test9.conf";
+
+    create_test_csv($csv_file, [
+        {
+            URL => '1xbet14.com',
+            DATUM_ZAPISU => '2018-02-15',
+            DATUM_VYMAZU => '',
+            ZDROJ => 'Test Source',
+            NAZEV_DATOVE_SADY => 'Test List',
+            LEGAL => '186/2016 Sb. updated',
+            EVIDENCE => 'zverejneno 15.2.2018',
+            SHA256SUM => 'ad58d3f193322030f2c5ec8226ab63c417956bdbc3fa75c92dda963bee42b27b b1.pdf',
+            WILDCARD => '0',
+        },
+    ], [qw(URL DATUM_ZAPISU DATUM_VYMAZU ZDROJ NAZEV_DATOVE_SADY LEGAL EVIDENCE SHA256SUM WILDCARD)]);
+
+    create_test_config($config_file, $csv_file, 'test-rpz.example.cz', undef, {
+        source_regex => 'Test Source',
+        txt_columns => {
+            _info => 'generated:info',
+            _legal => 'LEGAL',
+            _sha256sum => 'SHA256SUM',
+        },
+    });
+
+    my ($exit, $out) = run_import("--config", $config_file, "--source", "test-source");
+    is($exit, 0, "import-blocklist exits 0") or diag($out);
+
+    my $pending = run_psql("SELECT CASE WHEN h.mdate > z.serial_date THEN 1 ELSE 0 END FROM hosts h JOIN zones z ON h.zone=z.id WHERE h.zone=$zoneid AND h.domain='1xbet14.com'");
+    is($pending, 1, "Updated host is pending against zone serial_date");
+};
+
+# =========================================================================
 # Cleanup
 # =========================================================================
 END {
