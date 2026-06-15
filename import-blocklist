@@ -153,14 +153,17 @@ sub parse_json_config {
     my ($content) = @_;
     
     # Use JSON module if available
+    my $json;
     eval {
         require JSON;
-        JSON->import();
-        return decode_json($content);
+        $json = decode_json($content);
+        1;
+    } or do {
+        # Fallback to simple parser
+        return parse_simple_json($content);
     };
     
-    # Fallback to simple parser
-    return parse_simple_json($content);
+    return $json;
 }
 
 sub parse_simple_json {
@@ -182,6 +185,7 @@ sub parse_simple_json {
             $source{csv_file} = $1 if $src_str =~ /"csv_file"\s*:\s*"([^"]+)"/;
             $source{zone} = $1 if $src_str =~ /"zone"\s*:\s*"([^"]+)"/;
             $source{cname_target} = $1 if $src_str =~ /"cname_target"\s*:\s*"([^"]+)"/;
+            $source{cname_target_column} = $1 if $src_str =~ /"cname_target_column"\s*:\s*"([^"]+)"/;
             $source{txt_info_prefix} = $1 if $src_str =~ /"txt_info_prefix"\s*:\s*"([^"]+)"/;
             
             # Extract csv_columns
@@ -383,10 +387,11 @@ sub parse_csv_file {
         }
     }
     
-    # Also check for cname_target_column
-    if ($cols->{cname_target_column}) {
+    # Also check for cname_target_column (it's a source property, not csv_columns)
+    if ($src->{cname_target_column}) {
+        my $target_col_name = $src->{cname_target_column};
         for my $i (0..$#headers) {
-            if ($headers[$i] eq $cols->{cname_target_column}) {
+            if ($headers[$i] eq $target_col_name) {
                 $col_idx{cname_target} = $i;
                 last;
             }
@@ -509,7 +514,10 @@ sub apply_filters {
         
         # Validate domain
         next ENTRY unless $entry->{domain};
-        next ENTRY unless valid_domainname($entry->{domain});
+        
+        # Allow wildcard domains (*.example.com) which are valid for RPZ
+        my $is_wildcard = ($entry->{domain} =~ /^\*\./);
+        next ENTRY unless ($is_wildcard || valid_domainname($entry->{domain}));
         
         push @filtered, $entry;
     }
@@ -590,6 +598,10 @@ sub add_rpz_entry {
 sub create_or_update_host {
     my ($zoneid, $domain, $cname, $comment, $info) = @_;
     
+    # For wildcard domains, we need to handle them differently
+    # Wildcard domains start with * and are valid in DNS
+    my $is_wildcard = ($domain =~ /^\*\./);
+    
     # Check if domain already exists in the zone
     my $existing_id = get_host_id($zoneid, $domain);
     if ($existing_id > 0) {
@@ -600,10 +612,13 @@ sub create_or_update_host {
                     "info = " . db_encode_str($info) . " " .
                     "WHERE id = $existing_id AND type = 4";
         
-        return db_exec($query) >= 0;
+        my $result = db_exec($query);
+        print "    UPDATED: $domain (result=$result)\n" if $opt_verbose && $result >= 0;
+        return $result >= 0;
     }
     
     # Create new host record with CNAME
+    # For wildcards, we still use the same structure
     my @cname_l = ([0, $cname, '']);
     my @txt_l = ([0, $info, '']);
     
@@ -617,6 +632,10 @@ sub create_or_update_host {
         info => $info,
         txt_l => \@txt_l,
     });
+    
+    if ($hostid <= 0) {
+        print "    FAILED: add_host returned $hostid for $domain\n" if $opt_verbose;
+    }
     
     return $hostid > 0;
 }
