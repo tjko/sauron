@@ -42,47 +42,66 @@ sub run_import {
 
 # Create test CSV file with blocklist data
 sub create_test_csv {
-    my ($filename, $entries_ref) = @_;
+    my ($filename, $entries_ref, $headers_ref) = @_;
+    my @headers = $headers_ref ? @$headers_ref : qw(URL DATUM_ZAPISU DATUM_VYMAZU ZDROJ NAZEV_DATOVE_SADY);
     open(my $fh, '>:utf8', $filename) or die "Cannot create $filename: $!";
-    print $fh "URL,DATUM_ZAPISU,DATUM_VYMAZU,ZDROJ,NAZEV_DATOVE_SADY\n";
+    print $fh join(',', @headers) . "\n";
     for my $e (@$entries_ref) {
-        print $fh "$e->{url},$e->{added},$e->{removed},$e->{source},$e->{dataset}\n";
+        if ($headers_ref) {
+            print $fh join(',', map { defined $e->{$_} ? $e->{$_} : '' } @headers) . "\n";
+        } else {
+            print $fh "$e->{url},$e->{added},$e->{removed},$e->{source},$e->{dataset}\n";
+        }
     }
     close($fh);
 }
 
 # Create test config file
 sub create_test_config {
-    my ($filename, $csv_file, $zone, $cname_target) = @_;
+    my ($filename, $csv_file, $zone, $cname_target, $opts) = @_;
     $cname_target ||= '*.blocked.example.cz.';
+    $opts ||= {};
+    my $source_regex = $opts->{source_regex} || 'Test';
+    my $txt_columns = $opts->{txt_columns} || undef;
     open(my $fh, '>:utf8', $filename) or die "Cannot create $filename: $!";
-    print $fh <<EOF;
-{
-  "sources": [
-    {
-      "name": "test-source",
-      "description": "Test blocklist source",
-      "csv_file": "$csv_file",
-      "csv_columns": {
-        "domain": "URL",
-        "date_added": "DATUM_ZAPISU",
-        "date_removed": "DATUM_VYMAZU",
-        "source": "ZDROJ",
-        "dataset": "NAZEV_DATOVE_SADY"
-      },
-      "filters": {
-        "source_regex": "Test"
-      },
-      "zone": "$zone",
-      "cname_target": "$cname_target",
-      "txt_info_prefix": "Test"
-    }
-  ],
-  "global_settings": {
-    "remove_expired": true
-  }
-}
-EOF
+        print $fh "{\n";
+        print $fh "  \"sources\": [\n";
+        print $fh "    {\n";
+        print $fh "      \"name\": \"test-source\",\n";
+        print $fh "      \"description\": \"Test blocklist source\",\n";
+        print $fh "      \"csv_file\": \"$csv_file\",\n";
+        print $fh "      \"csv_columns\": {\n";
+        print $fh "        \"domain\": \"URL\",\n";
+        print $fh "        \"date_added\": \"DATUM_ZAPISU\",\n";
+        print $fh "        \"date_removed\": \"DATUM_VYMAZU\",\n";
+        print $fh "        \"source\": \"ZDROJ\",\n";
+        print $fh "        \"dataset\": \"NAZEV_DATOVE_SADY\"\n";
+        print $fh "      },\n";
+        print $fh "      \"filters\": {\n";
+        print $fh "        \"source_regex\": \"$source_regex\"\n";
+        print $fh "      },\n";
+        print $fh "      \"zone\": \"$zone\",\n";
+        print $fh "      \"cname_target\": \"$cname_target\",\n";
+        print $fh "      \"txt_info_prefix\": \"Test\"";
+        if ($txt_columns) {
+                print $fh ",\n";
+                print $fh "      \"txt_columns\": {\n";
+                my @labels = sort keys %$txt_columns;
+                for my $i (0..$#labels) {
+                        my $label = $labels[$i];
+                        my $comma = $i == $#labels ? '' : ',';
+                        print $fh "        \"$label\": \"$txt_columns->{$label}\"$comma\n";
+                }
+                print $fh "      }\n";
+        } else {
+                print $fh "\n";
+        }
+        print $fh "    }\n";
+        print $fh "  ],\n";
+        print $fh "  \"global_settings\": {\n";
+        print $fh "    \"remove_expired\": true\n";
+        print $fh "  }\n";
+        print $fh "}\n";
     close($fh);
 }
 
@@ -342,6 +361,60 @@ subtest 'Duplicate domains in CSV' => sub {
     is($exit, 0, "import-blocklist exits 0") or diag($out);
     # Should only show 1 ADD, not 3
     like($out, qr/ADD:\s+1/, "Duplicates deduplicated to 1 entry");
+};
+
+# =========================================================================
+# Test 8: Generated TXT records and wildcard suppression
+# =========================================================================
+subtest 'Generated TXT records and wildcard suppression' => sub {
+    my $csv_file = "$tmpdir/test8.csv";
+    my $config_file = "$tmpdir/test8.conf";
+
+    create_test_csv($csv_file, [
+        {
+            URL => '1xbet14.com',
+            DATUM_ZAPISU => '2018-02-15',
+            DATUM_VYMAZU => '',
+            ZDROJ => 'Test Source',
+            NAZEV_DATOVE_SADY => 'Test List',
+            LEGAL => '186/2016 Sb.',
+            EVIDENCE => 'zverejneno 15.2.2018',
+            SHA256SUM => 'ad58d3f193322030f2c5ec8226ab63c417956bdbc3fa75c92dda963bee42b27b b1.pdf',
+            WILDCARD => '0',
+        },
+        {
+            URL => 'wildcard-txt.example.com',
+            DATUM_ZAPISU => '2024-01-01',
+            DATUM_VYMAZU => '',
+            ZDROJ => 'Test Source',
+            NAZEV_DATOVE_SADY => 'Test List',
+            LEGAL => 'Law X',
+            EVIDENCE => 'Evidence X',
+            SHA256SUM => 'deadbeef',
+            WILDCARD => '1',
+        },
+    ], [qw(URL DATUM_ZAPISU DATUM_VYMAZU ZDROJ NAZEV_DATOVE_SADY LEGAL EVIDENCE SHA256SUM WILDCARD)]);
+
+    create_test_config($config_file, $csv_file, 'test-rpz.example.cz', undef, {
+        source_regex => 'Test Source',
+        txt_columns => {
+            _info => 'generated:info',
+            _legal => 'LEGAL',
+            _sha256sum => 'SHA256SUM',
+        },
+    });
+
+    my ($exit, $out) = run_import("--config", $config_file, "--source", "test-source");
+    is($exit, 0, "import-blocklist exits 0") or diag($out);
+
+    my $base_txt_count = run_psql("SELECT COUNT(*) FROM txt_entries te JOIN hosts h ON te.ref = h.id WHERE h.zone=$zoneid AND h.domain='1xbet14.com' AND te.type=2");
+    is($base_txt_count, 3, "Base host has three TXT records");
+
+    my $wildcard_txt_count = run_psql("SELECT COUNT(*) FROM txt_entries te JOIN hosts h ON te.ref = h.id WHERE h.zone=$zoneid AND h.domain='*.wildcard-txt.example.com' AND te.type=2");
+    is($wildcard_txt_count, 0, "Wildcard host has no TXT records");
+
+    my $wildcard_host = run_psql("SELECT COUNT(*) FROM hosts WHERE zone=$zoneid AND domain='*.wildcard-txt.example.com'");
+    is($wildcard_host, 1, "Wildcard host exists");
 };
 
 # =========================================================================

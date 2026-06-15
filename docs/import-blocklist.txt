@@ -80,6 +80,30 @@ Example configuration:
   }
 }
 
+TXT RECORD MAPPING
+------------------
+The optional txt_columns map lets you define additional TXT records per host.
+Use the TXT label without the leading underscore as the key and the CSV column
+name as the value.
+
+Example:
+
+  "txt_columns": {
+    "_info": "generated:info",
+    "_legal": "legal",
+    "_sha256sum": "sha256sum"
+  }
+
+Supported generated values:
+  * generated:info       - Uses the blocklist info string from the host
+  * generated:date_added - Formats the import date as D.M.YYYY
+  * generated:date_removed - Formats the removal date as D.M.YYYY
+  * generated:source     - Uses the CSV source column
+  * generated:dataset    - Uses the CSV dataset column
+
+Wildcard helper hosts (*.domain) are still created when wildcard=1 is present
+in CSV, but they do not receive TXT records. This keeps named-checkzone happy.
+
 CSV STRUCTURE
 -------------
 Expected CSV file format:
