@@ -362,9 +362,19 @@ sub parse_csv_file {
     my $cols = $src->{csv_columns};
     for my $i (0..$#headers) {
         $headers[$i] =~ s/^\s+|\s+$//g;  # Trim whitespace
-        foreach my $field (qw(domain date_added date_removed source dataset)) {
+        foreach my $field (qw(domain wildcard date_added date_removed source dataset)) {
             if ($headers[$i] eq $cols->{$field}) {
                 $col_idx{$field} = $i;
+            }
+        }
+    }
+    
+    # Also check for cname_target_column
+    if ($cols->{cname_target_column}) {
+        for my $i (0..$#headers) {
+            if ($headers[$i] eq $cols->{cname_target_column}) {
+                $col_idx{cname_target} = $i;
+                last;
             }
         }
     }
@@ -380,7 +390,7 @@ sub parse_csv_file {
         next unless @fields >= keys %col_idx;
         
         my %entry;
-        foreach my $field (qw(domain date_added date_removed source dataset)) {
+        foreach my $field (qw(domain wildcard date_added date_removed source dataset cname_target)) {
             if (defined $col_idx{$field}) {
                 my $val = $fields[$col_idx{$field}] // '';
                 $val =~ s/^\s+|\s+$//g;  # Trim
@@ -391,6 +401,13 @@ sub parse_csv_file {
         # Clean up domain (remove http://, https://, www., trailing slashes)
         if ($entry{domain}) {
             $entry{domain} = clean_domain($entry{domain});
+        }
+        
+        # Normalize wildcard flag (true/1 -> 1, else 0)
+        if (defined $entry{wildcard}) {
+            $entry{wildcard} = ($entry{wildcard} =~ /^(true|1|yes)$/i) ? 1 : 0;
+        } else {
+            $entry{wildcard} = 0;
         }
         
         # Skip duplicate domains (keep first occurrence)
@@ -534,16 +551,33 @@ sub add_rpz_entry {
     my ($zoneid, $entry, $src) = @_;
     
     my $domain = $entry->{domain};
-    my $cname = $src->{cname_target} || $src->{default_cname_target};
+    my $cname = $entry->{cname_target} || $src->{cname_target} || $src->{default_cname_target};
     my $comment = "blocklist:$src->{name}:$entry->{source}";
     my $info = format_info_text($entry, $src);
+    my $wildcard = $entry->{wildcard} || 0;
     
-    # Check if domain already exists in the zone (regardless of source)
+    my $result = 0;
+    
+    # Create base domain entry
+    $result = create_or_update_host($zoneid, $domain, $cname, $comment, $info);
+    
+    # Create wildcard entry if requested
+    if ($wildcard) {
+        my $wildcard_domain = "*.$domain";
+        print "    ADD WILDCARD: $wildcard_domain --> $cname\n" if $opt_verbose;
+        create_or_update_host($zoneid, $wildcard_domain, $cname, $comment, $info);
+    }
+    
+    return $result;
+}
+
+sub create_or_update_host {
+    my ($zoneid, $domain, $cname, $comment, $info) = @_;
+    
+    # Check if domain already exists in the zone
     my $existing_id = get_host_id($zoneid, $domain);
     if ($existing_id > 0) {
-        # Domain exists - update it with new info if from our source
-        print "    UPDATE: $domain (already exists in zone)\n" if $opt_verbose;
-        
+        # Domain exists - update it
         my $query = "UPDATE hosts SET " .
                     "cname_txt = " . db_encode_str($cname) . ", " .
                     "comment = " . db_encode_str($comment) . ", " .
@@ -553,9 +587,7 @@ sub add_rpz_entry {
         return db_exec($query) >= 0;
     }
     
-    print "    ADD: $domain --> $cname\n" if $opt_verbose;
-    
-    # Create host record with CNAME
+    # Create new host record with CNAME
     my @cname_l = ([0, $cname, '']);
     my @txt_l = ([0, $info, '']);
     
@@ -577,11 +609,26 @@ sub update_rpz_entry {
     my ($zoneid, $entry, $src) = @_;
     
     my $domain = $entry->{domain};
-    my $cname = $src->{cname_target};
+    my $cname = $entry->{cname_target} || $src->{cname_target} || $src->{default_cname_target};
     my $comment = "blocklist:$src->{name}:$entry->{source}";
     my $info = format_info_text($entry, $src);
+    my $wildcard = $entry->{wildcard} || 0;
     
-    print "    UPDATE: $domain\n" if $opt_verbose;
+    # Update base domain
+    my $result = update_host_entry($zoneid, $domain, $cname, $comment, $info);
+    
+    # Update/create wildcard entry if requested
+    if ($wildcard) {
+        my $wildcard_domain = "*.$domain";
+        print "    UPDATE WILDCARD: $wildcard_domain\n" if $opt_verbose;
+        update_host_entry($zoneid, $wildcard_domain, $cname, $comment, $info);
+    }
+    
+    return $result;
+}
+
+sub update_host_entry {
+    my ($zoneid, $domain, $cname, $comment, $info) = @_;
     
     my $query = "UPDATE hosts SET " .
                 "cname_txt = " . db_encode_str($cname) . ", " .
@@ -596,14 +643,31 @@ sub delete_rpz_entry {
     my ($zoneid, $entry, $src) = @_;
     
     my $domain = $entry->{domain};
+    my $wildcard = $entry->{wildcard} || 0;
     
     print "    DELETE: $domain (expired/removed from source)\n" if $opt_verbose;
+    
+    # Delete base domain
+    my $result = delete_host_entry($zoneid, $domain, $src->{name});
+    
+    # Delete wildcard entry if it exists
+    if ($wildcard) {
+        my $wildcard_domain = "*.$domain";
+        print "    DELETE WILDCARD: $wildcard_domain\n" if $opt_verbose;
+        delete_host_entry($zoneid, $wildcard_domain, $src->{name});
+    }
+    
+    return $result;
+}
+
+sub delete_host_entry {
+    my ($zoneid, $domain, $source_name) = @_;
     
     my $query = "DELETE FROM hosts WHERE " .
                 "zone = $zoneid AND " .
                 "domain = " . db_encode_str($domain) . " AND " .
                 "type = 4 AND " .
-                "comment LIKE " . db_encode_str("blocklist:$src->{name}:%");
+                "comment LIKE " . db_encode_str("blocklist:$source_name:%");
     
     return db_exec($query) >= 0;
 }
@@ -822,6 +886,8 @@ zones. It supports:
 
 =item * Dry-run mode for testing changes
 
+=item * Wildcard domain support (creates *.domain entries)
+
 =back
 
 =head1 CONFIGURATION FILE
@@ -859,9 +925,53 @@ Example configuration:
       },
       "zone": "rpz.cesnet.cz",
       "cname_target": "*.poker.cesnet.cz."
+    },
+    {
+      "name": "blocking-rpz",
+      "description": "RPZ blocklist with wildcard support",
+      "csv_file": "/tmp/blocking-rpz.csv",
+      "csv_columns": {
+        "domain": "domain",
+        "wildcard": "wildcard",
+        "date_added": "date_added",
+        "source": "source",
+        "dataset": "legal"
+      },
+      "zone": "rpz.cesnet.cz",
+      "cname_target_column": "target",
+      "txt_info_prefix": "Blokovaná doména"
     }
   ]
 }
+
+=head1 WILDCARD SUPPORT
+
+The script supports wildcard domain entries. When a CSV file contains a C<wildcard>
+column with value C<1> or C<true>, the script creates two DNS entries:
+
+=over 4
+
+=item 1.
+
+The base domain (e.g., C<example.com>)
+
+=item 2.
+
+A wildcard entry (e.g., C<*.example.com>)
+
+=back
+
+This is useful for RPZ (Response Policy Zone) configurations where you want to
+block both the domain and all its subdomains.
+
+Example CSV with wildcard support:
+
+  domain,wildcard,target,date_added,source
+  blocked.com,0,*.poker.cesnet.cz.,2024-01-01,Authority
+  wildcard.com,1,*.poker.cesnet.cz.,2024-01-01,Authority
+
+In this example, C<wildcard.com> will create both C<wildcard.com> and
+C<*.wildcard.com> CNAME records.
 
 =head1 EXAMPLES
 
@@ -873,6 +983,12 @@ Example configuration:
 
 # Verbose output
 ./import-blocklist --config blocklist.conf --source sukl-leciva -v
+
+# Using blocking-rpz.conf with wildcard support
+./import-blocklist --config blocking-rpz.conf --source blocking-rpz
+
+# Disable safety checks for large imports
+./import-blocklist --config blocking-rpz.conf --all --max-changes-percent=0 --max-delete=0
 
 =head1 SEE ALSO
 
