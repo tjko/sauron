@@ -172,6 +172,54 @@ CREATE TABLE servers (
 
 ---
 
+## Documentation
+**Purpose:** Create and maintain documentation in the `docs/` directory.
+
+**Expertise:**
+- Writing technical documentation in English
+- Following existing documentation style and format (see `docs/import-blocklist.txt`)
+- Documenting command-line tools, scripts, and utilities
+- Creating comprehensive guides with examples
+- Maintaining consistency across documentation files
+
+**Style Guidelines:**
+- Use plain text format (`.txt` files)
+- Clear section headers with `====` or `----` separators
+- Include SYNOPSIS, DESCRIPTION, OPTIONS, EXAMPLES sections
+- Use monospace formatting for commands, paths, and code
+- Provide both interactive and non-interactive usage examples
+- Include troubleshooting sections for common issues
+- Add SEE ALSO references to related tools
+
+**Documentation Structure:**
+```
+Tool Name - Brief Description
+
+SYNOPSIS
+--------
+  command [OPTIONS]
+
+DESCRIPTION
+-----------
+Detailed description of purpose and features.
+
+OPTIONS
+-------
+  --option    Description of what it does.
+
+EXAMPLES
+--------
+Practical usage examples.
+
+SEE ALSO
+--------
+Related commands and documentation.
+```
+
+**When to Use:** Adding new documentation files to `docs/` directory, updating existing documentation for tools and scripts, creating user guides for new features.
+
+---
+
 ## DatabaseDiagnostics
 **Purpose:** Access Sauron PostgreSQL database from shell scripts and diagnostics.
 
