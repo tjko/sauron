@@ -299,13 +299,7 @@ subtest 'Dry-run mode' => sub {
     
     create_test_config($config_file, $csv_file, 'test-rpz.example.cz');
     
-    my ($exit, $out) = run_import(
-        "--config", $config_file,
-        "--source", "test-source",
-        "--dry-run",
-        "--max-changes-percent=0",
-        "--max-delete=0"
-    );
+    my ($exit, $out) = run_import("--config", $config_file, "--source", "test-source", "--dry-run");
     is($exit, 0, "import-blocklist exits 0") or diag($out);
     like($out, qr/\[DRY-RUN\]/, "Dry-run mode indicated");
     
@@ -351,13 +345,7 @@ subtest 'Duplicate domains in CSV' => sub {
     
     create_test_config($config_file, $csv_file, 'test-rpz.example.cz');
     
-    my ($exit, $out) = run_import(
-        "--config", $config_file,
-        "--source", "test-source",
-        "--dry-run",
-        "--max-changes-percent=0",
-        "--max-delete=0"
-    );
+    my ($exit, $out) = run_import("--config", $config_file, "--source", "test-source", "--dry-run");
     is($exit, 0, "import-blocklist exits 0") or diag($out);
     # Should only show 1 ADD, not 3
     like($out, qr/ADD:\s+1/, "Duplicates deduplicated to 1 entry");
@@ -404,7 +392,12 @@ subtest 'Generated TXT records and wildcard suppression' => sub {
         },
     });
 
-    my ($exit, $out) = run_import("--config", $config_file, "--source", "test-source");
+    my ($exit, $out) = run_import(
+        "--config", $config_file,
+        "--source", "test-source",
+        "--max-changes-percent=0",
+        "--max-delete=0"
+    );
     is($exit, 0, "import-blocklist exits 0") or diag($out);
 
     my $base_txt_count = run_psql("SELECT COUNT(*) FROM txt_entries te JOIN hosts h ON te.ref = h.id WHERE h.zone=$zoneid AND h.domain='1xbet14.com' AND te.type=2");
@@ -447,7 +440,12 @@ subtest 'Updated entry is marked pending' => sub {
         },
     });
 
-    my ($exit, $out) = run_import("--config", $config_file, "--source", "test-source");
+    my ($exit, $out) = run_import(
+        "--config", $config_file,
+        "--source", "test-source",
+        "--max-changes-percent=0",
+        "--max-delete=0"
+    );
     is($exit, 0, "import-blocklist exits 0") or diag($out);
 
     my $pending = run_psql("SELECT CASE WHEN h.mdate > z.serial_date THEN 1 ELSE 0 END FROM hosts h JOIN zones z ON h.zone=z.id WHERE h.zone=$zoneid AND h.domain='1xbet14.com'");
