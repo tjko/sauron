@@ -181,7 +181,16 @@ jobs:
           . /etc/profile.d/sauron.sh
           test -s named.root || (rm -fv named.root && wget 'ftp://ftp.rs.internic.net/domain/named.root')
           /usr/local/sauron/import-roots default ./named.root
-          test -s ieee-oui.txt || (rm -fv ieee-oui.txt && wget -O ./ieee-oui.txt 'https://standards-oui.ieee.org/oui/oui.txt')
+          # Use bundled OUI sample file instead of downloading from IEEE (to avoid rate limiting)
+          # In container jobs github.workspace can resolve to a host-only path.
+          if [ -s ./test/oui.txt ]; then
+            cp ./test/oui.txt ./ieee-oui.txt
+          elif [ -s ./contrib/Ethernet.txt ]; then
+            cp ./contrib/Ethernet.txt ./ieee-oui.txt
+          else
+            echo "No bundled OUI sample found (expected test/oui.txt or contrib/Ethernet.txt)." >&2
+            exit 1
+          fi
           /usr/local/sauron/import-ethers ./ieee-oui.txt
         shell: bash
 
