@@ -63,6 +63,7 @@ sub create_test_config {
     $opts ||= {};
     my $source_regex = $opts->{source_regex} || 'Test';
     my $txt_columns = $opts->{txt_columns} || undef;
+    my $csv_columns = $opts->{csv_columns} || undef;
     open(my $fh, '>:utf8', $filename) or die "Cannot create $filename: $!";
         print $fh "{\n";
         print $fh "  \"sources\": [\n";
@@ -76,7 +77,10 @@ sub create_test_config {
         print $fh "        \"date_removed\": \"DATUM_VYMAZU\",\n";
         print $fh "        \"source\": \"ZDROJ\",\n";
         print $fh "        \"dataset\": \"NAZEV_DATOVE_SADY\"\n";
-        print $fh "      },\n";
+        if ($csv_columns && $csv_columns->{wildcard}) {
+            print $fh ",\n        \"wildcard\": \"" . $csv_columns->{wildcard} . "\"";
+        }
+        print $fh "\n";
         print $fh "      \"filters\": {\n";
         print $fh "        \"source_regex\": \"$source_regex\"\n";
         print $fh "      },\n";
