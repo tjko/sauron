@@ -89,6 +89,7 @@ $opt_confirm_above = undef if ($opt_confirm_above <= 0);
 ######################
 my $config = load_config_file($opt_config);
 die "Invalid configuration file: $opt_config\n" unless $config && ref($config) eq 'HASH';
+my $global_default_cname_target = $config->{global_settings}{default_cname_target};
 
 $opt_remove_expired = $config->{global_settings}{remove_expired}
     if (defined $config->{global_settings}{remove_expired} && !$ENV{BLOCKLIST_KEEP_EXPIRED});
@@ -119,6 +120,10 @@ if ($opt_all) {
 print "Processing " . scalar(@sources_to_process) . " source(s)\n";
 
 foreach my $src (@sources_to_process) {
+    if (defined $global_default_cname_target &&
+        (!defined $src->{default_cname_target} || $src->{default_cname_target} eq '')) {
+        $src->{default_cname_target} = $global_default_cname_target;
+    }
     process_source($src);
 }
 
@@ -552,15 +557,36 @@ sub get_existing_entries {
     return %entries;
 }
 
+sub resolve_cname_target {
+    my ($entry, $src) = @_;
+
+    my @candidates = (
+        ($entry && defined $entry->{cname_target}) ? $entry->{cname_target} : undef,
+        $src->{cname_target},
+        $src->{default_cname_target},
+    );
+
+    foreach my $candidate (@candidates) {
+        next unless defined $candidate;
+        next if $candidate eq '';
+        return $candidate;
+    }
+
+    return undef;
+}
+
 sub entry_changed {
     my ($existing, $new, $src) = @_;
     
     # Get expected CNAME target from source config
-    my $expected_cname = $src->{cname_target} || $src->{default_cname_target};
+    my $expected_cname = resolve_cname_target($new, $src);
     
-    # Check if CNAME target changed (handle undefined values)
-    if (!defined $existing->{cname} || $existing->{cname} ne $expected_cname) {
-        return 1;
+    # Only compare CNAME when we can resolve expected target.
+    # This prevents false-positive MODIFY for all records when config uses per-row targets.
+    if (defined $expected_cname) {
+        if (!defined $existing->{cname} || $existing->{cname} ne $expected_cname) {
+            return 1;
+        }
     }
     
     # Check if info/metadata is missing
@@ -575,7 +601,11 @@ sub add_rpz_entry {
     my ($zoneid, $entry, $src) = @_;
     
     my $domain = $entry->{domain};
-    my $cname = $entry->{cname_target} || $src->{cname_target} || $src->{default_cname_target};
+    my $cname = resolve_cname_target($entry, $src);
+    unless (defined $cname) {
+        print STDERR "    ERROR: Missing CNAME target for $domain\n";
+        return 0;
+    }
     my $comment = "blocklist:$src->{name}:$entry->{source}";
     my $info = format_info_text($entry, $src);
     my $wildcard = $entry->{wildcard} || 0;
@@ -644,7 +674,11 @@ sub update_rpz_entry {
     my ($zoneid, $entry, $src) = @_;
     
     my $domain = $entry->{domain};
-    my $cname = $entry->{cname_target} || $src->{cname_target} || $src->{default_cname_target};
+    my $cname = resolve_cname_target($entry, $src);
+    unless (defined $cname) {
+        print STDERR "    ERROR: Missing CNAME target for $domain\n";
+        return 0;
+    }
     my $comment = "blocklist:$src->{name}:$entry->{source}";
     my $info = format_info_text($entry, $src);
     my $wildcard = $entry->{wildcard} || 0;
