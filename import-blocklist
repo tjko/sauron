@@ -352,18 +352,32 @@ sub parse_csv_file {
         return ();
     };
     
-    # Read header line
-    my $header_line = <$fh>;
+    # Read header line (skip comment lines starting with #)
+    my $header_line;
+    while (my $line = <$fh>) {
+        $line =~ s/^\s+|\s+$//g;  # Trim whitespace
+        next if $line =~ /^#/;     # Skip comment lines
+        next if $line =~ /^$/;     # Skip empty lines
+        $header_line = $line;
+        last;
+    }
+    
+    unless ($header_line) {
+        print STDERR "WARNING: No header line found in CSV file: $file\n";
+        close($fh);
+        return ();
+    }
+    
     chomp($header_line);
     my @headers = split(/,/, $header_line);
     
     # Create column index mapping
     my %col_idx;
-    my $cols = $src->{csv_columns};
+    my $cols = $src->{csv_columns} || {};
     for my $i (0..$#headers) {
         $headers[$i] =~ s/^\s+|\s+$//g;  # Trim whitespace
         foreach my $field (qw(domain wildcard date_added date_removed source dataset)) {
-            if ($headers[$i] eq $cols->{$field}) {
+            if (defined $cols->{$field} && $headers[$i] eq $cols->{$field}) {
                 $col_idx{$field} = $i;
             }
         }
@@ -379,12 +393,13 @@ sub parse_csv_file {
         }
     }
     
-    # Read data lines
+    # Read data lines (skip comment lines starting with #)
     my %seen_domains;  # Track unique domains
     my @entries;
     while (my $line = <$fh>) {
         chomp($line);
-        next if $line =~ /^\s*$/;  # Skip empty lines
+        next if $line =~ /^\s*$/;   # Skip empty lines
+        next if $line =~ /^\s*#/;   # Skip comment lines
         
         my @fields = parse_csv_line($line);
         next unless @fields >= keys %col_idx;
@@ -398,10 +413,11 @@ sub parse_csv_file {
             }
         }
         
+        # Skip entries without domain
+        next unless $entry{domain};
+        
         # Clean up domain (remove http://, https://, www., trailing slashes)
-        if ($entry{domain}) {
-            $entry{domain} = clean_domain($entry{domain});
-        }
+        $entry{domain} = clean_domain($entry{domain});
         
         # Normalize wildcard flag (true/1 -> 1, else 0)
         if (defined $entry{wildcard}) {
