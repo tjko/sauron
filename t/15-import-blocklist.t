@@ -76,11 +76,11 @@ sub create_test_config {
         print $fh "        \"date_added\": \"DATUM_ZAPISU\",\n";
         print $fh "        \"date_removed\": \"DATUM_VYMAZU\",\n";
         print $fh "        \"source\": \"ZDROJ\",\n";
-        print $fh "        \"dataset\": \"NAZEV_DATOVE_SADY\"\n";
+        print $fh "        \"dataset\": \"NAZEV_DATOVE_SADY\"";
         if ($csv_columns && $csv_columns->{wildcard}) {
             print $fh ",\n        \"wildcard\": \"" . $csv_columns->{wildcard} . "\"";
         }
-        print $fh "\n";
+        print $fh "\n      },\n";
         print $fh "      \"filters\": {\n";
         print $fh "        \"source_regex\": \"$source_regex\"\n";
         print $fh "      },\n";
