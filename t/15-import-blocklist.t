@@ -280,7 +280,13 @@ subtest 'Dry-run mode' => sub {
     
     create_test_config($config_file, $csv_file, 'test-rpz.example.cz');
     
-    my ($exit, $out) = run_import("--config", $config_file, "--source", "test-source", "--dry-run");
+    my ($exit, $out) = run_import(
+        "--config", $config_file,
+        "--source", "test-source",
+        "--dry-run",
+        "--max-changes-percent=0",
+        "--max-delete=0"
+    );
     is($exit, 0, "import-blocklist exits 0") or diag($out);
     like($out, qr/\[DRY-RUN\]/, "Dry-run mode indicated");
     
@@ -302,7 +308,11 @@ subtest 'Test --max-changes-percent limit' => sub {
     create_test_config($config_file, $csv_file, 'test-rpz.example.cz');
     
     # With default 25% limit, this should fail
-    my ($exit, $out) = run_import("--config", $config_file, "--source", "test-source", "--dry-run");
+    my ($exit, $out) = run_import(
+        "--config", $config_file,
+        "--source", "test-source",
+        "--dry-run"
+    );
     isnt($exit, 0, "import-blocklist fails with too many changes") or diag($out);
     like($out, qr/Changes exceed maximum allowed percentage/, "Error message indicates percentage limit");
 };
@@ -322,7 +332,13 @@ subtest 'Duplicate domains in CSV' => sub {
     
     create_test_config($config_file, $csv_file, 'test-rpz.example.cz');
     
-    my ($exit, $out) = run_import("--config", $config_file, "--source", "test-source", "--dry-run");
+    my ($exit, $out) = run_import(
+        "--config", $config_file,
+        "--source", "test-source",
+        "--dry-run",
+        "--max-changes-percent=0",
+        "--max-delete=0"
+    );
     is($exit, 0, "import-blocklist exits 0") or diag($out);
     # Should only show 1 ADD, not 3
     like($out, qr/ADD:\s+1/, "Duplicates deduplicated to 1 entry");

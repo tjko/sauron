@@ -253,6 +253,7 @@ sub process_source {
     # Get existing entries from database for this source
     my %existing = get_existing_entries($zoneid, $src->{name});
     print "    Existing entries in DB: " . scalar(keys %existing) . "\n";
+    my $existing_count = scalar(keys %existing);
     
     # Calculate changes
     my (%to_add, %to_modify, %to_delete);
@@ -283,22 +284,19 @@ sub process_source {
     my $num_modify = scalar(keys %to_modify);
     my $num_delete = scalar(keys %to_delete);
     my $total_changes = $num_add + $num_modify + $num_delete;
-    my $existing_count = scalar(keys %existing);
     
     print "\n    Changes summary:\n";
     print "      ADD:     $num_add\n";
     print "      MODIFY:  $num_modify\n";
     print "      DELETE:  $num_delete\n";
     
-    # Check change limits before applying (skip for dry-run)
-    unless ($opt_dry_run) {
-        check_change_limits($num_add, $num_modify, $num_delete, $existing_count, $src->{name});
-    }
+    # Check change limits even in dry-run so safety checks can be validated in CI
+    check_change_limits($num_add, $num_modify, $num_delete, $existing_count, $src->{name});
     
     # Apply changes
     if ($opt_dry_run) {
         print "\n[DRY-RUN] No changes will be applied\n";
-        print_changes(%to_add, %to_modify, %to_delete);
+        print_changes(\%to_add, \%to_modify, \%to_delete);
         return;
     }
     
@@ -663,6 +661,7 @@ sub check_change_limits {
     my ($num_add, $num_modify, $num_delete, $existing_count, $source_name) = @_;
     
     my $total_changes = $num_add + $num_modify + $num_delete;
+    my $existing_changes = $num_modify + $num_delete;
     my $abort = 0;
     
     print "\n";
@@ -677,10 +676,10 @@ sub check_change_limits {
     
     # Check percentage limit (only if we have existing records)
     if (defined $opt_max_changes_percent && $existing_count > 0) {
-        my $change_percent = int(($total_changes * 100) / $existing_count);
+        my $change_percent = int(($existing_changes * 100) / $existing_count);
         if ($change_percent > $opt_max_changes_percent) {
             print "ERROR: Changes exceed maximum allowed percentage!\n";
-            print "    Total changes: $total_changes ($change_percent% of existing records)\n";
+            print "    Total changes: $existing_changes ($change_percent% of existing records)\n";
             print "    Existing records: $existing_count\n";
             print "    Maximum allowed: $opt_max_changes_percent%\n";
             $abort = 1;
@@ -715,27 +714,27 @@ sub check_change_limits {
 }
 
 sub print_changes {
-    my (%to_add, %to_modify, %to_delete) = @_;
+    my ($to_add, $to_modify, $to_delete) = @_;
     
     print "\nChanges that would be made:\n";
     
-    if (%to_add) {
+    if (%$to_add) {
         print "\nADD:\n";
-        foreach my $d (sort keys %to_add) {
+        foreach my $d (sort keys %$to_add) {
             print "  + $d\n";
         }
     }
     
-    if (%to_modify) {
+    if (%$to_modify) {
         print "\nMODIFY:\n";
-        foreach my $d (sort keys %to_modify) {
+        foreach my $d (sort keys %$to_modify) {
             print "  ~ $d\n";
         }
     }
     
-    if (%to_delete) {
+    if (%$to_delete) {
         print "\nDELETE:\n";
-        foreach my $d (sort keys %to_delete) {
+        foreach my $d (sort keys %$to_delete) {
             print "  - $d\n";
         }
     }
