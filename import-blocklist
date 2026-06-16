@@ -566,6 +566,7 @@ sub get_existing_entries {
     my %entries;
     my $comment_prefix = "blocklist:$source_name:";
     
+    # Get CNAME hosts (type=4)
     my $query = "SELECT h.id, h.domain, h.cname_txt, h.comment, h.info " .
                 "FROM hosts h WHERE h.zone = $zoneid AND h.type = 4 " .
                 "AND h.comment LIKE " . db_encode_str($comment_prefix . '%');
@@ -582,6 +583,28 @@ sub get_existing_entries {
             comment => $comment,
             info => $info,
         };
+    }
+    
+    # Also get standalone TXT hosts (type=13) created for CNAME domains
+    # These have domain like "_info.original_domain" or "_legal.original_domain"
+    my $txt_comment_prefix = managed_txt_comment_prefix($source_name);
+    my $txt_query = "SELECT h.id, h.domain, h.cname_txt, h.comment " .
+                    "FROM hosts h WHERE h.zone = $zoneid AND h.type = 13 " .
+                    "AND h.comment LIKE " . db_encode_str($txt_comment_prefix . '%');
+    
+    undef @rows;
+    db_query($txt_query, \@rows);
+    
+    foreach my $row (@rows) {
+        my ($id, $domain, $txt_value, $comment) = @$row;
+        # Extract original domain from TXT domain (_label.domain -> domain)
+        if ($domain =~ /^_[^\.]+\.(.+)$/) {
+            my $original_domain = $1;
+            # Mark that this domain has associated TXT records
+            if (exists $entries{$original_domain}) {
+                $entries{$original_domain}{has_txt} = 1;
+            }
+        }
     }
     
     return %entries;
@@ -695,13 +718,158 @@ sub txt_records_changed {
     return 0;
 }
 
+# Check if zone is a catalog zone (type='C')
+sub is_catalog_zone_id {
+    my ($zoneid) = @_;
+    
+    return 0 unless $zoneid && $zoneid > 0;
+    
+    my $query = "SELECT type FROM zones WHERE id = $zoneid";
+    my @rows;
+    db_query($query, \@rows);
+    
+    return ($rows[0][0] // '') eq 'C' ? 1 : 0;
+}
+
+# Build TXT info string for catalog zones (stored in host info field)
+sub build_catalog_txt_info {
+    my ($entry, $src) = @_;
+    
+    my @parts;
+    my $txt_columns = $src->{txt_columns} || {};
+    
+    foreach my $label (sort keys %$txt_columns) {
+        my $spec = $txt_columns->{$label};
+        next unless defined $spec && $spec ne '';
+        
+        my $value;
+        if ($spec eq 'generated:info') {
+            $value = format_info_text($entry, $src);
+        } elsif ($spec eq 'generated:date_added') {
+            $value = format_date_cz($entry->{date_added});
+        } elsif ($spec eq 'generated:date_removed') {
+            $value = format_date_cz($entry->{date_removed});
+        } elsif ($spec eq 'generated:source') {
+            $value = $entry->{source} || '';
+        } elsif ($spec eq 'generated:dataset') {
+            $value = $entry->{dataset} || '';
+        } else {
+            $value = csv_value_for_column($entry, $spec);
+        }
+        
+        next unless defined $value;
+        $value =~ s/^\s+|\s+$//g;
+        next if $value eq '';
+        
+        push @parts, "$label=$value";
+    }
+    
+    return join('; ', @parts);
+}
+
+# Create standalone TXT host with prefix for CNAME domains
+# e.g., _info.hazard.com IN TXT "zakazano ministerstvem financi"
+# For catalog zones, stores TXT data in host info field instead.
+sub create_standalone_txt_host {
+    my ($zoneid, $domain, $txt_label, $txt_value, $comment, $src) = @_;
+
+    # For catalog zones, we cannot create separate hosts
+    # Instead, TXT data is stored in the parent CNAME host's info field
+    if (is_catalog_zone_id($zoneid)) {
+        # This function is called from sync_host_txt_entries which handles catalog zones separately
+        return 0;
+    }
+
+    # Create prefixed domain name: _label.domain
+    my $txt_domain = "${txt_label}.${domain}";
+
+    # Check if TXT host already exists
+    my $existing_id = get_host_id($zoneid, $txt_domain);
+    if ($existing_id > 0) {
+        # Update existing TXT host
+        my $now = time();
+        my $query = "UPDATE hosts SET " .
+                    "cname_txt = " . db_encode_str($txt_value) . ", " .
+                    "comment = " . db_encode_str($comment) . ", " .
+                    "mdate = $now, " .
+                    "muser = " . db_encode_str($import_user) . " " .
+                    "WHERE id = $existing_id AND type = 13";
+        my $result = db_exec($query);
+        print "    UPDATED TXT: $txt_domain (result=$result)\n" if $opt_verbose && $result >= 0;
+        return $result >= 0 ? $existing_id : 0;
+    }
+
+    # Create new TXT host (type=13 = standalone TXT record)
+    # Use direct SQL insert because add_host() validation is strict for TXT records
+    my $now = time();
+    my $insert_query = "INSERT INTO hosts (zone, type, domain, class, cname_txt, comment, cdate, cuser, mdate, muser) VALUES (" .
+                       "$zoneid, 13, " . db_encode_str($txt_domain) . ", 'IN', " .
+                       db_encode_str($txt_value) . ", " .
+                       db_encode_str($comment) . ", $now, " .
+                       db_encode_str($import_user) . ", $now, " .
+                       db_encode_str($import_user) . ") RETURNING id";
+    
+    my @result_rows;
+    db_query($insert_query, \@result_rows);
+    my $hostid = $result_rows[0][0] // 0;
+
+    if ($hostid <= 0) {
+        print "    FAILED: INSERT TXT returned $hostid for TXT $txt_domain\n" if $opt_verbose;
+    } else {
+        print "    ADDED TXT: $txt_domain (id=$hostid)\n" if $opt_verbose;
+    }
+
+    return $hostid > 0 ? $hostid : 0;
+}
+
 sub sync_host_txt_entries {
     my ($hostid, $entry, $src) = @_;
 
-    return 0 unless $hostid && $hostid > 0;
+    return 1 unless $hostid && $hostid > 0;
 
     my $source_name = $src->{name};
+    my $domain = $entry->{domain};
     my @desired = resolve_txt_records($entry, $src);
+
+    # For CNAME records (type=4), check if zone is catalog zone
+    my $host_type_query = "SELECT type FROM hosts WHERE id = $hostid";
+    my @type_rows;
+    db_query($host_type_query, \@type_rows);
+    my $host_type = $type_rows[0][0] // 0;
+
+    if ($host_type == 4) {
+        # Get zone ID from host record
+        my $zone_query = "SELECT zone FROM hosts WHERE id = $hostid";
+        my @zone_rows;
+        db_query($zone_query, \@zone_rows);
+        my $zoneid = $zone_rows[0][0] // 0;
+
+        # For catalog zones, store TXT data in the CNAME host's info field
+        # because we cannot create separate hosts in catalog zones
+        if (is_catalog_zone_id($zoneid)) {
+            my $txt_info = build_catalog_txt_info($entry, $src);
+            if ($txt_info ne '') {
+                my $now = time();
+                my $query = "UPDATE hosts SET " .
+                            "info = " . db_encode_str($txt_info) . ", " .
+                            "mdate = $now, " .
+                            "muser = " . db_encode_str($import_user) . " " .
+                            "WHERE id = $hostid";
+                db_exec($query);
+                print "    UPDATED INFO for: $domain (catalog zone)\n" if $opt_verbose;
+            }
+            return 1;
+        }
+
+        # For regular zones, create standalone TXT records with prefix
+        foreach my $record (@desired) {
+            my $comment = managed_txt_comment_prefix($source_name) . $record->{label};
+            create_standalone_txt_host($zoneid, $domain, $record->{label}, $record->{value}, $comment, $src);
+        }
+        return 1;
+    }
+
+    # For non-CNAME hosts, use the original approach (TXT entries bound to host)
     return 0 unless delete_all_txt_entries_for_host($hostid);
 
     foreach my $record (@desired) {
@@ -808,10 +976,40 @@ sub entry_changed {
         return 1;
     }
 
-    # Compare managed TXT entries on the base host.
-    my %existing_txts = managed_txt_entries_for_host($existing->{id}, $src->{name});
-    my @desired_txts = $new->{wildcard} ? resolve_txt_records($new, $src) : resolve_txt_records($new, $src);
-    return 1 if txt_records_changed(\%existing_txts, \@desired_txts);
+    # For CNAME hosts (type=4), TXT records are stored as standalone hosts with prefix.
+    # Check if TXT records have changed by comparing standalone TXT hosts.
+    my $host_type = get_host_type($existing->{id});
+    if ($host_type == 4 && $src->{txt_columns}) {
+        # Compare standalone TXT hosts for CNAME records
+        my @desired_txts = resolve_txt_records($new, $src);
+        foreach my $record (@desired_txts) {
+            my $txt_domain = $record->{label} . "." . $existing->{domain};
+            my $txt_id = get_host_id($zoneid, $txt_domain);
+            if ($txt_id > 0) {
+                # Check if TXT value matches
+                my $query = "SELECT cname_txt FROM hosts WHERE id = $txt_id";
+                my @rows;
+                db_query($query, \@rows);
+                my $existing_txt = $rows[0][0] // '';
+                if ($existing_txt ne $record->{value}) {
+                    return 1;
+                }
+            } else {
+                # TXT host doesn't exist but should
+                return 1;
+            }
+        }
+        # Check if there are extra TXT hosts that shouldn't exist
+        my @txt_labels = sort keys %{$src->{txt_columns} || {}};
+        if (scalar(@desired_txts) != scalar(@txt_labels)) {
+            return 1;
+        }
+    } else {
+        # For non-CNAME hosts, compare managed TXT entries on the base host.
+        my %existing_txts = managed_txt_entries_for_host($existing->{id}, $src->{name});
+        my @desired_txts = resolve_txt_records($new, $src);
+        return 1 if txt_records_changed(\%existing_txts, \@desired_txts);
+    }
 
     # When wildcard is requested in source data, ensure wildcard host exists.
     # Older imports may contain only base domain and need one-time sync.
@@ -827,6 +1025,18 @@ sub entry_changed {
     }
     
     return 0;  # No significant changes
+}
+
+sub get_host_type {
+    my ($hostid) = @_;
+    
+    return 0 unless $hostid && $hostid > 0;
+    
+    my $query = "SELECT type FROM hosts WHERE id = $hostid";
+    my @rows;
+    db_query($query, \@rows);
+    
+    return $rows[0][0] // 0;
 }
 
 sub add_rpz_entry {
@@ -925,12 +1135,42 @@ sub update_rpz_entry {
     return $result;
 }
 
+# Delete all standalone TXT hosts for a given domain
+# Used when deleting a CNAME host that has associated TXT records
+sub delete_txt_hosts_for_domain {
+    my ($zoneid, $domain) = @_;
+    
+    return unless $zoneid > 0 && $domain && $domain ne '';
+    
+    # Find and delete all TXT hosts (type=13) that match pattern _*.domain
+    # We need to escape dots in domain for SQL LIKE pattern
+    my $domain_pattern = $domain;
+    $domain_pattern =~ s/\./\\./g;
+    
+    my $query = "SELECT id, domain FROM hosts " .
+                "WHERE zone = $zoneid AND type = 13 " .
+                "AND domain LIKE '_%.${domain_pattern}'";
+    
+    my @rows;
+    db_query($query, \@rows);
+    
+    foreach my $row (@rows) {
+        my ($txt_id, $txt_domain) = @$row;
+        print "    DELETE TXT: $txt_domain\n" if $opt_verbose;
+        delete_host($txt_id);
+    }
+}
+
 sub delete_rpz_entry {
     my ($zoneid, $entry, $src) = @_;
     
     my $domain = $entry->{domain};
     
     print "    DELETE: $domain (expired/removed from source)\n" if $opt_verbose;
+    
+    # Delete standalone TXT hosts for CNAME domains (type=13)
+    # This deletes ALL TXT hosts matching _*.domain pattern, regardless of config
+    delete_txt_hosts_for_domain($zoneid, $domain);
     
     # Delete base domain
     my $result = delete_host_by_domain($zoneid, $domain);

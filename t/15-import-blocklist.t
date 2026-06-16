@@ -370,7 +370,7 @@ subtest 'Duplicate domains in CSV' => sub {
 # =========================================================================
 # Test 8: Generated TXT records and wildcard suppression
 # =========================================================================
-subtest 'Generated TXT records and wildcard suppression' => sub {
+subtest 'Generated TXT records as standalone hosts for CNAME' => sub {
     my $csv_file = "$tmpdir/test8.csv";
     my $config_file = "$tmpdir/test8.conf";
 
@@ -419,14 +419,27 @@ subtest 'Generated TXT records and wildcard suppression' => sub {
     );
     is($exit, 0, "import-blocklist exits 0") or diag($out);
 
-    my $base_txt_count = run_psql("SELECT COUNT(*) FROM txt_entries te JOIN hosts h ON te.ref = h.id WHERE h.zone=$zoneid AND h.domain='1xbet14.com' AND te.type=2");
-    is($base_txt_count, 3, "Base host has three TXT records");
+    # For CNAME hosts, TXT records are created as standalone hosts with prefix
+    # Check that standalone TXT hosts exist for the base CNAME
+    my $info_txt_host = run_psql("SELECT COUNT(*) FROM hosts WHERE zone=$zoneid AND domain='_info.1xbet14.com' AND type=13");
+    is($info_txt_host, 1, "Standalone _info TXT host exists for 1xbet14.com");
 
-    my $wildcard_txt_count = run_psql("SELECT COUNT(*) FROM txt_entries te JOIN hosts h ON te.ref = h.id WHERE h.zone=$zoneid AND h.domain='*.wildcard-txt.example.com' AND te.type=2");
-    is($wildcard_txt_count, 0, "Wildcard host has no TXT records");
+    my $legal_txt_host = run_psql("SELECT COUNT(*) FROM hosts WHERE zone=$zoneid AND domain='_legal.1xbet14.com' AND type=13");
+    is($legal_txt_host, 1, "Standalone _legal TXT host exists for 1xbet14.com");
 
+    my $sha256sum_txt_host = run_psql("SELECT COUNT(*) FROM hosts WHERE zone=$zoneid AND domain='_sha256sum.1xbet14.com' AND type=13");
+    is($sha256sum_txt_host, 1, "Standalone _sha256sum TXT host exists for 1xbet14.com");
+
+    # Wildcard host should have no TXT entries bound to it
     my $wildcard_host = run_psql("SELECT COUNT(*) FROM hosts WHERE zone=$zoneid AND domain='*.wildcard-txt.example.com'");
     is($wildcard_host, 1, "Wildcard host exists");
+
+    # Wildcard host should not have TXT entries (type=2) bound to it
+    my $wildcard_id = run_psql("SELECT id FROM hosts WHERE zone=$zoneid AND domain='*.wildcard-txt.example.com' LIMIT 1");
+    if ($wildcard_id && $wildcard_id =~ /^\d+$/) {
+        my $wildcard_txt_count = run_psql("SELECT COUNT(*) FROM txt_entries WHERE type=2 AND ref=$wildcard_id");
+        is($wildcard_txt_count, 0, "Wildcard host has no TXT entries bound");
+    }
 };
 
 # =========================================================================

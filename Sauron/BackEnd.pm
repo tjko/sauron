@@ -2381,9 +2381,23 @@ sub get_host($$) {
   get_array_field("caa_entries",5,"id,flags,tag,value,comment",
       "Flags,Tag,Value,Comments",
       "type=1 AND ref=$id ORDER BY flags,tag,value",$rec,'caa_l');
-  get_array_field("txt_entries",3,"id,txt,comment",
-		  "Text,Comments",
-		  "type=2 AND ref=$id ORDER BY txt",$rec,'txt_l');
+  
+  # For TXT hosts (type=13), the TXT value is stored in cname_txt column
+  # For other host types, TXT entries are stored in txt_entries table
+  if ($rec->{type} == 13) {
+      # Load TXT record from cname_txt column for type=13 hosts
+      if ($rec->{cname_txt}) {
+          $rec->{txt_l} = [['TXT', $rec->{cname_txt}, $rec->{comment} // '']];
+      } else {
+          $rec->{txt_l} = [['TXT', '', '']];
+      }
+  } else {
+      # Load TXT entries from txt_entries table for other host types
+      get_array_field("txt_entries",3,"id,txt,comment",
+		      "Text,Comments",
+		      "type=2 AND ref=$id ORDER BY txt",$rec,'txt_l');
+  }
+
 # Get CNAME aliases.
   get_array_field("hosts",5,"0,id,domain,type,1","Domain,cname",
 	          "type=4 AND alias=$id ORDER BY domain",$rec,'alias_l');
