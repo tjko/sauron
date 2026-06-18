@@ -301,6 +301,15 @@ sub display_new_server($$$$)
     save_state($scookie,$state);
   }
 
+  # Display action bar with History button (similar to hosts/zones)
+  my $selfurl = $state->{selfurl};
+  print '<div class="s-action-bar"><div class="s-action-bar__right">',
+        start_form(-method=>'POST',-action=>$selfurl,-class=>'s-inline-form'),
+        hidden('menu','servers'),hidden('sub','History'),
+        submit(-name=>'sub',-value=>'History'), ' '
+          if (!check_perms('level',$main::ALEVEL_HISTORY,1));
+  print '</div></div>';
+
   display_form(\%serv,\%server_form); # display server record
   return 0;
 }
@@ -321,7 +330,8 @@ sub menu_handler {
 
   my($res,%data,%serv,%srec,@l,$server);
 
-  if ($serverid && check_perms('server','R')) {
+  # Do not redirect for History action
+  if ($serverid && check_perms('server','R') && $sub ne 'History') {
     select_server($state,$perms);
     return;
   }
@@ -380,8 +390,27 @@ sub menu_handler {
 
   $serverid=param('server_list') if (param('server_list'));
 
-  if ($serverid && $sub ne 'select') {
+  # Do not redirect for History action
+  if ($serverid && $sub ne 'select' && $sub ne 'History') {
     display_new_server($state,$perms,$serverid,$scookie);
+    return;
+  }
+
+  # Handle History sub-action
+  if ($sub eq 'History') {
+    return if (check_perms('level',$main::ALEVEL_HISTORY));
+    unless ($serverid > 0) {
+      select_server($state,$perms);
+      return;
+    }
+    my %server_data;
+    get_server($serverid,\%server_data);
+    my $server_name = $server_data{name} || '';
+    print "History for server record: $serverid ($server_name):<br>";
+    my @q;
+    get_history_server($serverid,\@q);
+    unshift @q, [$server_data{cdate},'CREATE','server created',$server_data{cuser}];
+    display_list(['Date','Action','Info','By'],\@q,0);
     return;
   }
 

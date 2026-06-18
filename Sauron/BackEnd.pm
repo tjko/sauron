@@ -25,6 +25,7 @@ $VERSION = '$Id:$ ';
 	     sauron_db_version
 	     get_db_version
 	     set_muser
+	     set_muid_msid
 	     auto_address
 	     next_free_ip
 	     ip_in_use
@@ -163,6 +164,8 @@ $VERSION = '$Id:$ ';
 
 	     get_history_host
 	     get_history_session
+	     get_history_zone
+	     get_history_server
 
 	     save_state
 	     load_state
@@ -191,6 +194,7 @@ $VERSION = '$Id:$ ';
 
 # Catalog zones support (RFC 9432) - six functions exported above
 my($muser);
+my($muid, $msid);  # User ID and Session ID for history logging
 
 
 
@@ -225,6 +229,12 @@ sub sauron_db_version() {
 sub set_muser($) {
   my($usr)=@_;
   $muser=$usr;
+}
+
+sub set_muid_msid($$) {
+  my($uid, $sid)=@_;
+  $muid=$uid;
+  $msid=$sid;
 }
 
 
@@ -1070,6 +1080,9 @@ sub update_server($) {
   $r=update_aml_field(16,$id,$rec,'listen_on_v6');
   if ($r < 0) { db_rollback(); return -25; }
 
+  # Log server update to history (before commit)
+  my $server_name = $rec->{name} || "ID=$id";
+  update_history($muid, $msid, 3, "EDIT: Server", "name: $server_name", $id);
 
   return db_commit();
 }
@@ -1147,6 +1160,9 @@ sub add_server($) {
   $res = update_aml_field(15,$id,$rec,'allow_notify');
   if ($res < 0) { db_rollback(); return -22; }
 
+  # Log server creation to history
+  my $server_name = $rec->{name} || '';
+  update_history($muid, $msid, 3, "ADD: Server", "name: $server_name", $id);
 
   return -100 if (db_commit() < 0);
   return $id;
@@ -1310,6 +1326,11 @@ sub delete_server($) {
 
   return -100 unless ($id > 0);
 
+  # Get server name for history log BEFORE deletion
+  my %server_data;
+  get_server($id, \%server_data);
+  my $server_name = $server_data{name} || "ID=$id";
+
   write2log("SERVER_DELETE_START: Deleting server ID=$id");
   db_begin();
 
@@ -1339,11 +1360,14 @@ sub delete_server($) {
     write2log("SERVER_DELETE_FAILED: Server ID=$id was NOT deleted - failure to delete server parts with error $res");
     return $res;
   }
+
   if (db_commit() < 0) {
     write2log("SERVER_DELETE_FAILED: Server ID=$id was NOT deleted - commit failure");
     return -200;
   }
 
+  # Log server deletion to history (after commit)
+  update_history($muid, $msid, 3, "DELETE: Server", "name: $server_name", $id);
   write2log("SERVER_DELETE_SUCCESS: Server ID=$id successfully deleted");
 
   return 0;
@@ -1837,6 +1861,10 @@ sub update_zone($) {
     }
   }
 
+  # Log zone update to history (before commit)
+  my $zone_name = $rec->{name} || "ID=$id";
+  update_history($muid, $msid, 2, "EDIT: Zone", "name: $zone_name", $id);
+
   return db_commit();
 }
 
@@ -1996,11 +2024,17 @@ sub delete_zone($) {
         return $res;
     }
 
+    # Log zone deletion to history (before commit, using stored zone name)
+    my %zone_data;
+    get_zone($id, \%zone_data);
+    my $zone_name = $zone_data{name} || "ID=$id";
+    
     if (db_commit() < 0) {
         write2log("ZONE_DELETE_FAILED: Zone ID=$id WAS NOT deleted - commit failure");
         return -200;
     }
 
+    update_history($muid, $msid, 2, "DELETE: Zone", "name: $zone_name", $id);
     write2log("ZONE_DELETE_SUCCESS: Zone ID=$id successfully deleted");
     return 0;
 }
@@ -2093,6 +2127,11 @@ sub add_zone($) {
   $res = add_array_field('txt_entries','txt,comment','zentries',$rec,
 			 'type,ref',"12,$id");
   if ($res < 0) { db_rollback(); return -8; }
+
+  # Log zone creation to history
+  my $zone_type = $rec->{type} || 'M';
+  my $zone_name = $rec->{name} || '';
+  update_history($muid, $msid, 2, "ADD: Zone type=$zone_type", "name: $zone_name", $id);
 
   return -100 if (db_commit() < 0);
   return $id;
@@ -4630,6 +4669,10 @@ sub update_history($$$$$$) {
   my($date,$a,$i,$sql);
 
 # uid and sid are -1 in some command line scripts
+# Use -1 as default if undefined
+  $uid = -1 unless (defined $uid);
+  $sid = -1 unless (defined $sid);
+  
   return -1 unless ($uid > 0 || $uid == -1);
   return -2 unless ($sid > 0 || $sid == -1);
   return -3 unless ($type > 0);
@@ -4731,6 +4774,38 @@ sub get_history_session($$)
   db_query("SELECT date,type,ref,action,info FROM history ".
 	   "WHERE sid=$id ORDER BY date ",$list);
 
+  return 0;
+}
+
+sub get_history_zone($$)
+{
+  my ($id,$list) = @_;
+  my (@q,%users,$i);
+
+  return -1 unless ($id > 0);
+  db_query("SELECT date,action,info,uid FROM history ".
+	   "WHERE type=2 AND ref=$id ORDER BY date ",$list);
+  db_query("SELECT id,username FROM users",\@q);
+  for $i (0..$#q) { $users{$q[$i][0]}=$q[$i][1]; }
+  for $i (0..$#{$list}) {
+    $$list[$i][3] = $users{$$list[$i][3]} if ($users{$$list[$i][3]});
+  }
+  return 0;
+}
+
+sub get_history_server($$)
+{
+  my ($id,$list) = @_;
+  my (@q,%users,$i);
+
+  return -1 unless ($id > 0);
+  db_query("SELECT date,action,info,uid FROM history ".
+	   "WHERE type=3 AND ref=$id ORDER BY date ",$list);
+  db_query("SELECT id,username FROM users",\@q);
+  for $i (0..$#q) { $users{$q[$i][0]}=$q[$i][1]; }
+  for $i (0..$#{$list}) {
+    $$list[$i][3] = $users{$$list[$i][3]} if ($users{$$list[$i][3]});
+  }
   return 0;
 }
 

@@ -495,6 +495,14 @@ sub display_zone($$)
       $data{catalog_zones_selected_links} = join(', ', sort @catalog_zone_links) if @catalog_zone_links;
     }
 
+    # Display action bar with History button (similar to hosts)
+    print '<div class="s-action-bar"><div class="s-action-bar__right">',
+          start_form(-method=>'POST',-action=>$selfurl,-class=>'s-inline-form'),
+          hidden('menu','zones'),hidden('sub','History'),
+          submit(-name=>'sub',-value=>'History'), ' '
+            if (!check_perms('level',$main::ALEVEL_HISTORY,1));
+    print '</div></div>';
+
     display_form(\%data,\%zone_form);
     return;
   }
@@ -898,6 +906,20 @@ sub menu_handler {
   }
   elsif ($sub eq 'Current') {
       param('selected_zone', $state->{'zone'}); # Show selected zone.
+  }
+  elsif ($sub eq 'History') {
+    return if (check_perms('level',$main::ALEVEL_HISTORY));
+    unless ($zoneid > 0) {
+      display_zone($state,$perms);
+      return;
+    }
+    my %zone_data;
+    get_zone($zoneid,\%zone_data);
+    my $zone_name = $zone_data{name} || $zone || '';
+    print "History for zone record: $zoneid ($zone_name):<br>";
+    get_history_zone($zoneid,\@q);
+    unshift @q, [$zone_data{cdate},'CREATE','zone created',$zone_data{cuser}];
+    display_list(['Date','Action','Info','By'],\@q,0);
   }
 
  display_zone($state,$perms);
