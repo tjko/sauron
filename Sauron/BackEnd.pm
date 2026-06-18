@@ -1925,7 +1925,7 @@ sub update_zone($) {
   my $zone_name = $rec->{name} || "ID=$id";
   $changes = diff_records(\%old_rec, $rec,
                           'cdate_str,mdate_str,pending_info,zonehostid',
-                          'allow_update,masters,allow_query,allow_transfer,also_notify,forwarders');
+                          'ns,mx,txt,caa,naptr,ip,dhcp,allow_update,masters,allow_query,allow_transfer,also_notify,forwarders,zentries,zentries_ta');
 
   # Log zone update to history (before commit)
   my $info_str = "name: $zone_name";
