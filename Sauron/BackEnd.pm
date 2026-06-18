@@ -868,6 +868,52 @@ sub update_textarea_field($$$$$$) { # Textarea 12 Apr 2017 TVu
 ############################################################################
 # server table functions
 
+# Compare two record hashes and return a string describing the changes.
+# Returns: "field1 (old -> new), field2 ([list])" etc.
+sub diff_records($$$$) {
+  my($old_rec, $new_rec, $skip_fields, $array_fields) = @_;
+  my @changes;
+  my @skip = split(/,/, $skip_fields || '');
+  my %skip_hash = map { $_ => 1 } @skip;
+  my @arr_flds = split(/,/, $array_fields || '');
+  my %arr_hash = map { $_ => 1 } @arr_flds;
+
+  # Skip standard fields that are auto-updated
+  $skip_hash{cdate} = 1;
+  $skip_hash{cuser} = 1;
+  $skip_hash{mdate} = 1;
+  $skip_hash{muser} = 1;
+  $skip_hash{id} = 1;
+
+  foreach my $key (keys %{$new_rec}) {
+    next if $skip_hash{$key};
+    next unless defined($$new_rec{$key});
+
+    my $old_val = (defined($$old_rec{$key}) ? $$old_rec{$key} : '');
+    my $new_val = $$new_rec{$key};
+
+    # Handle array fields (lists)
+    if ($arr_hash{$key}) {
+      my $old_str = (ref($old_val) eq 'ARRAY' ? join(',', map { $_->[1] // '' } @{$old_val}) : $old_val);
+      my $new_str = (ref($new_val) eq 'ARRAY' ? join(',', map { $_->[1] // '' } @{$new_val}) : $new_val);
+      $old_str =~ s/^\s+|\s+$//g;
+      $new_str =~ s/^\s+|\s+$//g;
+      if ($old_str ne $new_str) {
+        push @changes, "$key (" . ($old_str eq '' ? '[]' : $old_str) . " -> " . 
+                       ($new_str eq '' ? '[]' : $new_str) . ")";
+      }
+    }
+    # Handle simple scalar values
+    elsif (!ref($old_val) && !ref($new_val)) {
+      if ($old_val ne $new_val) {
+        push @changes, "$key ('$old_val' -> '$new_val')";
+      }
+    }
+  }
+
+  return join(', ', @changes);
+}
+
 sub get_server_id($) {
   my ($server) = @_;
   my (@q);
@@ -978,7 +1024,10 @@ sub get_server($$) {
 
 sub update_server($) {
   my($rec) = @_;
-  my($r,$id);
+  my($r,$id,%old_rec,$changes);
+
+  # Load original server record for history diff
+  get_server($rec->{id}, \%old_rec) if ($rec->{id} > 0);
 
   del_std_fields($rec);
   delete $rec->{dhcp_flags};
@@ -1011,6 +1060,12 @@ sub update_server($) {
   $r=update_record('servers',$rec);
   if ($r < 0) { db_rollback(); return $r; }
   $id=$rec->{id};
+
+  # Compute changes for history log
+  my $server_name = $rec->{name} || "ID=$id";
+  $changes = diff_records(\%old_rec, $rec, 
+                          'cdate_str,mdate_str,pending_info,zonehostid',
+                          'allow_transfer,allow_query,allow_recursion,blackhole,listen_on,listen_on_v6,forwarders,dhcp,dhcp_l,dhcp6,dhcp6_l,txt,logging,custom_opts,bind_globals,allow_query_cache,allow_notify');
 
   # allow_transfer
   $r=update_aml_field(1,$id,$rec,'allow_transfer');
@@ -1082,7 +1137,9 @@ sub update_server($) {
 
   # Log server update to history (before commit)
   my $server_name = $rec->{name} || "ID=$id";
-  update_history($muid, $msid, 3, "EDIT: Server", "name: $server_name", $id);
+  my $info_str = "name: $server_name";
+  $info_str .= " | Changes: $changes" if ($changes);
+  update_history($muid, $msid, 3, "EDIT: Server", $info_str, $id);
 
   return db_commit();
 }
@@ -1630,8 +1687,11 @@ sub get_zone($$) {
 
 sub update_zone($) {
   my($rec) = @_;
-  my($r,$id,$new_net,$hid);
+  my($r,$id,$new_net,$hid,%old_rec,$changes);
   my(@current_catalogs, @new_catalogs, %new_cat_hash, %current_cat_hash);
+
+  # Load original zone record for history diff
+  get_zone($rec->{id}, \%old_rec) if ($rec->{id} > 0);
 
   del_std_fields($rec);
   delete $rec->{pending_info};
@@ -1861,9 +1921,16 @@ sub update_zone($) {
     }
   }
 
-  # Log zone update to history (before commit)
+  # Compute changes for history log
   my $zone_name = $rec->{name} || "ID=$id";
-  update_history($muid, $msid, 2, "EDIT: Zone", "name: $zone_name", $id);
+  $changes = diff_records(\%old_rec, $rec,
+                          'cdate_str,mdate_str,pending_info,zonehostid',
+                          'allow_update,masters,allow_query,allow_transfer,also_notify,forwarders');
+
+  # Log zone update to history (before commit)
+  my $info_str = "name: $zone_name";
+  $info_str .= " | Changes: $changes" if ($changes);
+  update_history($muid, $msid, 2, "EDIT: Zone", $info_str, $id);
 
   return db_commit();
 }
