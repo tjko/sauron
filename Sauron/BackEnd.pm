@@ -886,6 +886,7 @@ sub diff_records($$$$) {
   $skip_hash{id} = 1;
 
   # Helper function to extract values from array fields (skip header row and deleted entries)
+  # For multi-column fields (like MX with priority), include all relevant columns
   sub extract_array_values {
     my($arr) = @_;
     return '' unless (ref($arr) eq 'ARRAY');
@@ -898,8 +899,25 @@ sub diff_records($$$$) {
       # Skip entries marked for deletion (state = -1 in last column)
       my $state = $$row[$#{$row}];
       next if (defined($state) && $state eq '-1');
-      # Extract value from second column (index 1)
-      push @vals, $$row[1] if (defined($$row[1]) && $$row[1] ne '');
+      # Extract values from columns (skip id at index 0 and state at last index)
+      # For MX: [id, pri, mx, comment, state] -> show "pri:mx" (skip empty comment)
+      # For NS: [id, ns, comment, state] -> show "ns" (skip empty comment)
+      my @row_vals;
+      for my $i (1..$#{$row}-1) {  # Skip first (id) and last (state) columns
+        # Only skip if it's the last non-state column AND it's empty (likely comment)
+        # Otherwise include the value
+        my $is_last_data_col = ($i == $#{$row}-1);
+        my $val = $$row[$i];
+        if (defined($val) && $val ne '') {
+          push @row_vals, $val;
+        } elsif (!$is_last_data_col) {
+          # Include empty string placeholder for non-last columns to preserve structure
+          push @row_vals, '';
+        }
+      }
+      # Clean up: remove trailing empty values (comments)
+      while (@row_vals && $row_vals[-1] eq '') { pop @row_vals; }
+      push @vals, join(':', @row_vals) if (@row_vals > 0);
     }
     return join(',', @vals);
   }
