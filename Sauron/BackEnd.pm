@@ -885,6 +885,25 @@ sub diff_records($$$$) {
   $skip_hash{muser} = 1;
   $skip_hash{id} = 1;
 
+  # Helper function to extract values from array fields (skip header row and deleted entries)
+  sub extract_array_values {
+    my($arr) = @_;
+    return '' unless (ref($arr) eq 'ARRAY');
+    my @vals;
+    for my $row (@{$arr}) {
+      next unless (ref($row) eq 'ARRAY');
+      # Skip header row (first element is not a number)
+      my $id = $$row[0];
+      next unless (defined($id) && $id =~ /^-?\d+$/);
+      # Skip entries marked for deletion (state = -1 in last column)
+      my $state = $$row[$#{$row}];
+      next if (defined($state) && $state eq '-1');
+      # Extract value from second column (index 1)
+      push @vals, $$row[1] if (defined($$row[1]) && $$row[1] ne '');
+    }
+    return join(',', @vals);
+  }
+
   foreach my $key (keys %{$new_rec}) {
     next if $skip_hash{$key};
     next unless defined($$new_rec{$key});
@@ -894,8 +913,8 @@ sub diff_records($$$$) {
 
     # Handle array fields (lists)
     if ($arr_hash{$key}) {
-      my $old_str = (ref($old_val) eq 'ARRAY' ? join(',', map { $_->[1] // '' } @{$old_val}) : $old_val);
-      my $new_str = (ref($new_val) eq 'ARRAY' ? join(',', map { $_->[1] // '' } @{$new_val}) : $new_val);
+      my $old_str = extract_array_values($old_val);
+      my $new_str = extract_array_values($new_val);
       $old_str =~ s/^\s+|\s+$//g;
       $new_str =~ s/^\s+|\s+$//g;
       if ($old_str ne $new_str) {
