@@ -1142,18 +1142,21 @@ sub update_rpz_entry {
 # Delete all standalone TXT hosts for a given domain
 # Used when deleting a CNAME host that has associated TXT records
 sub delete_txt_hosts_for_domain {
-    my ($zoneid, $domain) = @_;
+    my ($zoneid, $domain, $source_name) = @_;
     
-    return unless $zoneid > 0 && $domain && $domain ne '';
+    return unless $zoneid > 0 && $domain && $domain ne '' && $source_name && $source_name ne '';
     
-    # Find and delete all TXT hosts (type=13) that match pattern _*.domain
-    # We need to escape dots in domain for SQL LIKE pattern
+    # Delete only TXT hosts managed by import-blocklist for the same source.
+    # Pattern: _*.domain with escaped LIKE wildcards and explicit ESCAPE clause.
     my $domain_pattern = $domain;
-    $domain_pattern =~ s/\./\\./g;
+    $domain_pattern =~ s/([\\%_])/\\$1/g;
+    my $like_pattern = "\\_%.$domain_pattern";
+    my $txt_comment_prefix = managed_txt_comment_prefix($source_name);
     
     my $query = "SELECT id, domain FROM hosts " .
                 "WHERE zone = $zoneid AND type = 13 " .
-                "AND domain LIKE '_%.${domain_pattern}'";
+                "AND comment LIKE " . db_encode_str($txt_comment_prefix . '%') . " " .
+                "AND domain LIKE " . db_encode_str($like_pattern) . " ESCAPE '\\\\'";
     
     my @rows;
     db_query($query, \@rows);
@@ -1172,9 +1175,9 @@ sub delete_rpz_entry {
     
     print "    DELETE: $domain (expired/removed from source)\n" if $opt_verbose;
     
-    # Delete standalone TXT hosts for CNAME domains (type=13)
-    # This deletes ALL TXT hosts matching _*.domain pattern, regardless of config
-    delete_txt_hosts_for_domain($zoneid, $domain);
+    # Delete standalone TXT hosts for CNAME domains (type=13) that are managed
+    # by import-blocklist for the current source only.
+    delete_txt_hosts_for_domain($zoneid, $domain, $src->{name});
     
     # Delete base domain
     my $result = delete_host_by_domain($zoneid, $domain);
