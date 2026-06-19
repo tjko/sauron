@@ -697,7 +697,7 @@ sub menu_handler {
     # check for removed hosts...
     get_zone($zoneid,\%zone);
     if ($zone{rdate} > $zone{serial_date}) {
-      push @plist, ['','&lt;removed host(s)&gt;','',
+      push @plist, ['','<removed host(s)>','','Remove',
 		    localtime($zone{rdate}).'',''];
     }
 
