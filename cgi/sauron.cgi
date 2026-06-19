@@ -6,7 +6,7 @@
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>, 2000-2005.
 # All Rights Reserved.
 #
-use CGI qw/:standard *table -utf8/;
+use CGI qw/:standard *table/;
 use CGI::Carp 'fatalsToBrowser'; # debug stuff
 # use Net::Netmask;
 use Sauron::DB;
@@ -52,7 +52,14 @@ my ($PG_DIR,$PG_NAME) = ($0 =~ /^(.*\/)(.*)$/);
 $0 = $PG_NAME;
 
 load_config();
-$CGI::PARAM_UTF8 = 1 if (($SAURON_CHARSET // '') =~ /utf-?8/i);
+# UTF-8 handling, single-decode/single-encode boundary model:
+#   - input : decode_cgi_params() decodes request params to wide chars once
+#   - DB    : DBD::Pg pg_enable_utf8 decodes reads to wide chars
+#   - output: the binmode below encodes the response body exactly once
+# Everything in between is kept as Perl wide-character strings. Encoding is
+# driven by the configured web charset, NOT by the server locale.
+decode_cgi_params($SAURON_CHARSET);
+binmode(STDOUT, ":encoding($SAURON_CHARSET)") if $SAURON_CHARSET;
 
 my $SAURON_CGI_VER = ' $Revision: 1.204 $ $Date: 2005/01/27 09:24:44 $ ';
 $debug_mode = $SAURON_DEBUG_MODE;

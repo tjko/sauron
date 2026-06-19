@@ -6,7 +6,7 @@
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>, 2001-2005.
 # All Rights Reserved.
 #
-use CGI qw/:standard *table -utf8/;
+use CGI qw/:standard *table/;
 use CGI::Carp 'fatalsToBrowser'; # debug stuff
 # use Net::Netmask;
 use NetAddr::IP; # For IPv6.
@@ -39,7 +39,11 @@ $0 = $PG_NAME;
 $debug_mode = 0;
 
 load_browser_config();
-$CGI::PARAM_UTF8 = 1 if (($BROWSER_CHARSET // '') =~ /utf-?8/i);
+# UTF-8 boundary model: decode input once (decode_cgi_params / DBD::Pg
+# pg_enable_utf8), keep wide chars internally, encode the response body once
+# here. Driven by the configured web charset, independent of the server locale.
+decode_cgi_params($BROWSER_CHARSET);
+binmode(STDOUT, ":encoding($BROWSER_CHARSET)") if $BROWSER_CHARSET;
 
 
 #%host_types=(0=>'Any type',1=>'Host',2=>'Delegation',3=>'Plain MX',
