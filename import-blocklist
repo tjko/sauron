@@ -50,6 +50,7 @@ my $opt_all = 0;
 my $opt_dry_run = 0;
 my $opt_verbose = 0;
 my $opt_help = 0;
+my $opt_keep_expired = 0;
 my $opt_remove_expired = 1;
 my $opt_max_changes_percent = 25;  # Default: max 25% changes allowed
 my $opt_max_delete = 1000;          # Default: max 1000 deletes allowed
@@ -65,14 +66,12 @@ GetOptions(
     'all!'                 => \$opt_all,
     'dry-run!'             => \$opt_dry_run,
     'verbose|v+'           => \$opt_verbose,
-    'keep-expired!'        => \$opt_remove_expired,  # inverted logic
+    'keep-expired!'        => \$opt_keep_expired,
     'max-changes-percent=i'=> \$opt_max_changes_percent,
     'max-delete=i'         => \$opt_max_delete,
     'confirm-above=i'      => \$opt_confirm_above,
     'help|h'               => \$opt_help,
 ) or pod2usage(2);
-
-$opt_remove_expired = !$opt_remove_expired;  # fix inverted logic
 
 pod2usage(1) if $opt_help;
 pod2usage(2) unless $opt_config;
@@ -84,6 +83,9 @@ $opt_max_changes_percent = undef if ($opt_max_changes_percent <= 0);
 $opt_max_delete = undef if ($opt_max_delete <= 0);
 $opt_confirm_above = undef if ($opt_confirm_above <= 0);
 
+# keep-expired can be forced from CLI or environment.
+$opt_remove_expired = 0 if ($opt_keep_expired || $ENV{BLOCKLIST_KEEP_EXPIRED});
+
 ######################
 # Load configuration
 ######################
@@ -92,7 +94,9 @@ die "Invalid configuration file: $opt_config\n" unless $config && ref($config) e
 my $global_default_cname_target = $config->{global_settings}{default_cname_target};
 
 $opt_remove_expired = $config->{global_settings}{remove_expired}
-    if (defined $config->{global_settings}{remove_expired} && !$ENV{BLOCKLIST_KEEP_EXPIRED});
+    if (defined $config->{global_settings}{remove_expired} &&
+        !$ENV{BLOCKLIST_KEEP_EXPIRED} &&
+        !$opt_keep_expired);
 
 ######################
 # Load Sauron configuration
