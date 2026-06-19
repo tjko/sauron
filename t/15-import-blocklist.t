@@ -190,7 +190,7 @@ subtest 'Setup: Create test zone' => sub {
     }
 };
 
-plan skip_all => 'Failed to setup test zone'
+BAIL_OUT('Failed to setup test zone')
     unless (defined $zoneid && $zoneid =~ /^\d+$/ && $zoneid > 0);
 
 # =========================================================================
