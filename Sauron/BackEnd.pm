@@ -887,7 +887,7 @@ sub diff_records($$$$) {
 
   # Helper function to extract values from array fields (skip header row and deleted entries)
   # For multi-column fields (like MX with priority), include all relevant columns
-  sub extract_array_values {
+  my $extract_array_values = sub {
     my($arr) = @_;
     return '' unless (ref($arr) eq 'ARRAY');
     my @vals;
@@ -920,7 +920,7 @@ sub diff_records($$$$) {
       push @vals, join(':', @row_vals) if (@row_vals > 0);
     }
     return join(',', @vals);
-  }
+  };
 
   foreach my $key (keys %{$new_rec}) {
     next if $skip_hash{$key};
@@ -931,8 +931,8 @@ sub diff_records($$$$) {
 
     # Handle array fields (lists)
     if ($arr_hash{$key}) {
-      my $old_str = extract_array_values($old_val);
-      my $new_str = extract_array_values($new_val);
+      my $old_str = $extract_array_values->($old_val);
+      my $new_str = $extract_array_values->($new_val);
       $old_str =~ s/^\s+|\s+$//g;
       $new_str =~ s/^\s+|\s+$//g;
       if ($old_str ne $new_str) {
