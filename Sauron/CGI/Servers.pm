@@ -303,12 +303,14 @@ sub display_new_server($$$$)
 
   # Display action bar with History button (similar to hosts/zones)
   my $selfurl = $state->{selfurl};
-  print '<div class="s-action-bar"><div class="s-action-bar__right">',
-        start_form(-method=>'POST',-action=>$selfurl,-class=>'s-inline-form'),
-        hidden('menu','servers'),hidden('sub','History'),
-        submit(-name=>'sub',-value=>'History'), ' '
-          if (!check_perms('level',$main::ALEVEL_HISTORY,1));
-  print '</div></div>';
+  if (!check_perms('level',$main::ALEVEL_HISTORY,1)) {
+    print '<div class="s-action-bar"><div class="s-action-bar__right">',
+          start_form(-method=>'POST',-action=>$selfurl,-class=>'s-inline-form'),
+          hidden('menu','servers'),hidden('sub','History'),
+          submit(-name=>'sub',-value=>'History'),' ',
+          end_form,
+          '</div></div>';
+  }
 
   display_form(\%serv,\%server_form); # display server record
   return 0;
