@@ -1473,8 +1473,9 @@ Example configuration:
 }
 
 The C<txt_columns> map controls additional TXT records created for each host.
-The key is the TXT label without the leading underscore and the value is the
-CSV column name. A few generated values are also supported:
+The key is the TXT owner label exactly as it should appear in DNS (for example
+C<_info>, C<_legal>, C<_sha256sum>) and the value is the CSV column name.
+A few generated values are also supported:
 
 =over 4
 

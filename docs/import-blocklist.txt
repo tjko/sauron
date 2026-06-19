@@ -83,8 +83,9 @@ Example configuration:
 TXT RECORD MAPPING
 ------------------
 The optional txt_columns map lets you define additional TXT records per host.
-Use the TXT label without the leading underscore as the key and the CSV column
-name as the value.
+Use the TXT owner label as the key exactly as it should appear in DNS.
+For blocklist metadata this is usually an underscored label (for example
+`_info`, `_legal`, `_sha256sum`). The value is the CSV column name.
 
 Example:
 
