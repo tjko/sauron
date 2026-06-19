@@ -5,7 +5,7 @@
 #
 package Sauron::CGI::Login;
 require Exporter;
-use CGI qw/:standard *table -utf8/;
+use CGI qw/:standard *table/;
 use HTML::Entities;
 use Sauron::DB;
 use Sauron::Util;

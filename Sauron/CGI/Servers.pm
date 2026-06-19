@@ -6,7 +6,7 @@
 #
 package Sauron::CGI::Servers;
 require Exporter;
-use CGI qw/:standard *table -utf8/;
+use CGI qw/:standard *table/;
 use Sauron::CGIutil;
 use Sauron::BackEnd;
 use Sauron::Sauron;

@@ -33,7 +33,31 @@
 	    used with --commit (still non-destructive without --commit)
 	  - Added upgrade notes for one-time repair of already corrupted records
 	    (README.upgrade)
-	- Added KEA DHCP configuration import support: parses KEA JSON 
+	- Reworked UTF-8 handling into a clean single decode/encode boundary
+	  model, superseding the earlier mojibake-repair heuristic [svamberg]
+	  - Root cause: with this CGI.pm + module stack, request parameters
+	    arrive as the raw UTF-8 octets reinterpreted as Latin-1 codepoints,
+	    with the UTF8 flag already set -- e.g. "ž" (octets C5 BE) becomes the
+	    codepoints U+00C5 U+00BE ("Å¾"). Sent to DBD::Pg/db_encode_str it is
+	    re-encoded to UTF-8, double-encoding the value on every save
+	    (e.g. "žluťoučký" -> "Å¾luÅ¥ouÄ\x8dký", getting worse with each
+	    edit, including via form-reloading "Add" buttons)
+	  - The previous fix_param_utf8() heuristic only repaired this inside
+	    form_check_form(), so any path that bypassed it (form-reloading
+	    buttons, sticky form re-render) still corrupted the text. Removed.
+	  - decode_cgi_params() (Sauron::CGIutil) now repairs every request
+	    parameter once at the boundary: map the codepoints back to octets
+	    (encode ISO-8859-1) and decode them as UTF-8. FB_CROAK makes it
+	    self-guarding -- already-correct wide text and non-UTF-8 values are
+	    left untouched, so it is idempotent across repeated round trips.
+	    The unreliable -utf8 / $CGI::PARAM_UTF8 path was dropped.
+	  - Data is then kept as Perl wide-character strings end to end: DBD::Pg
+	    pg_enable_utf8 decodes DB reads, and the response body is encoded
+	    exactly once via an explicit STDOUT binmode driven by the configured
+	    web charset (independent of the server locale)
+	  - Added regression tests including the UTF8-flagged mojibake case, the
+	    write-path invariant and round-trip stability (t/07-utf8-encoding.t)
+	- Added KEA DHCP configuration import support: parses KEA JSON
 	  configs (DHCPv4/DHCPv6) and converts subnets, pools, reservations, 
 	  shared-networks and options to ISC-like internal format used 
 	  by import-dhcp [svamberg]
