@@ -1413,7 +1413,8 @@ sub make_dns() {
                bind_fmt_long_data("$val", $padding)
                if ($bind_conf);
              $val =~ s/:/\\072/g;
-             printf TINYDNSFILE "'$zonename\:$val\:$ttl\:\:\n" if ($tiny_conf);
+             my $txt_owner = ($domain ne '' ? "$domain.$zonename" : $zonename);
+             printf TINYDNSFILE "'$txt_owner\:$val\:$ttl\:\:\n" if ($tiny_conf);
            }
          }
        }
