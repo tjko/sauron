@@ -1099,7 +1099,6 @@ sub update_server($) {
   $id=$rec->{id};
 
   # Compute changes for history log
-  my $server_name = $rec->{name} || "ID=$id";
   $changes = diff_records(\%old_rec, $rec, 
                           'cdate_str,mdate_str,pending_info,zonehostid',
                           'allow_transfer,allow_query,allow_recursion,blackhole,listen_on,listen_on_v6,forwarders,dhcp,dhcp_l,dhcp6,dhcp6_l,txt,logging,custom_opts,bind_globals,allow_query_cache,allow_notify');
