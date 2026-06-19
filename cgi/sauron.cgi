@@ -325,6 +325,7 @@ if ($pathinfo ne '') {
 cgi_util_set_zone($zoneid,$zone);
 cgi_util_set_server($serverid,$server);
 set_muser($state{user});
+set_muid_msid($state{uid}, $state{sid});
 
 unless (is_superuser()) {
   html_error("cannot get permissions!")
@@ -690,6 +691,7 @@ sub login_auth() {
 	$state{'uid'}=$user{'id'};
 	$state{'sid'}=new_sid();
 	$state{'login'}=$ticks;
+	set_muid_msid($state{'uid'}, $state{'sid'});
 	$state{'serverid'}=$user{'server'};
 	$state{'zoneid'}=$user{'zone'};
 	$state{'superuser'}='yes' if ($user{superuser} eq 't' ||
@@ -763,7 +765,7 @@ sub login_auth() {
 	print '</div></div></div>', "\n";
 	logmsg("notice","user ($u) logged in from: $remote_addr");
 	$last_from = db_encode_str($remote_addr);
-	db_exec("UPDATE users SET last=$ticks,last_from=$last_from " .
+    db_exec("UPDATE users SET last=$ticks,last_from=$last_from " .
 		"WHERE id=$user{'id'};");
 	update_lastlog($state{uid},$state{sid},1,
 		       $remote_addr,$remote_host);
@@ -783,7 +785,10 @@ sub login_auth() {
   print '</div></div></div>', "\n";
   print end_html();
   save_state($scookie,\%state);
-  load_state($scookie,\%state) if ($SAURON_AUTH_MODE==1);
+  if ($SAURON_AUTH_MODE==1) {
+      load_state($scookie,\%state);
+      set_muid_msid($state{uid}, $state{sid});
+  }
   fix_utmp($SAURON_USER_TIMEOUT*2, 0);
   exit;
 }

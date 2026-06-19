@@ -25,6 +25,7 @@ $VERSION = '$Id:$ ';
 	     sauron_db_version
 	     get_db_version
 	     set_muser
+	     set_muid_msid
 	     auto_address
 	     next_free_ip
 	     ip_in_use
@@ -163,6 +164,8 @@ $VERSION = '$Id:$ ';
 
 	     get_history_host
 	     get_history_session
+	     get_history_zone
+	     get_history_server
 
 	     save_state
 	     load_state
@@ -191,6 +194,7 @@ $VERSION = '$Id:$ ';
 
 # Catalog zones support (RFC 9432) - six functions exported above
 my($muser);
+my($muid, $msid);  # User ID and Session ID for history logging
 
 
 
@@ -225,6 +229,12 @@ sub sauron_db_version() {
 sub set_muser($) {
   my($usr)=@_;
   $muser=$usr;
+}
+
+sub set_muid_msid($$) {
+  my($uid, $sid)=@_;
+  $muid=$uid;
+  $msid=$sid;
 }
 
 
@@ -858,6 +868,89 @@ sub update_textarea_field($$$$$$) { # Textarea 12 Apr 2017 TVu
 ############################################################################
 # server table functions
 
+# Compare two record hashes and return a string describing the changes.
+# Returns: "field1 (old -> new), field2 ([list])" etc.
+sub diff_records($$$$) {
+  my($old_rec, $new_rec, $skip_fields, $array_fields) = @_;
+  my @changes;
+  my @skip = split(/,/, $skip_fields || '');
+  my %skip_hash = map { $_ => 1 } @skip;
+  my @arr_flds = split(/,/, $array_fields || '');
+  my %arr_hash = map { $_ => 1 } @arr_flds;
+
+  # Skip standard fields that are auto-updated
+  $skip_hash{cdate} = 1;
+  $skip_hash{cuser} = 1;
+  $skip_hash{mdate} = 1;
+  $skip_hash{muser} = 1;
+  $skip_hash{id} = 1;
+
+  # Helper function to extract values from array fields (skip header row and deleted entries)
+  # For multi-column fields (like MX with priority), include all relevant columns
+  my $extract_array_values = sub {
+    my($arr) = @_;
+    return '' unless (ref($arr) eq 'ARRAY');
+    my @vals;
+    for my $row (@{$arr}) {
+      next unless (ref($row) eq 'ARRAY');
+      # Skip header row (first element is not a number)
+      my $id = $$row[0];
+      next unless (defined($id) && $id =~ /^-?\d+$/);
+      # Skip entries marked for deletion (state = -1 in last column)
+      my $state = $$row[$#{$row}];
+      next if (defined($state) && $state eq '-1');
+      # Extract values from columns (skip id at index 0 and state at last index)
+      # For MX: [id, pri, mx, comment, state] -> show "pri:mx" (skip empty comment)
+      # For NS: [id, ns, comment, state] -> show "ns" (skip empty comment)
+      my @row_vals;
+      for my $i (1..$#{$row}-1) {  # Skip first (id) and last (state) columns
+        # Only skip if it's the last non-state column AND it's empty (likely comment)
+        # Otherwise include the value
+        my $is_last_data_col = ($i == $#{$row}-1);
+        my $val = $$row[$i];
+        if (defined($val) && $val ne '') {
+          push @row_vals, $val;
+        } elsif (!$is_last_data_col) {
+          # Include empty string placeholder for non-last columns to preserve structure
+          push @row_vals, '';
+        }
+      }
+      # Clean up: remove trailing empty values (comments)
+      while (@row_vals && $row_vals[-1] eq '') { pop @row_vals; }
+      push @vals, join(':', @row_vals) if (@row_vals > 0);
+    }
+    return join(',', @vals);
+  };
+
+  foreach my $key (keys %{$new_rec}) {
+    next if $skip_hash{$key};
+    next unless defined($$new_rec{$key});
+
+    my $old_val = (defined($$old_rec{$key}) ? $$old_rec{$key} : '');
+    my $new_val = $$new_rec{$key};
+
+    # Handle array fields (lists)
+    if ($arr_hash{$key}) {
+      my $old_str = $extract_array_values->($old_val);
+      my $new_str = $extract_array_values->($new_val);
+      $old_str =~ s/^\s+|\s+$//g;
+      $new_str =~ s/^\s+|\s+$//g;
+      if ($old_str ne $new_str) {
+        push @changes, "$key (" . ($old_str eq '' ? '[]' : $old_str) . " -> " . 
+                       ($new_str eq '' ? '[]' : $new_str) . ")";
+      }
+    }
+    # Handle simple scalar values
+    elsif (!ref($old_val) && !ref($new_val)) {
+      if ($old_val ne $new_val) {
+        push @changes, "$key ('$old_val' -> '$new_val')";
+      }
+    }
+  }
+
+  return join(', ', @changes);
+}
+
 sub get_server_id($) {
   my ($server) = @_;
   my (@q);
@@ -968,7 +1061,10 @@ sub get_server($$) {
 
 sub update_server($) {
   my($rec) = @_;
-  my($r,$id);
+  my($r,$id,%old_rec,$changes);
+
+  # Load original server record for history diff
+  get_server($rec->{id}, \%old_rec) if ($rec->{id} > 0);
 
   del_std_fields($rec);
   delete $rec->{dhcp_flags};
@@ -1001,6 +1097,11 @@ sub update_server($) {
   $r=update_record('servers',$rec);
   if ($r < 0) { db_rollback(); return $r; }
   $id=$rec->{id};
+
+  # Compute changes for history log
+  $changes = diff_records(\%old_rec, $rec, 
+                          'cdate_str,mdate_str,pending_info,zonehostid',
+                          'allow_transfer,allow_query,allow_recursion,blackhole,listen_on,listen_on_v6,forwarders,dhcp,dhcp_l,dhcp6,dhcp6_l,txt,logging,custom_opts,bind_globals,allow_query_cache,allow_notify');
 
   # allow_transfer
   $r=update_aml_field(1,$id,$rec,'allow_transfer');
@@ -1070,6 +1171,11 @@ sub update_server($) {
   $r=update_aml_field(16,$id,$rec,'listen_on_v6');
   if ($r < 0) { db_rollback(); return -25; }
 
+  # Log server update to history (before commit)
+  my $server_name = $rec->{name} || "ID=$id";
+  my $info_str = "name: $server_name";
+  $info_str .= " | Changes: $changes" if ($changes);
+  update_history($muid, $msid, 3, "EDIT: Server", $info_str, $id);
 
   return db_commit();
 }
@@ -1147,6 +1253,9 @@ sub add_server($) {
   $res = update_aml_field(15,$id,$rec,'allow_notify');
   if ($res < 0) { db_rollback(); return -22; }
 
+  # Log server creation to history
+  my $server_name = $rec->{name} || '';
+  update_history($muid, $msid, 3, "ADD: Server", "name: $server_name", $id);
 
   return -100 if (db_commit() < 0);
   return $id;
@@ -1310,6 +1419,11 @@ sub delete_server($) {
 
   return -100 unless ($id > 0);
 
+  # Get server name for history log BEFORE deletion
+  my %server_data;
+  get_server($id, \%server_data);
+  my $server_name = $server_data{name} || "ID=$id";
+
   write2log("SERVER_DELETE_START: Deleting server ID=$id");
   db_begin();
 
@@ -1339,11 +1453,14 @@ sub delete_server($) {
     write2log("SERVER_DELETE_FAILED: Server ID=$id was NOT deleted - failure to delete server parts with error $res");
     return $res;
   }
+
   if (db_commit() < 0) {
     write2log("SERVER_DELETE_FAILED: Server ID=$id was NOT deleted - commit failure");
     return -200;
   }
 
+  # Log server deletion to history (after commit)
+  update_history($muid, $msid, 3, "DELETE: Server", "name: $server_name", $id);
   write2log("SERVER_DELETE_SUCCESS: Server ID=$id successfully deleted");
 
   return 0;
@@ -1606,8 +1723,11 @@ sub get_zone($$) {
 
 sub update_zone($) {
   my($rec) = @_;
-  my($r,$id,$new_net,$hid);
+  my($r,$id,$new_net,$hid,%old_rec,$changes);
   my(@current_catalogs, @new_catalogs, %new_cat_hash, %current_cat_hash);
+
+  # Load original zone record for history diff
+  get_zone($rec->{id}, \%old_rec) if ($rec->{id} > 0);
 
   del_std_fields($rec);
   delete $rec->{pending_info};
@@ -1837,6 +1957,17 @@ sub update_zone($) {
     }
   }
 
+  # Compute changes for history log
+  my $zone_name = $rec->{name} || "ID=$id";
+  $changes = diff_records(\%old_rec, $rec,
+                          'cdate_str,mdate_str,pending_info,zonehostid',
+                          'ns,mx,txt,caa,naptr,ip,dhcp,allow_update,masters,allow_query,allow_transfer,also_notify,forwarders,zentries,zentries_ta');
+
+  # Log zone update to history (before commit)
+  my $info_str = "name: $zone_name";
+  $info_str .= " | Changes: $changes" if ($changes);
+  update_history($muid, $msid, 2, "EDIT: Zone", $info_str, $id);
+
   return db_commit();
 }
 
@@ -1996,11 +2127,17 @@ sub delete_zone($) {
         return $res;
     }
 
+    # Log zone deletion to history (before commit, using stored zone name)
+    my %zone_data;
+    get_zone($id, \%zone_data);
+    my $zone_name = $zone_data{name} || "ID=$id";
+    
     if (db_commit() < 0) {
         write2log("ZONE_DELETE_FAILED: Zone ID=$id WAS NOT deleted - commit failure");
         return -200;
     }
 
+    update_history($muid, $msid, 2, "DELETE: Zone", "name: $zone_name", $id);
     write2log("ZONE_DELETE_SUCCESS: Zone ID=$id successfully deleted");
     return 0;
 }
@@ -2093,6 +2230,11 @@ sub add_zone($) {
   $res = add_array_field('txt_entries','txt,comment','zentries',$rec,
 			 'type,ref',"12,$id");
   if ($res < 0) { db_rollback(); return -8; }
+
+  # Log zone creation to history
+  my $zone_type = $rec->{type} || 'M';
+  my $zone_name = $rec->{name} || '';
+  update_history($muid, $msid, 2, "ADD: Zone type=$zone_type", "name: $zone_name", $id);
 
   return -100 if (db_commit() < 0);
   return $id;
@@ -4698,6 +4840,10 @@ sub update_history($$$$$$) {
   my($date,$a,$i,$sql);
 
 # uid and sid are -1 in some command line scripts
+# Use -1 as default if undefined
+  $uid = -1 unless (defined $uid);
+  $sid = -1 unless (defined $sid);
+  
   return -1 unless ($uid > 0 || $uid == -1);
   return -2 unless ($sid > 0 || $sid == -1);
   return -3 unless ($type > 0);
@@ -4799,6 +4945,38 @@ sub get_history_session($$)
   db_query("SELECT date,type,ref,action,info FROM history ".
 	   "WHERE sid=$id ORDER BY date ",$list);
 
+  return 0;
+}
+
+sub get_history_zone($$)
+{
+  my ($id,$list) = @_;
+  my (@q,%users,$i);
+
+  return -1 unless ($id > 0);
+  db_query("SELECT date,action,info,uid FROM history ".
+	   "WHERE type=2 AND ref=$id ORDER BY date ",$list);
+  db_query("SELECT id,username FROM users",\@q);
+  for $i (0..$#q) { $users{$q[$i][0]}=$q[$i][1]; }
+  for $i (0..$#{$list}) {
+    $$list[$i][3] = $users{$$list[$i][3]} if ($users{$$list[$i][3]});
+  }
+  return 0;
+}
+
+sub get_history_server($$)
+{
+  my ($id,$list) = @_;
+  my (@q,%users,$i);
+
+  return -1 unless ($id > 0);
+  db_query("SELECT date,action,info,uid FROM history ".
+	   "WHERE type=3 AND ref=$id ORDER BY date ",$list);
+  db_query("SELECT id,username FROM users",\@q);
+  for $i (0..$#q) { $users{$q[$i][0]}=$q[$i][1]; }
+  for $i (0..$#{$list}) {
+    $$list[$i][3] = $users{$$list[$i][3]} if ($users{$$list[$i][3]});
+  }
   return 0;
 }
 
