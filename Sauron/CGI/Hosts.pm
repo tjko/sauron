@@ -429,7 +429,7 @@ my %host_form = (
   {ftype=>6, tag=>'mx', name=>'MX template', iff=>['type','[13]']},
   {ftype=>7, tag=>'wks', name=>'WKS template', iff=>['type','1']},
 
-  {ftype=>0, name=>'Host specific',iff=>['type','(?:1|2|3|7|13|15)']},
+  {ftype=>0, name=>'Host specific',iff=>['type','(?:1|2|3|4|7|13|15)']},
   {ftype=>2, tag=>'ns_l', name=>'Name servers (NS)', type=>['domain','text'],
    fields=>2, maxlen=>[400,80],
    len=>[50,20], empty=>[0,1], elabels=>['NS','comment'], iff=>['type','2']},
@@ -455,7 +455,7 @@ my %host_form = (
 
   {ftype=>2, tag=>'txt_l', name=>'TXT', type=>['text','text'],
    whitesp=>['P','P'], fields=>2, maxlen=>[253, 80],
-   len=>[50,20], empty=>[0,1], elabels=>['TXT','comment'], iff=>['type','(?:13|1|3|7)']},
+   len=>[50,20], empty=>[0,1], elabels=>['TXT','comment'], iff=>['type','(?:13|1|3|4|7)']},
 
   {ftype=>2, tag=>'printer_l', name=>'PRINTER entries', no_empty=>1,
    type=>['text','text'], fields=>2,len=>[50,20], empty=>[0,1],
@@ -2135,16 +2135,16 @@ sub menu_handler {
 # Regular expression search for TXT. TVu 2020-11-03
     my ($txtrule1, $txtrule2);
 # If user chose something other than Any type (0), Host (1),
-# Plain MX (3) or AREC alias (7), TXT is ignored.
-    if (param('bh_search_txt') && param('bh_type') =~ /^(0|1|3|7)$/) {
+# Plain MX (3), Static/CNAME alias (4) or AREC alias (7), TXT is ignored.
+    if (param('bh_search_txt') && param('bh_type') =~ /^(0|1|3|4|7)$/) {
 	$txtrule1 = 'txt_entries te,';
 	$txtrule2 = 'and te.type = 2 and te.ref = a.id and te.txt ~* ' .
 	    db_encode_str(param('bh_search_txt'));
-# If user chose Any type and gave a TXT, only types 1, 3 and 7 are searched.
-# These are the only types that should have TXT records.
-# The main purpose of this limitation is to avoid finding hosts which represent zones.
+# If user chose Any type and gave a TXT, only host types that can carry TXT
+# records are searched.
+  # The main purpose of this limitation is to avoid finding hosts which represent zones.
 	if (param('bh_type') == 0) {
-	    $txtrule2 .= ' and (a.type = 1 or a.type = 3 or a.type = 7) ';
+      $txtrule2 .= ' and (a.type = 1 or a.type = 3 or a.type = 4 or a.type = 7) ';
 	}
     }
 

@@ -909,7 +909,7 @@ sub make_dns() {
                " AND (coalesce(z.expiration, 0) <= 0 OR coalesce(z.expiration, 0) > " .
                " extract(epoch from now())) " . # Exclude expired zones.
 #              "AND h.type=1 AND z.id=$zoneid " .
-               "AND (h.type=1 OR h.type=3 OR h.type=7) AND z.id=$zoneid " . # ** TVu 2020-06-16 +7 2020-11-02
+               "AND (h.type=1 OR h.type=3 OR h.type=4 OR h.type=7) AND z.id=$zoneid " . # ** TVu 2020-06-16 +7 2020-11-02 +4 2025-06-16
                "ORDER BY h.domain;",\@q);
       error(db_errormsg()) if (db_errormsg());
       if (@q > 0) {
@@ -1366,7 +1366,7 @@ sub make_dns() {
            if ($tiny_conf);
        }
      }
-     # aliases outside zone
+     # aliases outside zone (Static Alias)
      undef @q;
      db_query("SELECT h.domain,h.cname_txt,h.ttl,h.expiration " .
               "FROM hosts h,zones z " .
@@ -1401,6 +1401,22 @@ sub make_dns() {
            if ($bind_conf);
          printf TINYDNSFILE "C$domain\.$zonename\:$alias\:$ttl\:\:\n"
            if ($tiny_conf);
+
+         # TXT records for Static Alias (type=4) - ** 2025-06-16
+         my $txt = $txthash{$q[$i][0]};
+         if ($txt && ref($txt) eq 'ARRAY') {
+           for my $k (0 .. $#{$txt}) {
+             my $val = $$txt[$k];
+             $val =~ s/\"//g;
+             my $padding = length(sprintf $ZFORMAT, '', $ttl, $class, 'TXT', '');
+             printf ZONEFILE $ZFORMAT, '', $ttl, $class, 'TXT',
+               bind_fmt_long_data("$val", $padding)
+               if ($bind_conf);
+             $val =~ s/:/\\072/g;
+             my $txt_owner = ($domain ne '' ? "$domain.$zonename" : $zonename);
+             printf TINYDNSFILE "'$txt_owner\:$val\:$ttl\:\:\n" if ($tiny_conf);
+           }
+         }
        }
      }
 
@@ -1656,7 +1672,7 @@ sub make_dns() {
       }
     }
 
-    # TXT records
+    # TXT records from txt_entries table (legacy: type=2 entries linked to hosts)
     undef @q;
     db_query("SELECT a.domain,a.ttl,a.expiration,b.txt " .
                    "FROM hosts a, txt_entries b, zones z " .
@@ -1665,7 +1681,45 @@ sub make_dns() {
                    "ORDER BY a.domain,b.txt;",\@q);
     error(db_errormsg()) if (db_errormsg());
     if (@q > 0) {
-      print ZONEFILE ";\n;\n; TXT records\n;\n" if ($bind_conf);
+      print ZONEFILE ";\n;\n; TXT records (legacy)\n;\n" if ($bind_conf);
+      for $i (0 .. $#q) {
+        $domain=remove_origin($q[$i][0],$origin);
+        if ($domain =~ /\.$/) {
+          error("Out-of-zone TXT record skipped: $q[$i][0]");
+          next;
+        }
+        if ($domain =~ /\.($delegation_mask)$/) {
+          error("TXT in delegated zone skipped: $q[$i][0]");
+          next;
+        }
+        if (($q[$i][2] > 0) && ($q[$i][2] < $time_now_ticks)) {
+          error("Skipping expired TXT record: $q[$i][0]");
+          next;
+        }
+        $ttl=$q[$i][1];
+        $ttl='' unless ($ttl > 0);
+        $val=$q[$i][3];
+        $val =~ s/\"//g;
+
+        $padding = length(sprintf $ZFORMAT, $domain,$ttl,$class, '');
+        printf ZONEFILE $ZFORMAT, $domain,$ttl,$class,'TXT', 
+            bind_fmt_long_data("$val", $padding) 
+            if ($bind_conf);
+        $val=~ s/:/\\072/g;
+        printf TINYDNSFILE "'$zonename\:$val\:$ttl\:\:\n" if ($tiny_conf);
+      }
+    }
+
+    # Standalone TXT hosts (type=13) - TXT value stored in cname_txt column
+    # Used for blocklist TXT records like _info.domain, _legal.domain, etc.
+    undef @q;
+    db_query("SELECT domain,ttl,expiration,cname_txt " .
+                   "FROM hosts " .
+                   "WHERE zone=$zoneid AND type=13 " .
+                   "ORDER BY domain;",\@q);
+    error(db_errormsg()) if (db_errormsg());
+    if (@q > 0) {
+      print ZONEFILE ";\n;\n; TXT records (standalone hosts)\n;\n" if ($bind_conf);
       for $i (0 .. $#q) {
         $domain=remove_origin($q[$i][0],$origin);
         if ($domain =~ /\.$/) {

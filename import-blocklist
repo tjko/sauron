@@ -1,0 +1,1548 @@
+#!/usr/bin/perl -I/opt/sauron
+#
+# import-blocklist - import blocked domains from CSV files into RPZ zones
+#
+# Copyright (c) 2026 CESNET, z.s.p.o.
+# Based on Sauron DNS management system
+#
+# This script imports blocked domains from external CSV sources
+# (e.g., government blocklists) into Sauron-managed RPZ zones.
+#
+# Features:
+#   - Configurable CSV column mapping
+#   - Automatic filtering by date_removed (expired entries are removed)
+#   - Support for multiple sources in single CSV or separate files
+#   - Incremental updates (add/modify/delete)
+#   - Dry-run mode for testing
+#
+# Usage:
+#   ./import-blocklist --config <file> --source <name> [--zone <zone>] [--dry-run]
+#   ./import-blocklist --config <file> --all [--dry-run]
+#
+
+require 5;
+use strict;
+use warnings;
+use utf8;
+
+use Getopt::Long;
+use Pod::Usage;
+use FindBin;
+use lib "$FindBin::Bin";
+
+use Sauron::DB;
+use Sauron::Util;
+use Sauron::BackEnd;
+use Sauron::SetupIO;
+use Sauron::Sauron;
+
+# Binmode for UTF-8
+binmode(STDOUT, ':utf8');
+binmode(STDERR, ':utf8');
+
+######################
+# Default values
+######################
+my $opt_config;
+my $opt_source;
+my $opt_zone;
+my $opt_all = 0;
+my $opt_dry_run = 0;
+my $opt_verbose = 0;
+my $opt_help = 0;
+my $opt_keep_expired = 0;
+my $opt_remove_expired = 1;
+my $opt_max_changes_percent = 25;  # Default: max 25% changes allowed
+my $opt_max_delete = 1000;          # Default: max 1000 deletes allowed
+my $opt_confirm_above = 0;          # Default: no confirmation required
+
+######################
+# Parse command line
+######################
+GetOptions(
+    'config=s'             => \$opt_config,
+    'source=s'             => \$opt_source,
+    'zone=s'               => \$opt_zone,
+    'all!'                 => \$opt_all,
+    'dry-run!'             => \$opt_dry_run,
+    'verbose|v+'           => \$opt_verbose,
+    'keep-expired!'        => \$opt_keep_expired,
+    'max-changes-percent=i'=> \$opt_max_changes_percent,
+    'max-delete=i'         => \$opt_max_delete,
+    'confirm-above=i'      => \$opt_confirm_above,
+    'help|h'               => \$opt_help,
+) or pod2usage(2);
+
+pod2usage(1) if $opt_help;
+pod2usage(2) unless $opt_config;
+pod2usage(2) unless ($opt_source || $opt_all);
+pod2usage(2) if ($opt_source && $opt_all);
+
+# Special value -1 or 0 means no limit
+$opt_max_changes_percent = undef if ($opt_max_changes_percent <= 0);
+$opt_max_delete = undef if ($opt_max_delete <= 0);
+$opt_confirm_above = undef if ($opt_confirm_above <= 0);
+
+# keep-expired can be forced from CLI or environment.
+$opt_remove_expired = 0 if ($opt_keep_expired || $ENV{BLOCKLIST_KEEP_EXPIRED});
+
+######################
+# Load configuration
+######################
+my $config = load_config_file($opt_config);
+die "Invalid configuration file: $opt_config\n" unless $config && ref($config) eq 'HASH';
+my $global_default_cname_target = $config->{global_settings}{default_cname_target};
+
+$opt_remove_expired = $config->{global_settings}{remove_expired}
+    if (defined $config->{global_settings}{remove_expired} &&
+        !$ENV{BLOCKLIST_KEEP_EXPIRED} &&
+        !$opt_keep_expired);
+
+######################
+# Load Sauron configuration
+######################
+set_encoding();
+load_config();
+
+my $import_user = $ENV{SUDO_USER} || $ENV{LOGNAME} || $ENV{USER} || getlogin() || 'import-blocklist';
+set_muser($import_user);
+
+######################
+# Connect to database
+######################
+db_connect() or die "Cannot connect to database: $DBI::errstr\n";
+
+######################
+# Main processing
+######################
+my @sources_to_process;
+
+if ($opt_all) {
+    @sources_to_process = @{$config->{sources}};
+} else {
+    @sources_to_process = grep { $_->{name} eq $opt_source } @{$config->{sources}};
+    die "Unknown source: $opt_source\n" unless @sources_to_process;
+}
+
+print "Processing " . scalar(@sources_to_process) . " source(s)\n";
+
+foreach my $src (@sources_to_process) {
+    if (defined $global_default_cname_target &&
+        (!defined $src->{default_cname_target} || $src->{default_cname_target} eq '')) {
+        $src->{default_cname_target} = $global_default_cname_target;
+    }
+    process_source($src);
+}
+
+print "Done.\n" unless $opt_dry_run;
+exit(0);
+
+######################
+# Subroutines
+######################
+
+sub load_config_file {
+    my ($file) = @_;
+    
+    # Try JSON first (using JSON module if available, otherwise simple parser)
+    my $content = read_file_content($file);
+    return undef unless $content;
+    
+    # Simple JSON parser for our specific format
+    return parse_json_config($content);
+}
+
+sub read_file_content {
+    my ($file) = @_;
+    open(my $fh, '<:utf8', $file) or return undef;
+    local $/;
+    my $content = <$fh>;
+    close($fh);
+    return $content;
+}
+
+sub parse_json_config {
+    my ($content) = @_;
+    
+    # Use JSON module if available
+    my $json;
+    eval {
+        require JSON;
+        my $decoder = JSON->new->utf8(0);
+        $json = $decoder->decode($content);
+        1;
+    } or do {
+        # Fallback to simple parser
+        return parse_simple_json($content);
+    };
+    
+    return $json;
+}
+
+sub parse_simple_json {
+    my ($json) = @_;
+    my %config = (sources => [], global_settings => {});
+    
+    # Extract sources array
+    if ($json =~ /"sources"\s*:\s*\[(.*?)\]\s*,\s*"global_settings"/s) {
+        my $sources_str = $1;
+        
+        # Parse each source object
+        while ($sources_str =~ /\{([^{}]+(?:\{[^{}]*\}[^{}]*)*)\}/gs) {
+            my $src_str = $1;
+            my %source;
+            
+            # Extract simple fields
+            $source{name} = $1 if $src_str =~ /"name"\s*:\s*"([^"]+)"/;
+            $source{description} = $1 if $src_str =~ /"description"\s*:\s*"([^"]+)"/;
+            $source{csv_file} = $1 if $src_str =~ /"csv_file"\s*:\s*"([^"]+)"/;
+            $source{zone} = $1 if $src_str =~ /"zone"\s*:\s*"([^"]+)"/;
+            $source{cname_target} = $1 if $src_str =~ /"cname_target"\s*:\s*"([^"]+)"/;
+            $source{cname_target_column} = $1 if $src_str =~ /"cname_target_column"\s*:\s*"([^"]+)"/;
+            $source{txt_info_prefix} = $1 if $src_str =~ /"txt_info_prefix"\s*:\s*"([^"]+)"/;
+
+            # Extract txt_columns
+            if ($src_str =~ /"txt_columns"\s*:\s*\{([^}]+)\}/s) {
+                my $txt_str = $1;
+                $source{txt_columns} = {};
+                while ($txt_str =~ /"([^"]+)"\s*:\s*"([^"]*)"/g) {
+                    $source{txt_columns}{$1} = $2;
+                }
+            }
+            
+            # Extract csv_columns
+            if ($src_str =~ /"csv_columns"\s*:\s*\{([^}]+)\}/s) {
+                my $cols_str = $1;
+                $source{csv_columns} = {};
+                $source{csv_columns}{domain} = $1 if $cols_str =~ /"domain"\s*:\s*"([^"]+)"/;
+                $source{csv_columns}{wildcard} = $1 if $cols_str =~ /"wildcard"\s*:\s*"([^"]+)"/;
+                $source{csv_columns}{date_added} = $1 if $cols_str =~ /"date_added"\s*:\s*"([^"]+)"/;
+                $source{csv_columns}{date_removed} = $1 if $cols_str =~ /"date_removed"\s*:\s*"([^"]+)"/;
+                $source{csv_columns}{source} = $1 if $cols_str =~ /"source"\s*:\s*"([^"]+)"/;
+                $source{csv_columns}{dataset} = $1 if $cols_str =~ /"dataset"\s*:\s*"([^"]+)"/;
+            }
+            
+            # Extract filters
+            if ($src_str =~ /"filters"\s*:\s*\{([^}]+)\}/s) {
+                my $filt_str = $1;
+                $source{filters} = {};
+                $source{filters}{source_regex} = $1 if $filt_str =~ /"source_regex"\s*:\s*"([^"]+)"/;
+                $source{filters}{dataset_regex} = $1 if $filt_str =~ /"dataset_regex"\s*:\s*"([^"]+)"/;
+            }
+            
+            push @{$config{sources}}, \%source if $source{name};
+        }
+    }
+    
+    # Extract global_settings
+    if ($json =~ /"global_settings"\s*:\s*\{([^}]+)\}/s) {
+        my $gs_str = $1;
+        $config{global_settings}{default_cname_target} = $1 
+            if $gs_str =~ /"default_cname_target"\s*:\s*"([^"]+)"/;
+        $config{global_settings}{add_sha256sum} = ($1 eq 'true')
+            if $gs_str =~ /"add_sha256sum"\s*:\s*(true|false)/;
+        $config{global_settings}{remove_expired} = ($1 eq 'true')
+            if $gs_str =~ /"remove_expired"\s*:\s*(true|false)/;
+    }
+    
+    return \%config;
+}
+
+sub process_source {
+    my ($src) = @_;
+    
+    print "\n=== Processing source: $src->{name} ===\n";
+    print "    Description: $src->{description}\n";
+    print "    CSV file: $src->{csv_file}\n";
+    print "    Target zone: $src->{zone}\n";
+    
+    # Check if zone exists
+    my $serverid = get_server_for_zone($src->{zone});
+    unless ($serverid > 0) {
+        print STDERR "WARNING: Zone $src->{zone} not found, skipping source $src->{name}\n";
+        return;
+    }
+    
+    my $zoneid = get_zone_id($src->{zone}, $serverid);
+    unless ($zoneid > 0) {
+        print STDERR "WARNING: Cannot get zone ID for $src->{zone}, skipping\n";
+        return;
+    }
+    
+    # Read and parse CSV file
+    my @entries = parse_csv_file($src);
+    print "    Found " . scalar(@entries) . " entries in CSV\n";
+    
+    # Filter entries based on source filters
+    @entries = apply_filters(\@entries, $src);
+    print "    After filtering: " . scalar(@entries) . " entries\n";
+    
+    # Get existing entries from database for this source
+    my %existing = get_existing_entries($zoneid, $src->{name});
+    print "    Existing entries in DB: " . scalar(keys %existing) . "\n";
+    my $existing_count = scalar(keys %existing);
+    
+    # Calculate changes
+    my (%to_add, %to_modify, %to_delete);
+    
+    # Check what needs to be added or modified
+    foreach my $entry (@entries) {
+        my $domain = $entry->{domain};
+        next unless $domain;
+        my $wildcard_domain = "*.$domain";
+        
+        if (exists $existing{$domain}) {
+            # Check if modification needed
+            if (entry_changed($existing{$domain}, $entry, $src, $zoneid, \%existing)) {
+                $to_modify{$domain} = $entry;
+            }
+            delete $existing{$domain};  # Mark as still needed
+        } else {
+            $to_add{$domain} = $entry;
+        }
+
+        # Keep wildcard hosts tied to the same CSV row out of the leftover set.
+        # They are managed explicitly when the base domain is processed.
+        delete $existing{$wildcard_domain} if $entry->{wildcard} && exists $existing{$wildcard_domain};
+    }
+    
+    # Remaining existing entries should be deleted (expired/removed)
+    if ($opt_remove_expired) {
+        %to_delete = %existing;
+    }
+    
+    # Report changes
+    my $num_add = scalar(keys %to_add);
+    my $num_modify = scalar(keys %to_modify);
+    my $num_delete = scalar(keys %to_delete);
+    my $total_changes = $num_add + $num_modify + $num_delete;
+    
+    print "\n    Changes summary:\n";
+    print "      ADD:     $num_add\n";
+    print "      MODIFY:  $num_modify\n";
+    print "      DELETE:  $num_delete\n";
+    
+    # Check change limits even in dry-run so safety checks can be validated in CI
+    check_change_limits($num_add, $num_modify, $num_delete, $existing_count, $src->{name});
+    
+    # Apply changes
+    if ($opt_dry_run) {
+        print "\n[DRY-RUN] No changes will be applied\n";
+        print_changes(\%to_add, \%to_modify, \%to_delete);
+        return;
+    }
+    
+    # Set flag to ignore transaction begin/commit (queries will auto-commit)
+    db_ignore_begin_and_commit(1);
+    
+    my ($added, $modified, $deleted) = (0, 0, 0);
+    
+    # Add new entries
+    foreach my $domain (keys %to_add) {
+        if (add_rpz_entry($zoneid, $to_add{$domain}, $src)) {
+            $added++;
+        } else {
+            print STDERR "    ERROR: Failed to add $domain\n";
+        }
+    }
+    
+    # Modify existing entries
+    foreach my $domain (keys %to_modify) {
+        if (update_rpz_entry($zoneid, $to_modify{$domain}, $src)) {
+            $modified++;
+        } else {
+            print STDERR "    ERROR: Failed to update $domain\n";
+        }
+    }
+    
+    # Delete expired entries
+    foreach my $domain (keys %to_delete) {
+        if (delete_rpz_entry($zoneid, $to_delete{$domain}, $src)) {
+            $deleted++;
+        } else {
+            print STDERR "    ERROR: Failed to delete $domain\n";
+        }
+    }
+    
+    # Reset flag (no explicit commit needed - queries auto-commit)
+    db_ignore_begin_and_commit(0);
+    
+    print "\n    Applied changes: +$added ~$modified -$deleted\n";
+}
+
+sub parse_csv_file {
+    my ($src) = @_;
+    
+    my $file = $src->{csv_file};
+    unless (-r $file) {
+        print STDERR "WARNING: Cannot read CSV file: $file\n";
+        return ();
+    }
+    
+    open(my $fh, '<:utf8', $file) or do {
+        print STDERR "WARNING: Cannot open CSV file: $file: $!\n";
+        return ();
+    };
+    
+    # Read header line (skip comment lines starting with #)
+    my $header_line;
+    while (my $line = <$fh>) {
+        $line =~ s/^\s+|\s+$//g;  # Trim whitespace
+        next if $line =~ /^#/;     # Skip comment lines
+        next if $line =~ /^$/;     # Skip empty lines
+        $header_line = $line;
+        last;
+    }
+    
+    unless ($header_line) {
+        print STDERR "WARNING: No header line found in CSV file: $file\n";
+        close($fh);
+        return ();
+    }
+    
+    chomp($header_line);
+    my @headers = split(/,/, $header_line);
+    
+    # Create column index mapping
+    my %col_idx;
+    my $cols = $src->{csv_columns} || {};
+    for my $i (0..$#headers) {
+        $headers[$i] =~ s/^\s+|\s+$//g;  # Trim whitespace
+        foreach my $field (qw(domain wildcard date_added date_removed source dataset)) {
+            if (defined $cols->{$field} && $headers[$i] eq $cols->{$field}) {
+                $col_idx{$field} = $i;
+            }
+        }
+    }
+    
+    # Also check for cname_target_column (it's a source property, not csv_columns)
+    if ($src->{cname_target_column}) {
+        my $target_col_name = $src->{cname_target_column};
+        for my $i (0..$#headers) {
+            if ($headers[$i] eq $target_col_name) {
+                $col_idx{cname_target} = $i;
+                last;
+            }
+        }
+    }
+    
+    # Read data lines (skip comment lines starting with #)
+    my %seen_domains;  # Track unique domains
+    my @entries;
+    while (my $line = <$fh>) {
+        chomp($line);
+        next if $line =~ /^\s*$/;   # Skip empty lines
+        next if $line =~ /^\s*#/;   # Skip comment lines
+        
+        my @fields = parse_csv_line($line);
+        next unless @fields >= keys %col_idx;
+        
+        my %entry;
+        my %csv_values;
+        for my $i (0..$#headers) {
+            my $header = $headers[$i];
+            $header =~ s/^\s+|\s+$//g;
+            my $val = $fields[$i] // '';
+            $val =~ s/^\s+|\s+$//g;
+            $csv_values{$header} = $val;
+        }
+
+        foreach my $field (qw(domain wildcard date_added date_removed source dataset cname_target)) {
+            if (defined $col_idx{$field}) {
+                my $val = $fields[$col_idx{$field}] // '';
+                $val =~ s/^\s+|\s+$//g;  # Trim
+                $entry{$field} = $val;
+            }
+        }
+
+        $entry{csv} = \%csv_values;
+        
+        # Skip entries without domain
+        next unless $entry{domain};
+        
+        # Clean up domain (remove http://, https://, www., trailing slashes)
+        $entry{domain} = clean_domain($entry{domain});
+        
+        # Normalize wildcard flag (true/1 -> 1, else 0)
+        if (defined $entry{wildcard}) {
+            $entry{wildcard} = ($entry{wildcard} =~ /^(true|1|yes)$/i) ? 1 : 0;
+        } else {
+            $entry{wildcard} = 0;
+        }
+        
+        # Skip duplicate domains (keep first occurrence)
+        next if $seen_domains{$entry{domain}};
+        $seen_domains{$entry{domain}} = 1;
+        
+        push @entries, \%entry;
+    }
+    
+    close($fh);
+    return @entries;
+}
+
+sub parse_csv_line {
+    my ($line) = @_;
+    my @fields;
+    my $field = '';
+    my $in_quotes = 0;
+    
+    for my $char (split(//, $line)) {
+        if ($char eq '"' && !$in_quotes) {
+            $in_quotes = 1;
+        } elsif ($char eq '"' && $in_quotes) {
+            $in_quotes = 0;
+        } elsif ($char eq ',' && !$in_quotes) {
+            push @fields, $field;
+            $field = '';
+        } else {
+            $field .= $char;
+        }
+    }
+    push @fields, $field;
+    
+    return @fields;
+}
+
+sub clean_domain {
+    my ($url) = @_;
+    
+    # Remove protocol
+    $url =~ s|^https?://||i;
+    $url =~ s|^www\.||i;
+    
+    # Remove path
+    $url =~ s|/.*$||;
+    
+    # Remove port
+    $url =~ s|:\d+$||;
+    
+    # Trim whitespace
+    $url =~ s/^\s+|\s+$//g;
+    
+    # Lowercase
+    $url = lc($url);
+    
+    return $url;
+}
+
+sub apply_filters {
+    my ($entries, $src) = @_;
+    
+    my @filtered;
+    my $filters = $src->{filters} || {};
+    
+    ENTRY: foreach my $entry (@$entries) {
+        # Skip entries with date_removed in the past
+        if ($entry->{date_removed}) {
+            my $removal_date = parse_date($entry->{date_removed});
+            if ($removal_date && $removal_date <= today_days()) {
+                next ENTRY;
+            }
+        }
+        
+        # Apply source regex filter
+        if ($filters->{source_regex} && $entry->{source}) {
+            next ENTRY unless $entry->{source} =~ /$filters->{source_regex}/i;
+        }
+        
+        # Apply dataset regex filter
+        if ($filters->{dataset_regex} && $entry->{dataset}) {
+            next ENTRY unless $entry->{dataset} =~ /$filters->{dataset_regex}/i;
+        }
+        
+        # Validate domain
+        next ENTRY unless $entry->{domain};
+        
+        # Allow wildcard domains (*.example.com) which are valid for RPZ
+        my $is_wildcard = ($entry->{domain} =~ /^\*\./);
+        next ENTRY unless ($is_wildcard || valid_domainname($entry->{domain}));
+        
+        push @filtered, $entry;
+    }
+    
+    return @filtered;
+}
+
+sub get_existing_entries {
+    my ($zoneid, $source_name) = @_;
+    
+    my %entries;
+    my $comment_prefix = "blocklist:$source_name:";
+    
+    # Get CNAME hosts (type=4)
+    my $query = "SELECT h.id, h.domain, h.cname_txt, h.comment, h.info " .
+                "FROM hosts h WHERE h.zone = $zoneid AND h.type = 4 " .
+                "AND h.comment LIKE " . db_encode_str($comment_prefix . '%');
+    
+    my @rows;
+    db_query($query, \@rows);
+    
+    foreach my $row (@rows) {
+        my ($id, $domain, $cname, $comment, $info) = @$row;
+        $entries{$domain} = {
+            id => $id,
+            domain => $domain,
+            cname => $cname,
+            comment => $comment,
+            info => $info,
+        };
+    }
+    
+    # Also get standalone TXT hosts (type=13) created for CNAME domains
+    # These have domain like "_info.original_domain" or "_legal.original_domain"
+    my $txt_comment_prefix = managed_txt_comment_prefix($source_name);
+    my $txt_query = "SELECT h.id, h.domain, h.cname_txt, h.comment " .
+                    "FROM hosts h WHERE h.zone = $zoneid AND h.type = 13 " .
+                    "AND h.comment LIKE " . db_encode_str($txt_comment_prefix . '%');
+    
+    undef @rows;
+    db_query($txt_query, \@rows);
+    
+    foreach my $row (@rows) {
+        my ($id, $domain, $txt_value, $comment) = @$row;
+        # Extract original domain from TXT domain (_label.domain -> domain)
+        if ($domain =~ /^_[^\.]+\.(.+)$/) {
+            my $original_domain = $1;
+            # Mark that this domain has associated TXT records
+            if (exists $entries{$original_domain}) {
+                $entries{$original_domain}{has_txt} = 1;
+            }
+        }
+    }
+    
+    return %entries;
+}
+
+sub managed_txt_comment_prefix {
+    my ($source_name) = @_;
+
+    return "blocklist:$source_name:txt:";
+}
+
+sub managed_txt_label_from_comment {
+    my ($comment, $source_name) = @_;
+
+    return undef unless defined $comment && defined $source_name;
+
+    my $prefix = managed_txt_comment_prefix($source_name);
+    return $1 if $comment =~ /^\Q$prefix\E(.+)$/;
+
+    return undef;
+}
+
+sub csv_value_for_column {
+    my ($entry, $column) = @_;
+
+    return undef unless $entry && defined $column && $column ne '';
+    return $entry->{csv}{$column} if exists $entry->{csv}{$column};
+    return undef;
+}
+
+sub resolve_txt_records {
+    my ($entry, $src) = @_;
+
+    my @records;
+    my $txt_columns = $src->{txt_columns} || {};
+
+    foreach my $label (sort keys %$txt_columns) {
+        my $spec = $txt_columns->{$label};
+        next unless defined $spec && $spec ne '';
+
+        my $value;
+        if ($spec eq 'generated:info') {
+            $value = format_info_text($entry, $src);
+        } elsif ($spec eq 'generated:date_added') {
+            $value = format_date_cz($entry->{date_added});
+        } elsif ($spec eq 'generated:date_removed') {
+            $value = format_date_cz($entry->{date_removed});
+        } elsif ($spec eq 'generated:source') {
+            $value = $entry->{source} || '';
+        } elsif ($spec eq 'generated:dataset') {
+            $value = $entry->{dataset} || '';
+        } else {
+            $value = csv_value_for_column($entry, $spec);
+        }
+
+        next unless defined $value;
+        $value =~ s/^\s+|\s+$//g;
+        next if $value eq '';
+
+        push @records, {
+            label => $label,
+            value => $value,
+        };
+    }
+
+    return @records;
+}
+
+sub managed_txt_entries_for_host {
+    my ($hostid, $source_name) = @_;
+
+    my %txts;
+    return %txts unless $hostid && $hostid > 0;
+
+    my $query = "SELECT id, txt, comment FROM txt_entries WHERE type = 2 AND ref = $hostid ORDER BY id";
+
+    my @rows;
+    db_query($query, \@rows);
+
+    foreach my $row (@rows) {
+        my ($id, $txt, $comment) = @$row;
+        my $label = managed_txt_label_from_comment($comment, $source_name);
+        next unless defined $label;
+
+        $txts{$label} = {
+            id => $id,
+            txt => $txt,
+            comment => $comment,
+        };
+    }
+
+    return %txts;
+}
+
+sub txt_records_changed {
+    my ($existing_txts, $desired_txts) = @_;
+
+    $existing_txts ||= {};
+    $desired_txts ||= [];
+
+    my %existing = map { $_ => $existing_txts->{$_}{txt} } keys %$existing_txts;
+    my %desired = map { $_->{label} => $_->{value} } @$desired_txts;
+
+    return 1 if scalar(keys %existing) != scalar(keys %desired);
+
+    foreach my $label (keys %desired) {
+        return 1 unless exists $existing{$label};
+        return 1 if $existing{$label} ne $desired{$label};
+    }
+
+    return 0;
+}
+
+# Check if zone is a catalog zone (type='C')
+sub is_catalog_zone_id {
+    my ($zoneid) = @_;
+    
+    return 0 unless $zoneid && $zoneid > 0;
+    
+    my $query = "SELECT type FROM zones WHERE id = $zoneid";
+    my @rows;
+    db_query($query, \@rows);
+    
+    return ($rows[0][0] // '') eq 'C' ? 1 : 0;
+}
+
+# Build TXT info string for catalog zones (stored in host info field)
+sub build_catalog_txt_info {
+    my ($entry, $src) = @_;
+    
+    my @parts;
+    my $txt_columns = $src->{txt_columns} || {};
+    
+    foreach my $label (sort keys %$txt_columns) {
+        my $spec = $txt_columns->{$label};
+        next unless defined $spec && $spec ne '';
+        
+        my $value;
+        if ($spec eq 'generated:info') {
+            $value = format_info_text($entry, $src);
+        } elsif ($spec eq 'generated:date_added') {
+            $value = format_date_cz($entry->{date_added});
+        } elsif ($spec eq 'generated:date_removed') {
+            $value = format_date_cz($entry->{date_removed});
+        } elsif ($spec eq 'generated:source') {
+            $value = $entry->{source} || '';
+        } elsif ($spec eq 'generated:dataset') {
+            $value = $entry->{dataset} || '';
+        } else {
+            $value = csv_value_for_column($entry, $spec);
+        }
+        
+        next unless defined $value;
+        $value =~ s/^\s+|\s+$//g;
+        next if $value eq '';
+        
+        push @parts, "$label=$value";
+    }
+    
+    return join('; ', @parts);
+}
+
+# Create standalone TXT host with prefix for CNAME domains
+# e.g., _info.hazard.com IN TXT "zakazano ministerstvem financi"
+# For catalog zones, stores TXT data in host info field instead.
+sub create_standalone_txt_host {
+    my ($zoneid, $domain, $txt_label, $txt_value, $comment, $src) = @_;
+
+    # For catalog zones, we cannot create separate hosts
+    # Instead, TXT data is stored in the parent CNAME host's info field
+    if (is_catalog_zone_id($zoneid)) {
+        # This function is called from sync_host_txt_entries which handles catalog zones separately
+        return 0;
+    }
+
+    # Create prefixed domain name: _label.domain
+    my $txt_domain = "${txt_label}.${domain}";
+
+    # Check if TXT host already exists
+    my $existing_id = get_host_id($zoneid, $txt_domain);
+    if ($existing_id > 0) {
+        # Update existing TXT host
+        my $now = time();
+        my $query = "UPDATE hosts SET " .
+                    "cname_txt = " . db_encode_str($txt_value) . ", " .
+                    "comment = " . db_encode_str($comment) . ", " .
+                    "mdate = $now, " .
+                    "muser = " . db_encode_str($import_user) . " " .
+                    "WHERE id = $existing_id AND type = 13";
+        my $result = db_exec($query);
+        print "    UPDATED TXT: $txt_domain (result=$result)\n" if $opt_verbose && $result >= 0;
+        return $result >= 0 ? $existing_id : 0;
+    }
+
+    # Create new TXT host (type=13 = standalone TXT record)
+    # Use direct SQL insert because add_host() validation is strict for TXT records
+    my $now = time();
+    my $insert_query = "INSERT INTO hosts (zone, type, domain, class, cname_txt, comment, cdate, cuser, mdate, muser) VALUES (" .
+                       "$zoneid, 13, " . db_encode_str($txt_domain) . ", 'IN', " .
+                       db_encode_str($txt_value) . ", " .
+                       db_encode_str($comment) . ", $now, " .
+                       db_encode_str($import_user) . ", $now, " .
+                       db_encode_str($import_user) . ") RETURNING id";
+    
+    my @result_rows;
+    db_query($insert_query, \@result_rows);
+    my $hostid = $result_rows[0][0] // 0;
+
+    if ($hostid <= 0) {
+        print "    FAILED: INSERT TXT returned $hostid for TXT $txt_domain\n" if $opt_verbose;
+    } else {
+        print "    ADDED TXT: $txt_domain (id=$hostid)\n" if $opt_verbose;
+    }
+
+    return $hostid > 0 ? $hostid : 0;
+}
+
+sub sync_host_txt_entries {
+    my ($hostid, $entry, $src) = @_;
+
+    return 1 unless $hostid && $hostid > 0;
+
+    my $source_name = $src->{name};
+    my $domain = $entry->{domain};
+    my @desired = resolve_txt_records($entry, $src);
+
+    # For CNAME records (type=4), check if zone is catalog zone
+    my $host_type_query = "SELECT type FROM hosts WHERE id = $hostid";
+    my @type_rows;
+    db_query($host_type_query, \@type_rows);
+    my $host_type = $type_rows[0][0] // 0;
+
+    if ($host_type == 4) {
+        # Get zone ID from host record
+        my $zone_query = "SELECT zone FROM hosts WHERE id = $hostid";
+        my @zone_rows;
+        db_query($zone_query, \@zone_rows);
+        my $zoneid = $zone_rows[0][0] // 0;
+
+        # For catalog zones, store TXT data in the CNAME host's info field
+        # because we cannot create separate hosts in catalog zones
+        if (is_catalog_zone_id($zoneid)) {
+            my $txt_info = build_catalog_txt_info($entry, $src);
+            if ($txt_info ne '') {
+                my $now = time();
+                my $query = "UPDATE hosts SET " .
+                            "info = " . db_encode_str($txt_info) . ", " .
+                            "mdate = $now, " .
+                            "muser = " . db_encode_str($import_user) . " " .
+                            "WHERE id = $hostid";
+                db_exec($query);
+                print "    UPDATED INFO for: $domain (catalog zone)\n" if $opt_verbose;
+            }
+            return 1;
+        }
+
+        # For regular zones, create standalone TXT records with prefix
+        foreach my $record (@desired) {
+            my $comment = managed_txt_comment_prefix($source_name) . $record->{label};
+            create_standalone_txt_host($zoneid, $domain, $record->{label}, $record->{value}, $comment, $src);
+        }
+        return 1;
+    }
+
+    # For non-CNAME hosts, use the original approach (TXT entries bound to host)
+    return 0 unless delete_all_txt_entries_for_host($hostid);
+
+    foreach my $record (@desired) {
+        my $query = "INSERT INTO txt_entries (txt, comment, type, ref) VALUES (" .
+                    db_encode_str($record->{value}) . ", " .
+                    db_encode_str(managed_txt_comment_prefix($source_name) . $record->{label}) .
+                    ", 2, $hostid)";
+        return 0 unless db_exec($query) >= 0;
+    }
+
+    return 1;
+}
+
+sub delete_all_txt_entries_for_host {
+    my ($hostid) = @_;
+
+    return 1 unless $hostid && $hostid > 0;
+    return db_exec("DELETE FROM txt_entries WHERE type = 2 AND ref = $hostid") >= 0;
+}
+
+sub delete_host_by_domain {
+    my ($zoneid, $domain) = @_;
+
+    my $hostid = get_host_id($zoneid, $domain);
+    return 1 unless $hostid && $hostid > 0;
+
+    return delete_host($hostid) >= 0;
+}
+
+sub sync_wildcard_host {
+    my ($zoneid, $entry, $src) = @_;
+
+    my $domain = $entry->{domain};
+    my $wildcard_domain = "*.$domain";
+
+    if ($entry->{wildcard}) {
+        my $cname = resolve_cname_target($entry, $src);
+        unless (defined $cname) {
+            print STDERR "    ERROR: Missing CNAME target for $wildcard_domain\n";
+            return 0;
+        }
+
+        my $comment = "blocklist:$src->{name}:$entry->{source}";
+        my $info = format_info_text($entry, $src);
+        my $wildcard_id = create_or_update_host($zoneid, $wildcard_domain, $cname, $comment, $info);
+        return 0 unless $wildcard_id && $wildcard_id > 0;
+
+        # Wildcard hosts must not carry TXT records.
+        return delete_all_txt_entries_for_host($wildcard_id);
+    }
+
+    return delete_host_by_domain($zoneid, $wildcard_domain);
+}
+
+sub delete_managed_txt_entries {
+    my ($hostid, $source_name) = @_;
+
+    return delete_all_txt_entries_for_host($hostid);
+}
+
+sub resolve_cname_target {
+    my ($entry, $src) = @_;
+
+    my @candidates = (
+        ($entry && defined $entry->{cname_target}) ? $entry->{cname_target} : undef,
+        $src->{cname_target},
+        $src->{default_cname_target},
+    );
+
+    foreach my $candidate (@candidates) {
+        next unless defined $candidate;
+        next if $candidate eq '';
+        return $candidate;
+    }
+
+    return undef;
+}
+
+sub wildcard_host_exists {
+    my ($zoneid, $domain) = @_;
+
+    return 0 unless ($zoneid > 0);
+    return 0 unless ($domain);
+
+    return get_host_id($zoneid, "*.$domain") > 0 ? 1 : 0;
+}
+
+sub entry_changed {
+    my ($existing, $new, $src, $zoneid, $existing_all) = @_;
+    
+    # Get expected CNAME target from source config
+    my $expected_cname = resolve_cname_target($new, $src);
+    
+    # Only compare CNAME when we can resolve expected target.
+    # This prevents false-positive MODIFY for all records when config uses per-row targets.
+    if (defined $expected_cname) {
+        if (!defined $existing->{cname} || $existing->{cname} ne $expected_cname) {
+            return 1;
+        }
+    }
+    
+    # Check if info/metadata is missing
+    if (!defined $existing->{info} || $existing->{info} eq '') {
+        return 1;
+    }
+
+    # For CNAME hosts (type=4), TXT records are stored as standalone hosts with prefix.
+    # Check if TXT records have changed by comparing standalone TXT hosts.
+    my $host_type = get_host_type($existing->{id});
+    if ($host_type == 4 && $src->{txt_columns}) {
+        # Compare standalone TXT hosts for CNAME records
+        my @desired_txts = resolve_txt_records($new, $src);
+        foreach my $record (@desired_txts) {
+            my $txt_domain = $record->{label} . "." . $existing->{domain};
+            my $txt_id = get_host_id($zoneid, $txt_domain);
+            if ($txt_id > 0) {
+                # Check if TXT value matches
+                my $query = "SELECT cname_txt FROM hosts WHERE id = $txt_id";
+                my @rows;
+                db_query($query, \@rows);
+                my $existing_txt = $rows[0][0] // '';
+                if ($existing_txt ne $record->{value}) {
+                    return 1;
+                }
+            } else {
+                # TXT host doesn't exist but should
+                return 1;
+            }
+        }
+        # Check if there are extra TXT hosts that shouldn't exist
+        my @txt_labels = sort keys %{$src->{txt_columns} || {}};
+        if (scalar(@desired_txts) != scalar(@txt_labels)) {
+            return 1;
+        }
+    } else {
+        # For non-CNAME hosts, compare managed TXT entries on the base host.
+        my %existing_txts = managed_txt_entries_for_host($existing->{id}, $src->{name});
+        my @desired_txts = resolve_txt_records($new, $src);
+        return 1 if txt_records_changed(\%existing_txts, \@desired_txts);
+    }
+
+    # When wildcard is requested in source data, ensure wildcard host exists.
+    # Older imports may contain only base domain and need one-time sync.
+    if ($new->{wildcard}) {
+        my $wildcard_domain = "*.$new->{domain}";
+        my $wildcard_existing = $existing_all->{$wildcard_domain};
+        if (!$wildcard_existing) {
+            return 1;
+        }
+
+        my %wildcard_txts = managed_txt_entries_for_host($wildcard_existing->{id}, $src->{name});
+        return 1 if scalar(keys %wildcard_txts) > 0;
+    }
+    
+    return 0;  # No significant changes
+}
+
+sub get_host_type {
+    my ($hostid) = @_;
+    
+    return 0 unless $hostid && $hostid > 0;
+    
+    my $query = "SELECT type FROM hosts WHERE id = $hostid";
+    my @rows;
+    db_query($query, \@rows);
+    
+    return $rows[0][0] // 0;
+}
+
+sub add_rpz_entry {
+    my ($zoneid, $entry, $src) = @_;
+    
+    my $domain = $entry->{domain};
+    my $cname = resolve_cname_target($entry, $src);
+    unless (defined $cname) {
+        print STDERR "    ERROR: Missing CNAME target for $domain\n";
+        return 0;
+    }
+    my $comment = "blocklist:$src->{name}:$entry->{source}";
+    my $info = format_info_text($entry, $src);
+    my $wildcard = $entry->{wildcard} || 0;
+    
+    # Create base domain entry
+    my $result = create_or_update_host($zoneid, $domain, $cname, $comment, $info);
+    return 0 unless $result && $result > 0;
+
+    return 0 unless sync_host_txt_entries($result, $entry, $src);
+    
+    # Create wildcard entry if requested
+    if ($wildcard) {
+        my $wildcard_domain = "*.$domain";
+        print "    ADD WILDCARD: $wildcard_domain --> $cname\n" if $opt_verbose;
+        return 0 unless sync_wildcard_host($zoneid, $entry, $src);
+    }
+    
+    return $result;
+}
+
+sub create_or_update_host {
+    my ($zoneid, $domain, $cname, $comment, $info) = @_;
+    
+    # For wildcard domains, we need to handle them differently
+    # Wildcard domains start with * and are valid in DNS
+    my $is_wildcard = ($domain =~ /^\*\./);
+    
+    # Check if domain already exists in the zone
+    my $existing_id = get_host_id($zoneid, $domain);
+    if ($existing_id > 0) {
+        # Domain exists - update it
+        my $now = time();
+        my $query = "UPDATE hosts SET " .
+                    "cname_txt = " . db_encode_str($cname) . ", " .
+                    "comment = " . db_encode_str($comment) . ", " .
+                    "info = " . db_encode_str($info) . ", " .
+                    "mdate = $now, " .
+                    "muser = " . db_encode_str($import_user) . " " .
+                    "WHERE id = $existing_id AND type = 4";
+        
+        my $result = db_exec($query);
+        print "    UPDATED: $domain (result=$result)\n" if $opt_verbose && $result >= 0;
+        return $result >= 0 ? $existing_id : 0;
+    }
+    
+    my $hostid = add_host({
+        zone => $zoneid,
+        type => 4,  # alias (CNAME)
+        domain => $domain,
+        class => 'IN',
+        cname_txt => $cname,
+        comment => $comment,
+        info => $info,
+    });
+    
+    if ($hostid <= 0) {
+        print "    FAILED: add_host returned $hostid for $domain\n" if $opt_verbose;
+    }
+    
+    return $hostid > 0 ? $hostid : 0;
+}
+
+sub update_rpz_entry {
+    my ($zoneid, $entry, $src) = @_;
+    
+    my $domain = $entry->{domain};
+    my $cname = resolve_cname_target($entry, $src);
+    unless (defined $cname) {
+        print STDERR "    ERROR: Missing CNAME target for $domain\n";
+        return 0;
+    }
+    my $comment = "blocklist:$src->{name}:$entry->{source}";
+    my $info = format_info_text($entry, $src);
+    my $wildcard = $entry->{wildcard} || 0;
+    
+    # Update base domain
+    my $result = create_or_update_host($zoneid, $domain, $cname, $comment, $info);
+    return 0 unless $result && $result > 0;
+
+    return 0 unless sync_host_txt_entries($result, $entry, $src);
+    
+    # Update/create wildcard entry if requested
+    return 0 unless sync_wildcard_host($zoneid, $entry, $src);
+    
+    return $result;
+}
+
+# Delete all standalone TXT hosts for a given domain
+# Used when deleting a CNAME host that has associated TXT records
+sub delete_txt_hosts_for_domain {
+    my ($zoneid, $domain, $source_name) = @_;
+    
+    return unless $zoneid > 0 && $domain && $domain ne '' && $source_name && $source_name ne '';
+    
+    # Delete only TXT hosts managed by import-blocklist for the same source.
+    # Pattern: _*.domain with escaped LIKE wildcards and explicit ESCAPE clause.
+    my $domain_pattern = $domain;
+    $domain_pattern =~ s/([\\%_])/\\$1/g;
+    my $like_pattern = "\\_%.$domain_pattern";
+    my $txt_comment_prefix = managed_txt_comment_prefix($source_name);
+    
+    my $query = "SELECT id, domain FROM hosts " .
+                "WHERE zone = $zoneid AND type = 13 " .
+                "AND comment LIKE " . db_encode_str($txt_comment_prefix . '%') . " " .
+                "AND domain LIKE " . db_encode_str($like_pattern) . " ESCAPE '\\\\'";
+    
+    my @rows;
+    db_query($query, \@rows);
+    
+    foreach my $row (@rows) {
+        my ($txt_id, $txt_domain) = @$row;
+        print "    DELETE TXT: $txt_domain\n" if $opt_verbose;
+        delete_host($txt_id);
+    }
+}
+
+sub delete_rpz_entry {
+    my ($zoneid, $entry, $src) = @_;
+    
+    my $domain = $entry->{domain};
+    
+    print "    DELETE: $domain (expired/removed from source)\n" if $opt_verbose;
+    
+    # Delete standalone TXT hosts for CNAME domains (type=13) that are managed
+    # by import-blocklist for the current source only.
+    delete_txt_hosts_for_domain($zoneid, $domain, $src->{name});
+    
+    # Delete base domain
+    my $result = delete_host_by_domain($zoneid, $domain);
+    return 0 unless $result;
+    
+    # Delete wildcard entry if it exists.
+    my $wildcard_domain = "*.$domain";
+    if (get_host_id($zoneid, $wildcard_domain) > 0) {
+        print "    DELETE WILDCARD: $wildcard_domain\n" if $opt_verbose;
+        delete_host_by_domain($zoneid, $wildcard_domain) or return 0;
+    }
+    
+    return $result;
+}
+
+sub format_info_text {
+    my ($entry, $src) = @_;
+    
+    my $date_added = format_date_cz($entry->{date_added});
+    my $source = $entry->{source} || 'Unknown';
+    my $prefix = $src->{txt_info_prefix} || 'Blokovaná doména';
+    
+    my $info = "pub: $date_added zdroj: $source";
+    $info .= " [$prefix]" if $prefix;
+    
+    return $info;
+}
+
+sub format_date_cz {
+    my ($iso_date) = @_;
+    return '' unless $iso_date;
+    
+    # Convert YYYY-MM-DD to D.M.YYYY
+    if ($iso_date =~ /^(\d{4})-(\d{2})-(\d{2})$/) {
+        return "$3.$2.$1";
+    }
+    return $iso_date;
+}
+
+sub parse_date {
+    my ($date_str) = @_;
+    return undef unless $date_str;
+    
+    if ($date_str =~ /^(\d{4})-(\d{2})-(\d{2})$/) {
+        my ($year, $month, $day) = ($1, $2, $3);
+        # Convert to days since epoch (simplified)
+        use Time::Local;
+        return timegm(0, 0, 0, $day, $month - 1, $year) / 86400;
+    }
+    return undef;
+}
+
+sub today_days {
+    return int(time() / 86400);
+}
+
+sub get_server_for_zone {
+    my ($zonename) = @_;
+    
+    my @rows;
+    db_query("SELECT server FROM zones WHERE name = " . db_encode_str($zonename), \@rows);
+    return @rows ? $rows[0][0] : -1;
+}
+
+sub check_change_limits {
+    my ($num_add, $num_modify, $num_delete, $existing_count, $source_name) = @_;
+    
+    my $total_changes = $num_add + $num_modify + $num_delete;
+    my $existing_changes = $num_modify + $num_delete;
+    my $abort = 0;
+    
+    print "\n";
+    
+    # Check delete limit
+    if (defined $opt_max_delete && $num_delete > $opt_max_delete) {
+        print "ERROR: Too many deletions detected!\n";
+        print "    DELETE count: $num_delete\n";
+        print "    Maximum allowed: $opt_max_delete\n";
+        $abort = 1;
+    }
+    
+    # Check percentage limit (only if we have existing records)
+    if (defined $opt_max_changes_percent && $existing_count > 0) {
+        my $change_percent = int(($existing_changes * 100) / $existing_count);
+        if ($change_percent > $opt_max_changes_percent) {
+            print "ERROR: Changes exceed maximum allowed percentage!\n";
+            print "    Total changes: $existing_changes ($change_percent% of existing records)\n";
+            print "    Existing records: $existing_count\n";
+            print "    Maximum allowed: $opt_max_changes_percent%\n";
+            $abort = 1;
+        }
+    }
+    
+    # Check confirmation threshold
+    if (defined $opt_confirm_above && $total_changes > $opt_confirm_above) {
+        print "WARNING: Large number of changes detected!\n";
+        print "    Total changes: $total_changes\n";
+        print "    Threshold: $opt_confirm_above\n";
+        
+        # Ask for confirmation in interactive mode
+        if (-t STDIN) {
+            print "\nDo you want to continue? [y/N]: ";
+            my $answer = <STDIN>;
+            chomp($answer);
+            if (lc($answer) ne 'y' && lc($answer) ne 'yes') {
+                print "Aborted by user.\n";
+                $abort = 1;
+            }
+        } else {
+            print "    (Run interactively to confirm)\n";
+            $abort = 1;
+        }
+    }
+    
+    if ($abort) {
+        print "\nAborting. Use --max-changes-percent=0 --max-delete=0 to override checks.\n";
+        exit(1);
+    }
+}
+
+sub print_changes {
+    my ($to_add, $to_modify, $to_delete) = @_;
+    
+    print "\nChanges that would be made:\n";
+    
+    if (%$to_add) {
+        print "\nADD:\n";
+        foreach my $d (sort keys %$to_add) {
+            print "  + $d\n";
+        }
+    }
+    
+    if (%$to_modify) {
+        print "\nMODIFY:\n";
+        foreach my $d (sort keys %$to_modify) {
+            print "  ~ $d\n";
+        }
+    }
+    
+    if (%$to_delete) {
+        print "\nDELETE:\n";
+        foreach my $d (sort keys %$to_delete) {
+            print "  - $d\n";
+        }
+    }
+}
+
+__END__
+
+=head1 NAME
+
+import-blocklist - Import blocked domains from CSV files into RPZ zones
+
+=head1 SYNOPSIS
+
+import-blocklist --config <file> --source <name> [options]
+import-blocklist --config <file> --all [options]
+
+=head1 OPTIONS
+
+=over 4
+
+=item B<--config>
+
+Configuration file path (required)
+
+=item B<--source>
+
+Source name from configuration to process
+
+=item B<--all>
+
+Process all sources defined in configuration
+
+=item B<--zone>
+
+Override target zone from configuration
+
+=item B<--dry-run>
+
+Show what would be done without making changes
+
+=item B<--verbose>
+
+Show detailed progress information
+
+=item B<--keep-expired>
+
+Do not remove entries marked as expired in CSV
+
+=item B<--max-changes-percent=E<lt>nE<gt>>
+
+Maximum percentage of changes allowed relative to existing records (default: 25).
+Set to 0 to disable this check. Useful for detecting corrupted source data.
+
+=item B<--max-delete=E<lt>nE<gt>>
+
+Maximum number of DELETE operations allowed (default: 1000).
+Set to 0 to disable this check. Protects against accidental mass deletions.
+
+=item B<--confirm-above=E<lt>nE<gt>>
+
+Require interactive confirmation if total changes exceed this number.
+Only works in interactive mode (TTY). Set to 0 to disable.
+
+=item B<--help>
+
+Show this help message
+
+=back
+
+=head1 DESCRIPTION
+
+This script imports blocked domain entries from external CSV sources
+(e.g., government blocklists) into Sauron-managed RPZ (Response Policy Zone)
+zones. It supports:
+
+=over 4
+
+=item * Configurable CSV column mapping
+
+=item * Automatic filtering by removal date
+
+=item * Multiple sources from single or multiple CSV files
+
+=item * Incremental updates (add/modify/delete)
+
+=item * Dry-run mode for testing changes
+
+=item * Wildcard domain support (creates *.domain entries)
+
+=item * Generic TXT record mapping from CSV columns to per-host TXT labels
+
+=back
+
+=head1 CONFIGURATION FILE
+
+The configuration file is in JSON format and defines:
+
+=over 4
+
+=item * Source definitions with CSV file paths and column mappings
+
+=item * Filters for selecting relevant entries
+
+=item * Target zone and CNAME targets for each source
+
+=item * Global settings
+
+=back
+
+Example configuration:
+
+{
+    "sources": [
+        {
+            "name": "mfcr-hazardy",
+            "csv_file": "/path/to/blocking_lists.csv",
+            "csv_columns": {
+                "domain": "URL",
+                "date_added": "DATUM_ZAPISU",
+                "date_removed": "DATUM_VYMAZU",
+                "source": "ZDROJ",
+                "dataset": "NAZEV_DATOVE_SADY"
+            },
+            "filters": {
+                "source_regex": "Ministerstvo financí"
+            },
+            "zone": "rpz.cesnet.cz",
+            "cname_target": "*.poker.cesnet.cz.",
+            "txt_columns": {
+                "_info": "generated:info",
+                "_legal": "legal",
+                "_sha256sum": "sha256sum"
+            }
+        },
+        {
+            "name": "blocking-rpz",
+            "description": "RPZ blocklist with wildcard support",
+            "csv_file": "/tmp/blocking-rpz.csv",
+            "csv_columns": {
+                "domain": "domain",
+                "wildcard": "wildcard",
+                "date_added": "date_added",
+                "source": "source",
+                "dataset": "legal"
+            },
+            "zone": "rpz.cesnet.cz",
+            "cname_target_column": "target",
+            "txt_info_prefix": "Blokovaná doména"
+        }
+    ]
+}
+
+The C<txt_columns> map controls additional TXT records created for each host.
+The key is the TXT owner label exactly as it should appear in DNS (for example
+C<_info>, C<_legal>, C<_sha256sum>) and the value is the CSV column name.
+A few generated values are also supported:
+
+=over 4
+
+=item * C<generated:info> uses the blocklist info string already stored in the host record
+
+=item * C<generated:date_added> formats the import date as C<D.M.YYYY>
+
+=item * C<generated:date_removed> formats the removal date as C<D.M.YYYY>
+
+=item * C<generated:source> uses the CSV source column
+
+=item * C<generated:dataset> uses the CSV dataset column
+
+=back
+
+TXT records are created only for the base host. Wildcard helper hosts
+(`*.domain`) are still created when C<wildcard> is set in CSV, but they do not
+receive TXT records because C<named-checkzone> is sensitive to them.
+
+=head1 WILDCARD SUPPORT
+
+The script supports wildcard domain entries. When a CSV file contains a C<wildcard>
+column with value C<1> or C<true>, the script creates two DNS entries:
+
+=over 4
+
+=item 1.
+
+The base domain (e.g., C<example.com>)
+
+=item 2.
+
+A wildcard entry (e.g., C<*.example.com>)
+
+=back
+
+This is useful for RPZ (Response Policy Zone) configurations where you want to
+block both the domain and all its subdomains.
+
+Example CSV with wildcard support:
+
+  domain,wildcard,target,date_added,source
+  blocked.com,0,*.poker.cesnet.cz.,2024-01-01,Authority
+  wildcard.com,1,*.poker.cesnet.cz.,2024-01-01,Authority
+
+In this example, C<wildcard.com> will create both C<wildcard.com> and
+C<*.wildcard.com> CNAME records.
+
+=head1 EXAMPLES
+
+# Process single source
+./import-blocklist --config blocklist.conf --source mfcr-hazardy
+
+# Process all sources with dry-run
+./import-blocklist --config blocklist.conf --all --dry-run
+
+# Verbose output
+./import-blocklist --config blocklist.conf --source sukl-leciva -v
+
+# Using blocking-rpz.conf with wildcard support
+./import-blocklist --config blocking-rpz.conf --source blocking-rpz
+
+# Disable safety checks for large imports
+./import-blocklist --config blocking-rpz.conf --all --max-changes-percent=0 --max-delete=0
+
+=head1 SEE ALSO
+
+L<import-zone>, L<sauron>
+
+=cut

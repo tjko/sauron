@@ -17,6 +17,7 @@ REQUIREMENTS
 	- Perl 5 or better [at least 5.36 recommended]
 		- CGI module
 		- DBI + DBD::Pg module (REQUIRED - default backend)
+    - JSON module (required by import-blocklist)
 		- Pg module (DEPRECATED - only if using --with-Pg)
 		- Net::DNS module
 		- Net::IP module

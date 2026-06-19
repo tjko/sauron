@@ -2381,9 +2381,21 @@ sub get_host($$) {
   get_array_field("caa_entries",5,"id,flags,tag,value,comment",
       "Flags,Tag,Value,Comments",
       "type=1 AND ref=$id ORDER BY flags,tag,value",$rec,'caa_l');
-  get_array_field("txt_entries",3,"id,txt,comment",
-		  "Text,Comments",
-		  "type=2 AND ref=$id ORDER BY txt",$rec,'txt_l');
+
+    # For TXT hosts (type=13), TXT value is stored in hosts.cname_txt.
+    # Keep txt_l in the same shape as get_array_field() output so existing
+    # form validation/serialization logic works unchanged.
+  if ($rec->{type} == 13) {
+      $rec->{txt_l} = [
+  	      ['Text', 'Comments'],
+  	      [0, ($rec->{cname_txt} // ''), ($rec->{comment} // ''), 0]
+  	  ];
+  } else {
+      get_array_field("txt_entries",3,"id,txt,comment",
+  		      "Text,Comments",
+  		      "type=2 AND ref=$id ORDER BY txt",$rec,'txt_l');
+  }
+
 # Get CNAME aliases.
   get_array_field("hosts",5,"0,id,domain,type,1","Domain,cname",
 	          "type=4 AND alias=$id ORDER BY domain",$rec,'alias_l');
@@ -2531,6 +2543,35 @@ sub _host_has_active_list_entries($$) {
   return 0;
 }
 
+sub _host_first_active_list_entry($$$) {
+  my($list, $value_index, $comment_index) = @_;
+
+  return ('','') unless (ref($list) eq 'ARRAY');
+
+  for my $row (@{$list}) {
+    next unless (ref($row) eq 'ARRAY');
+
+    my $id = $$row[0];
+    next if (defined($id) && $id !~ /^-?\d+$/);
+
+    my $state = $$row[$#{$row}];
+    next if (defined($state) && $state =~ /^-1$/);
+
+    my $val = (defined($value_index) ? $$row[$value_index] : '');
+    $val = '' unless defined($val);
+    $val =~ s/^\s+//;
+    $val =~ s/\s+$//;
+    next if ($val eq '');
+
+    my $comment = (defined($comment_index) ? $$row[$comment_index] : '');
+    $comment = '' unless defined($comment);
+
+    return ($val, $comment);
+  }
+
+  return ('','');
+}
+
 sub _host_has_ip_entries($) {
   my($rec) = @_;
 
@@ -2634,6 +2675,16 @@ sub update_host($) {
   delete $rec->{dhcp_date_str};
   delete $rec->{fqdn};
   delete $rec->{approval_reason};
+
+  if ($rec->{type} == 13) {
+    my($txt_val, $txt_comment) = _host_first_active_list_entry($rec->{txt_l}, 1, 2);
+    $rec->{cname_txt} = $txt_val;
+    if ((!defined($rec->{comment}) || $rec->{comment} =~ /^\s*$/) &&
+        defined($txt_comment) && $txt_comment ne '') {
+      $rec->{comment} = $txt_comment;
+    }
+  }
+
   $rec->{alias} = -1 if ($rec->{cname_txt});
 
   $rec->{domain}=lc($rec->{domain}) if (defined $rec->{domain});
@@ -2685,10 +2736,16 @@ sub update_host($) {
 			"flags,tag,value,comment,type,ref",
 			'caa_l',$rec,"1,$id");
   if ($r < 0) { db_rollback(); return -211; }
-  $r=update_array_field("txt_entries",3,
+  if ($rec->{type} == 13) {
+    $r = db_exec("DELETE FROM txt_entries WHERE type=2 AND ref=$id");
+    if ($r < 0) { db_rollback(); return -22; }
+  }
+  else {
+    $r=update_array_field("txt_entries",3,
 			"txt,comment,type,ref",
 			'txt_l',$rec,"2,$id");
-  if ($r < 0) { db_rollback(); return -22; }
+    if ($r < 0) { db_rollback(); return -22; }
+  }
   $r=update_array_field("a_entries",4,"ip,reverse,forward,host",
 			'ip',$rec,"$id");
   if ($r < 0) { db_rollback(); return -23; }
@@ -2827,6 +2884,15 @@ sub add_host($) {
 
   return -100 unless ($rec->{zone} > 0);
 
+  if ($rec->{type} == 13) {
+    my($txt_val, $txt_comment) = _host_first_active_list_entry($rec->{txt_l}, 1, 2);
+    $rec->{cname_txt} = $txt_val;
+    if ((!defined($rec->{comment}) || $rec->{comment} =~ /^\s*$/) &&
+        defined($txt_comment) && $txt_comment ne '') {
+      $rec->{comment} = $txt_comment;
+    }
+  }
+
   # Catalog zones cannot have hosts added (RFC 9432)
   if (is_catalog_zone($rec->{zone})) {
     return -999;  # ERROR: Cannot add hosts to catalog zones
@@ -2914,9 +2980,11 @@ sub add_host($) {
   if ($res < 0) { db_rollback(); return -111; }
 
   # TXTs
-  $res = add_array_field('txt_entries','txt,comment',
-			 'txt_l',$rec,'type,ref',"2,$id");
-  if ($res < 0) { db_rollback(); return -12; }
+  if ($rec->{type} != 13) {
+    $res = add_array_field('txt_entries','txt,comment',
+			   'txt_l',$rec,'type,ref',"2,$id");
+    if ($res < 0) { db_rollback(); return -12; }
+  }
 
   # ARECs
   if ($rec->{type}==7) {

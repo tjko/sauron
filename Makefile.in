@@ -98,7 +98,7 @@ SQL_MISC =      sql/DEFAULTS.sql sql/misc.sql sql/copy_tables.sql \
 
 
 PROGS = sauron addgroup adduser deluser delgroup modhosts \
-	import import-ethers import-jyu import-roots \
+	import import-blocklist import-ethers import-jyu import-roots \
 	last moduser runsql status update-dhcp-info \
 	export-networks generatehosts addhosts check-pending \
 	expire-hosts createtables import-zone remove-hosts \

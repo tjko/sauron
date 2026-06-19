@@ -1,5 +1,23 @@
 0.9.0 (beta)
 
+	- Add import-blocklist script for RPZ blocklist management [svamberg]
+	  - New Perl script for importing blocked domains from CSV files
+	  - Supports multiple sources with configurable column mapping
+	  - Incremental updates: add/modify/delete operations
+	  - Safety features to prevent accidental data loss:
+	    * --max-changes-percent: limit changes as percentage (default 25%)
+	    * --max-delete: maximum DELETE operations (default 1000)
+	    * --confirm-above: interactive confirmation for large changes
+	  - Automatic deduplication of domains in source CSV
+	  - Sample configuration for Czech government blocklists:
+	    * Ministerstvo financí (unauthorized gambling)
+	    * SÚKL (illegal medicines)
+	    * SZPI (dangerous foods)
+	    * ÚSKVBL (veterinary medicines)
+	  - Documentation: docs/import-blocklist.txt
+	  - Integration tests: t/15-import-blocklist.t
+	  - CI workflow updated to run tests on push/PR
+
 	- Fixed UTF-8 corruption in CGI edit/save flow (notably zone comments)
 	  where text could degrade to mojibake on repeated updates [svamberg]
 	  - DBI backend now enables pg_enable_utf8 and forces UTF8 client encoding
