@@ -496,12 +496,14 @@ sub display_zone($$)
     }
 
     # Display action bar with History button (similar to hosts)
-    print '<div class="s-action-bar"><div class="s-action-bar__right">',
-          start_form(-method=>'POST',-action=>$selfurl,-class=>'s-inline-form'),
-          hidden('menu','zones'),hidden('sub','History'),
-          submit(-name=>'sub',-value=>'History'), ' '
-            if (!check_perms('level',$main::ALEVEL_HISTORY,1));
-    print '</div></div>';
+    if (!check_perms('level',$main::ALEVEL_HISTORY,1)) {
+      print '<div class="s-action-bar"><div class="s-action-bar__right">',
+            start_form(-method=>'POST',-action=>$selfurl,-class=>'s-inline-form'),
+            hidden('menu','zones'),hidden('sub','History'),
+            submit(-name=>'sub',-value=>'History'),' ',
+            end_form,
+            '</div></div>';
+    }
 
     display_form(\%data,\%zone_form);
     return;
