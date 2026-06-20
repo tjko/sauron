@@ -540,8 +540,12 @@ sub bind_fmt_long_data($$) {
   my $spaces = shift @_;
   my $indentation = ' ' x ($spaces - 1);
 
+  # Empty data would otherwise fall through to the multi-line branch below
+  # and emit an invalid empty "( )" record. Return a valid empty TXT string.
+  return "\"\"\n" unless (defined($data) && $data ne '');
+
   # Converting text to a sequence of bytes (DNS operates with bytes)
-  my $bytes = encode('UTF-8', $data); 
+  my $bytes = encode('UTF-8', $data);
   #print "$data\n";
   my @chunks;
   while (length $bytes) {
