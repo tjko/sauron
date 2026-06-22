@@ -186,7 +186,7 @@ sub generate_key($$$$) {
 
     # Use the list form of open() so the key name cannot be interpreted by
     # a shell (it is already validated by valid_texthandle(), but be safe).
-    open(PIPE,"-|",$tsig_prog,"-a",$alg_name,$name) ||
+    open(PIPE,"-|",$tsig_prog,"-a",$alg_name,"--",$name) ||
 	fatal("failed to run $tsig_prog");
     while(<PIPE>) {
 	chomp;
