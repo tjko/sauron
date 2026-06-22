@@ -13,7 +13,7 @@ use Sauron::Util;
 use Sauron::BackEnd;
 use Net::IP qw(:PROC);
 use HTML::Entities;
-use Encode qw(encode decode FB_CROAK);
+use Encode qw(decode encode FB_CROAK);
 # use Data::Dumper;
 
 use strict;
@@ -23,6 +23,8 @@ $VERSION = '$Id:$ ';
 
 @ISA = qw(Exporter); # Inherit from Exporter
 @EXPORT = qw(
+	     decode_cgi_params
+
 	     cgi_util_set_zone
 	     cgi_util_set_server
 	     valid_safe_string
@@ -44,6 +46,57 @@ $VERSION = '$Id:$ ';
 	     html_error2
 	    );
 
+
+# Normalize all incoming CGI parameters to proper Perl wide-character strings,
+# exactly once, at the request boundary.
+#
+# In this CGI.pm + module stack, request parameters arrive as the raw UTF-8
+# octets reinterpreted as individual Latin-1 codepoints -- e.g. "ž" (U+017E,
+# octets C5 BE) comes in as the two codepoints U+00C5 U+00BE ("Å¾") -- and the
+# UTF8 flag may even be set on that mis-decoded string. Neither -utf8 /
+# $CGI::PARAM_UTF8 nor a flag check fixes this; the old fix_param_utf8()
+# heuristic was silently repairing it, but only inside form_check_form(), so
+# any path that bypassed it (form-reloading "Add" buttons, sticky re-render)
+# still corrupted the text and every round trip added another layer.
+#
+# We repair it centrally here so every downstream consumer -- sticky form
+# re-render via param(), form_check_form(), and DB writes via db_encode_str() --
+# sees consistent wide-char text, which is then encoded exactly once by the
+# output binmode and by DBD::Pg on the DB write.
+#
+# Repair = map the codepoints back to octets (encode as ISO-8859-1) and decode
+# them as UTF-8. FB_CROAK makes this self-guarding: it leaves untouched any
+# value that is already proper wide text (a codepoint > 255 cannot be an
+# ISO-8859-1 octet) or that is not valid UTF-8 when reinterpreted. Only relevant
+# for UTF-8 deployments; legacy byte-oriented charsets are left alone.
+#
+# This is the single authority for input decoding. CGI.pm's own -utf8 /
+# $CGI::PARAM_UTF8 mechanism is intentionally not relied upon anywhere (it is not
+# imported), so the repair must be -- and is -- agnostic to whether a value
+# arrives flagged or not.
+sub decode_cgi_params(;$) {
+  my ($charset) = @_;
+  $charset = 'UTF-8' unless (defined $charset && $charset ne '');
+  return unless ($charset =~ /utf-?8/i);
+
+  my $have_multi = CGI->can('multi_param');
+  foreach my $name (param()) {     # no-arg param() lists names (no warning)
+    # multi_param() is the sanctioned way to read all values of a parameter
+    # without triggering CGI.pm's list-context security warning.
+    my @vals = $have_multi ? multi_param($name) : param($name);
+    my $changed = 0;
+    foreach my $v (@vals) {
+      next unless (defined $v && $v ne '');
+      # local $@ so the repair's control-flow eval never clobbers the caller's $@
+      my $fixed = do {
+        local $@;
+        eval { decode('UTF-8', encode('ISO-8859-1', $v, FB_CROAK), FB_CROAK) };
+      };
+      if (defined $fixed && $fixed ne $v) { $v = $fixed; $changed = 1; }
+    }
+    param($name, @vals) if $changed;
+  }
+}
 
 my($CGI_UTIL_zoneid,$CGI_UTIL_zone);
 my($CGI_UTIL_serverid,$CGI_UTIL_server);
@@ -404,24 +457,6 @@ sub remove_whitespace($$) {
     return $val;
 }
 
-# Repair typical UTF-8 mojibake caused by ISO-8859-1 decoding in CGI layer.
-# If conversion is not safe/applicable, keep original value unchanged.
-sub fix_param_utf8($) {
-  my ($val) = @_;
-
-  return $val unless defined $val;
-  return $val if $val eq '';
-  return $val unless ((($main::SAURON_CHARSET // '') =~ /utf-?8/i) ||
-                      (($main::BROWSER_CHARSET // '') =~ /utf-?8/i));
-
-  my $fixed = eval {
-    my $octets = encode('ISO-8859-1', $val, FB_CROAK);
-    decode('UTF-8', $octets, FB_CROAK);
-  };
-
-  return defined $fixed ? $fixed : $val;
-}
-
 #####################################################################
 # form_check_form($prefix,$data,$form)
 #
@@ -489,7 +524,7 @@ sub form_check_form($$$) {
       next unless ($val =~ /^($e)$/);
     }
 
-    $val=fix_param_utf8(param($p));
+    $val=param($p);
     $val="\L$val" if ($rec->{conv} eq 'L');
     $val="\U$val" if ($rec->{conv} eq 'U');
 
@@ -569,8 +604,8 @@ sub form_check_form($$$) {
       $data->{$tag}=$val;
     }
     elsif ($type == 101) {
-      $tmp=fix_param_utf8(param($p));
-      $tmp=fix_param_utf8(param($p."_l")) if ($tmp eq '');
+      $tmp=param($p);
+      $tmp=param($p."_l") if ($tmp eq '');
       return 101 if (form_check_field($rec,$tmp,0) ne '');
       $data->{$tag}=$tmp;
     }
@@ -593,11 +628,11 @@ sub form_check_form($$$) {
 # Remove unnecessary whitespace from indexed input fields.
 # **	  if ($rec->{rows}
 	  param($p."_".$j."_".$k,
-	        remove_whitespace(fix_param_utf8(param($p."_".$j."_".$k)),
+	        remove_whitespace(param($p."_".$j."_".$k),
 				  $rec->{'whitesp'}[$k-1] || ''));
-          $tmp=fix_param_utf8(param($p."_".$j."_".$k));
+          $tmp=param($p."_".$j."_".$k);
           if ($rec->{type}[$k-1] eq 'enum') {
-            $tmp=fix_param_utf8(param($p."_".$j."_".$k."_enum")) if ($tmp eq '');
+            $tmp=param($p."_".$j."_".$k."_enum") if ($tmp eq '');
           }
 	  return 2
 	    if (form_check_field($rec,$tmp,$k) ne '');
@@ -628,9 +663,9 @@ sub form_check_form($$$) {
 	    $new=[];
 	    $$new[$f+1]=2;
 	    for $k (1..$f) {
-	      $tmp=fix_param_utf8(param($p2."_".$k));
+	      $tmp=param($p2."_".$k);
               if ($rec->{type}[$k-1] eq 'enum') {
-                $tmp=fix_param_utf8(param($p2."_".$k."_enum")) if ($tmp eq '');
+                $tmp=param($p2."_".$k."_enum") if ($tmp eq '');
               }
 	      $tmp=($tmp eq 'on' ? 't':'f') if ($type==5 && $k>1);
 	      $$new[$k]=$tmp;
@@ -640,9 +675,9 @@ sub form_check_form($$$) {
 	    for $k (1..$f) {
 	      if (param($p2."_".$k) ne $$list[$ind][$k]) {
 		$$list[$ind][$f+1]=1;
-		$tmp=fix_param_utf8(param($p2."_".$k));
+		$tmp=param($p2."_".$k);
                 if ($rec->{type}[$k-1] eq 'enum') {
-                  $tmp=fix_param_utf8(param($p2."_".$k."_enum")) if ($tmp eq '');
+                  $tmp=param($p2."_".$k."_enum") if ($tmp eq '');
                 }
 		$tmp=($tmp eq 'on' ? 't':'f') if ($type==5 && $k>1);
 		$$list[$ind][$k]=$tmp;
@@ -667,7 +702,7 @@ sub form_check_form($$$) {
       }
     }
     elsif ($type == 6 || $type == 7 || $type == 10) {
-      my $val = fix_param_utf8(param($p));
+      my $val = param($p);
       # Allow empty value if field has empty=>1
       if ($val eq '' && $rec->{empty}) {
         $data->{$tag} = -1;  # Set to -1 for empty optional groups
@@ -679,8 +714,7 @@ sub form_check_form($$$) {
     }
     elsif ($type == 13) { # Textarea (check input) 12 Apr 2017 TVu
 # Some sources say that line breaks in textarea depend on the client.
-  $val = fix_param_utf8($val);
-  $val =~ s/\r(?=\n)//gms; # cr/nl => nl (for Windows client)
+	$val =~ s/\r(?=\n)//gms; # cr/nl => nl (for Windows client)
 	$val =~ s/\r/\n/gms; # cr => nl (for Mac client)
 	my @val_arr = split(/\n/, $val);
 	my @val_arr2;
