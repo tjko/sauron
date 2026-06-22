@@ -9,7 +9,6 @@ require Exporter;
 use Sauron::SetupIO;
 use Time::Local 'timelocal_nocheck';
 use Digest::MD5;
-use MIME::Base64;
 use Crypt::Cipher::RC5;
 # use Net::Netmask;
 use POSIX qw(strftime);
