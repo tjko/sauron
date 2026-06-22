@@ -24,7 +24,10 @@ $VERSION = '$Id:$ ';
 
 
 my %key_algorithm_hash = (0=>'Reserved', 1=>'RSA/MD5',2=>'Diffie-Hellman',
-			  3=>'DSA',4=>'ECC',157=>'HMAC MD5');
+			  3=>'DSA',4=>'ECC',
+			  157=>'HMAC-MD5', 158=>'HMAC-SHA1',
+			  159=>'HMAC-SHA256', 160=>'HMAC-SHA384',
+			  161=>'HMAC-SHA512');
 
 
 my %acl_form=(
