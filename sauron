@@ -1740,11 +1740,15 @@ sub make_dns() {
         $ttl=$q[$i][1];
         $ttl='' unless ($ttl > 0);
         $val=$q[$i][3];
+        # type=13 hosts may keep their TXT data in txt_entries (legacy path
+        # above) and have an empty/NULL cname_txt. Skip those, otherwise an
+        # empty value produces an invalid "( )" TXT record. ** MSv 2026-06-20
+        next unless (defined($val) && $val ne '');
         $val =~ s/\"//g;
 
         $padding = length(sprintf $ZFORMAT, $domain, $ttl, $class, '');
-        printf ZONEFILE $ZFORMAT, $domain,$ttl,$class,'TXT', 
-            bind_fmt_long_data("$val", $padding) 
+        printf ZONEFILE $ZFORMAT, $domain,$ttl,$class,'TXT',
+            bind_fmt_long_data("$val", $padding)
             if ($bind_conf);
         $val=~ s/:/\\072/g;
         printf TINYDNSFILE "'$zonename\:$val\:$ttl\:\:\n" if ($tiny_conf);
