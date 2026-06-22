@@ -4538,7 +4538,12 @@ sub get_key_list($$$$) {
   undef %{$rec};
   $$rec{-1}='--None--';
   return if ($serverid < 1);
-  $algorule=" AND algorithm=$algo " if ($algo > 0);
+  if ($algo > 0) {
+    $algorule=" AND algorithm=$algo ";
+  } elsif (defined($algo) && $algo == -1) {
+    # Whole TSIG family (HMAC-MD5/SHA1/SHA256/SHA384/SHA512).
+    $algorule=" AND algorithm >= 157 AND algorithm <= 161 ";
+  }
 
   db_query("SELECT id,name FROM keys " .
 	   "WHERE type=1 AND ref=$serverid $algorule ORDER BY name;",\@q);

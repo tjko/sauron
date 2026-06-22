@@ -9,6 +9,7 @@ require Exporter;
 use Sauron::SetupIO;
 use Time::Local 'timelocal_nocheck';
 use Digest::MD5;
+use Crypt::Cipher::RC5;
 # use Net::Netmask;
 use POSIX qw(strftime);
 use Net::IP qw(:PROC);
@@ -83,6 +84,8 @@ $VERSION = '$Id:$ ';
          is_iaid
          trim
          dhcpduid
+	     tsig_secret_encrypt
+	     tsig_secret_decrypt
 	    );
 
 sub valid_base64($) {
@@ -1122,6 +1125,55 @@ sub trim($) {
     $s =~ s/\s+$//g;
 
     return $s;
+}
+
+
+#
+# TSIG shared secret encryption helpers.
+#
+# Sauron stores TSIG shared secrets in the database encrypted with the
+# Sauron master key using RC5.  The original code only handled a single
+# 8-byte (64-bit) block, which is enough for legacy HMAC-MD5 but not for
+# the modern HMAC-SHA* algorithms whose secrets are 20-64 bytes long.
+#
+# These helpers process the secret in 8-byte ECB blocks so secrets of any
+# length are supported.  For an 8-byte secret the output is byte-for-byte
+# identical to the old single-block code, so existing keys keep working.
+# The padding added to fill the last block is plain zero bytes; the real
+# secret length is tracked separately (the keysize column) and used to
+# trim the padding on decryption, so no ambiguous padding scheme is needed.
+#
+
+# tsig_secret_encrypt($masterkey, $secret)
+#   $masterkey - raw (binary) Sauron master key
+#   $secret    - raw (decoded) secret bytes
+# returns the raw (binary) ciphertext.
+sub tsig_secret_encrypt($$) {
+  my($masterkey,$secret) = @_;
+  my $cipher = Crypt::Cipher::RC5->new($masterkey,16);
+  # zero-pad to a full block boundary
+  $secret .= "\0" x ((8 - length($secret) % 8) % 8);
+  my $out = '';
+  for (my $i=0; $i < length($secret); $i += 8) {
+    $out .= $cipher->encrypt(substr($secret,$i,8));
+  }
+  return $out;
+}
+
+# tsig_secret_decrypt($masterkey, $crypted, $len)
+#   $masterkey - raw (binary) Sauron master key
+#   $crypted   - raw (binary) ciphertext
+#   $len       - real secret length in bytes (0 = keep full padded block(s))
+# returns the raw (binary) secret bytes.
+sub tsig_secret_decrypt($$$) {
+  my($masterkey,$crypted,$len) = @_;
+  my $cipher = Crypt::Cipher::RC5->new($masterkey,16);
+  my $out = '';
+  for (my $i=0; $i < length($crypted); $i += 8) {
+    $out .= $cipher->decrypt(substr($crypted,$i,8));
+  }
+  $out = substr($out,0,$len) if ($len > 0);
+  return $out;
 }
 
 

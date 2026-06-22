@@ -1,5 +1,20 @@
 0.9.0 (beta)
 
+	- Add modern TSIG algorithm support (HMAC-SHA1/256/384/512) [svamberg]
+	  - keygen: generate keys with --algorithm (default HMAC-SHA256) and
+	    switch from dnssec-keygen to BIND's tsig-keygen, which is required
+	    for the HMAC family (path overridable via SAURON_TSIG_KEYGEN_PROG)
+	  - Store shared secrets in 8-byte RC5 blocks so the longer SHA secrets
+	    (20-64 bytes) are supported; existing HMAC-MD5 keys keep working
+	    byte-for-byte and require no migration (tsig_secret_encrypt/decrypt
+	    helpers in Sauron::Util)
+	  - setmasterkey re-encrypts secrets of any length and accepts the whole
+	    TSIG algorithm range (157-161)
+	  - sauron: emit the new algorithms in BIND configuration, trimming the
+	    decrypted secret back to its real length (keysize)
+	  - get_key_list() can match the whole TSIG family (algo == -1)
+	  - Unit tests for the encryption helpers (t/01-util.t)
+
 	- Add import-blocklist script for RPZ blocklist management [svamberg]
 	  - New Perl script for importing blocked domains from CSV files
 	  - Supports multiple sources with configurable column mapping

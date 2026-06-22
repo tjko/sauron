@@ -13,24 +13,51 @@ use Sauron::Sauron;
 use Sauron::BackEnd;
 use Digest::MD5;
 use MIME::Base64;
-use Crypt::Cipher::RC5;
 use Sauron::SetupIO;
 use open ':locale';
 
-my %KEY_ALGORITHMS = ( 
+my %KEY_ALGORITHMS = (
 		       0=>'reserved',
 		       1=>'RSA/MD5',
 		       2=>'DH',
 		       3=>'DSA',
 		       4=>'ECC',
-		       157=>'HMAC-MD5'
+		       157=>'HMAC-MD5',
+		       158=>'HMAC-SHA1',
+		       159=>'HMAC-SHA256',
+		       160=>'HMAC-SHA384',
+		       161=>'HMAC-SHA512'
 		      );
+
+# Map Sauron algorithm id <-> tsig-keygen algorithm name (lower case).
+my %TSIG_ALG_NAME = (
+		       157=>'hmac-md5',
+		       158=>'hmac-sha1',
+		       159=>'hmac-sha256',
+		       160=>'hmac-sha384',
+		       161=>'hmac-sha512'
+		    );
+
+# Default TSIG algorithm used when --algorithm is not given.
+my $DEFAULT_TSIG_ALGORITHM = 'HMAC-SHA256';
 
 set_encoding();
 load_config();
 
 GetOptions("help|h","setmasterkey:s","add:s","del:s","regen:s","list:s",
-	   "verbose|v");
+	   "verbose|v","algorithm=s");
+
+# Resolve a TSIG algorithm name (any case, e.g. 'HMAC-SHA256') to its
+# Sauron algorithm id, or 0 if the name is not supported.
+sub tsig_algo_id($) {
+    my($name) = @_;
+    return 0 unless (defined $name && $name ne '');
+    $name =~ tr/A-Z/a-z/;
+    for my $id (keys %TSIG_ALG_NAME) {
+	return $id if ($TSIG_ALG_NAME{$id} eq $name);
+    }
+    return 0;
+}
 
 if ($opt_help || not (defined($opt_add) || defined $opt_del || 
 		   defined $opt_regen || defined $opt_list || 
@@ -48,8 +75,10 @@ if ($opt_help || not (defined($opt_add) || defined $opt_del ||
         "\t--regen=<server>,<keytype>\n",
         "\t--del=<server>,<keyname>\n",
         "\t--add=\"<server>,<keyname>,<keytype>,<keylen>[,<comments>,<passphrase>]\"\n",
+        "\t--algorithm=<alg>\tTSIG algorithm (default: $DEFAULT_TSIG_ALGORITHM)\n",
 	"\n\t--verbose\tverbose output\n",
-        "\n\nsupported key types: TSIG\n\n";
+        "\n\nsupported key types: TSIG\n",
+        "supported TSIG algorithms: HMAC-SHA256, HMAC-SHA384, HMAC-SHA512, HMAC-SHA1, HMAC-MD5\n\n";
   exit(0);
 }
 
@@ -138,50 +167,33 @@ sub make_tmpdir() {
 }
 
 
-sub generate_key($$$) {
-    my($name,$type,$len) = @_;
+sub generate_key($$$$) {
+    my($name,$type,$len,$algo) = @_;
     my $key;
 
-    fatal("SAURON_DNSSEC_KEYGEN_PROG configuration option not defined")
-	unless ($SAURON_DNSSEC_KEYGEN_PROG);
-    fatal("Cannot execute: $SAURON_DNSSEC_KEYGEN_PROG")
-	unless (-x $SAURON_DNSSEC_KEYGEN_PROG);
+    fatal("support this keytype not implemented yet: $type")
+	unless ($type eq 'TSIG');
 
-    my $opts = $SAURON_DNSSEC_KEYGEN_ARGS;
+    my $alg_name = $TSIG_ALG_NAME{$algo};
+    fatal("unsupported TSIG algorithm id: $algo") unless ($alg_name);
 
-    if ($type eq 'TSIG') {
-	$args = "-a HMAC-MD5 -b $len -n USER"; 
-    } else {
-	fatal("support this keytype not implemented yet: $type");
-    }
+    # Modern BIND ships tsig-keygen for generating TSIG shared secrets;
+    # dnssec-keygen no longer supports the HMAC algorithms.  The program
+    # path can be overridden with the SAURON_TSIG_KEYGEN_PROG config option.
+    my $tsig_prog = ($SAURON_TSIG_KEYGEN_PROG || '/usr/sbin/tsig-keygen');
+    fatal("Cannot execute tsig-keygen: $tsig_prog")
+	unless (-x $tsig_prog);
 
-    my $tmpdir=make_tmpdir();
-    chdir($tmpdir) || fatal("cannot access tmp dir: $tmpdir");
-
-    my $keyid = '';
-    open(PIPE,"$SAURON_DNSSEC_KEYGEN_PROG $args $opts keygen |") ||
-	fatal("pipe failed");
+    # Use the list form of open() so the key name cannot be interpreted by
+    # a shell (it is already validated by valid_texthandle(), but be safe).
+    open(PIPE,"-|",$tsig_prog,"-a",$alg_name,"--",$name) ||
+	fatal("failed to run $tsig_prog");
     while(<PIPE>) {
 	chomp;
-        $keyid=$1 if (/^(Kkeygen\S+)\s*$/);
+	$key = $1 if (/secret\s+"([^"]+)"/);
     }
     close(PIPE);
-    fatal("failed to generate key!") unless ($keyid);
-
-    my $keyfile = $tmpdir."/".$keyid.".key";
-    my $keyfile2 = $tmpdir."/".$keyid.".private";
-
-    open(FILE,$keyfile) || fatal("failed to open: $keyfile");
-    while(<FILE>) {
-	chomp;
-	$key = $1 if (/^\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+(\S+)/);
-    }
-    close(FILE);
-
-
-    unlink($keyfile) || error("failed to remove: $keyfile");
-    unlink($keyfile2) || error("failed to remove: $keyfile2");
-    rmdir($tmpdir) || error("failed to remove: $tmpdir");
+    fatal("failed to generate key!") unless ($key);
 
     return $key;
 }
@@ -242,13 +254,15 @@ sub setmasterkey($) {
 	for $i (0..$#keys) {
 	    my $name = $keys[$i][2];
 	    my $algo = $keys[$i][3];
-	    fatal("unsupported key: $name (algorithm=$algo)") 
-	      if ($algo != 157);
+	    # All TSIG family algorithms (HMAC-MD5/SHA1/SHA256/SHA384/SHA512).
+	    fatal("unsupported key: $name (algorithm=$algo)")
+	      if ($algo < 157 || $algo > 161);
 	    if ($keys[$i][1]) {
-		my $ref1 = Crypt::Cipher::RC5->new($oldkey,16);
-		my $okey=$ref1->decrypt(decode_base64($keys[$i][1]));
-		my $ref2 = Crypt::Cipher::RC5->new($key,16);
-		my $nkey=encode_base64($ref2->encrypt($okey));
+		# Re-encrypt the stored (padded) ciphertext blocks: decrypt
+		# with the old master key, encrypt with the new one.  Length 0
+		# keeps the padding intact so the round-trip is exact.
+		my $okey=tsig_secret_decrypt($oldkey,decode_base64($keys[$i][1]),0);
+		my $nkey=encode_base64(tsig_secret_encrypt($key,$okey),"");
 		chomp($nkey);
 		if (db_exec("UPDATE keys SET secretkey='$nkey' " .
 			    "WHERE id=$keys[$i][0]\n") < 0) {
@@ -291,21 +305,33 @@ sub addkey() {
 
     $type=gettype($type);
     if ($type eq  'TSIG') {
-	$len=getlen($len,1,512,128);
-	$algo=157;
+	my $alg = ($opt_algorithm || $DEFAULT_TSIG_ALGORITHM);
+	$algo = tsig_algo_id($alg);
+	fatal("unsupported TSIG algorithm: $alg\n" .
+	      "supported: HMAC-SHA256, HMAC-SHA384, HMAC-SHA512, HMAC-SHA1, HMAC-MD5")
+	    unless ($algo);
     } else {
 	fatal("unsupported key type");
     }
-    
+
     if ($key) {
+	# Static key: the secret is supplied (Base64) by the user.  Store it
+	# encrypted just like a generated key so it decrypts correctly when
+	# the server configuration is generated.
 	fatal("Key must be in Base64 (MIME) format")
 	    unless ($key =~ /^[a-zA-Z0-9+\/=]+$/);
+	my $raw = decode_base64($key);
+	$len = length($raw) * 8;
+	$key = encode_base64(tsig_secret_encrypt($SAURON_KEY,$raw),"");
 	$mode=1;
     } else {
 	print "Generating key...\n";
-	my $okey = generate_key($name,$type,$len);
-	my $ref = Crypt::Cipher::RC5->new($SAURON_KEY,16);
-	$key=encode_base64($ref->encrypt(decode_base64($okey)));
+	my $okey = generate_key($name,$type,$len,$algo);
+	my $raw = decode_base64($okey);
+	# tsig-keygen determines the secret length from the algorithm; record
+	# the actual length (in bits) so it can be trimmed back on decryption.
+	$len = length($raw) * 8;
+	$key = encode_base64(tsig_secret_encrypt($SAURON_KEY,$raw),"");
 	print "Key: $okey  Encrypted-Key: $key\n" if ($opt_verbose);
 	$mode=0;
     }
@@ -383,14 +409,15 @@ sub regenkeys($) {
     my($id,$name,$algo,$len) = @{$keys[$i]};
 
     print "Generating key: $name ...\n";
-    my $okey = generate_key($name,$type,$len);
-    my $ref = Crypt::Cipher::RC5->new($SAURON_KEY,16);
-    my $key=encode_base64($ref->encrypt(decode_base64($okey)));
+    my $okey = generate_key($name,$type,$len,$algo);
+    my $raw = decode_base64($okey);
+    my $newlen = length($raw) * 8;
+    my $key=encode_base64(tsig_secret_encrypt($SAURON_KEY,$raw),"");
     chomp($key);
     print "Key: $okey  Encrypted-Key: $key\n" if ($opt_verbose);
-    
+
     fatal("Failed to update key: $name")
-      if (update_key({id=>$id,secretkey=>$key}) < 0);
+      if (update_key({id=>$id,secretkey=>$key,keysize=>$newlen}) < 0);
   }
 
 }

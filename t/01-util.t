@@ -298,4 +298,40 @@ subtest 'new_serial' => sub {
     like($s, qr/^\d{10}$/, 'serial has 10 digits');
 };
 
+# =========================================================================
+# tsig_secret_encrypt / tsig_secret_decrypt
+# =========================================================================
+subtest 'tsig_secret_encrypt/decrypt round-trip' => sub {
+    my $masterkey = "0123456789abcdef";  # 16-byte raw master key
+
+    # Secret lengths used by the TSIG HMAC family:
+    #   MD5=16, SHA1=20, SHA256=32, SHA384=48, SHA512=64 bytes,
+    #   plus an exact single block (8) and a non-block-multiple (10).
+    for my $len (8, 10, 16, 20, 32, 48, 64) {
+        my $secret = join('', map { chr($_ % 256) } 1..$len);
+        my $enc = tsig_secret_encrypt($masterkey, $secret);
+        is(length($enc) % 8, 0, "len=$len: ciphertext is block-aligned");
+        my $dec = tsig_secret_decrypt($masterkey, $enc, $len);
+        is($dec, $secret, "len=$len: round-trip restores secret exactly");
+    }
+};
+
+subtest 'tsig_secret backward compatibility (single block)' => sub {
+    # An 8-byte secret must encrypt to a single RC5 block identical to the
+    # old single-block code, so existing HMAC-MD5 keys keep decrypting.
+    require Crypt::Cipher::RC5;
+    my $masterkey = "0123456789abcdef";
+    my $secret    = "12345678";  # exactly one 8-byte block
+
+    my $old = Crypt::Cipher::RC5->new($masterkey, 16)->encrypt($secret);
+    my $new = tsig_secret_encrypt($masterkey, $secret);
+    is($new, $old, 'single-block ciphertext matches legacy RC5 output');
+
+    # Decrypting with len=0 keeps the full (unpadded) block.
+    is(tsig_secret_decrypt($masterkey, $new, 0), $secret,
+       'len=0 keeps full single block');
+    is(tsig_secret_decrypt($masterkey, $new, 8), $secret,
+       'len=8 returns exact secret');
+};
+
 done_testing();
