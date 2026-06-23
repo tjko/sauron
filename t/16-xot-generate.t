@@ -84,6 +84,33 @@ subtest 'tls_profiles CRUD' => sub {
 };
 
 # ---------------------------------------------------------------------------
+subtest 'tls_profiles validation / edge cases' => sub {
+    # reserved built-in names must be rejected
+    for my $n (qw(ephemeral none NONE Ephemeral)) {
+        my %r = (ref=>$srvid, type=>1, name=>$n);
+        cmp_ok(add_tls_profile(\%r), '<', 0, "reserved name '$n' rejected");
+    }
+
+    # duplicate name (same server) must fail (UNIQUE constraint)
+    my %a = (ref=>$srvid, type=>1, name=>'dup');
+    my $id = add_tls_profile(\%a);
+    ok($id > 0, "first 'dup' profile added");
+    my %b = (ref=>$srvid, type=>1, name=>'dup');
+    cmp_ok(add_tls_profile(\%b), '<', 0, "duplicate name rejected");
+    delete_tls_profile($id);
+
+    # non-integer / non-positive ids must be rejected without touching SQL
+    my %x;
+    isnt(get_tls_profile("1; DROP TABLE tls_profiles", \%x), 0,
+         "get_tls_profile rejects non-integer id");
+    isnt(get_tls_profile(0, \%x), 0, "get_tls_profile rejects id 0");
+    cmp_ok(delete_tls_profile("1 OR 1=1"), '<', 0,
+           "delete_tls_profile rejects non-integer id");
+    cmp_ok(update_tls_profile({id=>'x', name=>'y'}), '<', 0,
+           "update_tls_profile rejects non-integer id");
+};
+
+# ---------------------------------------------------------------------------
 subtest 'server XoT fields load' => sub {
     my %srv;
     is(get_server($srvid,\%srv), 0, "get_server ok");

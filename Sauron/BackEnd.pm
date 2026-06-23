@@ -4691,9 +4691,17 @@ sub get_acl_by_name($$) {
 ############################################################################
 # TLS profile functions (DNS Zone Transfer over TLS, XoT, RFC 9103)
 
+# 'ephemeral' and 'none' are built-in BIND TLS objects; they must not be
+# used as user-defined profile names (they are emitted without a tls{} block).
+sub tls_profile_reserved_name($) {
+  my($name) = @_;
+  return (defined($name) && $name =~ /^(?:ephemeral|none)$/i);
+}
+
 sub get_tls_profile($$) {
   my ($id,$rec) = @_;
 
+  return -100 unless ($id =~ /^\d+$/ && $id > 0);
   return -100 if (get_record("tls_profiles",
 		      "ref,name,cert_file,key_file,ca_file,dhparam_file," .
 		      "protocols,ciphers,prefer_server_ciphers," .
@@ -4707,6 +4715,8 @@ sub update_tls_profile($) {
   my($rec) = @_;
   my($r);
 
+  return -1 unless ($rec->{id} =~ /^\d+$/ && $rec->{id} > 0);
+  return -3 if (tls_profile_reserved_name($rec->{name}));
   del_std_fields($rec);
 
   db_begin();
@@ -4719,6 +4729,8 @@ sub update_tls_profile($) {
 sub add_tls_profile($) {
   my($rec) = @_;
   my($res);
+
+  return -3 if (tls_profile_reserved_name($rec->{name}));
 
   db_begin();
   $rec->{cdate}=time;
@@ -4736,7 +4748,7 @@ sub delete_tls_profile($) {
   my($id) = @_;
   my($res);
 
-  return -100 unless ($id > 0);
+  return -100 unless ($id =~ /^\d+$/ && $id > 0);
 
   db_begin();
   $res=db_exec("DELETE FROM tls_profiles WHERE id=$id");

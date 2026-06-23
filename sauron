@@ -220,6 +220,12 @@ sub make_dns() {
       # TLS profiles. '/dns-query' maps to BIND's built-in `http default`.
       if ($server{doh_profile} ne '') {
         my $ep=($server{doh_endpoint} ne '' ? $server{doh_endpoint}:'/dns-query');
+        # Endpoint must be a safe URL path so it cannot inject config
+        unless ($ep =~ m{^/[\w./\-]*$}) {
+          error("Invalid DoH endpoint '$ep' for server $servername; " .
+                "using /dns-query");
+          $ep='/dns-query';
+        }
         if ($ep eq '/dns-query') {
           $doh_http_ref='default';
         } else {
@@ -3517,6 +3523,19 @@ sub print_tls_profiles($) {
     }
     # 'ephemeral' and 'none' are built-in BIND TLS objects, never defined
     next if ($name eq 'ephemeral' || $name eq 'none');
+    # Defense in depth: skip the whole profile if any value would break out
+    # of the quoted "..." context (the web form already restricts these, but
+    # values may be set directly in the DB or via import). Skipping the entire
+    # profile fails safe (a referenced-but-undefined tls name is rejected by
+    # named-checkconf) instead of emitting a partial, invalid tls{} block.
+    my $unsafe=0;
+    for my $f ($cert,$key,$ca,$dh,$protocols,$ciphers,$rhost) {
+      $unsafe=1 if (defined($f) && $f =~ /["\n\r]/);
+    }
+    if ($unsafe) {
+      error("Skipping TLS profile \"$name\" with unsafe value(s)");
+      next;
+    }
     print BINDFILE "tls \"$name\" {\n";
     print BINDFILE "\t// $comment\n" if ($comment ne '');
     print BINDFILE "\tcert-file \"$cert\";\n" if ($cert ne '');
