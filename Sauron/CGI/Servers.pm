@@ -103,6 +103,18 @@ my %server_form = (
   {ftype=>12, tag=>'listen_on_v6', name=>'Listen-on-v6', whitesp=>['','','','','','P'],
    iff=>['named_flags_ac','0']},
 
+  {ftype=>0, name=>'DNS Zone Transfer over TLS (XoT, RFC 9103)'},
+  {ftype=>1, tag=>'tls_listen_profile', name=>'TLS listener profile',
+   type=>'text', len=>25, empty=>1, whitesp=>'P',
+   definfo=>['','No TLS listener'],
+   extrainfo=>'Name of a TLS profile; enables listen-on ... tls for XoT'},
+  {ftype=>1, tag=>'tls_listen_port', name=>'TLS listener port',
+   type=>'port', len=>5, empty=>1, definfo=>['853','Default (853)']},
+  {ftype=>1, tag=>'tls_default_profile', name=>'Default zone TLS profile',
+   type=>'text', len=>25, empty=>1, whitesp=>'P',
+   definfo=>['','None'],
+   extrainfo=>'Default TLS profile name for zones that do not set their own'},
+
 
   {ftype=>0, name=>'Access control'},
   {ftype=>3, tag=>'named_flags_ac', name=>'Use access control from master',
