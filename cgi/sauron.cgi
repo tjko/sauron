@@ -159,8 +159,10 @@ $debug_mode = $SAURON_DEBUG_MODE;
 	    'acls'=>[
 		       ['ACLs','',['level', $main::ALEVEL_ACLS]],
 		       ['Keys','sub=keys',['level', $main::ALEVEL_ACLS]],
+		       ['TLS Profiles','sub=tls',['level', $main::ALEVEL_ACLS]],
 		       [],
-		       ['Add ACL','sub=addacl',['level', $main::ALEVEL_ACLS]]
+		       ['Add ACL','sub=addacl',['level', $main::ALEVEL_ACLS]],
+		       ['Add TLS Profile','sub=addtls',['level', $main::ALEVEL_ACLS]]
 		      ],
 	    'hosts'=>[
 		      ['Search',''],
