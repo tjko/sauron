@@ -1,0 +1,230 @@
+DNS over TLS: XoT (RFC 9103), DoT and DoH (RFC 8484)
+====================================================
+
+DESCRIPTION
+-----------
+Sauron can generate BIND configuration for encrypted DNS transports:
+
+  * XoT  - DNS Zone Transfer over TLS (RFC 9103): AXFR/IXFR between
+           primaries and secondaries is carried over TLS.
+  * DoT  - DNS over TLS for queries (RFC 7858): a side effect of enabling
+           the TLS listener (listen-on ... tls) on an authoritative server.
+  * DoH  - DNS over HTTPS (RFC 8484): queries over HTTPS, reusing the same
+           TLS profiles.
+
+All three are driven by named "TLS profiles" plus a few per-server and
+per-zone settings. Everything is configured through the web interface and
+emitted into the generated named.conf.
+
+REQUIREMENTS
+------------
+  * BIND 9.18.11 or later (XoT and the `tls`/`http` statements).
+    DNS over QUIC (DoQ, RFC 9250) is NOT supported by BIND and is therefore
+    not offered by Sauron.
+
+CONCEPTS
+--------
+TLS profile
+  A named block of TLS settings (certificate paths and parameters) emitted
+  as a top-level `tls "<name>" { ... };` statement. Profiles are scoped to a
+  server and managed under the web UI menu: ACLs -> TLS Profiles.
+
+  IMPORTANT: Sauron stores only the *references* (file paths + parameters),
+  not the certificate or key material. The cert-file/key-file/ca-file PEM
+  files live on the host that runs named and must be provisioned out of band
+  (e.g. by ACME/certbot, Ansible, Puppet). Sauron is a configuration
+  generator, not a certificate authority or key store.
+
+Built-in TLS objects (no certificate files required)
+  BIND provides two built-in TLS objects that Sauron emits without quotes
+  and without generating a `tls { }` block:
+
+    ephemeral - named generates a temporary self-signed certificate in
+                memory. Ideal for opportunistic XoT, where peer authenticity
+                is already protected by TSIG. Lets you enable XoT/DoT/DoH
+                immediately, before any certificate is deployed.
+    none      - no TLS; used for plaintext DoH behind a TLS-terminating
+                reverse proxy.
+
+  To use them, simply enter `ephemeral` (or `none`) anywhere a TLS profile
+  name is expected.
+
+OPPORTUNISTIC vs STRICT (authenticated) XoT
+  * Opportunistic: encryption only; authenticity relies on TSIG. Needs just
+    cert-file/key-file on the primary (or `ephemeral`).
+  * Strict: the secondary verifies the primary's certificate. Set `ca-file`
+    (trust anchor, on the secondary host) and `remote-hostname` (expected
+    name in the primary's certificate) in the profile.
+
+WEB INTERFACE
+-------------
+TLS profiles      : ACLs -> TLS Profiles -> Add TLS Profile
+                    Fields: name, cert-file, key-file, ca-file, dhparam-file,
+                    protocols (e.g. "TLSv1.2 TLSv1.3"), ciphers,
+                    prefer-server-ciphers, session-tickets, remote-hostname.
+
+Server (Servers -> Edit), section "DNS Zone Transfer over TLS (XoT)":
+  TLS listener profile   - profile name (or `ephemeral`) -> the server
+                           offers XoT/DoT via `listen-on ... tls`.
+  TLS listener port      - default 853.
+  Default zone TLS profile - applied to zones that do not set their own.
+
+Server section "DNS over HTTPS (DoH)":
+  DoH TLS profile        - profile name, `ephemeral`, or `none`; empty = off.
+  DoH listener port      - default 443.
+  DoH endpoint path      - default /dns-query (maps to BIND's built-in
+                           `http default`; any other value emits a custom
+                           `http "doh"` object).
+
+Zone (Zones -> Edit):
+  Use TLS for zone transfers (XoT) - Default/Yes/No. On a primary this adds
+                           `transport tls` to allow-transfer; on a secondary
+                           it makes masters without an explicit profile use
+                           the zone/server default profile (port 853).
+  TLS profile (for masters) - per-zone override of the default profile.
+  Masters / also-notify rows now carry optional Port and TLS profile columns
+                           so each peer can use XoT independently.
+
+DATABASE STRUCTURE
+------------------
+New table `tls_profiles` (one row per named profile, scoped to a server):
+
+  id                    - unique identifier
+  type                  - 1 = server profile
+  ref                   - server ID reference (-> servers.id)
+  name                  - profile name (`tls "<name>"`), unique per server
+  cert_file, key_file   - certificate / private key paths (PEM)
+  ca_file               - CA bundle for peer verification (strict mode)
+  dhparam_file          - Diffie-Hellman parameters file
+  protocols             - allowed protocols, e.g. "TLSv1.2 TLSv1.3"
+  ciphers               - OpenSSL cipher string
+  prefer_server_ciphers - D=default, Y=yes, N=no
+  session_tickets       - D=default, Y=yes, N=no
+  remote_hostname       - expected peer certificate name (outgoing auth)
+  comment               - description
+
+New columns:
+  servers.tls_listen_profile, servers.tls_listen_port,
+  servers.tls_default_profile  - TLS listener and zone default.
+  servers.doh_profile, servers.doh_port, servers.doh_endpoint  - DoH listener.
+  zones.xot_transfer ('D'/'Y'/'N'), zones.tls_profile           - per-zone XoT.
+  cidr_entries.tls                                              - per-row TLS
+      profile for masters (type=3) and also-notify (type=6); the existing
+      `port` column carries the per-row port.
+
+Built-in names `ephemeral` and `none` need NO tls_profiles row.
+
+GENERATED named.conf (examples)
+-------------------------------
+TLS profile (top level):
+
+  tls "xfr" {
+      cert-file "/etc/bind/tls/xfr.pem";
+      key-file "/etc/bind/tls/xfr.key";
+      ca-file "/etc/bind/tls/ca.pem";
+      protocols { TLSv1.2; TLSv1.3; };
+      ciphers "HIGH:!aNULL";
+      prefer-server-ciphers yes;
+      remote-hostname "primary.example.";
+  };
+
+Server offering XoT/DoT (options{}):
+
+  listen-on port 853 tls "xfr" { any; };
+  listen-on-v6 port 853 tls "xfr" { any; };
+
+  # or, without certificate files:
+  listen-on port 853 tls ephemeral { any; };
+
+Secondary pulling a zone over TLS:
+
+  zone "example.com" {
+      type slave;
+      masters {
+              192.0.2.10 port 853 tls "xfr";
+      };
+  };
+
+Primary requiring TLS for transfers and notifying over TLS:
+
+  zone "example.com" {
+      type master;
+      allow-transfer transport tls {
+          192.0.2.20;
+      };
+      also-notify {
+          192.0.2.21 port 853 tls "xfr";
+      };
+  };
+
+DoH listener (custom endpoint emits an http object; /dns-query uses the
+built-in `http default`):
+
+  http "doh" {
+      endpoints { "/resolve"; };
+  };
+  ...
+  listen-on port 443 tls "xfr" http "doh" { any; };
+  listen-on port 443 tls ephemeral http default { any; };   // default endpoint
+
+CERTIFICATE HANDLING
+--------------------
+1. Provision the certificate and key on each DNS server that runs named
+   (out of band; e.g. certbot/ACME). Note the file paths.
+2. In Sauron, create a TLS profile referencing those paths (or use
+   `ephemeral` to skip files entirely).
+3. Enable the listener / per-zone XoT and regenerate the configuration.
+4. Validate before deploying:  named-checkconf named.conf
+   (named-checkconf verifies syntax and that referenced tls/http objects
+   exist, but does NOT check that the certificate files are present.)
+
+Tip: until certificates are reliably deployed, use `ephemeral` so that named
+never fails to start because of a missing certificate file.
+
+WORKFLOW EXAMPLE
+----------------
+Authenticated XoT between two Sauron-managed servers:
+
+  1. ACLs -> TLS Profiles -> Add TLS Profile on the primary:
+       name=xfr, cert-file/key-file = deployed cert paths.
+  2. Servers -> Edit (primary): TLS listener profile = xfr (port 853).
+  3. Zones -> Edit (primary zone): Use TLS for zone transfers = Yes.
+  4. On the secondary: add a TLS profile (ca-file + remote-hostname for
+     strict verification), then in the slave zone set the Masters row's
+     TLS profile column (or the zone TLS profile + Use TLS = Yes).
+  5. Regenerate: sauron --bind <server> <outdir>
+  6. Verify:     named-checkconf <outdir>/named.conf
+                 dig +tls @primary axfr example.com
+
+TROUBLESHOOTING
+---------------
+"tls 'xfr' not defined"
+  The TLS profile referenced by a zone/server/master does not exist for that
+  server. Create it under ACLs -> TLS Profiles, or use `ephemeral`.
+
+named fails to start: cannot load certificate / no such file
+  The cert-file/key-file paths in the profile do not exist on the DNS host.
+  Deploy the files, or switch the profile to `ephemeral` for now.
+
+allow-transfer has no `transport tls`
+  The block is emitted only when the zone has "Use TLS for zone transfers"
+  set to Yes AND at least one allow-transfer entry is present.
+
+DoH listener missing
+  DoH is emitted only when the server's "DoH TLS profile" field is set.
+
+DNS over QUIC (DoQ)
+  Not available: BIND (named) has no QUIC transport. Use a DoQ-capable
+  front end (e.g. dnsdist) if you need DoQ.
+
+SEE ALSO
+--------
+sauron(1), tsig-key-management.txt
+
+RFCs: 9103 (XoT), 7858 (DoT), 8484 (DoH), 9250 (DoQ)
+BIND documentation: named.conf(5) - `tls`, `http`, `listen-on`,
+                    `allow-transfer`, `primaries`/`masters` statements.
+
+AUTHORS
+-------
+Part of the Sauron DNS management system.

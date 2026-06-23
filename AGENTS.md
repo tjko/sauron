@@ -182,6 +182,13 @@ CREATE TABLE servers (
 - Creating comprehensive guides with examples
 - Maintaining consistency across documentation files
 
+**Existing documents (`docs/`):**
+- `docs/import-blocklist.txt` — import-blocklist utility
+- `docs/tsig-key-management.txt` — TSIG keys via `keygen`
+- `docs/dns-over-tls.txt` — DNS over TLS: XoT (RFC 9103), DoT and DoH
+  (RFC 8484), TLS profiles, `ephemeral` certificates, certificate handling
+  (BIND 9.18.11+; DoQ/RFC 9250 is not supported by BIND)
+
 **Style Guidelines:**
 - Use plain text format (`.txt` files)
 - Clear section headers with `====` or `----` separators
