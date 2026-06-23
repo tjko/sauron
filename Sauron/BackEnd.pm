@@ -1004,7 +1004,8 @@ sub get_server($$) {
 		    "df_port6,df_max_delay6,df_max_uupdates6,df_mclt6,df_split6,".
 		    "df_loadbalmax6,dhcp_flags,".
             "listen_on_port_v6,transfer_source_v6,query_src_ip_v6,query_src_port_v6," .
-            "tls_default_profile,tls_listen_profile,tls_listen_port",
+            "tls_default_profile,tls_listen_profile,tls_listen_port," .
+            "doh_profile,doh_port,doh_endpoint",
 		    $id,$rec,"id");
   return -1 if ($res < 0);
   fix_bools($rec,"no_roots,zones_only");

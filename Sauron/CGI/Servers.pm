@@ -107,13 +107,27 @@ my %server_form = (
   {ftype=>1, tag=>'tls_listen_profile', name=>'TLS listener profile',
    type=>'text', len=>25, empty=>1, whitesp=>'P',
    definfo=>['','No TLS listener'],
-   extrainfo=>'Name of a TLS profile; enables listen-on ... tls for XoT'},
+   extrainfo=>"TLS profile name; enables listen-on ... tls for XoT. " .
+              "Use 'ephemeral' for a built-in self-signed cert (no files)"},
   {ftype=>1, tag=>'tls_listen_port', name=>'TLS listener port',
    type=>'port', len=>5, empty=>1, definfo=>['853','Default (853)']},
   {ftype=>1, tag=>'tls_default_profile', name=>'Default zone TLS profile',
    type=>'text', len=>25, empty=>1, whitesp=>'P',
    definfo=>['','None'],
-   extrainfo=>'Default TLS profile name for zones that do not set their own'},
+   extrainfo=>"Default TLS profile name for zones that do not set their own " .
+              "(or 'ephemeral')"},
+
+  {ftype=>0, name=>'DNS over HTTPS (DoH, RFC 8484)'},
+  {ftype=>1, tag=>'doh_profile', name=>'DoH TLS profile',
+   type=>'text', len=>25, empty=>1, whitesp=>'P',
+   definfo=>['','DoH disabled'],
+   extrainfo=>"TLS profile name; enables listen-on ... tls ... http for DoH. " .
+              "Use 'ephemeral' (self-signed) or 'none' (plaintext behind proxy)"},
+  {ftype=>1, tag=>'doh_port', name=>'DoH listener port',
+   type=>'port', len=>5, empty=>1, definfo=>['443','Default (443)']},
+  {ftype=>1, tag=>'doh_endpoint', name=>'DoH endpoint path',
+   type=>'text', len=>25, empty=>1, whitesp=>'P',
+   definfo=>['/dns-query','Default (/dns-query, BIND built-in http default)']},
 
 
   {ftype=>0, name=>'Access control'},

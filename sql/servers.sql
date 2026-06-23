@@ -109,6 +109,12 @@ CREATE TABLE servers (
 				     (server offers XoT to secondaries) */
 	tls_listen_port	    TEXT DEFAULT '853', /* port for the TLS listener */
 
+	/* DNS over HTTPS (DoH, RFC 8484); reuses TLS profiles */
+	doh_profile	    TEXT, /* TLS profile name for the DoH listener
+				     (or 'ephemeral'/'none'); empty = DoH off */
+	doh_port	    TEXT DEFAULT '443',        /* DoH listener port */
+	doh_endpoint	    TEXT DEFAULT '/dns-query', /* HTTP endpoint path */
+
 	/* defaults to use in zones */
 	hostname	TEXT,  /* primary servername for sibling zone SOAs */
 	hostaddr	INET,  /* primary server IP address */

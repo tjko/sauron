@@ -209,10 +209,25 @@ sub make_dns() {
     }
 
     unless ($zones_only) {
+      my $doh_http_ref='';
+
       # TLS profiles for DNS Zone Transfer over TLS (XoT, RFC 9103)
       print_tls_profiles($server{named_flags_ac} ?
                          $server{masterserver} :
                          $serverid);
+
+      # DoH (DNS over HTTPS, RFC 8484) endpoint, BIND 9.18+. Reuses the same
+      # TLS profiles. '/dns-query' maps to BIND's built-in `http default`.
+      if ($server{doh_profile} ne '') {
+        my $ep=($server{doh_endpoint} ne '' ? $server{doh_endpoint}:'/dns-query');
+        if ($ep eq '/dns-query') {
+          $doh_http_ref='default';
+        } else {
+          $doh_http_ref='"doh"';
+          print BINDFILE "// DoH endpoint (RFC 8484)\n";
+          print BINDFILE "http \"doh\" {\n\tendpoints { \"$ep\"; };\n};\n\n";
+        }
+      }
 
       # key & acl section
       print_keys_acls($server{named_flags_ac} ?
@@ -292,9 +307,19 @@ sub make_dns() {
       # TLS listener for DNS Zone Transfer over TLS (XoT, RFC 9103)
       if ($server{tls_listen_profile} ne '') {
         my $tport=($server{tls_listen_port} ne '' ? $server{tls_listen_port}:853);
+        my $tref=tls_name_ref($server{tls_listen_profile});
         print BINDFILE
-          "\tlisten-on port $tport tls \"$server{tls_listen_profile}\" { any; };\n",
-          "\tlisten-on-v6 port $tport tls \"$server{tls_listen_profile}\" { any; };\n";
+          "\tlisten-on port $tport tls $tref { any; };\n",
+          "\tlisten-on-v6 port $tport tls $tref { any; };\n";
+      }
+
+      # DoH listener (DNS over HTTPS, RFC 8484)
+      if ($server{doh_profile} ne '') {
+        my $dport=($server{doh_port} ne '' ? $server{doh_port} : 443);
+        my $tref=tls_name_ref($server{doh_profile});
+        print BINDFILE
+          "\tlisten-on port $dport tls $tref http $doh_http_ref { any; };\n",
+          "\tlisten-on-v6 port $dport tls $tref http $doh_http_ref { any; };\n";
       }
 
       print BINDFILE "\tforward $forward_enum{$server{forward}};\n"
@@ -506,7 +531,7 @@ sub make_dns() {
               $port=853 if ((!defined($port) || $port eq '') && $tls ne '');
             }
             $ip .= " port $port" if (defined($port) && $port ne '');
-            $ip .= " tls \"$tls\"" if (defined($tls) && $tls ne '');
+            $ip .= " tls ".tls_name_ref($tls) if (defined($tls) && $tls ne '');
             print BINDFILE "\n\t\t\t\t$ip; ";
           }
           print BINDFILE "\n\t};\n";
@@ -1989,7 +2014,7 @@ sub print_cidr_list($$$$$) {
         # also-notify over TLS (XoT, RFC 9103): per-target port and profile
         if ($mode == 0 && $type == 6) {
           $val .= " port $port" if (defined($port) && $port ne '');
-          $val .= " tls \"$tls\"" if (defined($tls) && $tls ne '');
+          $val .= " tls ".tls_name_ref($tls) if (defined($tls) && $tls ne '');
         }
 
         printf BINDFILE "$hdr\t%1s %-39s %s\n",$op,"$val;",$com # 20 -> 39 for IPv6.
@@ -3450,6 +3475,23 @@ sub print_subnets6() {
   }
 }
 
+sub tls_name_ref($) {
+  # Reference for a TLS object after the `tls` keyword. BIND's built-in
+  # objects (ephemeral = self-signed in-memory cert, none = no TLS) must be
+  # referenced WITHOUT quotes; user-defined profile names are quoted.
+  my($name) = @_;
+  return $name if ($name eq 'ephemeral' || $name eq 'none');
+  return "\"$name\"";
+}
+
+sub http_name_ref($) {
+  # Reference for an HTTP object after the `http` keyword. BIND's built-in
+  # objects (default = /dns-query endpoint, none) are referenced unquoted.
+  my($name) = @_;
+  return $name if ($name eq 'default' || $name eq 'none');
+  return "\"$name\"";
+}
+
 sub print_tls_profiles($) {
   # Emit top-level `tls "<name>" { ... };` statements for DNS Zone Transfer
   # over TLS (XoT, RFC 9103). Requires BIND 9.18.11+.
@@ -3473,6 +3515,8 @@ sub print_tls_profiles($) {
       error("Skipping TLS profile with empty name");
       next;
     }
+    # 'ephemeral' and 'none' are built-in BIND TLS objects, never defined
+    next if ($name eq 'ephemeral' || $name eq 'none');
     print BINDFILE "tls \"$name\" {\n";
     print BINDFILE "\t// $comment\n" if ($comment ne '');
     print BINDFILE "\tcert-file \"$cert\";\n" if ($cert ne '');
