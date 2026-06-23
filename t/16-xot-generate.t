@@ -45,7 +45,8 @@ db_exec("DELETE FROM zones WHERE id=$zoneid");
 db_exec("DELETE FROM servers WHERE id=$srvid");
 db_exec("DELETE FROM tls_profiles WHERE ref=$srvid");
 db_exec("INSERT INTO servers (id,name,tls_listen_profile,tls_listen_port,".
-        "tls_default_profile) VALUES ($srvid,'xot-test-srv','xfr','853','xfr')");
+        "tls_default_profile,doh_profile,doh_port,doh_endpoint) VALUES ".
+        "($srvid,'xot-test-srv','xfr','853','xfr','ephemeral','443','/dns-query')");
 db_exec("INSERT INTO zones (id,server,type,name,xot_transfer,tls_profile) ".
         "VALUES ($zoneid,$srvid,'S','xot.example.','Y','xfr')");
 
@@ -89,6 +90,9 @@ subtest 'server XoT fields load' => sub {
     is($srv{tls_listen_profile}, 'xfr', "tls_listen_profile loaded");
     is($srv{tls_listen_port}, '853', "tls_listen_port loaded");
     is($srv{tls_default_profile}, 'xfr', "tls_default_profile loaded");
+    is($srv{doh_profile}, 'ephemeral', "doh_profile loaded");
+    is($srv{doh_port}, '443', "doh_port loaded");
+    is($srv{doh_endpoint}, '/dns-query', "doh_endpoint loaded");
 };
 
 # ---------------------------------------------------------------------------
