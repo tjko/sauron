@@ -272,10 +272,19 @@ COMMANDS
 
 
 
+ADDITIONAL DOCUMENTATION
+	doc/manual.sgml                 Full manual
+	docs/tsig-key-management.txt    TSIG key management (keygen)
+	docs/dns-over-tls.txt           DNS over TLS: XoT (RFC 9103), DoT and
+	                                DoH (RFC 8484); TLS profiles, ephemeral
+	                                certificates, certificate handling
+
+
 SUGGESTED READING
 	RFC: 952,953,974,1032,1034,1035,1123,1912
+	RFC: 9103 (XoT), 7858 (DoT), 8484 (DoH)
 
 
 --
-Timo <tjko@iki.fi>			        
+Timo <tjko@iki.fi>
 
