@@ -269,6 +269,11 @@ sub form_check_field($$$) {
   } elsif ($type eq 'path') {
     return 'valid pathname required!'
       unless ($value =~ /^(|\S+\/)$/);
+  } elsif ($type eq 'filepath') {
+    # File path (no trailing slash required); restricted to safe characters
+    # so values cannot break out of the quoted "..." context in named.conf.
+    return 'valid file path required (allowed: letters, digits, . _ - /)!'
+      unless ($value =~ m{^[\w.\-/]*$});
   } elsif ($type =~ /ip[46]?/) {
     my $ipversion = ip_get_version($value);
      return 'IPv4 address required!' if $type eq 'ip4' and $ipversion == 6;
