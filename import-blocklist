@@ -1156,7 +1156,7 @@ sub delete_txt_hosts_for_domain {
     my $query = "SELECT id, domain FROM hosts " .
                 "WHERE zone = $zoneid AND type = 13 " .
                 "AND comment LIKE " . db_encode_str($txt_comment_prefix . '%') . " " .
-                "AND domain LIKE " . db_encode_str($like_pattern) . " ESCAPE '\\\\'";
+                "AND domain LIKE " . db_encode_str($like_pattern) . " ESCAPE E'\\\\'";
     
     my @rows;
     db_query($query, \@rows);
