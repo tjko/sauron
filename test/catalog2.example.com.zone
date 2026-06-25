@@ -15,7 +15,7 @@ $ORIGIN catalog2.example.com.
 ;
 ; Catalog zone version (RFC 9432 §4.2)
 ;
-version.catalog		IN	TXT	"2"
+version		IN	TXT	"2"
 ;
 ; Member zones (PTR records under *.zones.catalog)
 ;
