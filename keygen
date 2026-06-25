@@ -120,7 +120,7 @@ sub getname($) {
 	print "Key name: ";
 	chomp($ans = <STDIN>);
     }
-    fatal("invalid key name: $ans") unless (valid_texthandle($ans));
+    fatal("invalid key name: $ans") unless (valid_tsig_keyname($ans));
     return $ans;
 }
 
@@ -185,7 +185,7 @@ sub generate_key($$$$) {
 	unless (-x $tsig_prog);
 
     # Use the list form of open() so the key name cannot be interpreted by
-    # a shell (it is already validated by valid_texthandle(), but be safe).
+    # a shell (it is already validated by valid_tsig_keyname(), but be safe).
     open(PIPE,"-|",$tsig_prog,"-a",$alg_name,"--",$name) ||
 	fatal("failed to run $tsig_prog");
     while(<PIPE>) {

@@ -38,6 +38,7 @@ $VERSION = '$Id:$ ';
 	     valid_domainname
              valid_hex
 	     valid_texthandle
+	     valid_tsig_keyname
              cidrok
              cidr4ok
              cidr6ok
@@ -80,10 +81,10 @@ $VERSION = '$Id:$ ';
 	     new_serial
 	     decode_daterange_str
 	     utimefmt
-             url2link
-         is_iaid
-         trim
-         dhcpduid
+         url2link
+     is_iaid
+     trim
+     dhcpduid
 	     tsig_secret_encrypt
 	     tsig_secret_decrypt
 	    );
@@ -209,6 +210,35 @@ sub valid_texthandle($) {
   my($str) = @_;
 
   return ($str =~ /^[a-zA-Z0-9_\-]+$/ ? 1 : 0);
+}
+
+# Validate TSIG key name according to RFC8945.
+# TSIG key name should be a valid domain name format: <id>.<fqdn>
+# Allowed characters: alphanumeric, hyphens, dots, underscores
+# - Labels (parts between dots) must start with alphanumeric
+# - No consecutive dots
+# - Trailing dot is allowed (FQDN notation)
+sub valid_tsig_keyname($) {
+  my($str) = @_;
+  
+  return 0 unless (defined $str && $str ne '');
+  return 0 if ($str =~ /^\./);                   # cannot start with dot
+  return 0 if ($str =~ /\.\./);                  # no consecutive dots
+  
+  # Strip trailing dot if present (FQDN notation)
+  $str =~ s/\.$//;
+  return 0 if ($str eq '');                      # was just a single dot
+  
+  # Check each label (part between dots)
+  my @labels = split(/\./, $str);
+  for my $label (@labels) {
+    return 0 if ($label eq '');                  # empty label
+    return 0 unless ($label =~ /^[a-zA-Z0-9_\-]+$/);  # valid chars only
+    return 0 unless ($label =~ /^[a-zA-Z0-9]/);  # must start with alphanumeric
+    return 0 if ($label =~ /-$/);                # cannot end with hyphen
+  }
+  
+  return 1;
 }
 
 # Change an URL to a link, not showing "http(s)://", possible parameters and fragment identifier.
