@@ -81,10 +81,10 @@ $VERSION = '$Id:$ ';
 	     new_serial
 	     decode_daterange_str
 	     utimefmt
-         url2link
-     is_iaid
-     trim
-     dhcpduid
+             url2link
+         is_iaid
+         trim
+         dhcpduid
 	     tsig_secret_encrypt
 	     tsig_secret_decrypt
 	    );
@@ -213,7 +213,7 @@ sub valid_texthandle($) {
 }
 
 # Validate TSIG key name according to RFC8945.
-# TSIG key name should be a valid domain name format: <id>.<fqdn>
+# TSIG key name is a DNS domain name (relative or FQDN), e.g. <id>.<fqdn>
 # Allowed characters: alphanumeric, hyphens, dots, underscores
 # - Labels (parts between dots) must start with alphanumeric
 # - No consecutive dots

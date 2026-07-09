@@ -56,7 +56,7 @@ subtest 'valid_texthandle' => sub {
 # valid_tsig_keyname (RFC8945 compliant TSIG key names)
 # =========================================================================
 subtest 'valid_tsig_keyname' => sub {
-    # Valid TSIG key names per RFC8945 format <id>.<fqdn>
+    # Valid TSIG key names (relative or FQDN); RFC8945 uses domain names such as <id>.<fqdn>
     ok(valid_tsig_keyname('key1.example.com'), 'simple FQDN format');
     ok(valid_tsig_keyname('1.key.example.com'), 'numeric prefix label');
     ok(valid_tsig_keyname('tsig-key.example.net'), 'label with hyphen');
