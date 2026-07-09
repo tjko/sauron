@@ -100,6 +100,51 @@ Always run a database backup before mass text repair.
 
 
 
+TSIG KEY NAME VALIDATION (RFC8945, 0.9.0)
+
+Sauron 0.9.0 enforces RFC8945-compliant TSIG key name validation. The new
+valid_tsig_keyname() validator replaces the previous valid_texthandle() and
+requires TSIG key names to follow DNS domain name rules:
+
+Validation rules:
+ - Allowed characters: alphanumeric (A-Z, a-z, 0-9), hyphens (-), 
+   underscores (_), and dots (.)
+ - Labels (parts between dots) must start with alphanumeric
+ - Labels cannot end with hyphen
+ - No consecutive dots
+ - Trailing dot is allowed (FQDN notation, e.g. "key.example.com.")
+ - Both relative names ("key1") and FQDNs ("key1.example.com") are accepted
+
+BREAKING CHANGE:
+If your database contains TSIG keys with names that violate these rules,
+the keygen utility will reject them after upgrade. Specifically:
+
+ - Names starting with underscore: "_key", "_transfer"
+ - Names ending with hyphen: "key-", "transfer-"
+
+Before upgrading, check for non-compliant key names:
+
+  sudo -u postgres -- psql sauron -P pager=off -c \
+    "SELECT id, name FROM keys WHERE type=1 AND protocol=2 AND (name ~ '^_' OR name ~ '-$');"
+
+If any keys are returned, you have two options:
+
+Option A: Rename the keys before upgrade
+  sudo -u postgres -- psql sauron -P pager=off -c \
+    "UPDATE keys SET name='renamed-key' WHERE id=<id>;"
+  
+  Then update any DNS server configurations that reference the old key name.
+
+Option B: Temporarily relax validation (not recommended)
+  Modify Sauron/Util.pm valid_tsig_keyname() to allow the problematic patterns,
+  then plan a migration to compliant names.
+
+Always backup your database before making changes to TSIG key names:
+
+  pg_dump sauron > sauron-backup-$(date +%Y%m%d).sql
+
+
+
 GENERAL UPGRADE PROCEDURE
 
  1) Make backup of your database!
