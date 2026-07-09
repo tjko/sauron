@@ -1,5 +1,18 @@
 0.9.0 (beta)
 
+	- Enforce RFC8945-compliant TSIG key name validation [svamberg]
+	  - Add valid_tsig_keyname() to Sauron::Util for DNS domain name validation
+	    (relative or FQDN, allowing alphanumeric, hyphens, underscores, dots)
+	  - keygen now uses valid_tsig_keyname() instead of valid_texthandle()
+	    to accept RFC8945-style key names with dots (e.g. <id>.<fqdn>)
+	  - Validation rules: labels must start with alphanumeric, no consecutive
+	    dots, no leading/trailing hyphens on labels, trailing dot allowed
+	  - BREAKING CHANGE: Existing TSIG keys with names starting with '_' or
+	    ending with '-' are now rejected. Check existing keys before upgrade:
+	      SELECT name FROM keys WHERE type=1 AND (name ~ '^_' OR name ~ '-$');
+	  - Unit tests: t/01-util.t (valid_tsig_keyname subtest)
+	  - Documentation: docs/tsig-key-management.txt, README.upgrade
+
 	- Add modern TSIG algorithm support (HMAC-SHA1/256/384/512) [svamberg]
 	  - keygen: generate keys with --algorithm (default HMAC-SHA256) and
 	    switch from dnssec-keygen to BIND's tsig-keygen, which is required
