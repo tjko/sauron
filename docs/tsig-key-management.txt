@@ -219,11 +219,27 @@ BEST PRACTICES
    - Use --regen for automated key rotation
    - Document key creation/rotation dates in comments
 
-3. Key Naming:
-   - Use descriptive names indicating purpose:
-     * axfr-key, ixfr-key (zone transfers)
-     * ddns-key, update-key (dynamic updates)
-     * <zone>-key (zone-specific keys)
+3. Key Naming (RFC8945 compliant):
+   - TSIG key names must follow DNS domain name rules per RFC8945
+   - Format: relative name (e.g. "key1") or FQDN (e.g. "key1.example.com.")
+   - Allowed characters: alphanumeric (A-Z, a-z, 0-9), hyphens, underscores, dots
+   - Labels (parts between dots) must:
+     * Start with alphanumeric character
+     * Not end with hyphen
+   - No consecutive dots allowed
+   - Trailing dot is optional (FQDN notation)
+   - Examples of valid names:
+     * "transfer-key", "ddns-key", "axfr-key.example.com."
+     * "1.key.example.com" (numeric prefix allowed)
+     * "key_1" (underscore allowed, but not as first character)
+   - Invalid names (rejected by keygen):
+     * "_key" (starts with underscore)
+     * "key-" (ends with hyphen)
+     * "key..example.com" (consecutive dots)
+     * "-key.example.com" (label starts with hyphen)
+   - Check existing keys before upgrade (0.9.0+):
+     SELECT name FROM keys WHERE type=1 AND protocol=2
+       AND (name ~ '^_' OR name ~ '-$');
 
 4. Access Control:
    - Limit key regeneration/deletion to authorized administrators
