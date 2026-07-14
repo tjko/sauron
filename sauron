@@ -1785,7 +1785,7 @@ sub make_dns() {
         print ZONEFILE ";\n; Catalog zone members (RFC 9432)\n;\n";
 
         # Version metadata record
-        print ZONEFILE "version.catalog\t$ttl\tIN\tTXT\t\"2\"\n";
+        print ZONEFILE "version\t$ttl\tIN\tTXT\t\"2\"\n";
 
         # Member zone PTR records
         for $i (0 .. $#{$catalog_rec->{members}}) {
@@ -1807,7 +1807,7 @@ sub make_dns() {
         }
       } else {
         print ZONEFILE ";\n; Catalog zone (no members currently)\n;\n" if ($bind_conf);
-        print ZONEFILE "version.catalog\t$ttl\tIN\tTXT\t\"2\"\n" if ($bind_conf);
+        print ZONEFILE "version\t$ttl\tIN\tTXT\t\"2\"\n" if ($bind_conf);
       }
     }
 
@@ -1824,7 +1824,7 @@ sub make_dns() {
 
       if (@comps > 0) {
         print ZONEFILE ";\n; Aggregate catalog zone members (RFC 9432)\n;\n";
-        print ZONEFILE "version.catalog\t$ttl\tIN\tTXT\t\"2\"\n";
+        print ZONEFILE "version\t$ttl\tIN\tTXT\t\"2\"\n";
 
         for my $comp (@comps) {
           my ($src_id, $src_name, $prio) = @$comp;
@@ -1869,7 +1869,7 @@ sub make_dns() {
         }
       } else {
         print ZONEFILE ";\n; Aggregate catalog zone (no source catalogs configured)\n;\n";
-        print ZONEFILE "version.catalog\t$ttl\tIN\tTXT\t\"2\"\n";
+        print ZONEFILE "version\t$ttl\tIN\tTXT\t\"2\"\n";
       }
     }
 

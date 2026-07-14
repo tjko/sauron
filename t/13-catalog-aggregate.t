@@ -350,9 +350,9 @@ subtest 'generate aggregate zone file' => sub {
     my $content = do { local $/; <$fh> };
     close($fh);
 
-    # Verify version record
-    like($content, qr/version\.catalog\s+.*\s+IN\s+TXT\s+"2"/,
-         'contains version.catalog TXT "2"');
+    # Verify version record (relative to zone origin: version.<aggregate-zone-name>)
+    like($content, qr/^version\s+.*\s+IN\s+TXT\s+"2"/m,
+         'contains version TXT "2"');
 
     # Verify members from catalog1
     like($content, qr/PTR\s+alpha\.example\.com\./,
@@ -449,7 +449,7 @@ $ORIGIN catalog1.example.com.
 @	IN	SOA	ns1.example.com. admin.example.com. (
 		2024020101 3600 900 604800 0 )
 	IN	NS	invalid.
-version.catalog		IN	TXT	"2"
+version		IN	TXT	"2"
 uuid-002.zones	IN	PTR	beta.example.com.
 uuid-003.zones	IN	PTR	shared.example.com.
 group.uuid-002.zones	IN	TXT	"backend"
@@ -502,7 +502,7 @@ $ORIGIN catalog1.example.com.
 @	IN	SOA	ns1.example.com. admin.example.com. (
 		2024030101 3600 900 604800 0 )
 	IN	NS	invalid.
-version.catalog		IN	TXT	"2"
+version		IN	TXT	"2"
 uuid-002.zones	IN	PTR	beta.example.com.
 uuid-003.zones	IN	PTR	shared.example.com.
 uuid-004.zones	IN	PTR	newzone.example.com.
@@ -675,7 +675,7 @@ $ORIGIN catalog1.example.com.
 @	IN	SOA	ns1.example.com. admin.example.com. (
 		2024040101 3600 900 604800 0 )
 	IN	NS	invalid.
-version.catalog		IN	TXT	"2"
+version		IN	TXT	"2"
 uuid-002.zones	IN	PTR	beta.example.com.
 uuid-003.zones	IN	PTR	shared.example.com.
 group.uuid-002.zones	IN	TXT	"should-be-ignored"

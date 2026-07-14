@@ -148,8 +148,8 @@ print "Detected source catalog origin: $source_origin\n" if ($opt_verbose);
 ##############################
 # Parse catalog zone contents (RFC 9432)
 #
-# Structure:
-#   version.catalog.<origin>  TXT "2"
+# Structure (RFC 9432):
+#   version.<origin>  TXT "2"
 #   <uuid>.zones.<origin>  PTR <member-zone-name>.
 #   group.<uuid>.zones.<origin>  TXT "<group-name>"
 #
@@ -158,9 +158,12 @@ print "Detected source catalog origin: $source_origin\n" if ($opt_verbose);
 #   group.<uuid>.zones.catalog.<origin>  TXT "<group-name>"
 
 # Verify catalog version
-# Sauron generator writes 'version.catalog' relative to zone origin, so
-# after FQDN expansion it becomes 'version.catalog.<origin>'.
-$version_key = "version.catalog.$source_origin";
+# Accept both canonical RFC 9432 form (version.<origin>) and
+# legacy Sauron form (version.catalog.<origin>) for backward compatibility.
+$version_key = "version.$source_origin";
+unless ($zonedata{$version_key} && @{$zonedata{$version_key}{TXT}} > 0) {
+    $version_key = "version.catalog.$source_origin";
+}
 if ($zonedata{$version_key} && @{$zonedata{$version_key}{TXT}} > 0) {
     $catver = $zonedata{$version_key}{TXT}[0];
     $catver =~ s/^"(.*)"$/$1/;  # strip quotes if present
@@ -559,7 +562,7 @@ sub detect_catalog_origin($$$) {
 	return $soa_candidates[0] if (@soa_candidates == 1);
 
 	@version_candidates = sort map {
-	/^version\.catalog\.(.+)$/ ? $1 : ()
+	/^version\.(?:catalog\.)?(.+)$/ ? $1 : ()
 	} keys %{$zonedata};
 	return $version_candidates[0] if (@version_candidates == 1);
 
