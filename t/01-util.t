@@ -53,6 +53,31 @@ subtest 'valid_texthandle' => sub {
 };
 
 # =========================================================================
+# valid_tsig_keyname (RFC8945 compliant TSIG key names)
+# =========================================================================
+subtest 'valid_tsig_keyname' => sub {
+    # Valid TSIG key names (relative or FQDN); RFC8945 uses domain names such as <id>.<fqdn>
+    ok(valid_tsig_keyname('key1.example.com'), 'simple FQDN format');
+    ok(valid_tsig_keyname('1.key.example.com'), 'numeric prefix label');
+    ok(valid_tsig_keyname('tsig-key.example.net'), 'label with hyphen');
+    ok(valid_tsig_keyname('key_1.example.com'), 'label with underscore');
+    ok(valid_tsig_keyname('host1'), 'single label without dot');
+    ok(valid_tsig_keyname('mykey'), 'simple alphanumeric');
+    ok(valid_tsig_keyname('key.example.com.'), 'FQDN with trailing dot');
+    ok(valid_tsig_keyname('1.sner-hub.flab.cesnet.cz.'), 'complex FQDN with trailing dot');
+    
+    # Invalid cases
+    ok(!valid_tsig_keyname(''), 'rejects empty string');
+    ok(!valid_tsig_keyname('.example.com'), 'rejects leading dot');
+    ok(!valid_tsig_keyname('key..example.com'), 'rejects consecutive dots');
+    ok(!valid_tsig_keyname('key name.example.com'), 'rejects spaces');
+    ok(!valid_tsig_keyname('-key.example.com'), 'rejects label starting with hyphen');
+    ok(!valid_tsig_keyname('key-'), 'rejects label ending with hyphen');
+    ok(!valid_tsig_keyname('key!example.com'), 'rejects special characters');
+    ok(!valid_tsig_keyname('.'), 'rejects single dot');
+};
+
+# =========================================================================
 # IPv4 CIDR validation (cidr4ok)
 # =========================================================================
 subtest 'cidr4ok' => sub {
