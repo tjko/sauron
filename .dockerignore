@@ -1,0 +1,29 @@
+# Version control / metadata not needed in the image build
+.git
+.gitignore
+.github
+.agents
+.dockerignore
+
+# Documentation and tests (not installed by `make install`)
+*.md
+doc/
+docs/
+t/
+test/
+
+# OS packaging artifacts (not for Docker image)
+redhat/
+solaris/
+
+# Compose files (bind-mounted at runtime, not baked into image)
+docker-compose.yml
+docker-compose.dev.yml
+
+# Build artifacts from in-tree ./configure runs on the host —
+# must not leak into the container build (configure regenerates them)
+Makefile
+config.h
+config.log
+config.status
+modgroup

@@ -1,0 +1,60 @@
+# Sauron full stack: app (Apache + CGI) + PostgreSQL
+# Usage: docker compose up -d
+#
+# Web UI:  http://localhost:8080/cgi-bin/sauron.cgi
+# Login:   admin / admin  (override via SAURON_* env or .env file)
+# DB:      localhost:5433  (user/password/db: sauron)
+
+name: sauron
+
+services:
+  db:
+    image: postgres:15.10
+    environment:
+      POSTGRES_DB: ${SAURON_DB_NAME:-sauron}
+      POSTGRES_USER: ${SAURON_DB_USER:-sauron}
+      POSTGRES_PASSWORD: ${SAURON_DB_PASSWORD:-sauron}
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sauron -d sauron"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  sauron:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: sauron:local
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8080:80"
+    environment:
+      SAURON_DB_HOST: ${SAURON_DB_HOST:-db}
+      SAURON_DB_PORT: ${SAURON_DB_PORT:-5432}
+      SAURON_DB_NAME: ${SAURON_DB_NAME:-sauron}
+      SAURON_DB_USER: ${SAURON_DB_USER:-sauron}
+      SAURON_DB_PASSWORD: ${SAURON_DB_PASSWORD:-sauron}
+      SAURON_ADMIN_USER: ${SAURON_ADMIN_USER:-admin}
+      SAURON_ADMIN_PASSWORD: ${SAURON_ADMIN_PASSWORD:-admin}
+      SAURON_ADMIN_EMAIL: ${SAURON_ADMIN_EMAIL:-admin@example.com}
+      SAURON_ADMIN_NAME: ${SAURON_ADMIN_NAME:-Sauron Admin}
+      SAURON_SERVER_ID: ${SAURON_SERVER_ID:-docker}
+      SAURON_ENV_NAME: ${SAURON_ENV_NAME:-DEV}
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "-o", "/dev/null", "http://127.0.0.1/cgi-bin/sauron.cgi"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
+    restart: unless-stopped
+
+volumes:
+  pgdata:
