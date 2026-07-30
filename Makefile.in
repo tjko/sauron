@@ -105,14 +105,16 @@ PROGS = sauron addgroup adduser deluser delgroup modhosts \
 	update-hosts export-vmps import-nets import-dhcp \
 	export-ip-list export-hosts export-by-group keygen \
 	addzone import-zone-comments compare-zones check-reverse \
-	import-catalog-zone
+	import-catalog-zone \
+	send-approval-reminders
 
 MODULES = Sauron/Util.pm Sauron/BackEnd.pm Sauron/CGIutil.pm \
 	  Sauron/UtilZone.pm Sauron/Sauron.pm Sauron/UtilDhcp.pm \
-	  Sauron/DB-Pg.pm Sauron/DB-DBI.pm Sauron/SetupIO.pm
+	  Sauron/DB-Pg.pm Sauron/DB-DBI.pm Sauron/SetupIO.pm \
+	  Sauron/Approval.pm
 
 CGIMODULES = Utils.pm Servers.pm Groups.pm Templates.pm Nets.pm \
-	     Login.pm Zones.pm Hosts.pm ACLs.pm
+	     Login.pm Zones.pm Hosts.pm ACLs.pm Approvals.pm
 
 CONTRIB_FILES = contrib/additional-ether-codes.txt \
 		contrib/Ethernet.txt \
