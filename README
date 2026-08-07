@@ -149,10 +149,13 @@ DOCKER
   Custom credentials (env or a .env file next to docker-compose.yml):
 
 	SAURON_DB_PASSWORD=secret
-	POSTGRES_PASSWORD=secret	# must match SAURON_DB_PASSWORD
 	SAURON_ADMIN_USER=admin
 	SAURON_ADMIN_PASSWORD=secret
 	SAURON_ADMIN_EMAIL=you@example.com
+
+  The db service's POSTGRES_* values are derived from the corresponding
+  SAURON_DB_* variables (e.g. POSTGRES_PASSWORD always follows
+  SAURON_DB_PASSWORD).
 
   Rebuild after Dockerfile / system-package / entrypoint changes:
 
