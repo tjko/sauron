@@ -31,8 +31,9 @@ doc/tables.sgml
 .*
 
 # don't ignore (yourself, github, ...)
-!.gitignore 
+!.gitignore
 !.github/
+!.dockerignore
 
 
 # eof
