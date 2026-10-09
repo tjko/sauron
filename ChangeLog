@@ -1,5 +1,12 @@
 0.9.0 (beta)
 
+	- Deleting a server also deletes its ACLs (with their entries) and
+	  TSIG keys; previously they were left in the database orphaned
+	  [svamberg]
+	  - A server that still has slave servers cannot be deleted (slaves
+	    use its zones, ACLs and keys); delete the slave servers first
+	  - Integration test: t/18-delete-server.t
+
 	- Fix adding CNAME/AREC alias in web UI failing with "Undefined
 	  subroutine db_lasterrormsg" [svamberg]
 	  - Sauron::CGI::Utils now imports Sauron::DB, so add/edit errors
