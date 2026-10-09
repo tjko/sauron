@@ -156,6 +156,21 @@ subtest 'zone XoT fields + masters with port/TLS' => sub {
 };
 
 # ---------------------------------------------------------------------------
+subtest 'copy_zone keeps XoT settings' => sub {
+    my $newid = copy_zone($zoneid, $srvid, 'xot-copy.example.', 0);
+    ok($newid > 0, "copy_zone ok") or return;
+    my %c; get_zone($newid,\%c);
+    is($c{xot_transfer}, 'Y', "xot_transfer copied");
+    is($c{tls_profile}, 'xfr', "zone tls_profile copied");
+    my @m;
+    db_query("SELECT port,tls FROM cidr_entries WHERE type=3 AND ref=$newid",\@m);
+    is($m[0][0], 853, "master port copied");
+    is($m[0][1], 'xfr', "master TLS profile copied");
+    db_exec("DELETE FROM cidr_entries WHERE ref=$newid");
+    db_exec("DELETE FROM zones WHERE id=$newid");
+};
+
+# ---------------------------------------------------------------------------
 # named.conf generation (needs the installed generator, like t/11)
 my $install_dir = $ENV{SAURON_INSTALL_DIR} || '';
 SKIP: {
