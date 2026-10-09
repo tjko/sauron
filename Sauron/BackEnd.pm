@@ -1401,6 +1401,17 @@ sub _delete_server_parts($) {
   $res=db_exec("DELETE FROM nets WHERE server=$id;");
   if ($res < 0) { db_rollback(); return -28; }
 
+  # ACLs (with their entries) and TSIG keys of the server
+  $res=db_exec("DELETE FROM cidr_entries WHERE type=0 AND ref IN ( " .
+               "SELECT id FROM acls WHERE server=$id);");
+  if ($res < 0) { db_rollback(); return -32; }
+
+  $res=db_exec("DELETE FROM acls WHERE server=$id;");
+  if ($res < 0) { db_rollback(); return -33; }
+
+  $res=db_exec("DELETE FROM keys WHERE type=1 AND ref=$id;");
+  if ($res < 0) { db_rollback(); return -34; }
+
   # vlans
   # Poznámka: VLAN nejsou smazány, pouze zóny a jejich obsah
   # To odpovídá původní logice
@@ -1418,6 +1429,11 @@ sub delete_server($) {
   my($res);
 
   return -100 unless ($id > 0);
+
+  # slave servers use the master's zones, ACLs and keys; delete them first
+  my @slaves;
+  db_query("SELECT id FROM servers WHERE masterserver=$id", \@slaves);
+  return -101 if (@slaves > 0);
 
   # Get server name for history log BEFORE deletion
   my %server_data;
