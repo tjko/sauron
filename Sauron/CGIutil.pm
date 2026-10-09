@@ -290,8 +290,9 @@ sub form_check_field($$$) {
     return 'valid URL path required (e.g. /dns-query)!'
       unless ($value =~ m{^/[\w./\-]*$});
   } elsif ($type eq 'tlshostname') {
-    return 'valid host name required (without trailing dot)!'
-      unless ($value !~ /\.$/ && valid_domainname($value));
+    return 'fully qualified host name required (e.g. ns1.example.com, ' .
+           'without trailing dot)!'
+      unless (valid_tls_hostname($value));
   } elsif ($type =~ /ip[46]?/) {
     my $ipversion = ip_get_version($value);
      return 'IPv4 address required!' if $type eq 'ip4' and $ipversion == 6;

@@ -373,6 +373,20 @@ subtest 'valid_tls_protocols' => sub {
     ok(!valid_tls_protocols('TLSv1.3; }'), 'syntax characters rejected');
 };
 
+subtest 'valid_tls_hostname' => sub {
+    ok(valid_tls_hostname('ns1.example.com'), 'FQDN accepted');
+    ok(valid_tls_hostname('primary.example'), 'two labels accepted');
+    ok(valid_tls_hostname('xn--d1acufc.example'), 'IDN (punycode) accepted');
+    ok(!valid_tls_hostname('xyz'), 'single label rejected');
+    ok(!valid_tls_hostname('ns1.example.com.'), 'trailing dot rejected');
+    ok(!valid_tls_hostname(''), 'empty rejected');
+    ok(!valid_tls_hostname('ns1..example.com'), 'empty label rejected');
+    ok(!valid_tls_hostname('-ns1.example.com'), 'leading hyphen rejected');
+    ok(!valid_tls_hostname('ns1-.example.com'), 'trailing hyphen rejected');
+    ok(!valid_tls_hostname('*.example.com'), 'wildcard rejected');
+    ok(!valid_tls_hostname('ns1.example.com"; }'), 'syntax characters rejected');
+};
+
 subtest 'valid_tls_ciphers' => sub {
     ok(!valid_tls_ciphers(''), 'empty rejected');
     ok(!valid_tls_ciphers('HIGH" ; }'), 'quote/space rejected');
