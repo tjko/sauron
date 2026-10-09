@@ -194,6 +194,13 @@ SKIP: {
         like($conf, qr/192\.0\.2\.53 port 853 tls "xfr";/,
              "master over TLS emitted");
 
+        # TLS profile without a port: the DNS over TLS port 853 is used
+        db_exec("UPDATE cidr_entries SET port=NULL WHERE type=3 AND ref=$zoneid");
+        db_exec("UPDATE zones SET xot_transfer='D' WHERE id=$zoneid");
+        my ($conf2) = $generate->();
+        like($conf2, qr/192\.0\.2\.53 port 853 tls "xfr";/,
+             "empty master port with TLS profile defaults to 853");
+
         if (system('named-checkconf -v >/dev/null 2>&1') == 0) {
             my $chk = `named-checkconf $dir/named.conf 2>&1`;
             is($? >> 8, 0, "named-checkconf accepts named.conf") or diag($chk);

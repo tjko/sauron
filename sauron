@@ -547,8 +547,10 @@ sub make_dns() {
             $ip =~ s/\/128$//g;
             if ($zone{xot_transfer} eq 'Y') {
               $tls=$def_tls if ((!defined($tls) || $tls eq '') && $def_tls ne '');
-              $port=853 if ((!defined($port) || $port eq '') && $tls ne '');
             }
+            # DNS over TLS port (RFC 7858) when TLS is used without a port
+            $port=853 if ((!defined($port) || $port eq '') &&
+                          defined($tls) && $tls ne '');
             $ip .= " port $port" if (defined($port) && $port ne '');
             $ip .= " tls ".tls_name_ref($tls) if (defined($tls) && $tls ne '');
             print BINDFILE "\n\t\t\t\t$ip; ";
@@ -2032,6 +2034,8 @@ sub print_cidr_list($$$$$) {
 
         # also-notify over TLS (XoT, RFC 9103): per-target port and profile
         if ($mode == 0 && $type == 6) {
+          $port=853 if ((!defined($port) || $port eq '') &&
+                        defined($tls) && $tls ne '');
           $val .= " port $port" if (defined($port) && $port ne '');
           $val .= " tls ".tls_name_ref($tls) if (defined($tls) && $tls ne '');
         }

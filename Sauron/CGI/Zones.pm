@@ -101,7 +101,8 @@ my %zone_form = (
   {ftype=>2, tag=>'masters', name=>'Masters', type=>['ip','port','tlsref','text'],
    fields=>4, len=>[43,6,25,30], empty=>[0,1,1,1],
    elabels=>['IP','Port','TLS profile','comment'],
-   extrainfo=>'Port + TLS profile enable XoT (RFC 9103) for this master',
+   extrainfo=>'Port + TLS profile enable XoT (RFC 9103) for this master. ' .
+              'Empty port with a TLS profile = 853 (DNS over TLS port)',
    whitesp=>['','','P','P'], iff=>['type','S']},
   {ftype=>1, tag=>'hostmaster', name=>'Hostmaster', type=>'domain', len=>30,
    empty=>1, definfo=>['','Default (from server)'], iff=>['type','[MC]']},
@@ -200,7 +201,8 @@ my %zone_form = (
    type=>['ip','port','tlsref','text'],
    fields=>4, len=>[39,6,25,15], empty=>[0,1,1,1],
    elabels=>['IP','Port','TLS profile','comment'],
-   extrainfo=>'Port + TLS profile enable notify over TLS (RFC 9103)',
+   extrainfo=>'Port + TLS profile enable notify over TLS (RFC 9103). ' .
+              'Empty port with a TLS profile = 853 (DNS over TLS port)',
    whitesp=>['','','P','P'], iff=>['type','M']},
   {ftype=>2, tag=>'forwarders',name=>'Forwarders', type=>['ip','int','text'],
    fields=>3, len=>[39,6,15], empty=>[0,1,1], elabels=>['IP','Port','comment'],

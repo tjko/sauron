@@ -107,7 +107,8 @@ Zone (Zones -> Edit):
                            the zone/server default profile (port 853).
   TLS profile (for masters) - per-zone override of the default profile.
   Masters / also-notify rows now carry optional Port and TLS profile columns
-                           so each peer can use XoT independently.
+                           so each peer can use XoT independently. A row
+                           with a TLS profile and an empty Port uses 853.
 
 DATABASE STRUCTURE
 ------------------
