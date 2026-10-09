@@ -9,6 +9,13 @@
 	    the dev stack and leaves nothing behind
 	  - Test runner: docker/e2e-tests.sh (PROVE_OPTS overrides prove flags)
 
+	- Fix adding CNAME/AREC alias in web UI failing with "Undefined
+	  subroutine db_lasterrormsg" [svamberg]
+	  - Sauron::CGI::Utils now imports Sauron::DB, so add/edit errors
+	    show the database message instead of crashing
+	  - Do not pass zone_id into the hosts INSERT (column does not exist);
+	    the approval check uses the record's zone instead
+
 	- Enforce RFC8945-compliant TSIG key name validation [svamberg]
 	  - Add valid_tsig_keyname() to Sauron::Util for DNS domain name validation
 	    (relative or FQDN, allowing alphanumeric, hyphens, underscores, dots)
