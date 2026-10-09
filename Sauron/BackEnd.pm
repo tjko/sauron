@@ -2295,8 +2295,9 @@ sub copy_zone($$$$) {
   print "<BR>Copying records pointing to zone record..." if ($verbose);
 
   # cidr_entries
-  $res=db_exec("INSERT INTO cidr_entries (type,ref,ip,comment) " .
-	       "SELECT type,$newid,ip,comment FROM cidr_entries " .
+  # port/tls carry XoT (RFC 9103) settings of masters/also-notify
+  $res=db_exec("INSERT INTO cidr_entries (type,ref,ip,port,tls,comment) " .
+	       "SELECT type,$newid,ip,port,tls,comment FROM cidr_entries " .
 	       "WHERE (type=2 OR type=3 OR type=4 OR type=5 OR type=6 " .
 	       " OR type=12) AND ref=$id;");
   if ($res < 0) { db_rollback(); return -3; }
