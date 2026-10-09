@@ -2250,6 +2250,14 @@ sub copy_zone($$$$) {
   delete $z{pending_info};
   delete $z{zonehostid};
   delete $z{txt_auto_generation};
+  # get_zone() adds helper fields (catalog info etc.) that are not columns
+  # of the zones table; copy only the real columns
+  db_query("SELECT column_name FROM information_schema.columns " .
+	   "WHERE table_name='zones'",\@q);
+  return -1 unless (@q > 0);
+  my %zcols = map { $_->[0] => 1 } @q;
+  for $i (keys %z) { delete $z{$i} unless ($zcols{$i}); }
+  undef @q;
 
 
   if ($z{reverse} =~ /^(t|true)$/) {
@@ -2324,13 +2332,12 @@ sub copy_zone($$$$) {
 
   db_query("SELECT a.id,b.id,a.domain FROM hosts a, hosts b " .
 	   "WHERE a.zone=$id AND b.zone=$newid AND a.domain=b.domain;",\@hids);
-  print "<br>hids = " . $#hids;
   for $i (0..$#hids) { $hidh{$hids[$i][0]}=$hids[$i][1]; }
 
   # a_entries
   print "<BR>Copying A records..." if ($verbose);
   $res=copy_records('a_entries','a_entries','id','host',\@hids,
-     'ip,ipv6,type,reverse,forward,comment',
+     'ip,type,reverse,forward,comment',
      "SELECT a.id FROM a_entries a,hosts h WHERE a.host=h.id AND h.zone=$id");
   if ($res < 0) { db_rollback(); return -12; }
 

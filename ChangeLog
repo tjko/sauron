@@ -1,5 +1,17 @@
 0.9.0 (beta)
 
+	- Fix "Copy zone" in the web UI [svamberg]
+	  - copy only real zones columns; catalog helper fields loaded by
+	    get_zone() made the insert fail
+	  - do not copy the a_entries.ipv6 column dropped in DB 1.6; the failed
+	    statement aborted the transaction, so the copy was lost even though
+	    copy_zone() reported success
+	  - remove a leftover debug print
+	  - Integration test: t/17-copy-zone.t
+
+	- Do not log "internal error (form_magic):16" when editing a zone
+	  (aggregate catalog composition field) [svamberg]
+
 	- Fix adding CNAME/AREC alias in web UI failing with "Undefined
 	  subroutine db_lasterrormsg" [svamberg]
 	  - Sauron::CGI::Utils now imports Sauron::DB, so add/edit errors
