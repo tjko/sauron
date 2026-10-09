@@ -8,6 +8,7 @@ package Sauron::CGI::Utils;
 require Exporter;
 use CGI qw/:standard *table/;
 use Digest::MD5;
+use Sauron::DB;
 use Sauron::CGIutil;
 use Sauron::BackEnd;
 use Sauron::Util;
