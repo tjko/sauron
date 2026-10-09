@@ -1,5 +1,37 @@
 0.9.0 (beta)
 
+	- Add DNS over TLS support: XoT (RFC 9103), DoT and DoH (RFC 8484)
+	  [svamberg]
+	  - New TLS profiles (ACLs -> TLS Profiles) emitted as top-level
+	    tls "<name>" { ... }; statements in named.conf; Sauron stores only
+	    certificate/key file paths, not the key material
+	  - Built-in 'ephemeral' (self-signed) and 'none' TLS objects usable
+	    wherever a profile name is expected; these names are reserved
+	  - Server: TLS listener (listen-on ... tls) with port, default zone
+	    TLS profile, and DoH listener with profile, port and endpoint path
+	  - Zone: "Use TLS for zone transfers" (allow-transfer transport tls),
+	    per-zone TLS profile override; masters and also-notify rows gained
+	    Port and TLS profile columns
+	  - Hardened input handling: integer-guarded profile ids, 'filepath'
+	    validator for certificate paths, generator skips profiles with
+	    unsafe values and falls back to /dns-query for invalid endpoints
+	  - Requires BIND 9.18.11 or later; DoQ (RFC 9250) is not supported
+	  - DB schema: new table tls_profiles; new columns servers.tls_*,
+	    servers.doh_*, zones.xot_transfer, zones.tls_profile,
+	    cidr_entries.tls. Existing databases need to be upgraded manually:
+	      psql -f sql/tls_profiles.sql
+	      ALTER TABLE servers ADD COLUMN tls_default_profile TEXT,
+	        ADD COLUMN tls_listen_profile TEXT,
+	        ADD COLUMN tls_listen_port TEXT DEFAULT '853',
+	        ADD COLUMN doh_profile TEXT,
+	        ADD COLUMN doh_port TEXT DEFAULT '443',
+	        ADD COLUMN doh_endpoint TEXT DEFAULT '/dns-query';
+	      ALTER TABLE zones ADD COLUMN xot_transfer CHAR(1) DEFAULT 'D',
+	        ADD COLUMN tls_profile TEXT;
+	      ALTER TABLE cidr_entries ADD COLUMN tls TEXT;
+	  - Integration tests: t/16-xot-generate.t
+	  - Documentation: docs/dns-over-tls.txt
+
 	- Fix "Copy zone" in the web UI [svamberg]
 	  - copy only real zones columns; catalog helper fields loaded by
 	    get_zone() made the insert fail
