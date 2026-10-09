@@ -237,6 +237,16 @@ SKIP: {
     };
 }
 
+# ---------------------------------------------------------------------------
+subtest 'delete_server removes TLS profiles' => sub {
+    my %p = (ref=>$srvid, type=>1, name=>'gone');
+    ok(add_tls_profile(\%p) > 0, "profile added");
+    is(delete_server($srvid), 0, "delete_server ok");
+    my @t;
+    db_query("SELECT id FROM tls_profiles WHERE type=1 AND ref=$srvid",\@t);
+    is(scalar(@t), 0, "no orphaned TLS profiles");
+};
+
 # cleanup
 db_exec("DELETE FROM cidr_entries WHERE ref IN ($srvid,$zoneid)");
 db_exec("DELETE FROM zones WHERE id=$zoneid");

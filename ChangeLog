@@ -27,6 +27,7 @@
 	    cidr_entries.sql and dbconvert_1.7to1.8 to create and migrate
 	    the new table and columns
 	  - Integration tests: t/16-xot-generate.t
+	  - Deleting a server also deletes its TLS profiles
 	  - Copy zone keeps the XoT settings (Use TLS, TLS profile, masters
 	    and also-notify port/TLS profile)
 	  - Documentation: docs/dns-over-tls.txt

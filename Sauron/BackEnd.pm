@@ -1395,6 +1395,10 @@ sub _delete_server_parts($) {
   $res=db_exec("DELETE FROM wks_templates WHERE server=$id;");
   if ($res < 0) { db_rollback(); return -25; }
 
+  # tls_profiles (XoT, RFC 9103)
+  $res=db_exec("DELETE FROM tls_profiles WHERE type=1 AND ref=$id;");
+  if ($res < 0) { db_rollback(); return -29; }
+
   # mx_templates
   $res=db_exec("DELETE FROM mx_templates WHERE id IN ( " .
                "SELECT a.id FROM mx_templates a, zones z " .
