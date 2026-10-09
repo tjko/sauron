@@ -62,16 +62,25 @@ my %tls_form=(
    type=>'filepath', len=>70, maxlen=>255, empty=>1, whitesp=>'P'},
   {ftype=>1, tag=>'dhparam_file', name=>'dhparam-file', type=>'filepath',
    len=>70, maxlen=>255, empty=>1, whitesp=>'P'},
-  {ftype=>1, tag=>'protocols', name=>'protocols', type=>'text', len=>30,
-   empty=>1, whitesp=>'P', extrainfo=>'e.g. TLSv1.2 TLSv1.3'},
-  {ftype=>1, tag=>'ciphers', name=>'ciphers', type=>'text', len=>50,
-   empty=>1, whitesp=>'P'},
+  {ftype=>1, tag=>'protocols', name=>'protocols', type=>'tlsprotocols',
+   len=>30, empty=>1, whitesp=>'P',
+   extrainfo=>'Allowed: TLSv1.2, TLSv1.3 (space separated). ' .
+              'Empty = BIND default'},
+  {ftype=>1, tag=>'ciphers', name=>'ciphers', type=>'tlsciphers', len=>50,
+   maxlen=>255, empty=>1, whitesp=>'P',
+   extrainfo=>"OpenSSL cipher list for TLSv1.2 (TLSv1.3 suites are not " .
+              "configurable in BIND), e.g. HIGH:!aNULL:!MD5:!RC4 or " .
+              "ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384. " .
+              "List names on the DNS server: openssl ciphers -v 'HIGH:!aNULL' " .
+              "(see man 1ssl ciphers, docs/dns-over-tls.txt). Empty = BIND default"},
   {ftype=>3, tag=>'prefer_server_ciphers', name=>'prefer-server-ciphers',
    type=>'enum', conv=>'U', enum=>\%tls_yn_enum},
   {ftype=>3, tag=>'session_tickets', name=>'session-tickets',
    type=>'enum', conv=>'U', enum=>\%tls_yn_enum},
   {ftype=>1, tag=>'remote_hostname', name=>'remote-hostname (outgoing auth)',
-   type=>'text', len=>40, empty=>1, whitesp=>'P'},
+   type=>'tlshostname', len=>40, empty=>1, whitesp=>'P',
+   extrainfo=>'Expected host name in the peer certificate (strict XoT, ' .
+              'use together with ca-file)'},
   {ftype=>1, tag=>'comment', name=>'Comment', type=>'text', len=>60,
    empty=>1, whitesp=>'P'},
   {ftype=>0, name=>'Record info', no_edit=>1},

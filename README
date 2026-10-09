@@ -31,6 +31,8 @@ REQUIREMENTS
 		- Text::Table
                 - Parse::RecDescent # only for import-zone-comments
                 - HTML::Entities
+		- Net::SSLeay module (optional; validates TLS cipher lists
+		  in the web UI, without it only allowed characters are checked)
  	- PostgresSQL [15.10 or newer  recommended]
 	  (or add support to your favorite db yourself :)
 	- www-server (Apache or any other www-server with CGI support)

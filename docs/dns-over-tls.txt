@@ -63,6 +63,28 @@ TLS profiles      : ACLs -> TLS Profiles -> Add TLS Profile
                     protocols (e.g. "TLSv1.2 TLSv1.3"), ciphers,
                     prefer-server-ciphers, session-tickets, remote-hostname.
 
+                    Input validation:
+                      protocols       - TLSv1.2 and/or TLSv1.3 only (the
+                                        versions BIND accepts)
+                      ciphers         - OpenSSL cipher list for TLSv1.2; it
+                                        is checked with OpenSSL the same way
+                                        named-checkconf does it (requires
+                                        the Net::SSLeay Perl module,
+                                        otherwise only allowed characters
+                                        are checked). A list that matches no
+                                        cipher (e.g. "crc8") or contains only
+                                        TLSv1.3 suites is rejected; TLSv1.3
+                                        suites are not configurable in BIND.
+                      remote-hostname - host name without trailing dot
+                      file paths      - letters, digits, . _ - / only
+
+                    Choosing ciphers: list the names supported by OpenSSL on
+                    the DNS server (the host running named) with
+                      openssl ciphers -v 'HIGH:!aNULL'
+                    and see ciphers(1ssl) for the cipher list syntax.
+                    Example: ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384
+                    Leaving the field empty uses the BIND/OpenSSL default.
+
 Server (Servers -> Edit), section "DNS Zone Transfer over TLS (XoT)":
   TLS listener profile   - profile name (or `ephemeral`) -> the server
                            offers XoT/DoT via `listen-on ... tls`.
@@ -125,13 +147,22 @@ TLS profile (top level):
       protocols { TLSv1.2; TLSv1.3; };
       ciphers "HIGH:!aNULL";
       prefer-server-ciphers yes;
-      remote-hostname "primary.example.";
+      remote-hostname "primary.example";
   };
 
 Server offering XoT/DoT (options{}):
 
+  listen-on { any; };
+  listen-on-v6 { any; };
   listen-on port 853 tls "xfr" { any; };
   listen-on-v6 port 853 tls "xfr" { any; };
+
+  Any listen-on statement replaces BIND's implicit plain DNS listener
+  (port 53 on all interfaces). Therefore, when a TLS or DoH listener is
+  configured and the server has no explicit Listen-on (Listen-on-v6)
+  entries, Sauron also emits `listen-on { any; };` (`listen-on-v6 { any; };`),
+  using the server's "Listen on port" if set. With explicit entries, only
+  those are emitted, so make sure they include the plain DNS addresses.
 
   # or, without certificate files:
   listen-on port 853 tls ephemeral { any; };

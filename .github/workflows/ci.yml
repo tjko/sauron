@@ -31,7 +31,8 @@ jobs:
             libcryptx-perl libjson-perl libjson-maybexs-perl \
             libtest-simple-perl \
             libpath-tiny-perl libpg-perl libparse-recdescent-perl \
-            libdate-manip-perl libencode-locale-perl
+            libdate-manip-perl libencode-locale-perl \
+            libnet-ssleay-perl bind9-utils
         shell: bash
 
       - name: Verify core Perl test modules
@@ -115,7 +116,8 @@ jobs:
             libcryptx-perl libjson-perl libjson-maybexs-perl \
             libtest-simple-perl \
             libpath-tiny-perl libpg-perl libparse-recdescent-perl \
-            libdate-manip-perl libencode-locale-perl
+            libdate-manip-perl libencode-locale-perl \
+            libnet-ssleay-perl bind9-utils
         shell: bash
 
       - name: Verify core Perl test modules
@@ -175,15 +177,6 @@ jobs:
         run: prove -lv t/10-db-integration.t t/17-copy-zone.t
         shell: bash
 
-      - name: Run XoT (RFC 9103) tests (TAP)
-        env:
-          PERL5LIB: "/usr/local/sauron:${{ github.workspace }}"
-          SAURON_TEST_DSN: "dbi:Pg:dbname=sauron_test;host=postgres"
-          SAURON_TEST_USER: ${{ env.POSTGRES_USER }}
-          SAURON_TEST_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
-        run: prove -lv t/16-xot-generate.t
-        shell: bash
-
       - name: Download and import root hints & OUI
         run: |
           set -e
@@ -201,6 +194,16 @@ jobs:
             exit 1
           fi
           /usr/local/sauron/import-ethers ./ieee-oui.txt
+        shell: bash
+
+      - name: Run XoT (RFC 9103) tests (TAP)
+        env:
+          PERL5LIB: "/usr/local/sauron:${{ github.workspace }}"
+          SAURON_TEST_DSN: "dbi:Pg:dbname=sauron_test;host=postgres"
+          SAURON_TEST_USER: ${{ env.POSTGRES_USER }}
+          SAURON_TEST_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
+          SAURON_INSTALL_DIR: /usr/local/sauron
+        run: prove -lv t/16-xot-generate.t
         shell: bash
 
       - name: Run E2E integration tests (TAP)
