@@ -180,6 +180,17 @@ prove-unit:
 prove:
 	cd $(or $(srcdir),.) && prove -l t/
 
+# Run integration + E2E tests in an isolated Docker stack (no local DB needed)
+DOCKER_COMPOSE = docker compose
+E2E_COMPOSE = $(DOCKER_COMPOSE) -p sauron-e2e \
+	-f $(or $(srcdir),.)/docker-compose.yml \
+	-f $(or $(srcdir),.)/docker-compose.e2e.yml
+
+test-e2e:
+	$(E2E_COMPOSE) build sauron
+	$(E2E_COMPOSE) run --rm sauron /src/docker/e2e-tests.sh; rc=$$?; \
+	$(E2E_COMPOSE) down -v --remove-orphans; exit $$rc
+
 clean:
 	rm -f *~ *.o core a.out make.log \#*\# $(OBJS) $(BINARIES)
 
