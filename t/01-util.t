@@ -359,4 +359,47 @@ subtest 'tsig_secret backward compatibility (single block)' => sub {
        'len=8 returns exact secret');
 };
 
+# =========================================================================
+# valid_tls_protocols / valid_tls_ciphers (BIND tls{} block, XoT)
+# =========================================================================
+subtest 'valid_tls_protocols' => sub {
+    ok(valid_tls_protocols('TLSv1.3'), 'single protocol');
+    ok(valid_tls_protocols('TLSv1.2 TLSv1.3'), 'space separated');
+    ok(valid_tls_protocols('TLSv1.2,TLSv1.3'), 'comma separated');
+    ok(!valid_tls_protocols(''), 'empty rejected');
+    ok(!valid_tls_protocols('TLSv1.1'), 'TLSv1.1 not supported by BIND');
+    ok(!valid_tls_protocols('tlsv1.3'), 'case sensitive');
+    ok(!valid_tls_protocols('TLSv1.3 TLSv1.3'), 'duplicate rejected');
+    ok(!valid_tls_protocols('TLSv1.3; }'), 'syntax characters rejected');
+};
+
+subtest 'valid_tls_hostname' => sub {
+    ok(valid_tls_hostname('ns1.example.com'), 'FQDN accepted');
+    ok(valid_tls_hostname('primary.example'), 'two labels accepted');
+    ok(valid_tls_hostname('xn--d1acufc.example'), 'IDN (punycode) accepted');
+    ok(!valid_tls_hostname('xyz'), 'single label rejected');
+    ok(!valid_tls_hostname('ns1.example.com.'), 'trailing dot rejected');
+    ok(!valid_tls_hostname(''), 'empty rejected');
+    ok(!valid_tls_hostname('ns1..example.com'), 'empty label rejected');
+    ok(!valid_tls_hostname('-ns1.example.com'), 'leading hyphen rejected');
+    ok(!valid_tls_hostname('ns1-.example.com'), 'trailing hyphen rejected');
+    ok(!valid_tls_hostname('*.example.com'), 'wildcard rejected');
+    ok(!valid_tls_hostname('ns1.example.com"; }'), 'syntax characters rejected');
+};
+
+subtest 'valid_tls_ciphers' => sub {
+    ok(!valid_tls_ciphers(''), 'empty rejected');
+    ok(!valid_tls_ciphers('HIGH" ; }'), 'quote/space rejected');
+    ok(!valid_tls_ciphers("HIGH\n"), 'newline rejected');
+    ok(valid_tls_ciphers('HIGH:!aNULL'), 'cipher string accepted');
+  SKIP: {
+        skip 'Net::SSLeay not installed', 3
+            unless (eval { require Net::SSLeay; 1 });
+        is(valid_tls_ciphers('HIGH:!aNULL:!MD5'), 1, 'checked by OpenSSL');
+        is(valid_tls_ciphers('crc8'), 0, 'unknown cipher rejected');
+        is(valid_tls_ciphers('TLS_AES_128_GCM_SHA256'), 0,
+           'TLSv1.3-only suite rejected (as named-checkconf does)');
+    }
+};
+
 done_testing();

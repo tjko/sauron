@@ -102,6 +102,19 @@ CREATE TABLE servers (
     query_src_ip_v6 TEXT,               /* query source ip (optional) (ip | '*') */
     query_src_port_v6 TEXT,             /* query source port (optional) (port | '*') */
 
+	/* DNS Zone Transfer over TLS (XoT, RFC 9103) */
+	tls_default_profile TEXT, /* default TLS profile name applied to zones
+				     that do not set their own (-->tls_profiles.name) */
+	tls_listen_profile  TEXT, /* TLS profile name for `listen-on ... tls`
+				     (server offers XoT to secondaries) */
+	tls_listen_port	    TEXT DEFAULT '853', /* port for the TLS listener */
+
+	/* DNS over HTTPS (DoH, RFC 8484); reuses TLS profiles */
+	doh_profile	    TEXT, /* TLS profile name for the DoH listener
+				     (or 'ephemeral'/'none'); empty = DoH off */
+	doh_port	    TEXT DEFAULT '443',        /* DoH listener port */
+	doh_endpoint	    TEXT DEFAULT '/dns-query', /* HTTP endpoint path */
+
 	/* defaults to use in zones */
 	hostname	TEXT,  /* primary servername for sibling zone SOAs */
 	hostaddr	INET,  /* primary server IP address */

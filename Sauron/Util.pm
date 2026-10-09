@@ -39,6 +39,9 @@ $VERSION = '$Id:$ ';
              valid_hex
 	     valid_texthandle
 	     valid_tsig_keyname
+	     valid_tls_protocols
+	     valid_tls_ciphers
+	     valid_tls_hostname
              cidrok
              cidr4ok
              cidr6ok
@@ -239,6 +242,52 @@ sub valid_tsig_keyname($) {
   }
   
   return 1;
+}
+
+# Validate a TLS protocols list for a BIND tls{} block: space or comma
+# separated TLSv1.2 / TLSv1.3 (the only versions BIND accepts), no duplicates.
+sub valid_tls_protocols($) {
+  my($str) = @_;
+  my(%seen);
+
+  return 0 unless (defined $str && $str =~ /\S/);
+  for my $p (split(/[\s,]+/, $str)) {
+    next if ($p eq '');
+    return 0 unless ($p eq 'TLSv1.2' || $p eq 'TLSv1.3');
+    return 0 if ($seen{$p}++);
+  }
+  return 1;
+}
+
+# Validate a TLS remote-hostname (name expected in the peer certificate):
+# a fully qualified host name with at least two labels, written without
+# the trailing dot (certificate names do not carry it).
+sub valid_tls_hostname($) {
+  my($str) = @_;
+
+  return 0 unless (defined $str && $str =~ /^[A-Za-z0-9\-]+(\.[A-Za-z0-9\-]+)+$/);
+  return 0 if ($str =~ /(^|\.)-|-(\.|$)/);
+  return (valid_domainname($str) ? 1 : 0);
+}
+
+# Validate an OpenSSL cipher list (BIND tls{} `ciphers`, TLSv1.2 and older).
+# Returns 1 if valid, 0 if invalid, and -1 if the list could only be checked
+# for allowed characters because Net::SSLeay is not installed.
+# Uses SSL_CTX_set_cipher_list() the same way named-checkconf does, so a list
+# that matches no cipher at all (e.g. "crc8" or only TLSv1.3 suites) fails.
+sub valid_tls_ciphers($) {
+  my($str) = @_;
+
+  return 0 unless (defined $str && $str =~ /^[A-Za-z0-9_!+\-:@=.,]+$/);
+  return -1 unless (eval { require Net::SSLeay; 1 });
+
+  Net::SSLeay::load_error_strings();
+  Net::SSLeay::library_init();
+  my $ctx = Net::SSLeay::CTX_new();
+  return -1 unless ($ctx);
+  my $ok = Net::SSLeay::CTX_set_cipher_list($ctx, $str);
+  Net::SSLeay::CTX_free($ctx);
+  return ($ok ? 1 : 0);
 }
 
 # Change an URL to a link, not showing "http(s)://", possible parameters and fragment identifier.

@@ -42,7 +42,11 @@ CREATE TABLE cidr_entries (
 	op	    INT4 DEFAULT 0, /* rule operand:
 					0 = none,
 					1 = NOT */
-	port	    INT,            /* port value, used by: forwarders */      
+	port	    INT,            /* port value, used by: forwarders,
+						masters, also-notify (XoT) */
+	tls	    TEXT,           /* TLS profile name for XoT (RFC 9103),
+					used by: masters (type=3),
+					also-notify (type=6) -->tls_profiles.name */
 	comment     TEXT
 );
 

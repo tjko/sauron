@@ -209,6 +209,32 @@ sub make_dns() {
     }
 
     unless ($zones_only) {
+      my $doh_http_ref='';
+
+      # TLS profiles for DNS Zone Transfer over TLS (XoT, RFC 9103)
+      print_tls_profiles($server{named_flags_ac} ?
+                         $server{masterserver} :
+                         $serverid);
+
+      # DoH (DNS over HTTPS, RFC 8484) endpoint, BIND 9.18+. Reuses the same
+      # TLS profiles. '/dns-query' maps to BIND's built-in `http default`.
+      if ($server{doh_profile} ne '') {
+        my $ep=($server{doh_endpoint} ne '' ? $server{doh_endpoint}:'/dns-query');
+        # Endpoint must be a safe URL path so it cannot inject config
+        unless ($ep =~ m{^/[\w./\-]*$}) {
+          error("Invalid DoH endpoint '$ep' for server $servername; " .
+                "using /dns-query");
+          $ep='/dns-query';
+        }
+        if ($ep eq '/dns-query') {
+          $doh_http_ref='default';
+        } else {
+          $doh_http_ref='"doh"';
+          print BINDFILE "// DoH endpoint (RFC 8484)\n";
+          print BINDFILE "http \"doh\" {\n\tendpoints { \"$ep\"; };\n};\n\n";
+        }
+      }
+
       # key & acl section
       print_keys_acls($server{named_flags_ac} ?
                       $server{masterserver} :
@@ -276,13 +302,44 @@ sub make_dns() {
       print_cidr_list('allow-notify',15,$tmpserverid,"\t");
       print_cidr_list('blackhole',9,$tmpserverid,"\t");
 
-      print_cidr_list("listen-on ".
+      my $listen4=print_cidr_list("listen-on ".
             ($server{listen_on_port}?"port $server{listen_on_port}":""),
             10,$serverid,"\t", 4);
 
-      print_cidr_list("listen-on-v6 ".
+      my $listen6=print_cidr_list("listen-on-v6 ".
             ($server{listen_on_port_v6}?"port $server{listen_on_port_v6}":""),
             10,$serverid,"\t", 6);
+
+      # Any listen-on statement replaces BIND's implicit plain DNS listener
+      # (port 53 on all interfaces). When only TLS/DoH listeners would be
+      # emitted, keep the plain listener explicitly so the server does not
+      # silently stop answering regular DNS queries.
+      if ($server{tls_listen_profile} ne '' || $server{doh_profile} ne '') {
+        print BINDFILE "\tlisten-on " .
+              ($server{listen_on_port} ? "port $server{listen_on_port} " : "") .
+              "{ any; };\n" unless ($listen4);
+        print BINDFILE "\tlisten-on-v6 " .
+              ($server{listen_on_port_v6} ? "port $server{listen_on_port_v6} " : "") .
+              "{ any; };\n" unless ($listen6);
+      }
+
+      # TLS listener for DNS Zone Transfer over TLS (XoT, RFC 9103)
+      if ($server{tls_listen_profile} ne '') {
+        my $tport=($server{tls_listen_port} ne '' ? $server{tls_listen_port}:853);
+        my $tref=tls_name_ref($server{tls_listen_profile});
+        print BINDFILE
+          "\tlisten-on port $tport tls $tref { any; };\n",
+          "\tlisten-on-v6 port $tport tls $tref { any; };\n";
+      }
+
+      # DoH listener (DNS over HTTPS, RFC 8484)
+      if ($server{doh_profile} ne '') {
+        my $dport=($server{doh_port} ne '' ? $server{doh_port} : 443);
+        my $tref=tls_name_ref($server{doh_profile});
+        print BINDFILE
+          "\tlisten-on port $dport tls $tref http $doh_http_ref { any; };\n",
+          "\tlisten-on-v6 port $dport tls $tref http $doh_http_ref { any; };\n";
+      }
 
       print BINDFILE "\tforward $forward_enum{$server{forward}};\n"
         if ($forward_enum{$server{forward}});
@@ -458,8 +515,10 @@ sub make_dns() {
       }
       # allow_query
       print_cidr_list('allow-query',4,$zoneid,"\t");
-      # allow_transfer
-      print_cidr_list('allow-transfer',5,$zoneid,"\t");
+      # allow_transfer (require TLS transport for XoT if enabled, RFC 9103)
+      my $at_name='allow-transfer';
+      $at_name.=' transport tls' if ($zone{xot_transfer} eq 'Y');
+      print_cidr_list($at_name,5,$zoneid,"\t");
       # also_notify
       print_cidr_list('also-notify',6,$zoneid,"\t");
       # forwarders
@@ -471,16 +530,29 @@ sub make_dns() {
         if (($loopcounter >= $normalzones) && ($subtype eq 'master')) {
           @q=@master_server_ips;
         } else {
-          db_query("SELECT ip FROM cidr_entries WHERE type=3 AND ref=$zoneid " .
-                   "ORDER BY ip;",\@q);
+          db_query("SELECT ip,port,tls FROM cidr_entries " .
+                   "WHERE type=3 AND ref=$zoneid ORDER BY ip;",\@q);
           error(db_errormsg()) if (db_errormsg());
         }
         if (@q > 0) {
+          # XoT (RFC 9103): zone-wide default TLS profile (zone overrides
+          # server) applied to masters that lack an explicit per-row profile,
+          # but only when XoT is enabled for this zone.
+          my $def_tls=($zone{tls_profile} ne '' ? $zone{tls_profile}
+                                                : $server{tls_default_profile});
           print BINDFILE "\tmasters { ";
           for $j (0..(@q-1)) {
-            $ip=$q[$j][0];
+            my($ip,$port,$tls)=@{$q[$j]};
             $ip =~ s/\/32$//g;
             $ip =~ s/\/128$//g;
+            if ($zone{xot_transfer} eq 'Y') {
+              $tls=$def_tls if ((!defined($tls) || $tls eq '') && $def_tls ne '');
+            }
+            # DNS over TLS port (RFC 7858) when TLS is used without a port
+            $port=853 if ((!defined($port) || $port eq '') &&
+                          defined($tls) && $tls ne '');
+            $ip .= " port $port" if (defined($port) && $port ne '');
+            $ip .= " tls ".tls_name_ref($tls) if (defined($tls) && $tls ne '');
             print BINDFILE "\n\t\t\t\t$ip; ";
           }
           print BINDFILE "\n\t};\n";
@@ -1934,7 +2006,7 @@ sub print_cidr_list($$$$$) {
   $family = ($family ? "AND family(c.ip)=$family" : "");
 
   db_query("SELECT c.mode,c.ip,c.acl,c.tkey,c.op,c.port,c.comment" .
-           ",a.name,k.name " .
+           ",a.name,k.name,c.tls " .
            "FROM cidr_entries c LEFT JOIN acls a ON c.acl=a.id " .
            " LEFT JOIN keys k ON c.tkey=k.id " .
            "WHERE c.type=$type AND c.ref=$ref $family " .
@@ -1944,7 +2016,7 @@ sub print_cidr_list($$$$$) {
     if (@q > 0) {
       print BINDFILE "${hdr}${name} {\n";
       for $j (0..(@q-1)) {
-        my ($mode,$ip,$acl,$tkey,$op,$port,$comment,$aclname,$keyname)
+        my ($mode,$ip,$acl,$tkey,$op,$port,$comment,$aclname,$keyname,$tls)
             = @{$q[$j]};
 
         $ip =~ s/\/32\s*$//;
@@ -1960,12 +2032,21 @@ sub print_cidr_list($$$$$) {
         # forward zones forwarders port
         if ($mode == 0 && $type == 12 && $port) { $val .= " port $port"; }
 
+        # also-notify over TLS (XoT, RFC 9103): per-target port and profile
+        if ($mode == 0 && $type == 6) {
+          $port=853 if ((!defined($port) || $port eq '') &&
+                        defined($tls) && $tls ne '');
+          $val .= " port $port" if (defined($port) && $port ne '');
+          $val .= " tls ".tls_name_ref($tls) if (defined($tls) && $tls ne '');
+        }
+
         printf BINDFILE "$hdr\t%1s %-39s %s\n",$op,"$val;",$com # 20 -> 39 for IPv6.
           if ($val);
       }
       print BINDFILE "\t};\n";
     }
 
+    return scalar(@q);
 }
 
 
@@ -3417,6 +3498,82 @@ sub print_subnets6() {
     print DHCPFILE "\t}\n" if $net_map_mode == 2;
   }
 }
+
+sub tls_name_ref($) {
+  # Reference for a TLS object after the `tls` keyword. BIND's built-in
+  # objects (ephemeral = self-signed in-memory cert, none = no TLS) must be
+  # referenced WITHOUT quotes; user-defined profile names are quoted.
+  my($name) = @_;
+  return $name if ($name eq 'ephemeral' || $name eq 'none');
+  return "\"$name\"";
+}
+
+sub http_name_ref($) {
+  # Reference for an HTTP object after the `http` keyword. BIND's built-in
+  # objects (default = /dns-query endpoint, none) are referenced unquoted.
+  my($name) = @_;
+  return $name if ($name eq 'default' || $name eq 'none');
+  return "\"$name\"";
+}
+
+sub print_tls_profiles($) {
+  # Emit top-level `tls "<name>" { ... };` statements for DNS Zone Transfer
+  # over TLS (XoT, RFC 9103). Requires BIND 9.18.11+.
+  my($serverid) = @_;
+  my(@q,$i);
+
+  return unless ($serverid > 0);
+
+  db_query("SELECT name,cert_file,key_file,ca_file,dhparam_file,protocols," .
+           "ciphers,prefer_server_ciphers,session_tickets,remote_hostname," .
+           "comment FROM tls_profiles WHERE type=1 AND ref=$serverid " .
+           "ORDER BY name",\@q);
+  error(db_errormsg()) if (db_errormsg());
+  return unless (@q > 0);
+
+  print BINDFILE "// TLS profiles (XoT, RFC 9103)\n\n";
+  for $i (0..$#q) {
+    my($name,$cert,$key,$ca,$dh,$protocols,$ciphers,$psc,$st,$rhost,$comment)
+        = @{$q[$i]};
+    unless ($name) {
+      error("Skipping TLS profile with empty name");
+      next;
+    }
+    # 'ephemeral' and 'none' are built-in BIND TLS objects, never defined
+    next if ($name eq 'ephemeral' || $name eq 'none');
+    # Defense in depth: skip the whole profile if any value would break out
+    # of the quoted "..." context (the web form already restricts these, but
+    # values may be set directly in the DB or via import). Skipping the entire
+    # profile fails safe (a referenced-but-undefined tls name is rejected by
+    # named-checkconf) instead of emitting a partial, invalid tls{} block.
+    my $unsafe=0;
+    for my $f ($cert,$key,$ca,$dh,$protocols,$ciphers,$rhost) {
+      $unsafe=1 if (defined($f) && $f =~ /["\n\r]/);
+    }
+    if ($unsafe) {
+      error("Skipping TLS profile \"$name\" with unsafe value(s)");
+      next;
+    }
+    print BINDFILE "tls \"$name\" {\n";
+    print BINDFILE "\t// $comment\n" if ($comment ne '');
+    print BINDFILE "\tcert-file \"$cert\";\n" if ($cert ne '');
+    print BINDFILE "\tkey-file \"$key\";\n" if ($key ne '');
+    print BINDFILE "\tca-file \"$ca\";\n" if ($ca ne '');
+    print BINDFILE "\tdhparam-file \"$dh\";\n" if ($dh ne '');
+    if ($protocols ne '') {
+      print BINDFILE "\tprotocols { " .
+            join(' ', map { "$_;" } split(/[\s,]+/,$protocols)) . " };\n";
+    }
+    print BINDFILE "\tciphers \"$ciphers\";\n" if ($ciphers ne '');
+    print BINDFILE "\tprefer-server-ciphers yes;\n" if ($psc eq 'Y');
+    print BINDFILE "\tprefer-server-ciphers no;\n"  if ($psc eq 'N');
+    print BINDFILE "\tsession-tickets yes;\n" if ($st eq 'Y');
+    print BINDFILE "\tsession-tickets no;\n"  if ($st eq 'N');
+    print BINDFILE "\tremote-hostname \"$rhost\";\n" if ($rhost ne '');
+    print BINDFILE "};\n\n";
+  }
+}
+
 
 sub print_keys_acls($) {
   my($serverid) = @_;

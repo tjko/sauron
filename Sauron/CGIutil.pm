@@ -269,6 +269,30 @@ sub form_check_field($$$) {
   } elsif ($type eq 'path') {
     return 'valid pathname required!'
       unless ($value =~ /^(|\S+\/)$/);
+  } elsif ($type eq 'filepath') {
+    # File path (no trailing slash required); restricted to safe characters
+    # so values cannot break out of the quoted "..." context in named.conf.
+    return 'valid file path required (allowed: letters, digits, . _ - /)!'
+      unless ($value =~ m{^[\w.\-/]*$});
+  } elsif ($type eq 'tlsref') {
+    # Reference to a TLS profile name (or built-in 'ephemeral'/'none');
+    # emitted into named.conf, so restricted like the profile name itself.
+    return 'valid TLS profile name required (or ephemeral/none)!'
+      unless ($value =~ /^[a-zA-Z0-9_\-\.]+$/);
+  } elsif ($type eq 'tlsprotocols') {
+    return 'valid TLS protocols required (TLSv1.2 and/or TLSv1.3)!'
+      unless (valid_tls_protocols($value));
+  } elsif ($type eq 'tlsciphers') {
+    return 'invalid OpenSSL cipher list (no matching TLSv1.2 cipher), ' .
+           'check with: openssl ciphers -v \'<list>\''
+      unless (valid_tls_ciphers($value));
+  } elsif ($type eq 'urlpath') {
+    return 'valid URL path required (e.g. /dns-query)!'
+      unless ($value =~ m{^/[\w./\-]*$});
+  } elsif ($type eq 'tlshostname') {
+    return 'fully qualified host name required (e.g. ns1.example.com, ' .
+           'without trailing dot)!'
+      unless (valid_tls_hostname($value));
   } elsif ($type =~ /ip[46]?/) {
     my $ipversion = ip_get_version($value);
      return 'IPv4 address required!' if $type eq 'ip4' and $ipversion == 6;
@@ -904,8 +928,8 @@ sub form_magic($$$) {
 	}
 	param($p1."_count",($#{$a} < 0 ? 0 : $#{$a}));
       }
-      elsif ($rec->{ftype} == 0 || $rec->{ftype} == 9) {
-	# do nothing...
+      elsif ($rec->{ftype} == 0 || $rec->{ftype} == 9 || $rec->{ftype} == 16) {
+	# do nothing... (ftype 16 reads its data directly when rendered)
       }
       elsif ($rec->{ftype} == 3) {
 	param($p1,$val);

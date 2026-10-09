@@ -1,5 +1,49 @@
 0.9.0 (beta)
 
+	- Add DNS over TLS support: XoT (RFC 9103), DoT and DoH (RFC 8484)
+	  [svamberg]
+	  - New TLS profiles (ACLs -> TLS Profiles) emitted as top-level
+	    tls "<name>" { ... }; statements in named.conf; Sauron stores only
+	    certificate/key file paths, not the key material
+	  - Built-in 'ephemeral' (self-signed) and 'none' TLS objects usable
+	    wherever a profile name is expected; these names are reserved
+	  - Server: TLS listener (listen-on ... tls) with port, default zone
+	    TLS profile, and DoH listener with profile, port and endpoint path
+	  - Zone: "Use TLS for zone transfers" (allow-transfer transport tls),
+	    per-zone TLS profile override; masters and also-notify rows gained
+	    Port and TLS profile columns
+	  - Hardened input handling: integer-guarded profile ids, 'filepath'
+	    validator for certificate paths, generator skips profiles with
+	    unsafe values and falls back to /dns-query for invalid endpoints
+	  - Web form validation: protocols (TLSv1.2/TLSv1.3), ciphers checked
+	    with OpenSSL like named-checkconf (optional Net::SSLeay module),
+	    remote-hostname, TLS profile references and DoH endpoint path;
+	    form hints list allowed values and how to look up cipher names
+	  - Keep the plain DNS listener (listen-on { any; }) when a TLS or DoH
+	    listener is configured and the server has no explicit listen-on;
+	    otherwise BIND would stop listening on port 53
+	  - Requires BIND 9.18.11 or later; DoQ (RFC 9250) is not supported
+	  - Updated sql/tls_profiles.sql, servers.sql, zones.sql,
+	    cidr_entries.sql and dbconvert_1.7to1.8 to create and migrate
+	    the new table and columns
+	  - Integration tests: t/16-xot-generate.t
+	  - Deleting a server also deletes its TLS profiles
+	  - Copy zone keeps the XoT settings (Use TLS, TLS profile, masters
+	    and also-notify port/TLS profile)
+	  - Documentation: docs/dns-over-tls.txt
+
+	- Fix "Copy zone" in the web UI [svamberg]
+	  - copy only real zones columns; catalog helper fields loaded by
+	    get_zone() made the insert fail
+	  - do not copy the a_entries.ipv6 column dropped in DB 1.6; the failed
+	    statement aborted the transaction, so the copy was lost even though
+	    copy_zone() reported success
+	  - remove a leftover debug print
+	  - Integration test: t/17-copy-zone.t
+
+	- Do not log "internal error (form_magic):16" when editing a zone
+	  (aggregate catalog composition field) [svamberg]
+
 	- Fix adding CNAME/AREC alias in web UI failing with "Undefined
 	  subroutine db_lasterrormsg" [svamberg]
 	  - Sauron::CGI::Utils now imports Sauron::DB, so add/edit errors
