@@ -187,9 +187,11 @@ E2E_COMPOSE = $(DOCKER_COMPOSE) -p sauron-e2e \
 	-f $(or $(srcdir),.)/docker-compose.e2e.yml
 
 test-e2e:
-	$(E2E_COMPOSE) build sauron
-	$(E2E_COMPOSE) run --rm sauron /src/docker/e2e-tests.sh; rc=$$?; \
-	$(E2E_COMPOSE) down -v --remove-orphans; exit $$rc
+	rc=0; \
+	$(E2E_COMPOSE) build sauron && \
+	$(E2E_COMPOSE) run --rm sauron /src/docker/e2e-tests.sh || rc=$$?; \
+	$(E2E_COMPOSE) down -v --remove-orphans || { drc=$$?; [ $$rc -ne 0 ] || rc=$$drc; }; \
+	exit $$rc
 
 clean:
 	rm -f *~ *.o core a.out make.log \#*\# $(OBJS) $(BINARIES)

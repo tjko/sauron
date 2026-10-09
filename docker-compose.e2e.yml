@@ -23,6 +23,7 @@ services:
     ports: !reset []
     environment:
       SAURON_ENV_NAME: E2E
+      PROVE_OPTS: ${PROVE_OPTS:-}
     volumes:
       - .:/src:ro
     restart: "no"
