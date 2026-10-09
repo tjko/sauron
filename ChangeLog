@@ -16,19 +16,9 @@
 	    validator for certificate paths, generator skips profiles with
 	    unsafe values and falls back to /dns-query for invalid endpoints
 	  - Requires BIND 9.18.11 or later; DoQ (RFC 9250) is not supported
-	  - DB schema: new table tls_profiles; new columns servers.tls_*,
-	    servers.doh_*, zones.xot_transfer, zones.tls_profile,
-	    cidr_entries.tls. Existing databases need to be upgraded manually:
-	      psql -f sql/tls_profiles.sql
-	      ALTER TABLE servers ADD COLUMN tls_default_profile TEXT,
-	        ADD COLUMN tls_listen_profile TEXT,
-	        ADD COLUMN tls_listen_port TEXT DEFAULT '853',
-	        ADD COLUMN doh_profile TEXT,
-	        ADD COLUMN doh_port TEXT DEFAULT '443',
-	        ADD COLUMN doh_endpoint TEXT DEFAULT '/dns-query';
-	      ALTER TABLE zones ADD COLUMN xot_transfer CHAR(1) DEFAULT 'D',
-	        ADD COLUMN tls_profile TEXT;
-	      ALTER TABLE cidr_entries ADD COLUMN tls TEXT;
+	  - Updated sql/tls_profiles.sql, servers.sql, zones.sql,
+	    cidr_entries.sql and dbconvert_1.7to1.8 to create and migrate
+	    the new table and columns
 	  - Integration tests: t/16-xot-generate.t
 	  - Documentation: docs/dns-over-tls.txt
 
