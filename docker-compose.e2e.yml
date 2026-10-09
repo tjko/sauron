@@ -1,0 +1,29 @@
+# Isolated stack for end-to-end tests (used by `make test-e2e`).
+#
+# Usage:
+#   docker compose -p sauron-e2e -f docker-compose.yml -f docker-compose.e2e.yml \
+#     run --rm sauron /src/docker/e2e-tests.sh
+#
+# Differences from the default stack:
+# - separate image tag, so sauron:local used by the dev stack is not replaced
+# - no published ports, can run alongside the dev stack
+# - throw-away database on tmpfs (no named volume)
+# - repository mounted read-only at /src; e2e-tests.sh copies it before use
+
+services:
+  db:
+    ports: !reset []
+    volumes: !reset []
+    tmpfs:
+      - /var/lib/postgresql/data
+    restart: "no"
+
+  sauron:
+    image: sauron:e2e
+    ports: !reset []
+    environment:
+      SAURON_ENV_NAME: E2E
+      PROVE_OPTS: ${PROVE_OPTS:-}
+    volumes:
+      - .:/src:ro
+    restart: "no"
