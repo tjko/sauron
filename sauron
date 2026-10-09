@@ -302,13 +302,26 @@ sub make_dns() {
       print_cidr_list('allow-notify',15,$tmpserverid,"\t");
       print_cidr_list('blackhole',9,$tmpserverid,"\t");
 
-      print_cidr_list("listen-on ".
+      my $listen4=print_cidr_list("listen-on ".
             ($server{listen_on_port}?"port $server{listen_on_port}":""),
             10,$serverid,"\t", 4);
 
-      print_cidr_list("listen-on-v6 ".
+      my $listen6=print_cidr_list("listen-on-v6 ".
             ($server{listen_on_port_v6}?"port $server{listen_on_port_v6}":""),
             10,$serverid,"\t", 6);
+
+      # Any listen-on statement replaces BIND's implicit plain DNS listener
+      # (port 53 on all interfaces). When only TLS/DoH listeners would be
+      # emitted, keep the plain listener explicitly so the server does not
+      # silently stop answering regular DNS queries.
+      if ($server{tls_listen_profile} ne '' || $server{doh_profile} ne '') {
+        print BINDFILE "\tlisten-on " .
+              ($server{listen_on_port} ? "port $server{listen_on_port} " : "") .
+              "{ any; };\n" unless ($listen4);
+        print BINDFILE "\tlisten-on-v6 " .
+              ($server{listen_on_port_v6} ? "port $server{listen_on_port_v6} " : "") .
+              "{ any; };\n" unless ($listen6);
+      }
 
       # TLS listener for DNS Zone Transfer over TLS (XoT, RFC 9103)
       if ($server{tls_listen_profile} ne '') {
@@ -2029,6 +2042,7 @@ sub print_cidr_list($$$$$) {
       print BINDFILE "\t};\n";
     }
 
+    return scalar(@q);
 }
 
 

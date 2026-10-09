@@ -15,6 +15,13 @@
 	  - Hardened input handling: integer-guarded profile ids, 'filepath'
 	    validator for certificate paths, generator skips profiles with
 	    unsafe values and falls back to /dns-query for invalid endpoints
+	  - Web form validation: protocols (TLSv1.2/TLSv1.3), ciphers checked
+	    with OpenSSL like named-checkconf (optional Net::SSLeay module),
+	    remote-hostname, TLS profile references and DoH endpoint path;
+	    form hints list allowed values and how to look up cipher names
+	  - Keep the plain DNS listener (listen-on { any; }) when a TLS or DoH
+	    listener is configured and the server has no explicit listen-on;
+	    otherwise BIND would stop listening on port 53
 	  - Requires BIND 9.18.11 or later; DoQ (RFC 9250) is not supported
 	  - Updated sql/tls_profiles.sql, servers.sql, zones.sql,
 	    cidr_entries.sql and dbconvert_1.7to1.8 to create and migrate

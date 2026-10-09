@@ -274,6 +274,24 @@ sub form_check_field($$$) {
     # so values cannot break out of the quoted "..." context in named.conf.
     return 'valid file path required (allowed: letters, digits, . _ - /)!'
       unless ($value =~ m{^[\w.\-/]*$});
+  } elsif ($type eq 'tlsref') {
+    # Reference to a TLS profile name (or built-in 'ephemeral'/'none');
+    # emitted into named.conf, so restricted like the profile name itself.
+    return 'valid TLS profile name required (or ephemeral/none)!'
+      unless ($value =~ /^[a-zA-Z0-9_\-\.]+$/);
+  } elsif ($type eq 'tlsprotocols') {
+    return 'valid TLS protocols required (TLSv1.2 and/or TLSv1.3)!'
+      unless (valid_tls_protocols($value));
+  } elsif ($type eq 'tlsciphers') {
+    return 'invalid OpenSSL cipher list (no matching TLSv1.2 cipher), ' .
+           'check with: openssl ciphers -v \'<list>\''
+      unless (valid_tls_ciphers($value));
+  } elsif ($type eq 'urlpath') {
+    return 'valid URL path required (e.g. /dns-query)!'
+      unless ($value =~ m{^/[\w./\-]*$});
+  } elsif ($type eq 'tlshostname') {
+    return 'valid host name required (without trailing dot)!'
+      unless ($value !~ /\.$/ && valid_domainname($value));
   } elsif ($type =~ /ip[46]?/) {
     my $ipversion = ip_get_version($value);
      return 'IPv4 address required!' if $type eq 'ip4' and $ipversion == 6;

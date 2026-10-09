@@ -155,6 +155,66 @@ subtest 'zone XoT fields + masters with port/TLS' => sub {
     is($row->[3], 'xfr', "get_zone master TLS profile");
 };
 
+# ---------------------------------------------------------------------------
+# named.conf generation (needs the installed generator, like t/11)
+my $install_dir = $ENV{SAURON_INSTALL_DIR} || '';
+SKIP: {
+    skip 'Set SAURON_INSTALL_DIR to test named.conf generation', 1
+        unless ($install_dir && -x "$install_dir/sauron");
+
+    subtest 'named.conf listeners' => sub {
+        require File::Temp;
+        my %p = (ref=>$srvid, type=>1, name=>'xfr',
+                 cert_file=>'/etc/bind/tls/xfr.pem',
+                 key_file=>'/etc/bind/tls/xfr.key');
+        my $pid = add_tls_profile(\%p);
+        ok($pid > 0, "profile for generation added");
+
+        my $generate = sub {
+            my $dir = File::Temp::tempdir(CLEANUP => 1);
+            my $out = `$install_dir/sauron --bind xot-test-srv $dir 2>&1`;
+            is($? >> 8, 0, "sauron --bind exits 0") or diag($out);
+            open(my $fh, '<', "$dir/named.conf") or return ('', $dir);
+            local $/; my $conf = <$fh>; close($fh);
+            return ($conf, $dir);
+        };
+
+        # no explicit listen-on: the plain DNS listener must be kept,
+        # otherwise the TLS/DoH listen-on would replace BIND's default one
+        my ($conf, $dir) = $generate->();
+        like($conf, qr/listen-on port 853 tls "xfr" \{ any; \};/,
+             "TLS listener emitted");
+        like($conf, qr/listen-on port 443 tls ephemeral http default \{ any; \};/,
+             "DoH listener emitted");
+        like($conf, qr/^\s*listen-on \{ any; \};/m,
+             "plain IPv4 listener kept");
+        like($conf, qr/^\s*listen-on-v6 \{ any; \};/m,
+             "plain IPv6 listener kept");
+        like($conf, qr/tls "xfr" \{/, "tls profile block emitted");
+        like($conf, qr/192\.0\.2\.53 port 853 tls "xfr";/,
+             "master over TLS emitted");
+
+        if (system('named-checkconf -v >/dev/null 2>&1') == 0) {
+            my $chk = `named-checkconf $dir/named.conf 2>&1`;
+            is($? >> 8, 0, "named-checkconf accepts named.conf") or diag($chk);
+        }
+
+        # explicit listen-on: no extra 'any' listener for that family
+        db_exec("INSERT INTO cidr_entries (type,ref,mode,ip) VALUES " .
+                "(10,$srvid,0,'192.0.2.1')");
+        ($conf) = $generate->();
+        like($conf, qr/^\s*listen-on\s+\{\s*!?\s*192\.0\.2\.1;/m,
+             "explicit IPv4 listen-on kept");
+        unlike($conf, qr/^\s*listen-on \{ any; \};/m,
+               "no implicit IPv4 listener added");
+        like($conf, qr/^\s*listen-on-v6 \{ any; \};/m,
+             "plain IPv6 listener still kept");
+
+        db_exec("DELETE FROM cidr_entries WHERE type=10 AND ref=$srvid");
+        delete_tls_profile($pid);
+    };
+}
+
 # cleanup
 db_exec("DELETE FROM cidr_entries WHERE ref IN ($srvid,$zoneid)");
 db_exec("DELETE FROM zones WHERE id=$zoneid");
