@@ -75,7 +75,9 @@ TLS profiles      : ACLs -> TLS Profiles -> Add TLS Profile
                                         cipher (e.g. "crc8") or contains only
                                         TLSv1.3 suites is rejected; TLSv1.3
                                         suites are not configurable in BIND.
-                      remote-hostname - host name without trailing dot
+                      remote-hostname - fully qualified host name (at least
+                                        two labels, e.g. ns1.example.com)
+                                        without trailing dot
                       file paths      - letters, digits, . _ - / only
 
                     Choosing ciphers: list the names supported by OpenSSL on

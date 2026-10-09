@@ -41,6 +41,7 @@ $VERSION = '$Id:$ ';
 	     valid_tsig_keyname
 	     valid_tls_protocols
 	     valid_tls_ciphers
+	     valid_tls_hostname
              cidrok
              cidr4ok
              cidr6ok
@@ -256,6 +257,17 @@ sub valid_tls_protocols($) {
     return 0 if ($seen{$p}++);
   }
   return 1;
+}
+
+# Validate a TLS remote-hostname (name expected in the peer certificate):
+# a fully qualified host name with at least two labels, written without
+# the trailing dot (certificate names do not carry it).
+sub valid_tls_hostname($) {
+  my($str) = @_;
+
+  return 0 unless (defined $str && $str =~ /^[A-Za-z0-9\-]+(\.[A-Za-z0-9\-]+)+$/);
+  return 0 if ($str =~ /(^|\.)-|-(\.|$)/);
+  return (valid_domainname($str) ? 1 : 0);
 }
 
 # Validate an OpenSSL cipher list (BIND tls{} `ciphers`, TLSv1.2 and older).

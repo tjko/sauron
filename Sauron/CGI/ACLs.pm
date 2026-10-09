@@ -79,8 +79,8 @@ my %tls_form=(
    type=>'enum', conv=>'U', enum=>\%tls_yn_enum},
   {ftype=>1, tag=>'remote_hostname', name=>'remote-hostname (outgoing auth)',
    type=>'tlshostname', len=>40, empty=>1, whitesp=>'P',
-   extrainfo=>'Expected host name in the peer certificate (strict XoT, ' .
-              'use together with ca-file)'},
+   extrainfo=>'Fully qualified host name expected in the peer certificate, ' .
+              'e.g. ns1.example.com (strict XoT, use together with ca-file)'},
   {ftype=>1, tag=>'comment', name=>'Comment', type=>'text', len=>60,
    empty=>1, whitesp=>'P'},
   {ftype=>0, name=>'Record info', no_edit=>1},
