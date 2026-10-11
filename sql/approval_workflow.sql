@@ -141,11 +141,3 @@ CREATE TABLE dns_change_audit_log (
 
 CREATE INDEX dns_change_audit_log_request_index ON dns_change_audit_log(request_id);
 CREATE INDEX dns_change_audit_log_event_index ON dns_change_audit_log(event);
-
-ALTER TABLE approval_policies OWNER TO sauron;
-ALTER TABLE approval_rules OWNER TO sauron;
-ALTER TABLE approval_levels OWNER TO sauron;
-ALTER TABLE approval_level_approvers OWNER TO sauron;
-ALTER TABLE dns_change_requests OWNER TO sauron;
-ALTER TABLE dns_change_approvals OWNER TO sauron;
-ALTER TABLE dns_change_audit_log OWNER TO sauron;

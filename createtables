@@ -43,6 +43,7 @@ load_config();
 		sql/naptr_entries.sql
 		sql/zone_catalog_groups.sql sql/catalog_group_defs.sql
 		sql/catalog_compositions.sql
+		sql/approval_workflow.sql
 		@;
 
 

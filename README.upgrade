@@ -145,6 +145,87 @@ Always backup your database before making changes to TSIG key names:
 
 
 
+DATABASE FORMAT 1.7 -> 1.8 (0.9.0)
+
+The conversion script sql/dbconvert_1.7to1.8 creates new tables (SSHFP,
+TLSA, DS, NAPTR, CAA, catalog zones, approval workflow). PostgreSQL makes
+the role that creates a table its owner, and the script intentionally does
+not change table ownership (no ALTER TABLE ... OWNER TO). The script MUST
+therefore be run as the database user Sauron connects as (DB_USER in the
+config file, usually 'sauron'), which is also the owner of the existing
+tables. Do NOT run it as the postgres superuser: the new tables would be
+owned by postgres and Sauron would fail with "permission denied".
+
+The script checks this at the start and aborts with an error such as
+
+  invalid input syntax for type integer: "dbconvert_1.7to1.8 must be run
+  as the owner of all tables, not as postgres (table owners: sauron)"
+
+if the current user does not own all existing tables (or if public.zones
+does not exist, i.e. the wrong database was selected). Run the script as a
+single transaction that stops at the first error, so that a failed check
+or statement leaves the database unchanged.
+
+The DB_USER needs the CREATE privilege on schema public (granted when it
+owns the database, see 'ALTER DATABASE sauron OWNER TO sauron' in README).
+
+If your installation differs and the tables are owned by another role while
+Sauron connects as DB_USER through GRANTs (e.g. init/full-privileges.sql),
+run the script as the table owner (the check requires one owner of all
+tables) and afterwards grant DB_USER access to the new tables and their
+sequences, for example:
+
+	GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public
+	      TO sauron;
+	GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public
+	      TO sauron;
+
+ 1) Make backup of your database:
+
+	pg_dump sauron > sauron-backup-$(date +%Y%m%d).sql
+
+ 2) Check the owner of the existing tables (expected: one row, DB_USER):
+
+	psql sauron -c "SELECT tableowner, count(*) FROM pg_tables
+	                WHERE schemaname='public' GROUP BY 1;"
+
+ 3) Apply the script as DB_USER, using one of:
+
+    a) runsql (recommended; uses the DB_DSN/DB_USER/DB_PASSWORD from the
+       Sauron config file, runs in one transaction, stops on error):
+
+	cd /usr/local/sauron
+	./runsql sql/dbconvert_1.7to1.8
+
+    b) psql connecting as DB_USER:
+
+	psql -h localhost -U sauron -d sauron \
+	     -v ON_ERROR_STOP=1 --single-transaction \
+	     -f sql/dbconvert_1.7to1.8
+
+    c) psql as the postgres superuser, switching to DB_USER first:
+
+	sudo -u postgres psql -d sauron \
+	     -v ON_ERROR_STOP=1 --single-transaction \
+	     -c 'SET ROLE sauron' -f sql/dbconvert_1.7to1.8
+
+ 4) Verify that no table is owned by another user (expected: no rows):
+
+	psql sauron -c "SELECT tablename, tableowner FROM pg_tables
+	                WHERE schemaname='public' AND tableowner <> 'sauron';"
+
+    If some tables were created by a wrong user (e.g. by an earlier run
+    as postgres), fix them as the postgres superuser; sequences of SERIAL
+    columns follow their table:
+
+	ALTER TABLE <tablename> OWNER TO sauron;
+
+ 5) Check the database version (expected: 1.8):
+
+	psql sauron -c "SELECT value FROM settings WHERE setting='dbversion';"
+
+
+
 GENERAL UPGRADE PROCEDURE
 
  1) Make backup of your database!
@@ -155,8 +236,15 @@ GENERAL UPGRADE PROCEDURE
     For example script for converting from 1.0 to 1.1
     would be named as: dbconvert_1.0to1.1.sql
 
- 3) run upgrade scripts: psql sauron -f <filename>
-   
+ 3) run upgrade scripts as the database user Sauron connects as
+    (DB_USER, the owner of the existing tables), not as the postgres
+    superuser, for example:
+
+	cd /usr/local/sauron && ./runsql sql/<filename>
+
+    or: psql -U <DB_USER> -v ON_ERROR_STOP=1 -1 -f <filename> sauron
+    (see also DATABASE FORMAT 1.7 -> 1.8 above)
+
  4) vacuum database: psql sauron -c 'VACUUM ANALYZE;'
     (running 'VACUUM FULL' might be good idea, too)
 

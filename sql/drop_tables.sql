@@ -3,12 +3,25 @@
  * $Id:$
  */
 
+/* tables referencing other tables first, inheritance parents last;
+   SERIAL sequences are dropped together with their tables */
+DROP TABLE dns_change_audit_log;
+DROP TABLE dns_change_approvals;
+DROP TABLE dns_change_requests;
+DROP TABLE approval_level_approvers;
+DROP TABLE approval_levels;
+DROP TABLE approval_rules;
+DROP TABLE approval_policies;
+DROP TABLE catalog_compositions;
+DROP TABLE catalog_group_defs;
+DROP TABLE zone_catalog_groups;
+DROP TABLE zone_catalogs;
+
 DROP TABLE a_entries;
 DROP TABLE acls;
 DROP TABLE arec_entries;
 DROP TABLE caa_entries;
 DROP TABLE cidr_entries;
-DROP TABLE common_fields;
 DROP TABLE deleted_hosts;
 DROP TABLE dhcp_entries;
 DROP TABLE ds_entries;
@@ -46,42 +59,9 @@ DROP TABLE wks_entries;
 DROP TABLE wks_templates;
 DROP TABLE zones;
 
-DROP SEQUENCE a_entries_id_seq;
-DROP SEQUENCE acls_id_seq;
-DROP SEQUENCE arec_entries_id_seq;
-DROP SEQUENCE caa_entries_id_seq;
-DROP SEQUENCE cidr_entries_id_seq;
-DROP SEQUENCE dhcp_entries_id_seq;
-DROP SEQUENCE ds_entries_id_seq;
-DROP SEQUENCE group_entries_id_seq;
-DROP SEQUENCE groups_id_seq;
-DROP SEQUENCE hinfo_templates_id_seq;
-DROP SEQUENCE history_id_seq;
-DROP SEQUENCE hosts_id_seq;
-DROP SEQUENCE keys_id_seq;
-DROP SEQUENCE lastlog_id_seq;
-DROP SEQUENCE leases_id_seq;
-DROP SEQUENCE mx_entries_id_seq;
-DROP SEQUENCE mx_templates_id_seq;
-DROP SEQUENCE nets_id_seq;
-DROP SEQUENCE news_id_seq;
-DROP SEQUENCE ns_entries_id_seq;
-DROP SEQUENCE printer_classes_id_seq;
-DROP SEQUENCE printer_entries_id_seq;
-DROP SEQUENCE root_servers_id_seq;
-DROP SEQUENCE servers_id_seq;
+DROP TABLE common_fields;
+DROP TABLE pokemon;
+
 DROP SEQUENCE sid_seq;
-DROP SEQUENCE srv_entries_id_seq;
-DROP SEQUENCE sshfp_entries_id_seq;
-DROP SEQUENCE tlsa_entries_id_seq;
-DROP SEQUENCE txt_entries_id_seq;
-DROP SEQUENCE user_groups_id_seq;
-DROP SEQUENCE user_rights_id_seq;
-DROP SEQUENCE users_id_seq;
-DROP SEQUENCE vlans_id_seq;
-DROP SEQUENCE vmps_id_seq;
-DROP SEQUENCE wks_entries_id_seq;
-DROP SEQUENCE wks_templates_id_seq;
-DROP SEQUENCE zones_id_seq;
 
 /* eof */
