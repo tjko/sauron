@@ -211,10 +211,10 @@ sub make_dns() {
     unless ($zones_only) {
       my $doh_http_ref='';
 
-      # TLS profiles for DNS Zone Transfer over TLS (XoT, RFC 9103)
-      print_tls_profiles($server{named_flags_ac} ?
-                         $server{masterserver} :
-                         $serverid);
+      # TLS profiles for DNS Zone Transfer over TLS (XoT, RFC 9103). Unlike
+      # ACLs/keys they never follow named_flags_ac: they hold host-local
+      # certificate paths and are referenced by this server's settings.
+      print_tls_profiles($serverid);
 
       # DoH (DNS over HTTPS, RFC 8484) endpoint, BIND 9.18+. Reuses the same
       # TLS profiles. '/dns-query' maps to BIND's built-in `http default`.
@@ -3499,12 +3499,22 @@ sub print_subnets6() {
   }
 }
 
+sub valid_tls_name($) {
+  # Same character set as the web form ('tlsref'); values stored directly in
+  # the DB must not break out of the quoted "..." context in named.conf.
+  my($name) = @_;
+  return (defined($name) && $name =~ /^[a-zA-Z0-9_\-\.]+$/);
+}
+
 sub tls_name_ref($) {
   # Reference for a TLS object after the `tls` keyword. BIND's built-in
   # objects (ephemeral = self-signed in-memory cert, none = no TLS) must be
   # referenced WITHOUT quotes; user-defined profile names are quoted.
   my($name) = @_;
   return $name if ($name eq 'ephemeral' || $name eq 'none');
+  # an unsafe reference cannot be dropped silently (a master would fall back
+  # to plain-text transfers), so stop the generation
+  fatal("invalid TLS profile reference '$name'") unless (valid_tls_name($name));
   return "\"$name\"";
 }
 
@@ -3535,8 +3545,8 @@ sub print_tls_profiles($) {
   for $i (0..$#q) {
     my($name,$cert,$key,$ca,$dh,$protocols,$ciphers,$psc,$st,$rhost,$comment)
         = @{$q[$i]};
-    unless ($name) {
-      error("Skipping TLS profile with empty name");
+    unless (valid_tls_name($name)) {
+      error("Skipping TLS profile with invalid name '$name'");
       next;
     }
     # 'ephemeral' and 'none' are built-in BIND TLS objects, never defined
@@ -3554,6 +3564,7 @@ sub print_tls_profiles($) {
       error("Skipping TLS profile \"$name\" with unsafe value(s)");
       next;
     }
+    $comment =~ s/[\r\n]+/ /g if (defined($comment));
     print BINDFILE "tls \"$name\" {\n";
     print BINDFILE "\t// $comment\n" if ($comment ne '');
     print BINDFILE "\tcert-file \"$cert\";\n" if ($cert ne '');

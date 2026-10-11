@@ -53,7 +53,7 @@ db_exec("INSERT INTO zones (id,server,type,name,xot_transfer,tls_profile) ".
 # ---------------------------------------------------------------------------
 subtest 'tls_profiles CRUD' => sub {
     my %p = (
-      ref=>$srvid, type=>1, name=>'xfr',
+      ref=>$srvid, type=>1, name=>'crud',
       cert_file=>'/etc/bind/tls/xfr.pem', key_file=>'/etc/bind/tls/xfr.key',
       ca_file=>'/etc/bind/tls/ca.pem', protocols=>'TLSv1.2 TLSv1.3',
       ciphers=>'HIGH:!aNULL', prefer_server_ciphers=>'Y',
@@ -65,7 +65,7 @@ subtest 'tls_profiles CRUD' => sub {
 
     my %g;
     is(get_tls_profile($id,\%g), 0, "get_tls_profile ok");
-    is($g{name}, 'xfr', "name round-trips");
+    is($g{name}, 'crud', "name round-trips");
     is($g{cert_file}, '/etc/bind/tls/xfr.pem', "cert_file round-trips");
     is($g{protocols}, 'TLSv1.2 TLSv1.3', "protocols round-trips");
     is($g{prefer_server_ciphers}, 'Y', "prefer_server_ciphers round-trips");
@@ -76,7 +76,7 @@ subtest 'tls_profiles CRUD' => sub {
     is($g2{ciphers}, 'HIGH:!aNULL:!MD5', "updated ciphers persisted");
 
     my (@lst,%lh); get_tls_profile_list($srvid,\%lh,\@lst);
-    ok((grep { $_ eq 'xfr' } @lst) > 0, "get_tls_profile_list contains profile");
+    ok((grep { $_ eq 'crud' } @lst) > 0, "get_tls_profile_list contains profile");
 
     ok(delete_tls_profile($id) >= 0, "delete_tls_profile ok");
     my %gone;
@@ -156,6 +156,47 @@ subtest 'zone XoT fields + masters with port/TLS' => sub {
 };
 
 # ---------------------------------------------------------------------------
+subtest 'TLS profile references (rename / delete)' => sub {
+    my %p = (ref=>$srvid, type=>1, name=>'xfr');
+    my $pid = add_tls_profile(\%p);
+    ok($pid > 0, "referenced profile added");
+
+    my @refs = get_tls_profile_refs($srvid, 'xfr');
+    is(scalar(@refs), 4, "listener, default, zone and masters references")
+        or diag(explain \@refs);
+    is(delete_tls_profile($pid), -20, "delete of referenced profile refused");
+    my %g;
+    is(get_tls_profile($pid,\%g), 0, "profile still exists");
+
+    $g{name} = 'xfr2';
+    ok(update_tls_profile(\%g) >= 0, "rename ok");
+    my @s;
+    db_query("SELECT tls_listen_profile,tls_default_profile,doh_profile " .
+             "FROM servers WHERE id=$srvid",\@s);
+    is_deeply($s[0], ['xfr2','xfr2','ephemeral'], "server references renamed");
+    my @z;
+    db_query("SELECT tls_profile FROM zones WHERE id=$zoneid",\@z);
+    is($z[0][0], 'xfr2', "zone reference renamed");
+    my @c;
+    db_query("SELECT tls FROM cidr_entries WHERE type=3 AND ref=$zoneid",\@c);
+    is($c[0][0], 'xfr2', "masters reference renamed");
+    is(scalar(get_tls_profile_refs($srvid, 'xfr')), 0, "no references to old name");
+
+    my %g2; get_tls_profile($pid,\%g2);
+    $g2{name} = 'xfr';
+    ok(update_tls_profile(\%g2) >= 0, "rename back ok");
+    is(scalar(get_tls_profile_refs($srvid, 'xfr')), 4, "references restored");
+
+    my %u = (ref=>$srvid, type=>1, name=>'unused');
+    my $uid = add_tls_profile(\%u);
+    cmp_ok(delete_tls_profile($uid), ">=", 0, "unreferenced profile deleted");
+    my %gone; isnt(get_tls_profile($uid,\%gone), 0, "unreferenced profile gone");
+
+    # later subtests add 'xfr' themselves
+    db_exec("DELETE FROM tls_profiles WHERE id=$pid");
+};
+
+# ---------------------------------------------------------------------------
 subtest 'copy_zone keeps XoT settings' => sub {
     my $newid = copy_zone($zoneid, $srvid, 'xot-copy.example.', 0);
     ok($newid > 0, "copy_zone ok") or return;
@@ -181,9 +222,13 @@ SKIP: {
         require File::Temp;
         my %p = (ref=>$srvid, type=>1, name=>'xfr',
                  cert_file=>'/etc/bind/tls/xfr.pem',
-                 key_file=>'/etc/bind/tls/xfr.key');
+                 key_file=>'/etc/bind/tls/xfr.key',
+                 comment=>"line1\nzone \"injected.\" {");
         my $pid = add_tls_profile(\%p);
         ok($pid > 0, "profile for generation added");
+        # set directly in the DB, bypassing the web form validation
+        db_exec("INSERT INTO tls_profiles (type,ref,name) VALUES " .
+                "(1,$srvid,'bad\"name')");
 
         my $generate = sub {
             my $dir = File::Temp::tempdir(CLEANUP => 1);
@@ -206,6 +251,10 @@ SKIP: {
         like($conf, qr/^\s*listen-on-v6 \{ any; \};/m,
              "plain IPv6 listener kept");
         like($conf, qr/tls "xfr" \{/, "tls profile block emitted");
+        unlike($conf, qr/bad/, "profile with unsafe name skipped");
+        like($conf, qr{^\s*// line1 zone "injected\." \{$}m,
+             "comment kept on one line");
+        unlike($conf, qr/^zone "injected/m, "no directive injected via comment");
         like($conf, qr/192\.0\.2\.53 port 853 tls "xfr";/,
              "master over TLS emitted");
 
@@ -232,8 +281,17 @@ SKIP: {
         like($conf, qr/^\s*listen-on-v6 \{ any; \};/m,
              "plain IPv6 listener still kept");
 
+        # an unsafe reference stops the generation instead of being dropped
+        db_exec("UPDATE servers SET tls_listen_profile='x\"y' WHERE id=$srvid");
+        my $bdir = File::Temp::tempdir(CLEANUP => 1);
+        my $out = `$install_dir/sauron --bind xot-test-srv $bdir 2>&1`;
+        isnt($? >> 8, 0, "unsafe TLS reference stops generation");
+        like($out, qr/invalid TLS profile reference/, "error reported");
+        db_exec("UPDATE servers SET tls_listen_profile='xfr' WHERE id=$srvid");
+
         db_exec("DELETE FROM cidr_entries WHERE type=10 AND ref=$srvid");
-        delete_tls_profile($pid);
+        db_exec("DELETE FROM tls_profiles WHERE ref=$srvid AND name<>'xfr'");
+        # 'xfr' is still referenced; removed by delete_server below
     };
 }
 

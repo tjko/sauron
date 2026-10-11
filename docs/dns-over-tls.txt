@@ -29,6 +29,15 @@ TLS profile
   as a top-level `tls "<name>" { ... };` statement. Profiles are scoped to a
   server and managed under the web UI menu: ACLs -> TLS Profiles.
 
+  Each server always emits its own profiles: unlike ACLs and keys they do
+  not follow "Use access control from master", because they contain paths
+  on the host running named.
+
+  Servers, zones and masters/also-notify rows refer to a profile by name.
+  Renaming a profile updates these references of the same server; a profile
+  that is still referenced cannot be deleted (the web UI lists the
+  references to clear first).
+
   IMPORTANT: Sauron stores only the *references* (file paths + parameters),
   not the certificate or key material. The cert-file/key-file/ca-file PEM
   files live on the host that runs named and must be provisioned out of band

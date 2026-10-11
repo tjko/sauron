@@ -156,6 +156,7 @@ $VERSION = '$Id:$ ';
 	     add_tls_profile
 	     delete_tls_profile
 	     get_tls_profile_list
+	     get_tls_profile_refs
 
 	     add_news
 	     get_news_list
@@ -4716,17 +4717,65 @@ sub get_tls_profile($$) {
   return 0;
 }
 
+# Profiles are referenced by name from servers, zones and masters/also-notify
+# rows of the same server. Returns a list of descriptions of those references.
+sub get_tls_profile_refs($$) {
+  my($serverid,$name) = @_;
+  my(@q,@refs,$i);
+
+  return () unless ($serverid =~ /^\d+$/ && $serverid > 0 && $name ne '');
+  my $n=db_encode_str($name);
+
+  db_query("SELECT name,tls_listen_profile,tls_default_profile,doh_profile " .
+	   "FROM servers WHERE id=$serverid",\@q);
+  for $i (0..$#q) {
+    push @refs, "server $q[$i][0]: TLS listener" if ($q[$i][1] eq $name);
+    push @refs, "server $q[$i][0]: default TLS profile" if ($q[$i][2] eq $name);
+    push @refs, "server $q[$i][0]: DoH listener" if ($q[$i][3] eq $name);
+  }
+  undef @q;
+  db_query("SELECT name FROM zones WHERE server=$serverid AND tls_profile=$n " .
+	   "ORDER BY name",\@q);
+  push @refs, map { "zone $_->[0]: TLS profile" } @q;
+  undef @q;
+  db_query("SELECT DISTINCT z.name,c.type FROM cidr_entries c, zones z " .
+	   "WHERE c.ref=z.id AND z.server=$serverid AND c.type IN (3,6) " .
+	   "AND c.tls=$n ORDER BY z.name,c.type",\@q);
+  push @refs, map { "zone $_->[0]: " .
+		    ($_->[1] == 3 ? 'masters' : 'also-notify') } @q;
+  return @refs;
+}
+
 sub update_tls_profile($) {
   my($rec) = @_;
-  my($r);
+  my($r,%old);
 
   return -1 unless ($rec->{id} =~ /^\d+$/ && $rec->{id} > 0);
   return -3 if (tls_profile_reserved_name($rec->{name}));
+  return -2 if (get_tls_profile($rec->{id},\%old) < 0);
   del_std_fields($rec);
 
   db_begin();
   $r=update_record('tls_profiles',$rec);
   if ($r < 0) { db_rollback(); return $r; }
+
+  # renamed: update the name-based references of the same server
+  if (defined($rec->{name}) && $rec->{name} ne $old{name}) {
+    my $sid=$old{ref};
+    my $on=db_encode_str($old{name});
+    my $nn=db_encode_str($rec->{name});
+    for my $f (qw(tls_listen_profile tls_default_profile doh_profile)) {
+      $r=db_exec("UPDATE servers SET $f=$nn WHERE id=$sid AND $f=$on");
+      if ($r < 0) { db_rollback(); return -4; }
+    }
+    $r=db_exec("UPDATE zones SET tls_profile=$nn " .
+	       "WHERE server=$sid AND tls_profile=$on");
+    if ($r < 0) { db_rollback(); return -5; }
+    $r=db_exec("UPDATE cidr_entries SET tls=$nn WHERE tls=$on AND " .
+	       "type IN (3,6) AND ref IN (SELECT id FROM zones " .
+	       "WHERE server=$sid)");
+    if ($r < 0) { db_rollback(); return -6; }
+  }
 
   return db_commit();
 }
@@ -4754,6 +4803,11 @@ sub delete_tls_profile($) {
   my($res);
 
   return -100 unless ($id =~ /^\d+$/ && $id > 0);
+
+  # still referenced: deleting it would leave dangling tls "<name>" references
+  my %p;
+  return -2 if (get_tls_profile($id,\%p) < 0);
+  return -20 if (get_tls_profile_refs($p{ref},$p{name}) > 0);
 
   db_begin();
   $res=db_exec("DELETE FROM tls_profiles WHERE id=$id");

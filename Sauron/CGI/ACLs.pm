@@ -7,6 +7,7 @@
 package Sauron::CGI::ACLs;
 require Exporter;
 use CGI qw/:standard *table/;
+use HTML::Entities;
 use Sauron::DB;
 use Sauron::CGIutil;
 use Sauron::BackEnd;
@@ -255,7 +256,14 @@ sub menu_handler {
 	  show_tls_record($tls_id,$selfurl);
 	  return;
       }
-      elsif (param('tls_confirm')) {
+      my @refs=get_tls_profile_refs($tls{ref},$tls{name});
+      if (@refs > 0) {
+	  alert1("TLS profile \"$tls{name}\" is in use and cannot be removed:");
+	  print ul(li([map { encode_entities($_) } @refs]));
+	  show_tls_record($tls_id,$selfurl);
+	  return;
+      }
+      if (param('tls_confirm')) {
 	  if (delete_tls_profile($tls_id) < 0) {
 	      alert1("TLS profile delete failed!");
 	      return;

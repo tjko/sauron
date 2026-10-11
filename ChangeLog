@@ -28,6 +28,11 @@
 	    the new table and columns
 	  - Integration tests: t/16-xot-generate.t
 	  - Deleting a server also deletes its TLS profiles
+	  - Renaming a TLS profile updates its references; a referenced profile
+	    cannot be deleted; profiles are always emitted from the generated
+	    server (they do not follow "Use access control from master")
+	  - Generator skips profiles with unsafe names, keeps comments on one
+	    line and stops on an unsafe TLS profile reference
 	  - Copy zone keeps the XoT settings (Use TLS, TLS profile, masters
 	    and also-notify port/TLS profile)
 	  - Documentation: docs/dns-over-tls.txt
