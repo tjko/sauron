@@ -1,5 +1,14 @@
 0.9.0 (beta)
 
+	- Add 'make test-e2e' to run integration and E2E tests locally [svamberg]
+	  - Builds the Docker image from the working tree, seeds test servers
+	    and runs t/1*.t plus BIND/DHCP config generation, mirroring the
+	    integration-tests CI job
+	  - Uses an isolated compose project (sauron-e2e, docker-compose.e2e.yml)
+	    with no published ports and a tmpfs database, so it can run next to
+	    the dev stack and leaves nothing behind
+	  - Test runner: docker/e2e-tests.sh (PROVE_OPTS overrides prove flags)
+
 	- Fix adding CNAME/AREC alias in web UI failing with "Undefined
 	  subroutine db_lasterrormsg" [svamberg]
 	  - Sauron::CGI::Utils now imports Sauron::DB, so add/edit errors

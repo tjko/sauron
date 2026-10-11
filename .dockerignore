@@ -19,6 +19,7 @@ solaris/
 # Compose files (bind-mounted at runtime, not baked into image)
 docker-compose.yml
 docker-compose.dev.yml
+docker-compose.e2e.yml
 
 # Build artifacts from in-tree ./configure runs on the host —
 # must not leak into the container build (configure regenerates them)
