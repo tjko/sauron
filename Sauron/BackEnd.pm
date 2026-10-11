@@ -788,7 +788,7 @@ sub copy_records($$$$$$$) {
 
   $tmp="SELECT $reffield,$fields FROM $stable WHERE $key IN ($selectsql)";
   #print "$tmp\n";
-  db_query($tmp,\@data);
+  return -2 if (db_query($tmp,\@data) < 0);
   #print "<br>$stable records to copy: " . @data . "\n";
   return 0 if (@data < 1);
 

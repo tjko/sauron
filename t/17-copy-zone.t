@@ -82,5 +82,13 @@ subtest 'copy_zone stores the copy' => sub {
     is(scalar(@t), 1, "allow-transfer entry copied");
 };
 
+subtest 'copy_records reports query failure' => sub {
+    my @hids = ([$hostid, $hostid]);
+    my $res = copy_records('a_entries', 'a_entries', 'id', 'host', \@hids,
+        'ip,no_such_column',
+        "SELECT a.id FROM a_entries a WHERE a.host=$hostid");
+    ok($res < 0, "copy_records fails on SELECT error") or diag("res=$res");
+};
+
 cleanup();
 done_testing();
