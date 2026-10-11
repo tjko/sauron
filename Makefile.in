@@ -188,6 +188,15 @@ E2E_COMPOSE = $(DOCKER_COMPOSE) -p sauron-e2e \
 
 test-e2e:
 	rc=0; \
+	on_signal() { \
+		trap '' INT TERM HUP; \
+		$(E2E_COMPOSE) down -v --remove-orphans; \
+		exit $$1; \
+	}; \
+	trap 'on_signal 129' HUP; \
+	trap 'on_signal 130' INT; \
+	trap 'on_signal 143' TERM; \
+	$(E2E_COMPOSE) down -v --remove-orphans >/dev/null 2>&1 || true; \
 	$(E2E_COMPOSE) build sauron && \
 	$(E2E_COMPOSE) run --rm sauron /src/docker/e2e-tests.sh || rc=$$?; \
 	$(E2E_COMPOSE) down -v --remove-orphans || { drc=$$?; [ $$rc -ne 0 ] || rc=$$drc; }; \
