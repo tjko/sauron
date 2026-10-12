@@ -359,8 +359,10 @@ sub menu_handler {
     return if (check_perms('superuser',''));
 
     if (param('srvdel_submit') ne '') {
-      if (delete_server($serverid) < 0) {
-	alert1("Cannot delete server.");
+      if (($res=delete_server($serverid)) < 0) {
+	alert1($res == -101 ?
+	       "Cannot delete server: delete its slave servers first." :
+	       "Cannot delete server.");
       } else {
 	success1('Server deleted successfully.');
 	$state->{'zone'}=''; $state->{'zoneid'}=-1;

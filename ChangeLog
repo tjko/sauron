@@ -1,5 +1,14 @@
 0.9.0 (beta)
 
+	- Deleting a server also deletes its ACLs (with their entries) and
+	  TSIG keys; previously they were left in the database orphaned
+	  [svamberg]
+	  - Server allow-query-cache, allow-notify and listen-on-v6 entries
+	    are deleted too (they were left behind as well)
+	  - A server that still has slave servers cannot be deleted (slaves
+	    use its zones, ACLs and keys); delete the slave servers first
+	  - Integration test: t/18-delete-server.t
+
 	- Fix "Copy zone" in the web UI [svamberg]
 	  - copy only real zones columns; catalog helper fields loaded by
 	    get_zone() made the insert fail

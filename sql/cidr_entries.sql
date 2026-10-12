@@ -25,6 +25,7 @@ CREATE TABLE cidr_entries (
 				      13=server (bind-globals),   
 				      14=server (allow_query_cache), x
 				      15=server (allow_notify),      x
+				      16=server (listen-on-v6),   (cidronly)
 				      */
         ref	    INT4 NOT NULL, /* ptr to table speciefied by type field
 					-->acls.id

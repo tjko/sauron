@@ -1267,8 +1267,7 @@ sub _delete_server_parts($) {
 
   # cidr_entries
   $res=db_exec("DELETE FROM cidr_entries " .
-               "WHERE (type=1 OR type=7 OR type=8 OR type=9 OR type=10 " .
-               " OR type=11) AND ref=$id;");
+               "WHERE type IN (1,7,8,9,10,11,14,15,16) AND ref=$id;");
   if ($res < 0) { db_rollback(); return -1; }
 
   $res=db_exec("DELETE FROM cidr_entries WHERE id IN ( " .
@@ -1401,6 +1400,17 @@ sub _delete_server_parts($) {
   $res=db_exec("DELETE FROM nets WHERE server=$id;");
   if ($res < 0) { db_rollback(); return -28; }
 
+  # ACLs (with their entries) and TSIG keys of the server
+  $res=db_exec("DELETE FROM cidr_entries WHERE type=0 AND ref IN ( " .
+               "SELECT id FROM acls WHERE server=$id);");
+  if ($res < 0) { db_rollback(); return -32; }
+
+  $res=db_exec("DELETE FROM acls WHERE server=$id;");
+  if ($res < 0) { db_rollback(); return -33; }
+
+  $res=db_exec("DELETE FROM keys WHERE type=1 AND ref=$id;");
+  if ($res < 0) { db_rollback(); return -34; }
+
   # vlans
   # Poznámka: VLAN nejsou smazány, pouze zóny a jejich obsah
   # To odpovídá původní logice
@@ -1427,10 +1437,30 @@ sub delete_server($) {
   write2log("SERVER_DELETE_START: Deleting server ID=$id");
   db_begin();
 
+  # slave servers use the master's zones, ACLs and keys; delete them first.
+  # Lock servers so no slave can be assigned to this server by a concurrent
+  # add_server()/update_server() between this check and the deletion.
+  my @slaves;
+  if (db_exec("LOCK TABLE servers IN SHARE ROW EXCLUSIVE MODE") < 0 ||
+      db_query("SELECT id FROM servers WHERE masterserver=$id", \@slaves) < 0) {
+    db_rollback();
+    write2log("SERVER_DELETE_FAILED: Server ID=$id was NOT deleted - slave server check failed");
+    return -102;
+  }
+  if (@slaves > 0) {
+    db_rollback();
+    write2log("SERVER_DELETE_FAILED: Server ID=$id was NOT deleted - it has slave servers");
+    return -101;
+  }
+
   # get all zones of server
   my @zone_ids;
   my @q;
-  db_query("SELECT id FROM zones WHERE server=$id", \@q);
+  if (db_query("SELECT id FROM zones WHERE server=$id", \@q) < 0) {
+    db_rollback();
+    write2log("SERVER_DELETE_FAILED: Server ID=$id was NOT deleted - zone query failed");
+    return -103;
+  }
   for my $i (0..$#q) {
       push @zone_ids, $q[$i][0];
   }
