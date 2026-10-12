@@ -15,6 +15,18 @@
 	    sql/dbconvert_1.7to1.8 can be applied with runsql
 	  - README.upgrade: how to apply sql/dbconvert_1.7to1.8 as DB_USER
 
+	- Fix "Copy zone" in the web UI [svamberg]
+	  - copy only real zones columns; catalog helper fields loaded by
+	    get_zone() made the insert fail
+	  - do not copy the a_entries.ipv6 column dropped in DB 1.6; the failed
+	    statement aborted the transaction, so the copy was lost even though
+	    copy_zone() reported success
+	  - remove a leftover debug print
+	  - Integration test: t/17-copy-zone.t
+
+	- Do not log "internal error (form_magic):16" when editing a zone
+	  (aggregate catalog composition field) [svamberg]
+
 	- Add 'make test-e2e' to run integration and E2E tests locally [svamberg]
 	  - Builds the Docker image from the working tree, seeds test servers
 	    and runs t/1*.t plus BIND/DHCP config generation, mirroring the
