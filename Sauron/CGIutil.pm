@@ -904,8 +904,8 @@ sub form_magic($$$) {
 	}
 	param($p1."_count",($#{$a} < 0 ? 0 : $#{$a}));
       }
-      elsif ($rec->{ftype} == 0 || $rec->{ftype} == 9) {
-	# do nothing...
+      elsif ($rec->{ftype} == 0 || $rec->{ftype} == 9 || $rec->{ftype} == 16) {
+	# do nothing... (ftype 16 reads its data directly when rendered)
       }
       elsif ($rec->{ftype} == 3) {
 	param($p1,$val);
