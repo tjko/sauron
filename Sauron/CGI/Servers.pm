@@ -103,6 +103,32 @@ my %server_form = (
   {ftype=>12, tag=>'listen_on_v6', name=>'Listen-on-v6', whitesp=>['','','','','','P'],
    iff=>['named_flags_ac','0']},
 
+  {ftype=>0, name=>'DNS Zone Transfer over TLS (XoT, RFC 9103)'},
+  {ftype=>1, tag=>'tls_listen_profile', name=>'TLS listener profile',
+   type=>'tlsref', len=>25, empty=>1, whitesp=>'P',
+   definfo=>['','No TLS listener'],
+   extrainfo=>"TLS profile name; enables listen-on ... tls for XoT. " .
+              "Use 'ephemeral' for a built-in self-signed cert (no files)"},
+  {ftype=>1, tag=>'tls_listen_port', name=>'TLS listener port',
+   type=>'port', len=>5, empty=>1, definfo=>['853','Default (853)']},
+  {ftype=>1, tag=>'tls_default_profile', name=>'Default zone TLS profile',
+   type=>'tlsref', len=>25, empty=>1, whitesp=>'P',
+   definfo=>['','None'],
+   extrainfo=>"Default TLS profile name for zones that do not set their own " .
+              "(or 'ephemeral')"},
+
+  {ftype=>0, name=>'DNS over HTTPS (DoH, RFC 8484)'},
+  {ftype=>1, tag=>'doh_profile', name=>'DoH TLS profile',
+   type=>'tlsref', len=>25, empty=>1, whitesp=>'P',
+   definfo=>['','DoH disabled'],
+   extrainfo=>"TLS profile name; enables listen-on ... tls ... http for DoH. " .
+              "Use 'ephemeral' (self-signed) or 'none' (plaintext behind proxy)"},
+  {ftype=>1, tag=>'doh_port', name=>'DoH listener port',
+   type=>'port', len=>5, empty=>1, definfo=>['443','Default (443)']},
+  {ftype=>1, tag=>'doh_endpoint', name=>'DoH endpoint path',
+   type=>'urlpath', len=>25, empty=>1, whitesp=>'P',
+   definfo=>['/dns-query','Default (/dns-query, BIND built-in http default)']},
+
 
   {ftype=>0, name=>'Access control'},
   {ftype=>3, tag=>'named_flags_ac', name=>'Use access control from master',

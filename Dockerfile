@@ -52,6 +52,8 @@ RUN apt-get update -qq \
 		libhtml-parser-perl \
 		libdigest-hmac-perl \
 		libencode-locale-perl \
+		libnet-ssleay-perl \
+		bind9-utils \
 	&& a2enmod cgid alias \
 	&& a2disconf other-vhosts-access-log \
 	# Stock Debian maps /cgi-bin/ → /usr/lib/cgi-bin; Sauron replaces that.

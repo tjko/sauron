@@ -151,6 +151,13 @@ $VERSION = '$Id:$ ';
 	     get_acl_list
 	     get_acl_by_name
 
+	     get_tls_profile
+	     update_tls_profile
+	     add_tls_profile
+	     delete_tls_profile
+	     get_tls_profile_list
+	     get_tls_profile_refs
+
 	     add_news
 	     get_news_list
 
@@ -997,7 +1004,9 @@ sub get_server($$) {
 		    "cdate,cuser,mdate,muser,lastrun," .
 		    "df_port6,df_max_delay6,df_max_uupdates6,df_mclt6,df_split6,".
 		    "df_loadbalmax6,dhcp_flags,".
-            "listen_on_port_v6,transfer_source_v6,query_src_ip_v6,query_src_port_v6",
+            "listen_on_port_v6,transfer_source_v6,query_src_ip_v6,query_src_port_v6," .
+            "tls_default_profile,tls_listen_profile,tls_listen_port," .
+            "doh_profile,doh_port,doh_endpoint",
 		    $id,$rec,"id");
   return -1 if ($res < 0);
   fix_bools($rec,"no_roots,zones_only");
@@ -1386,6 +1395,10 @@ sub _delete_server_parts($) {
   $res=db_exec("DELETE FROM wks_templates WHERE server=$id;");
   if ($res < 0) { db_rollback(); return -25; }
 
+  # tls_profiles (XoT, RFC 9103)
+  $res=db_exec("DELETE FROM tls_profiles WHERE type=1 AND ref=$id;");
+  if ($res < 0) { db_rollback(); return -29; }
+
   # mx_templates
   $res=db_exec("DELETE FROM mx_templates WHERE id IN ( " .
                "SELECT a.id FROM mx_templates a, zones z " .
@@ -1562,7 +1575,8 @@ sub get_zone($$) {
 	       "server,active,dummy,catalog_only,type,reverse,class,name,nnotify," .
 	       "hostmaster,serial,refresh,retry,expire,minimum,ttl," .
 	       "chknames,reversenet,comment,cdate,cuser,mdate,muser," .
-	       "forward,serial_date,flags,rdate,transfer_source,transfer_source_v6,expiration",
+	       "forward,serial_date,flags,rdate,transfer_source,transfer_source_v6,expiration," .
+	       "xot_transfer,tls_profile",
 	       $id,$rec,"id");
   return -1 if ($res < 0);
   fix_bools($rec,"active,dummy,catalog_only,reverse,noreverse");
@@ -1609,11 +1623,13 @@ sub get_zone($$) {
   get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comments",
 		  "type=2 AND ref=$id ORDER BY id",$rec,'dhcp');
   get_aml_field($sid,2,$id,$rec,'allow_update');
-  get_array_field("cidr_entries",3,"id,ip,comment","IP,Comments",
+  get_array_field("cidr_entries",5,"id,ip,port,tls,comment",
+		  "IP,Port,TLS profile,Comments",
 		  "type=3 AND ref=$id ORDER BY ip",$rec,'masters');
   get_aml_field($sid,4,$id,$rec,'allow_query');
   get_aml_field($sid,5,$id,$rec,'allow_transfer');
-  get_array_field("cidr_entries",3,"id,ip,comment","IP,Comments",
+  get_array_field("cidr_entries",5,"id,ip,port,tls,comment",
+		  "IP,Port,TLS profile,Comments",
 		  "type=6 AND ref=$id ORDER BY ip",$rec,'also_notify');
   get_array_field("cidr_entries",4,"id,ip,port,comment","IP,Port,Comments",
 		  "type=12 AND ref=$id ORDER BY ip",$rec,'forwarders');
@@ -1870,8 +1886,8 @@ sub update_zone($) {
   # allow_update
   $r=update_aml_field(2,$id,$rec,'allow_update');
   if ($r < 0) { db_rollback(); return -16; }
-  # masters
-  $r=update_array_field("cidr_entries",3,"ip,comment,type,ref",
+  # masters (with optional XoT port/tls profile, RFC 9103)
+  $r=update_array_field("cidr_entries",5,"ip,port,tls,comment,type,ref",
 			'masters',$rec,"3,$id");
   if ($r < 0) { db_rollback(); return -17; }
   # allow_query
@@ -1880,8 +1896,8 @@ sub update_zone($) {
   # allow_transfer
   $r=update_aml_field(5,$id,$rec,'allow_transfer');
   if ($r < 0) { db_rollback(); return -19; }
-  # also_notify
-  $r=update_array_field("cidr_entries",3,"ip,comment,type,ref",
+  # also_notify (with optional XoT port/tls profile, RFC 9103)
+  $r=update_array_field("cidr_entries",5,"ip,port,tls,comment,type,ref",
 			'also_notify',$rec,"6,$id");
   if ($r < 0) { db_rollback(); return -20; }
   # forwarders
@@ -2314,8 +2330,9 @@ sub copy_zone($$$$) {
   print "<BR>Copying records pointing to zone record..." if ($verbose);
 
   # cidr_entries
-  $res=db_exec("INSERT INTO cidr_entries (type,ref,ip,comment) " .
-	       "SELECT type,$newid,ip,comment FROM cidr_entries " .
+  # port/tls carry XoT (RFC 9103) settings of masters/also-notify
+  $res=db_exec("INSERT INTO cidr_entries (type,ref,ip,port,tls,comment) " .
+	       "SELECT type,$newid,ip,port,tls,comment FROM cidr_entries " .
 	       "WHERE (type=2 OR type=3 OR type=4 OR type=5 OR type=6 " .
 	       " OR type=12) AND ref=$id;");
   if ($res < 0) { db_rollback(); return -3; }
@@ -4704,6 +4721,147 @@ sub get_acl_by_name($$) {
   db_query("SELECT id FROM acls " .
 	   "WHERE server=$serverid AND name=$name",\@q);
   return ($q[0][0] > 0 ? $q[0][0] : -1);
+}
+
+
+############################################################################
+# TLS profile functions (DNS Zone Transfer over TLS, XoT, RFC 9103)
+
+# 'ephemeral' and 'none' are built-in BIND TLS objects; they must not be
+# used as user-defined profile names (they are emitted without a tls{} block).
+sub tls_profile_reserved_name($) {
+  my($name) = @_;
+  return (defined($name) && $name =~ /^(?:ephemeral|none)$/i);
+}
+
+sub get_tls_profile($$) {
+  my ($id,$rec) = @_;
+
+  return -100 unless ($id =~ /^\d+$/ && $id > 0);
+  return -100 if (get_record("tls_profiles",
+		      "ref,name,cert_file,key_file,ca_file,dhparam_file," .
+		      "protocols,ciphers,prefer_server_ciphers," .
+		      "session_tickets,remote_hostname,comment," .
+		      "cdate,cuser,mdate,muser", $id,$rec,"id"));
+  add_std_fields($rec);
+  return 0;
+}
+
+# Profiles are referenced by name from servers, zones and masters/also-notify
+# rows of the same server. Returns a list of descriptions of those references.
+sub get_tls_profile_refs($$) {
+  my($serverid,$name) = @_;
+  my(@q,@refs,$i);
+
+  return () unless ($serverid =~ /^\d+$/ && $serverid > 0 && $name ne '');
+  my $n=db_encode_str($name);
+
+  db_query("SELECT name,tls_listen_profile,tls_default_profile,doh_profile " .
+	   "FROM servers WHERE id=$serverid",\@q);
+  for $i (0..$#q) {
+    push @refs, "server $q[$i][0]: TLS listener" if ($q[$i][1] eq $name);
+    push @refs, "server $q[$i][0]: default TLS profile" if ($q[$i][2] eq $name);
+    push @refs, "server $q[$i][0]: DoH listener" if ($q[$i][3] eq $name);
+  }
+  undef @q;
+  db_query("SELECT name FROM zones WHERE server=$serverid AND tls_profile=$n " .
+	   "ORDER BY name",\@q);
+  push @refs, map { "zone $_->[0]: TLS profile" } @q;
+  undef @q;
+  db_query("SELECT DISTINCT z.name,c.type FROM cidr_entries c, zones z " .
+	   "WHERE c.ref=z.id AND z.server=$serverid AND c.type IN (3,6) " .
+	   "AND c.tls=$n ORDER BY z.name,c.type",\@q);
+  push @refs, map { "zone $_->[0]: " .
+		    ($_->[1] == 3 ? 'masters' : 'also-notify') } @q;
+  return @refs;
+}
+
+sub update_tls_profile($) {
+  my($rec) = @_;
+  my($r,%old);
+
+  return -1 unless ($rec->{id} =~ /^\d+$/ && $rec->{id} > 0);
+  return -3 if (tls_profile_reserved_name($rec->{name}));
+  return -2 if (get_tls_profile($rec->{id},\%old) < 0);
+  del_std_fields($rec);
+
+  db_begin();
+  $r=update_record('tls_profiles',$rec);
+  if ($r < 0) { db_rollback(); return $r; }
+
+  # renamed: update the name-based references of the same server
+  if (defined($rec->{name}) && $rec->{name} ne $old{name}) {
+    my $sid=$old{ref};
+    my $on=db_encode_str($old{name});
+    my $nn=db_encode_str($rec->{name});
+    for my $f (qw(tls_listen_profile tls_default_profile doh_profile)) {
+      $r=db_exec("UPDATE servers SET $f=$nn WHERE id=$sid AND $f=$on");
+      if ($r < 0) { db_rollback(); return -4; }
+    }
+    $r=db_exec("UPDATE zones SET tls_profile=$nn " .
+	       "WHERE server=$sid AND tls_profile=$on");
+    if ($r < 0) { db_rollback(); return -5; }
+    $r=db_exec("UPDATE cidr_entries SET tls=$nn WHERE tls=$on AND " .
+	       "type IN (3,6) AND ref IN (SELECT id FROM zones " .
+	       "WHERE server=$sid)");
+    if ($r < 0) { db_rollback(); return -6; }
+  }
+
+  return db_commit();
+}
+
+sub add_tls_profile($) {
+  my($rec) = @_;
+  my($res);
+
+  return -3 if (tls_profile_reserved_name($rec->{name}));
+
+  db_begin();
+  $rec->{cdate}=time;
+  $rec->{cuser}=$muser if !$rec->{'cuser'};
+  $rec->{type}=1 unless ($rec->{type} > 0);
+  $res=add_record('tls_profiles',$rec);
+  if ($res < 0) { db_rollback(); return -1; }
+  $rec->{id}=$res;
+
+  return -10 if (db_commit() < 0);
+  return $res;
+}
+
+sub delete_tls_profile($) {
+  my($id) = @_;
+  my($res);
+
+  return -100 unless ($id =~ /^\d+$/ && $id > 0);
+
+  # still referenced: deleting it would leave dangling tls "<name>" references
+  my %p;
+  return -2 if (get_tls_profile($id,\%p) < 0);
+  return -20 if (get_tls_profile_refs($p{ref},$p{name}) > 0);
+
+  db_begin();
+  $res=db_exec("DELETE FROM tls_profiles WHERE id=$id");
+  if ($res < 0) { db_rollback(); return -1; }
+
+  return db_commit();
+}
+
+sub get_tls_profile_list($$$) {
+  my($serverid,$rec,$lst) = @_;
+  my(@q,$i);
+
+  undef @{$lst};
+  undef %{$rec};
+  push @{$lst}, '';
+  $$rec{''}='(none)';
+  return unless ($serverid > 0);
+
+  db_query("SELECT name FROM tls_profiles " .
+	   "WHERE type=1 AND ref=$serverid ORDER BY name",\@q);
+  for $i (0..$#q) {
+    push @{$lst}, $q[$i][0];
+    $$rec{$q[$i][0]}=$q[$i][0];
+  }
 }
 
 
