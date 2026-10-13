@@ -1,5 +1,9 @@
 0.9.0 (beta)
 
+	- Fix host browse returning no records for 'Any type' and 'Alias'
+	  when $SAURON_ZERO_IP was not set in the config file; it now
+	  defaults to '0.0.0.0' [svamberg]
+
 	- Add DNS over TLS support: XoT (RFC 9103), DoT and DoH (RFC 8484)
 	  [svamberg]
 	  - New TLS profiles (ACLs -> TLS Profiles) emitted as top-level
