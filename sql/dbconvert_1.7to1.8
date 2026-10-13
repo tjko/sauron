@@ -1,9 +1,10 @@
 /* convert Sauron database format from 1.7 to 1.8 */
 /* (this requires PostgreSQL v7.3 or later) */
 
-/* Run this script as the database user Sauron connects as (DB_USER,
-   the owner of the existing tables), never as the postgres superuser:
-   new tables are owned by whoever creates them. See README.upgrade. */
+/* Run this script as the role that owns all existing tables, normally
+   the database user Sauron connects as (DB_USER), not the postgres
+   superuser: new tables are owned by whoever creates them. See
+   README.upgrade, also for installations using GRANTs. */
 
 /* abort unless current user owns all existing tables */
 SELECT CASE

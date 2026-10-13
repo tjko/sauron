@@ -148,13 +148,15 @@ Always backup your database before making changes to TSIG key names:
 DATABASE FORMAT 1.7 -> 1.8 (0.9.0)
 
 The conversion script sql/dbconvert_1.7to1.8 creates new tables (SSHFP,
-TLSA, DS, NAPTR, CAA, catalog zones, approval workflow). PostgreSQL makes
-the role that creates a table its owner, and the script intentionally does
-not change table ownership (no ALTER TABLE ... OWNER TO). The script MUST
-therefore be run as the database user Sauron connects as (DB_USER in the
-config file, usually 'sauron'), which is also the owner of the existing
-tables. Do NOT run it as the postgres superuser: the new tables would be
-owned by postgres and Sauron would fail with "permission denied".
+TLSA, DS, NAPTR, CAA, catalog zones, TLS profiles, approval workflow).
+PostgreSQL makes the role that creates a table its owner, and the script
+intentionally does not change table ownership (no ALTER TABLE ... OWNER TO).
+The script MUST therefore be run as the role that owns all existing tables.
+In a standard installation this is the database user Sauron connects as
+(DB_USER in the config file, usually 'sauron'); do NOT run it as the
+postgres superuser then, or the new tables would be owned by postgres and
+Sauron would fail with "permission denied". (For installations where the
+tables are owned by another role and DB_USER only has GRANTs, see below.)
 
 The script checks this at the start and aborts with an error such as
 
@@ -236,14 +238,23 @@ GENERAL UPGRADE PROCEDURE
     For example script for converting from 1.0 to 1.1
     would be named as: dbconvert_1.0to1.1.sql
 
- 3) run upgrade scripts as the database user Sauron connects as
-    (DB_USER, the owner of the existing tables), not as the postgres
-    superuser, for example:
+ 3) run upgrade scripts as the role that owns the existing tables
+    (normally DB_USER, the database user Sauron connects as), not as the
+    postgres superuser.
+
+    SQL scripts (all dbconvert_* except dbconvert_1.6to1.7):
 
 	cd /usr/local/sauron && ./runsql sql/<filename>
 
     or: psql -U <DB_USER> -v ON_ERROR_STOP=1 -1 -f <filename> sauron
     (see also DATABASE FORMAT 1.7 -> 1.8 above)
+
+    Executable scripts (sql/dbconvert_1.6to1.7 is a Bash script,
+    sql/convertdb_1.0b2_1.0 a Perl script) are not SQL; do not pass them
+    to runsql or psql. Review them first (dbconvert_1.6to1.7 calls
+    'psql -U postgres' with /opt/sauron paths) and run them directly:
+
+	bash sql/dbconvert_1.6to1.7
 
  4) vacuum database: psql sauron -c 'VACUUM ANALYZE;'
     (running 'VACUUM FULL' might be good idea, too)
