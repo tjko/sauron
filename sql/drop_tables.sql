@@ -47,6 +47,7 @@ DROP TABLE settings;
 DROP TABLE srv_entries;
 DROP TABLE sshfp_entries;
 DROP TABLE tlsa_entries;
+DROP TABLE tls_profiles;
 DROP TABLE naptr_entries;
 DROP TABLE txt_entries;
 DROP TABLE user_groups;

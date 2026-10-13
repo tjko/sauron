@@ -66,6 +66,14 @@ CREATE TABLE zones (
        transfer_source INET,  /* transfer-source (optional) */
        transfer_source_v6 INET,  /* transfer-source IPv6 (optional) */
 
+       /* DNS Zone Transfer over TLS (XoT, RFC 9103) */
+       xot_transfer CHAR(1) DEFAULT 'D', /* require TLS for incoming zone
+					    transfers (master/catalog):
+					    D=default(no), Y=yes, N=no */
+       tls_profile  TEXT,  /* TLS profile name override for this zone
+			      (-->tls_profiles.name); if empty, the server
+			      default (servers.tls_default_profile) is used */
+
        CONSTRAINT  zones_key UNIQUE (name,server)
 ) INHERITS(common_fields);
 

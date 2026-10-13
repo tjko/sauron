@@ -31,6 +31,8 @@ REQUIREMENTS
 		- Text::Table
                 - Parse::RecDescent # only for import-zone-comments
                 - HTML::Entities
+		- Net::SSLeay module (optional; validates TLS cipher lists
+		  in the web UI, without it only allowed characters are checked)
  	- PostgresSQL [15.10 or newer  recommended]
 	  (or add support to your favorite db yourself :)
 	- www-server (Apache or any other www-server with CGI support)
@@ -272,10 +274,19 @@ COMMANDS
 
 
 
+ADDITIONAL DOCUMENTATION
+	doc/manual.sgml                 Full manual
+	docs/tsig-key-management.txt    TSIG key management (keygen)
+	docs/dns-over-tls.txt           DNS over TLS: XoT (RFC 9103), DoT and
+	                                DoH (RFC 8484); TLS profiles, ephemeral
+	                                certificates, certificate handling
+
+
 SUGGESTED READING
 	RFC: 952,953,974,1032,1034,1035,1123,1912
+	RFC: 9103 (XoT), 7858 (DoT), 8484 (DoH)
 
 
 --
-Timo <tjko@iki.fi>			        
+Timo <tjko@iki.fi>
 
