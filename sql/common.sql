@@ -15,6 +15,18 @@ CREATE TABLE common_fields (
 );
 
 
+/** virtual table; generic fields (with TIMESTAMP dates) for the
+    approval workflow tables **/
+
+CREATE TABLE pokemon (
+       cdate      TIMESTAMP DEFAULT CURRENT_TIMESTAMP, /* creation date */
+       cuser      TEXT DEFAULT 'unknown',              /* creating user */
+       mdate      TIMESTAMP DEFAULT CURRENT_TIMESTAMP, /* modification date */
+       muser      TEXT DEFAULT 'unknown',              /* last changed by this user */
+       expiration TIMESTAMP                            /* expiration date */
+);
+
+
 /** global settings table **/
 
 CREATE TABLE settings (

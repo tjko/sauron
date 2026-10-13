@@ -1,12 +1,43 @@
 /* convert Sauron database format from 1.7 to 1.8 */
 /* (this requires PostgreSQL v7.3 or later) */
 
+/* Run this script as the role that owns all existing tables, normally
+   the database user Sauron connects as (DB_USER), not the postgres
+   superuser: new tables are owned by whoever creates them. See
+   README.upgrade, also for installations using GRANTs. */
+
+/* abort unless current user owns all existing tables */
+SELECT CASE
+       WHEN NOT EXISTS (SELECT 1 FROM pg_tables
+                         WHERE schemaname = 'public' AND tablename = 'zones')
+       THEN CAST('dbconvert_1.7to1.8: table public.zones not found in database ' ||
+                 current_database() AS INT4)::TEXT
+       WHEN EXISTS (SELECT 1 FROM pg_tables
+                     WHERE schemaname = 'public' AND tableowner <> current_user)
+       THEN CAST('dbconvert_1.7to1.8 must be run as the owner of all tables, not as ' ||
+                 current_user || ' (table owners: ' ||
+                 (SELECT string_agg(DISTINCT tableowner, ', ') FROM pg_tables
+                   WHERE schemaname = 'public') || ')' AS INT4)::TEXT
+       ELSE 'ok'
+       END AS owner_check;
+
 
 /* remove fixed length limit from audit user field */
 ALTER TABLE common_fields ALTER COLUMN cuser TYPE TEXT;
 
 /* remove fixed length limit from audit user field */
 ALTER TABLE common_fields ALTER COLUMN muser TYPE TEXT;
+
+/* reset defaults (still typed as CHAR after the type change) */
+ALTER TABLE common_fields ALTER COLUMN cuser SET DEFAULT 'unknown';
+ALTER TABLE common_fields ALTER COLUMN muser SET DEFAULT 'unknown';
+
+/* missing in databases created by createtables (only dbconvert_1.5to1.6 added it) */
+ALTER TABLE nets ADD COLUMN IF NOT EXISTS ip_policy INT4 DEFAULT 0;
+
+/* deleted_hosts is a copy of hosts (not inherited from common_fields) */
+ALTER TABLE deleted_hosts ALTER COLUMN cuser TYPE TEXT;
+ALTER TABLE deleted_hosts ALTER COLUMN muser TYPE TEXT;
 
 
 /** This table contains SSHFP record entries. **/
@@ -32,8 +63,6 @@ CREATE TABLE sshfp_entries (
 );
 
 CREATE INDEX sshfp_entries_ref_index ON sshfp_entries (type,ref);
-
-ALTER TABLE sshfp_entries OWNER TO sauron;
 
 
 
@@ -61,8 +90,6 @@ CREATE TABLE tlsa_entries (
 );
 
 CREATE INDEX tlsa_entries_ref_index ON tlsa_entries (type,ref);
-
-ALTER TABLE tlsa_entries OWNER TO sauron;
 
 /** This table contains DS record entries. **/
 
@@ -99,8 +126,6 @@ CREATE TABLE ds_entries (
 
 CREATE INDEX ds_entries_ref_index ON ds_entries (type,ref);
 
-ALTER TABLE ds_entries OWNER TO sauron;
-
 /** This table contains NAPTR record entries. **/
 
 CREATE TABLE naptr_entries (
@@ -121,8 +146,6 @@ CREATE TABLE naptr_entries (
 
 CREATE INDEX naptr_entries_ref_index ON naptr_entries (type,ref);
 CREATE INDEX naptr_entries_order_pref_index ON naptr_entries (order_val, preference);
-
-ALTER TABLE naptr_entries OWNER TO sauron;
 
 /** This table contains the membership of zones within catalog zones. **/
 
@@ -149,8 +172,6 @@ CREATE TABLE zone_catalogs (
 CREATE INDEX idx_zone_catalogs_catalog ON zone_catalogs(catalog_zone_id);
 CREATE INDEX idx_zone_catalogs_member ON zone_catalogs(member_zone_id);
 
-ALTER TABLE zone_catalogs OWNER TO sauron;
-
 
 /* Catalog zone groups support (RFC 9432 §5.2) */
 
@@ -173,8 +194,6 @@ CREATE TABLE zone_catalog_groups (
 CREATE INDEX idx_zone_catalog_groups_ref ON zone_catalog_groups(zone_catalog_id);
 CREATE INDEX idx_zone_catalog_groups_name ON zone_catalog_groups(group_name);
 
-ALTER TABLE zone_catalog_groups OWNER TO sauron;
-
 
 /** This table stores predefined group definitions for catalog zones. **/
 
@@ -194,8 +213,6 @@ CREATE TABLE catalog_group_defs (
 );
 
 CREATE INDEX idx_catalog_group_defs_catalog ON catalog_group_defs(catalog_zone_id);
-
-ALTER TABLE catalog_group_defs OWNER TO sauron;
 
 
 /* DNS change approval workflow tables */
@@ -353,15 +370,6 @@ CREATE INDEX dns_change_audit_log_request_index ON dns_change_audit_log(request_
 CREATE INDEX dns_change_audit_log_event_index ON dns_change_audit_log(event);
 
 
-ALTER TABLE approval_policies OWNER TO sauron;
-ALTER TABLE approval_rules OWNER TO sauron;
-ALTER TABLE approval_levels OWNER TO sauron;
-ALTER TABLE approval_level_approvers OWNER TO sauron;
-ALTER TABLE dns_change_requests OWNER TO sauron;
-ALTER TABLE dns_change_approvals OWNER TO sauron;
-ALTER TABLE dns_change_audit_log OWNER TO sauron;
-
-
 /** This table contains CAA record entries. **/
 
 CREATE TABLE caa_entries (
@@ -378,8 +386,6 @@ CREATE TABLE caa_entries (
 
 CREATE INDEX caa_entries_ref_index ON caa_entries (type,ref);
 CREATE INDEX caa_entries_flags_tag_index ON caa_entries (flags,tag);
-
-ALTER TABLE caa_entries OWNER TO sauron;
 
 /* Migrate legacy apex CAA records imported as custom zone entries. */
 INSERT INTO caa_entries (type,ref,flags,tag,value,comment)
@@ -419,7 +425,7 @@ WHERE id IN (
 /* Add catalog_only flag to zones table */
 
 ALTER TABLE zones ADD COLUMN catalog_only BOOL DEFAULT false;
-COMMENT ON COLUMN zones.catalog_only IS 'if true, zone is not generated to named.conf or zone file; exists only as a catalog member source';
+COMMENT ON COLUMN zones.catalog_only IS 'if true, zone is not generated to named.conf or zone file, exists only as a catalog member source';
 
 
 /** This table stores the composition of aggregate catalog zones (type A).
@@ -457,8 +463,6 @@ CREATE INDEX idx_catalog_compositions_composite
 CREATE INDEX idx_catalog_compositions_priority
     ON catalog_compositions(composite_zone_id, priority);
 
-ALTER TABLE catalog_compositions OWNER TO sauron;
-
 
 /* DNS over TLS support: XoT (RFC 9103), DoT and DoH (RFC 8484) */
 
@@ -492,8 +496,6 @@ CREATE TABLE tls_profiles (
 ) INHERITS(common_fields);
 
 CREATE INDEX tls_profiles_ref_index ON tls_profiles (type,ref);
-
-ALTER TABLE tls_profiles OWNER TO sauron;
 
 /* server TLS listener (XoT/DoT) and DoH listener */
 ALTER TABLE servers ADD COLUMN tls_default_profile TEXT;

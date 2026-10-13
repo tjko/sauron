@@ -29,6 +29,9 @@ CREATE TABLE nets (
        no_dhcp     BOOL DEFAULT false,  /* no-DHCP flag */
        range_start INET, /* auto assign address range start */
        range_end   INET, /* auto assign address range end */
+       ip_policy   INT4 DEFAULT 0, /* auto assign IP policy:
+				      0=lowest free, 10=highest free,
+				      20=MAC based (IPv6), 30=IPv4 based (IPv6) */
        comment	   TEXT, /* comment */
 
        CONSTRAINT  nets_key UNIQUE (net,server)
