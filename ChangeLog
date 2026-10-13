@@ -1,5 +1,20 @@
 0.9.0 (beta)
 
+	- Fix database schema consistency between createtables and the
+	  1.7 -> 1.8 upgrade [svamberg]
+	  - createtables (and make install) now creates the approval workflow
+	    tables; the pokemon base table moved to sql/common.sql
+	  - sql/nets.sql: add the ip_policy column (missing on new installs)
+	  - sql/dbconvert_1.7to1.8: also add nets.ip_policy if missing and
+	    convert deleted_hosts cuser/muser to TEXT; no longer changes table
+	    ownership and aborts unless run as the owner of all existing
+	    tables (DB_USER)
+	  - sql/drop_tables.sql: drop the approval and catalog tables, drop
+	    tables in dependency order, remove obsolete sequence drops
+	  - runsql: join multi-line statements with a space, so that
+	    sql/dbconvert_1.7to1.8 can be applied with runsql
+	  - README.upgrade: how to apply sql/dbconvert_1.7to1.8 as DB_USER
+
 	- Add DNS over TLS support: XoT (RFC 9103), DoT and DoH (RFC 8484)
 	  [svamberg]
 	  - New TLS profiles (ACLs -> TLS Profiles) emitted as top-level
