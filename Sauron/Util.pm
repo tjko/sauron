@@ -265,7 +265,7 @@ sub valid_tls_protocols($) {
 sub valid_tls_hostname($) {
   my($str) = @_;
 
-  return 0 unless (defined $str && $str =~ /^[A-Za-z0-9\-]+(\.[A-Za-z0-9\-]+)+$/);
+  return 0 unless (defined $str && $str =~ /^[A-Za-z0-9\-]+(\.[A-Za-z0-9\-]+)+\z/);
   return 0 if ($str =~ /(^|\.)-|-(\.|$)/);
   return (valid_domainname($str) ? 1 : 0);
 }
@@ -278,7 +278,7 @@ sub valid_tls_hostname($) {
 sub valid_tls_ciphers($) {
   my($str) = @_;
 
-  return 0 unless (defined $str && $str =~ /^[A-Za-z0-9_!+\-:@=.,]+$/);
+  return 0 unless (defined $str && $str =~ /^[A-Za-z0-9_!+\-:@=.,]+\z/);
   return -1 unless (eval { require Net::SSLeay; 1 });
 
   Net::SSLeay::load_error_strings();

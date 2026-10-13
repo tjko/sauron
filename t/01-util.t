@@ -385,6 +385,7 @@ subtest 'valid_tls_hostname' => sub {
     ok(!valid_tls_hostname('ns1-.example.com'), 'trailing hyphen rejected');
     ok(!valid_tls_hostname('*.example.com'), 'wildcard rejected');
     ok(!valid_tls_hostname('ns1.example.com"; }'), 'syntax characters rejected');
+    ok(!valid_tls_hostname("ns1.example.com\n"), 'newline rejected');
 };
 
 subtest 'valid_tls_ciphers' => sub {
