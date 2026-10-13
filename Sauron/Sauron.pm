@@ -91,6 +91,7 @@ sub set_defaults() {
 
   $main::SAURON_BASE_URL = '';
   $main::SAURON_APPROVAL_REMINDER_HOURS = 24;
+  $main::SAURON_ZERO_IP = '0.0.0.0'; # placeholder IP for aliases in host browse
   $main::ALEVEL_APPROVAL_ADMIN = 5;
 
   $main::SAURON_RHF{huser}    = 0; # User

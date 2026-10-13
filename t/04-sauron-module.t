@@ -27,4 +27,14 @@ subtest 'module loaded' => sub {
         'sauron_version', 'load_browser_config', 'load_config');
 };
 
+# =========================================================================
+# Defaults
+# =========================================================================
+subtest 'set_defaults' => sub {
+    Sauron::Sauron::set_defaults();
+    # Used as placeholder IP for aliases in host browse (Sauron::CGI::Hosts);
+    # empty value made the SQL fail with "invalid input syntax for type cidr".
+    is($main::SAURON_ZERO_IP, '0.0.0.0', 'SAURON_ZERO_IP defaults to 0.0.0.0');
+};
+
 done_testing();
