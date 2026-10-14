@@ -1158,19 +1158,22 @@ sub browse_hosts($$)
 # HOSTS menu
 #
 # Find a host record by name in the given zone. Accepts a name relative
-# to the zone or an FQDN (with or without the trailing dot).
+# to the zone or an FQDN (with or without the trailing dot). Host names
+# may be stored relative or absolute (with the trailing dot), so the
+# absolute spellings are tried after the relative ones.
 sub _find_zone_host($$) {
   my($zoneid,$name) = @_;
   my(%zone,@q,@names);
 
   return () if ($name eq '' || get_zone($zoneid,\%zone) < 0);
   (my $zname = $zone{name}) =~ s/\.$//;
-  if ($name =~ s/\.$//) {
-    return () unless ($name =~ s/\.\Q$zname\E$//i);
-    @names = ($name);
+  if ($name =~ /\.$/) {
+    return () unless ($name =~ /^(.+)\.\Q$zname\E\.$/i);
+    @names = ($1, $name);
   } else {
     @names = ($name);
-    push @names, $1 if ($name =~ /^(.+)\.\Q$zname\E$/i);
+    push @names, $1, "$name." if ($name =~ /^(.+)\.\Q$zname\E$/i);
+    push @names, "$name.$zname.";
   }
   for my $n (@names) {
     undef @q;
@@ -1195,6 +1198,12 @@ sub move_cname_alias($$$) {
   }
   unless ($host->{cname_alias} && $host->{alias} > 0) {
     alert1("Only CNAME aliases can be moved to another host.");
+    show_host_record($state,$perms);
+    return;
+  }
+  # Permissions and approval policy are those of the selected zone.
+  if ($host->{zone} != $state->{zoneid}) {
+    alert1("Alias is not in the selected zone ($state->{zone}).");
     show_host_record($state,$perms);
     return;
   }
@@ -1244,7 +1253,7 @@ sub move_cname_alias($$$) {
 		       "MOVE: $host_types{4} ",
 		       "domain: $oldhost{domain}, " .
 		       "alias for: $old_target --> $tdomain",$oldhost{id});
-	success1("Alias moved from $old_target to $tdomain.");
+	success1("Alias moved: $old_target --> $tdomain");
       }
       show_host_record($state,$perms);
       return;

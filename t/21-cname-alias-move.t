@@ -3,7 +3,9 @@
 #
 # The web UI 'Move' action on a CNAME alias only changes hosts.alias and
 # saves the record via update_host(). Checks that the alias then points to
-# the new host and is listed among its aliases, and not the old host's.
+# the new host and is listed among its aliases, and not the old host's,
+# and that _find_zone_host() finds the target by its relative name or FQDN
+# also when the host name is stored absolute (with the trailing dot).
 #
 # Skipped unless SAURON_TEST_DSN is set:
 #   SAURON_TEST_DSN="dbi:Pg:dbname=sauron_test" prove -lv t/21-cname-alias-move.t
@@ -32,6 +34,7 @@ unless ($DB_DSN) {
 
 use Sauron::DB;
 use Sauron::BackEnd;
+use Sauron::CGI::Hosts;
 
 db_connect2() or plan skip_all => 'Cannot connect to test database';
 set_muser('cname-move-test');
@@ -41,6 +44,7 @@ my $zoneid  = 930002;
 my $hosta   = 930003;
 my $hostb   = 930004;
 my $aliasid = 930005;
+my $hostc   = 930006;
 
 sub cleanup {
     db_exec("DELETE FROM a_entries WHERE host IN " .
@@ -67,6 +71,8 @@ db_exec("INSERT INTO hosts (id,zone,type,domain) " .
         "VALUES ($hosta,$zoneid,1,'host-a')");
 db_exec("INSERT INTO hosts (id,zone,type,domain) " .
         "VALUES ($hostb,$zoneid,1,'host-b')");
+db_exec("INSERT INTO hosts (id,zone,type,domain) " .
+        "VALUES ($hostc,$zoneid,1,'host-c.cname-move.example.')");
 db_exec("INSERT INTO a_entries (host,ip) VALUES ($hosta,'192.0.2.10')");
 db_exec("INSERT INTO a_entries (host,ip) VALUES ($hostb,'192.0.2.11')");
 db_exec("INSERT INTO hosts (id,zone,type,domain,alias,ttl,info) " .
@@ -97,6 +103,26 @@ subtest 'move alias to host-b' => sub {
     is($n{info}, 'keep me', "info preserved");
     is_deeply(alias_names($hosta), [], "host-a no longer lists the alias");
     is_deeply(alias_names($hostb), ['www'], "host-b lists the alias");
+};
+
+subtest '_find_zone_host() name forms' => sub {
+    my %want = (
+        'host-b'                          => $hostb,
+        'host-b.cname-move.example'       => $hostb,
+        'host-b.cname-move.example.'      => $hostb,
+        'host-c'                          => $hostc,
+        'host-c.cname-move.example'       => $hostc,
+        'host-c.cname-move.example.'      => $hostc,
+        'www'                             => $aliasid,
+    );
+    for my $name (sort keys %want) {
+        my ($id) = Sauron::CGI::Hosts::_find_zone_host($zoneid, $name);
+        is($id, $want{$name}, "'$name' found");
+    }
+    for my $name ('', 'nope', 'host-b.other.example.', 'host-b.') {
+        my @r = Sauron::CGI::Hosts::_find_zone_host($zoneid, $name);
+        is(scalar(@r), 0, "'$name' not found");
+    }
 };
 
 cleanup();
