@@ -44,7 +44,7 @@ EOF
 
 log "Running integration and E2E tests"
 rc=0
-prove ${PROVE_OPTS:--l} t/1*.t || rc=$?
+prove ${PROVE_OPTS:--l} t/[1-9]*.t || rc=$?
 
 log "Generating config files for server 'example'"
 mkdir -p /tmp/gen

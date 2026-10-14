@@ -1,5 +1,13 @@
 0.9.0 (beta)
 
+	- Fix editing the value or comment of a TXT record (host type TXT)
+	  in the web UI; 'Apply' reported success but kept the old value.
+	  The web UI now rejects more than one TXT entry for a TXT record
+	  instead of silently keeping only the first one [svamberg]
+
+	- Fix adding, editing and deleting NAPTR entries in the zone edit
+	  form; changes were silently ignored [svamberg]
+
 	- Reject TLS cipher lists and remote-hostnames with a trailing newline
 	  (also without the optional Net::SSLeay module) [svamberg]
 

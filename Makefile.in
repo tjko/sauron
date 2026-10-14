@@ -172,7 +172,7 @@ test-unit:
 # Run all tests including integration (requires SAURON_TEST_DSN)
 test: test-unit
 	@echo "Running integration tests..."
-	PERL5LIB=$(or $(srcdir),.) $(PERL) -MTest::Harness -e 'runtests(sort glob("t/1*.t"))'
+	PERL5LIB=$(or $(srcdir),.) $(PERL) -MTest::Harness -e 'runtests(sort glob("t/[1-9]*.t"))'
 
 # Run all tests with prove (nicer output)
 prove-unit:

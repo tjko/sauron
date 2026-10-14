@@ -44,8 +44,16 @@ sub write2log{
 
 sub _host_required_data_error($) {
   my($rec) = @_;
+  my $err = Sauron::BackEnd::host_required_data_error($rec);
 
-  return Sauron::BackEnd::host_required_data_error($rec);
+  return $err if ($err ne '');
+  # A TXT host keeps a single value (hosts.cname_txt); update_host() would
+  # silently drop the other rows. Not enforced in BackEnd, since import-zone
+  # passes all TXT strings of a TXT-only name to add_host().
+  return 'TXT record allows only one TXT entry.'
+    if ($rec->{type} == 13 &&
+        Sauron::BackEnd::_host_count_active_list_entries($rec->{txt_l}, 1) > 1);
+  return '';
 }
 
 
