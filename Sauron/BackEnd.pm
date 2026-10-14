@@ -1867,7 +1867,7 @@ sub update_zone($) {
       $r=update_array_field("caa_entries",5,"flags,tag,value,comment,type,ref",
     			    'caa',$rec,"1,$hid");
       if ($r < 0) { db_rollback(); return -141; }
-      $r=update_array_field("naptr_entries",7,"order_val,preference,flags,service,regexp,replacement,comment,type,ref",
+      $r=update_array_field("naptr_entries",8,"order_val,preference,flags,service,regexp,replacement,comment,type,ref",
 			    'naptr',$rec,"1,$hid");
       if ($r < 0) { db_rollback(); return -140; }
     }
@@ -2580,11 +2580,14 @@ sub get_host($$) {
 
     # For TXT hosts (type=13), TXT value is stored in hosts.cname_txt.
     # Keep txt_l in the same shape as get_array_field() output so existing
-    # form validation/serialization logic works unchanged.
+    # form validation/serialization logic works unchanged. The row needs a
+    # non-zero id, otherwise form_check_form() can't match it on submit and
+    # treats an edited value as a new row (leaving the original one active).
+    # It is negative so that it never matches a real txt_entries.id.
   if ($rec->{type} == 13) {
       $rec->{txt_l} = [
   	      ['Text', 'Comments'],
-  	      [0, ($rec->{cname_txt} // ''), ($rec->{comment} // ''), 0]
+  	      [-1, ($rec->{cname_txt} // ''), ($rec->{comment} // ''), 0]
   	  ];
   } else {
       get_array_field("txt_entries",3,"id,txt,comment",
@@ -2716,6 +2719,13 @@ sub get_host($$) {
 sub _host_has_active_list_entries($$) {
   my($list, $value_index) = @_;
 
+  return (_host_count_active_list_entries($list, $value_index) > 0);
+}
+
+sub _host_count_active_list_entries($$) {
+  my($list, $value_index) = @_;
+  my $count = 0;
+
   return 0 unless (ref($list) eq 'ARRAY');
 
   for my $row (@{$list}) {
@@ -2733,10 +2743,10 @@ sub _host_has_active_list_entries($$) {
       next unless (defined($val) && $val !~ /^\s*$/);
     }
 
-    return 1;
+    $count++;
   }
 
-  return 0;
+  return $count;
 }
 
 sub _host_first_active_list_entry($$$) {
@@ -2766,6 +2776,17 @@ sub _host_first_active_list_entry($$$) {
   }
 
   return ('','');
+}
+
+# TXT host (type 13): its value and comment live in hosts.cname_txt and
+# hosts.comment, edited as a single txt_l row (see get_host()).
+sub _txt_host_from_txt_l($) {
+  my($rec) = @_;
+
+  return unless ($rec->{type} == 13);
+  my($txt_val, $txt_comment) = _host_first_active_list_entry($rec->{txt_l}, 1, 2);
+  $rec->{cname_txt} = $txt_val;
+  $rec->{comment} = $txt_comment;
 }
 
 sub _host_has_ip_entries($) {
@@ -2872,14 +2893,7 @@ sub update_host($) {
   delete $rec->{fqdn};
   delete $rec->{approval_reason};
 
-  if ($rec->{type} == 13) {
-    my($txt_val, $txt_comment) = _host_first_active_list_entry($rec->{txt_l}, 1, 2);
-    $rec->{cname_txt} = $txt_val;
-    if ((!defined($rec->{comment}) || $rec->{comment} =~ /^\s*$/) &&
-        defined($txt_comment) && $txt_comment ne '') {
-      $rec->{comment} = $txt_comment;
-    }
-  }
+  _txt_host_from_txt_l($rec);
 
   $rec->{alias} = -1 if ($rec->{cname_txt});
 
@@ -3080,14 +3094,7 @@ sub add_host($) {
 
   return -100 unless ($rec->{zone} > 0);
 
-  if ($rec->{type} == 13) {
-    my($txt_val, $txt_comment) = _host_first_active_list_entry($rec->{txt_l}, 1, 2);
-    $rec->{cname_txt} = $txt_val;
-    if ((!defined($rec->{comment}) || $rec->{comment} =~ /^\s*$/) &&
-        defined($txt_comment) && $txt_comment ne '') {
-      $rec->{comment} = $txt_comment;
-    }
-  }
+  _txt_host_from_txt_l($rec);
 
   # Catalog zones cannot have hosts added (RFC 9432)
   if (is_catalog_zone($rec->{zone})) {
