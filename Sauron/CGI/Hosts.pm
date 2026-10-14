@@ -1076,7 +1076,10 @@ sub show_host_record($$)
         $host{type} == 8 && $rwx && check_perms('flags','SRV',1) ||
         $host{type} == 15 && $rwx && check_perms('flags','CAA',1));
 
-    print submit(-name=>'sub',-value=>'Move'), " " if ($host{type} == 1);
+    print submit(-name=>'sub',-value=>'Move'), " "
+      if ($host{type} == 1 ||
+	  $host{type} == 4 && $host{cname_alias} &&
+	  !($rwx && check_perms('flags','CNAME',1)));
 
     #print submit(-name=>'sub',-value=>'Alias'), " " if ($host{type} == 1);
 
@@ -1146,6 +1149,119 @@ sub browse_hosts($$)
 
 # HOSTS menu
 #
+# Find a host record by name in the given zone. Accepts a name relative
+# to the zone or an FQDN (with or without the trailing dot).
+sub _find_zone_host($$) {
+  my($zoneid,$name) = @_;
+  my(%zone,@q,@names);
+
+  return () if ($name eq '' || get_zone($zoneid,\%zone) < 0);
+  (my $zname = $zone{name}) =~ s/\.$//;
+  if ($name =~ s/\.$//) {
+    return () unless ($name =~ s/\.\Q$zname\E$//i);
+    @names = ($name);
+  } else {
+    @names = ($name);
+    push @names, $1 if ($name =~ /^(.+)\.\Q$zname\E$/i);
+  }
+  for my $n (@names) {
+    undef @q;
+    db_query("SELECT id,type,domain FROM hosts WHERE zone=$zoneid " .
+	     "AND domain=" . db_encode_str($n) . ";",\@q);
+    return @{$q[0]} if (@q > 0);
+  }
+  return ();
+}
+
+# Point an existing CNAME alias to another host in the same zone.
+sub move_cname_alias($$$) {
+  my($state,$perms,$host) = @_;
+  my($target,$tid,$ttype,$tdomain,$res,%oldhost,%zone);
+
+  my $selfurl = $state->{selfurl};
+
+  return if (check_perms('zone','RW'));
+  if (check_perms('zone','RWX',1) && check_perms('flags','CNAME',1)) {
+    alert1("You don't have permission to edit CNAME Aliases");
+    return;
+  }
+  unless ($host->{cname_alias} && $host->{alias} > 0) {
+    alert1("Only CNAME aliases can be moved to another host.");
+    show_host_record($state,$perms);
+    return;
+  }
+  if (get_zone($host->{zone},\%zone) < 0) {
+    alert2("Cannot get zone record (id=$host->{zone})!");
+    return;
+  }
+
+  if (param('move_cancel')) {
+    alert1("Alias not moved.");
+    show_host_record($state,$perms);
+    return;
+  }
+
+  # Only a POST may change the record (no moves via crafted links).
+  if (param('move_confirm') && request_method() eq 'POST') {
+    $target = lc(param('new_target') // '');
+    $target =~ s/^\s+|\s+$//g;
+    ($tid,$ttype,$tdomain) = _find_zone_host($host->{zone},$target);
+
+    if ($target eq '') {
+      alert1("Target host not specified.");
+    } elsif (!$tid) {
+      alert1("Cannot find host '" . encode_entities($target) .
+	     "' in zone $zone{name}");
+    } elsif ($ttype != 1) {
+      alert1("Target must be a host record, not $host_types{$ttype}.");
+    } elsif ($tid == $host->{alias}) {
+      alert1("Alias already points to $tdomain.");
+    } elsif (check_perms('host',$tdomain,1)) {
+      alert1("Not authorized to add aliases to host $tdomain.");
+    } else {
+      my $old_target = $host->{alias_d};
+      %oldhost = %{$host};
+      $host->{alias} = $tid;
+
+      return if (_maybe_submit_approval($state, 'M', $host->{type},
+					$host->{domain}, $host->{id},
+					$host, \%oldhost));
+
+      $res = update_host($host);
+      if ($res < 0) {
+	alert1("Alias update failed! ($res)");
+	alert2(db_lasterrormsg());
+      } else {
+	update_history($state->{uid},$state->{sid},1,
+		       "MOVE: $host_types{4} ",
+		       "domain: $oldhost{domain}, " .
+		       "alias for: $old_target --> $tdomain",$oldhost{id});
+	success1("Alias moved from $old_target to $tdomain.");
+      }
+      show_host_record($state,$perms);
+      return;
+    }
+  }
+
+  print h2("Move alias to another host:"),
+        p,start_form(-method=>'POST',-action=>$selfurl),
+        hidden('menu','hosts'),hidden('h_id',$host->{id}),hidden('sub','Move'),
+        '<table class="s-form">',
+        '<tr class="s-form__row"><td class="s-form__label">Alias:</td>',
+        '<td class="s-form__value">',$host->{domain},'</td></tr>',
+        '<tr class="s-form__row"><td class="s-form__label">Current target:</td>',
+        '<td class="s-form__value">',$host->{alias_d},'</td></tr>',
+        '<tr class="s-form__row"><td class="s-form__label">New target host:</td>',
+        '<td class="s-form__value">',
+        textfield(-name=>'new_target',-size=>40,-maxlength=>253),
+        '</td></tr>',
+        '</table>',
+        submit(-name=>'move_confirm',-value=>'Move'), ' ',
+        submit(-name=>'move_cancel',-value=>'Cancel'),
+        end_form;
+  display_form($host,\%host_form);
+}
+
 sub menu_handler {
   my($state,$perms) = @_;
 
@@ -1397,6 +1513,10 @@ sub menu_handler {
     return unless ($id > 0);
     if (check_perms('host',$host{domain})) {
       show_host_record($state,$perms);
+      return;
+    }
+    if ($host{type} == 4) {
+      move_cname_alias($state,$perms,\%host);
       return;
     }
     # These moves are now supported.
