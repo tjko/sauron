@@ -1867,7 +1867,7 @@ sub update_zone($) {
       $r=update_array_field("caa_entries",5,"flags,tag,value,comment,type,ref",
     			    'caa',$rec,"1,$hid");
       if ($r < 0) { db_rollback(); return -141; }
-      $r=update_array_field("naptr_entries",7,"order_val,preference,flags,service,regexp,replacement,comment,type,ref",
+      $r=update_array_field("naptr_entries",8,"order_val,preference,flags,service,regexp,replacement,comment,type,ref",
 			    'naptr',$rec,"1,$hid");
       if ($r < 0) { db_rollback(); return -140; }
     }
