@@ -1194,7 +1194,8 @@ sub _show_request {
 	my ($req_id, $zoneid, $selfurl) = @_;
 	my (@req, @usr, @lvl, @tokens);
 	my ($zone_id, $policy_id, $requestor_id, $requestor_email, $operation, 
-	    $status, $current_level, $host_id, $change_data, $reason, $cdate);
+	    $status, $current_level, $host_id, $change_data, $original_data,
+	    $reason, $cdate);
 	my %op_name = ('A' => 'Add', 'M' => 'Modify', 'D' => 'Delete');
 	my %status_name = ('P' => 'Pending', 'A' => 'Approved', 'R' => 'Rejected');
 
@@ -1202,12 +1203,14 @@ sub _show_request {
 
 	# Get request details
 	db_query("SELECT zone_id, policy_id, requestor_id, requestor_email, operation, " .
-		 "status, current_level, host_id, change_data, reason, cdate " .
+		 "status, current_level, host_id, change_data, original_data, " .
+		 "reason, cdate " .
 		 "FROM dns_change_requests WHERE id = \$1", \@req, $req_id);
 	return unless (@req > 0);
 
 	($zone_id, $policy_id, $requestor_id, $requestor_email, $operation, 
-	 $status, $current_level, $host_id, $change_data, $reason, $cdate) = @{$req[0]};
+	 $status, $current_level, $host_id, $change_data, $original_data,
+	 $reason, $cdate) = @{$req[0]};
 
   unless (_can_view_request($zoneid, $zone_id)) {
     alert1('Access Denied.');
@@ -1278,6 +1281,17 @@ sub _show_request {
 		next if (!defined $val || $val eq '');
 		print '<tr class="s-list__row"><td>', encode_entities($field),
 		      ':</td><td>', encode_entities($val), "</td></tr>\n";
+	}
+
+	# CNAME target; for a modify also the original one (e.g. alias move).
+	if ($rec->{type} == 4 && defined $rec->{alias_d} && $rec->{alias_d} ne '') {
+		my $orig = _deserialize($original_data);
+		my $target = encode_entities($rec->{alias_d});
+		$target = encode_entities($orig->{alias_d}) . ' --&gt; ' . $target
+		  if ($operation eq 'M' && ref($orig) eq 'HASH' &&
+		      defined $orig->{alias_d} && $orig->{alias_d} ne $rec->{alias_d});
+		print '<tr class="s-list__row"><td>Alias for:</td><td>', $target,
+		      "</td></tr>\n";
 	}
 
 	if (defined $rec->{ip} && ref($rec->{ip}) eq 'ARRAY' && @{$rec->{ip}} > 0) {

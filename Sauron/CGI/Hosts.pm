@@ -1239,6 +1239,7 @@ sub move_cname_alias($$$) {
       my $old_target = $host->{alias_d};
       %oldhost = %{$host};
       $host->{alias} = $tid;
+      $host->{alias_d} = $tdomain; # shown in approval request details
 
       return if (_maybe_submit_approval($state, 'M', $host->{type},
 					$host->{domain}, $host->{id},
