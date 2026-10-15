@@ -1,5 +1,9 @@
 0.9.0 (beta)
 
+	- Fix approval workflow rejecting every approved Modify request as an
+	  IP conflict; the conflict check read the header row of the address
+	  list and treated the host's own addresses as used (#141) [svamberg]
+
 	- Fix editing the value or comment of a TXT record (host type TXT)
 	  in the web UI; 'Apply' reported success but kept the old value.
 	  The web UI now rejects more than one TXT entry for a TXT record
