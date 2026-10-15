@@ -161,7 +161,8 @@
 
 
     /* ---- Context warning -----------------------------------------------
-     * When no server or zone is selected (data-serverid/zoneid = 0),
+     * When no server or zone is selected (data-serverid/zoneid <= 0; the
+     * session stores -1 after a server or zone is deleted),
      * inject a hint link into the context bar so the operator knows
      * what to do next. Removed and re-added on every AJAX page swap. */
     function attachContextWarning() {
@@ -172,8 +173,8 @@
         var sid = parseInt(crumb.getAttribute('data-serverid') || '0', 10);
         var zid = parseInt(crumb.getAttribute('data-zoneid') || '0', 10);
         if (sid > 0 && zid > 0) return;
-        var hintHref  = sid === 0 ? '?menu=servers' : '?menu=zones';
-        var hintLabel = sid === 0 ? 'No server selected' : 'No zone selected';
+        var hintHref  = sid > 0 ? '?menu=zones' : '?menu=servers';
+        var hintLabel = sid > 0 ? 'No zone selected' : 'No server selected';
         var hint = document.createElement('span');
         hint.className = 's-ctx-hint';
         var hintA = document.createElement('a');
@@ -189,13 +190,10 @@
      * AJAX round-trip completes — so the hint disappears instantly.
      *
      * The crumb is rendered at the top of the page before the menu handler
-     * saves the new session state, so AJAX responses always carry stale
-     * zeroes for data-serverid/zoneid and missing Zone/Server segments.
-     * We store the pending values and re-apply them after every swap until
-     * the server confirms the selection in a later response. */
-
-    var _optZone = '';    /* pending zone name; cleared when server confirms */
-    var _optServer = '';  /* pending server name; cleared when server confirms */
+     * saves the new session state, so it shows the previous selection after
+     * a change. sauron.cgi emits <span id="s-ctx-update"> with the final
+     * selection at the end of .s-main and applyContextUpdate() rebuilds the
+     * crumb from it. */
 
     function _insertZoneInCrumb(crumb, zone) {
         /* If a Zone segment already exists, just update its text. */
@@ -207,8 +205,7 @@
                 return;
             }
         }
-        /* Insert sep + Zone label + segment before the first sep (before SID). */
-        var ref = crumb.querySelector('.s-context-bar__sep');
+        /* Append sep + Zone label + segment after the Server segment. */
         var sep = document.createElement('span');
         sep.className = 's-context-bar__sep';
         sep.setAttribute('aria-hidden', 'true');
@@ -219,13 +216,7 @@
         var seg = document.createElement('span');
         seg.className = 's-context-bar__segment';
         seg.textContent = zone;
-        if (ref) {
-            crumb.insertBefore(seg, ref);
-            crumb.insertBefore(lbl, seg);
-            crumb.insertBefore(sep, lbl);
-        } else {
-            crumb.appendChild(sep); crumb.appendChild(lbl); crumb.appendChild(seg);
-        }
+        crumb.appendChild(sep); crumb.appendChild(lbl); crumb.appendChild(seg);
     }
 
     function _insertServerInCrumb(crumb, name) {
@@ -260,11 +251,16 @@
             if (!sel || sel.selectedIndex < 0) return;
             var sid = parseInt(sel.value, 10);
             if (!(sid > 0)) return;
-            _optServer = sel.options[sel.selectedIndex].text.trim();
+            var name = sel.options[sel.selectedIndex].text.trim();
             var crumb = document.querySelector('.s-context-bar__crumb');
             if (crumb) {
+                /* Selecting another server clears the zone (Servers.pm). */
+                if (sid !== parseInt(crumb.getAttribute('data-serverid') || '0', 10)) {
+                    crumb.textContent = '';
+                    crumb.setAttribute('data-zoneid', '-1');
+                }
                 crumb.setAttribute('data-serverid', sid);
-                _insertServerInCrumb(crumb, _optServer);
+                _insertServerInCrumb(crumb, name);
             }
             attachContextWarning();
         }, true);
@@ -272,19 +268,36 @@
         /* Zone selection: links with ?menu=zones&selected_zone=name. */
         document.addEventListener('click', function (e) {
             var a = e.target.closest('a[href]');
-            if (!a) return;
+            if (!a || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+            if (a.getAttribute('target')) return;  /* not navigated by AJAX */
             var href = a.getAttribute('href') || '';
             var m = href.match(/[?&]selected_zone=([^&#]+)/);
             if (!m) return;
-            _optZone = decodeURIComponent(m[1].replace(/\+/g, ' '));
+            var zone = decodeURIComponent(m[1].replace(/\+/g, ' '));
             var crumb = document.querySelector('.s-context-bar__crumb');
             if (crumb) {
                 crumb.setAttribute('data-zoneid', '1');
-                _insertZoneInCrumb(crumb, _optZone);
+                _insertZoneInCrumb(crumb, zone);
             }
             attachContextWarning();
         }, true);
     }());
+
+    /* ---- Context update -------------------------------------------------
+     * Rebuild the crumb from <span id="s-ctx-update"> (see above) so it
+     * shows the selection the menu handler saved. */
+    function applyContextUpdate() {
+        var u = document.getElementById('s-ctx-update');
+        var crumb = document.querySelector('.s-context-bar__crumb');
+        if (!u || !crumb) return;
+        var server = u.getAttribute('data-server') || '';
+        var zone   = u.getAttribute('data-zone') || '';
+        crumb.textContent = '';
+        if (server) _insertServerInCrumb(crumb, server);
+        if (zone)   _insertZoneInCrumb(crumb, zone);
+        crumb.setAttribute('data-serverid', u.getAttribute('data-serverid') || '0');
+        crumb.setAttribute('data-zoneid',   u.getAttribute('data-zoneid') || '0');
+    }
 
     /* ---- Theme update after save --------------------------------------
      * When the theme settings page saves, it emits <meta id="s-theme-update">
@@ -372,6 +385,7 @@
         $$('.s-topbar__nav').forEach(attachTopbarNav);
         attachConfirmForms();
         focusLogin();
+        applyContextUpdate();
         attachContextWarning();
         applyThemeUpdate();
         attachThemeForm();
@@ -426,26 +440,12 @@
             var n = doc.querySelector(sel), o = document.querySelector(sel);
             if (!n || !o) return;
             o.innerHTML = n.innerHTML;
-            /* innerHTML copies children only — not the element's own attributes.
-             * Sync data-* attrs, keeping whichever value is higher so a
-             * pending optimistic update is not overwritten by the stale zero
-             * the server emits (crumb renders before the handler saves state).
-             * Then re-insert any optimistic server/zone name that the response
-             * content is missing, and clear the pending value once the server
-             * confirms it with a non-zero attr in its own response. */
-            if (sel === '.s-context-bar__crumb') {
-                var nvsid = parseInt(n.getAttribute('data-serverid') || '0', 10);
-                var nvzid = parseInt(n.getAttribute('data-zoneid') || '0', 10);
-                var ovsid = parseInt(o.getAttribute('data-serverid') || '0', 10);
-                var ovzid = parseInt(o.getAttribute('data-zoneid') || '0', 10);
-                o.setAttribute('data-serverid', Math.max(nvsid, ovsid));
-                o.setAttribute('data-zoneid',   Math.max(nvzid, ovzid));
-                /* Server confirmed — clear pending name so we trust its content. */
-                if (nvsid > 0) _optServer = '';
-                if (nvzid > 0) _optZone   = '';
-                /* Re-insert pending names the response content is missing. */
-                if (_optServer) _insertServerInCrumb(o, _optServer);
-                if (_optZone)   _insertZoneInCrumb(o, _optZone);
+            /* innerHTML copies children only — not the crumb's data-* attrs.
+             * applyContextUpdate() (from init()) sets them from
+             * #s-ctx-update; copy them here for a response without it. */
+            if (sel === '.s-context-bar__crumb' && !doc.getElementById('s-ctx-update')) {
+                o.setAttribute('data-serverid', n.getAttribute('data-serverid') || '0');
+                o.setAttribute('data-zoneid',   n.getAttribute('data-zoneid') || '0');
             }
         });
 

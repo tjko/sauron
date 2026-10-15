@@ -1,5 +1,8 @@
 0.9.0 (beta)
 
+	- Fix the context bar in the web UI showing the previously selected
+	  zone or server after changing the selection (#138) [svamberg]
+
 	- Web UI: add a 'Move' button to CNAME aliases to point an existing
 	  alias to another host in the same zone (instead of deleting and
 	  re-creating it) [svamberg]
