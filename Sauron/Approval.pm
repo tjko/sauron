@@ -653,18 +653,19 @@ sub _check_resource_conflict {
 	} elsif ($operation eq 'M') {
 		# For MODIFY: the record comes from get_host(), so row 0 of the
 		# ip list is the header and rows are [id,ip,reverse,forward,state].
-		# An address is a conflict only when another host or request uses it.
+		# Only added (2) or changed (1) addresses are new claims; they are
+		# a conflict when another host or pending request uses them.
 		if (ref($rec_ref->{ip}) eq 'ARRAY') {
 			for my $i (1..$#{$rec_ref->{ip}}) {
 				my $row = $rec_ref->{ip}[$i];
 				next unless (ref($row) eq 'ARRAY');
+				next unless (defined $row->[4] && ($row->[4] == 1 || $row->[4] == 2));
 				my $ip = $row->[1];
 				next if (!defined $ip || $ip eq '');
-				next if (defined $row->[4] && $row->[4] == -1); # deleted
-				my ($conflict_source, $conflict_id) = ip_in_use_with_pending($server_id, $ip, $request_id);
-				next unless (defined $conflict_source);
-				next if ($conflict_source eq 'hosts' && $conflict_id == $host_id);
-				return "IP conflict on modify: $ip already in use (in $conflict_source)";
+				my ($conflict_source, $conflict_id) = ip_in_use_with_pending($server_id, $ip, $request_id, $host_id);
+				if (defined $conflict_source) {
+					return "IP conflict on modify: $ip already in use (in $conflict_source)";
+				}
 			}
 		}
 	}

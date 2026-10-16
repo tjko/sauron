@@ -5,8 +5,9 @@
 # update_host(). The record comes from get_host(), whose ip list starts
 # with a header row; the host's own unchanged addresses must not count as
 # a conflict either. Checks that approved modifies of a host and of a
-# CNAME alias (no addresses) are applied, and that an address used by
-# another host is still rejected.
+# CNAME alias (no addresses) are applied, and that an added or changed
+# address used by another host or claimed by another pending request is
+# rejected.
 #
 # Skipped unless SAURON_TEST_DSN is set:
 #   SAURON_TEST_DSN="dbi:Pg:dbname=sauron_test" prove -lv t/22-approval-apply-modify.t
@@ -48,6 +49,7 @@ my $hostb   = 940004;
 my $aliasid = 940005;
 my $userid  = 940006;
 my $polid   = 940007;
+my $levelid = 940008;
 
 sub cleanup {
     my $rq = "SELECT id FROM dns_change_requests WHERE zone_id=$zoneid";
@@ -71,8 +73,8 @@ sub field {
 }
 
 # Submit a Modify request for $id with $change applied to the get_host()
-# record, then apply it as an approver would.
-sub approve_modify {
+# record. The policy has an approval level, so the request stays pending.
+sub submit_modify {
     my ($id, $change) = @_;
     my (%orig, %rec);
     get_host($id, \%orig);
@@ -80,8 +82,27 @@ sub approve_modify {
     $change->(\%rec);
     my $req = submit_change_request($zoneid, $polid, $userid, '', 'M', $id,
                                     \%rec, \%orig, 'test');
-    ok($req, "request submitted") or return (undef, 0);
+    ok($req, "request submitted") or return undef;
+    is(field("SELECT status FROM dns_change_requests WHERE id=$req"), 'P',
+       "request pending");
+    return $req;
+}
+
+# Submit a Modify request and apply it as the last approver would.
+sub approve_modify {
+    my $req = submit_modify(@_) or return (undef, 0);
     return ($req, apply_change($req));
+}
+
+sub set_ip {
+    my ($ip) = @_;
+    return sub { $_[0]{ip}[1][1] = $ip; $_[0]{ip}[1][4] = 1; };
+}
+
+sub ip_of {
+    my ($id) = @_;
+    (my $ip = field("SELECT ip FROM a_entries WHERE host=$id")) =~ s{/32$}{};
+    return $ip;
 }
 
 cleanup();
@@ -91,6 +112,8 @@ db_exec("INSERT INTO zones (id,server,type,name) " .
         "VALUES ($zoneid,$srvid,'M','approval-apply.example.')");
 db_exec("INSERT INTO approval_policies (id,zone_id,name,on_modify) " .
         "VALUES ($polid,$zoneid,'apply-test',true)");
+db_exec("INSERT INTO approval_levels (id,policy_id,level_order,level_type,name) " .
+        "VALUES ($levelid,$polid,1,'A','level 1')");
 db_exec("INSERT INTO hosts (id,zone,type,domain) " .
         "VALUES ($hosta,$zoneid,1,'host-a')");
 db_exec("INSERT INTO hosts (id,zone,type,domain) " .
@@ -110,25 +133,17 @@ subtest 'host modify keeping its address is applied' => sub {
 };
 
 subtest 'host modify to a free address is applied' => sub {
-    my ($req, $res) = approve_modify($hosta, sub {
-        $_[0]{ip}[1][1] = '192.0.2.20';
-        $_[0]{ip}[1][4] = 1;
-    });
+    my ($req, $res) = approve_modify($hosta, set_ip('192.0.2.20'));
     is($res, 1, "apply_change succeeds");
-    like(field("SELECT ip FROM a_entries WHERE host=$hosta"),
-         qr{^192\.0\.2\.20(/32)?$}, "address changed");
+    is(ip_of($hosta), '192.0.2.20', "address changed");
 };
 
 subtest 'host modify to an address of another host is rejected' => sub {
-    my ($req, $res) = approve_modify($hosta, sub {
-        $_[0]{ip}[1][1] = '192.0.2.11';
-        $_[0]{ip}[1][4] = 1;
-    });
+    my ($req, $res) = approve_modify($hosta, set_ip('192.0.2.11'));
     is($res, 0, "apply_change fails");
     is(field("SELECT status FROM dns_change_requests WHERE id=$req"), 'R',
        "request rejected");
-    like(field("SELECT ip FROM a_entries WHERE host=$hosta"),
-         qr{^192\.0\.2\.20(/32)?$}, "address unchanged");
+    is(ip_of($hosta), '192.0.2.20', "address unchanged");
 };
 
 subtest 'CNAME alias modify (no addresses) is applied' => sub {
@@ -136,6 +151,43 @@ subtest 'CNAME alias modify (no addresses) is applied' => sub {
     is($res, 1, "apply_change succeeds");
     is(field("SELECT alias FROM hosts WHERE id=$aliasid"), $hostb,
        "alias points to host-b");
+};
+
+subtest 'free address claimed by another pending request is rejected' => sub {
+    my $req1 = submit_modify($hosta, set_ip('192.0.2.30'));
+    my ($req2, $res2) = approve_modify($hostb, set_ip('192.0.2.30'));
+    is($res2, 0, "second claim fails");
+    is(field("SELECT status FROM dns_change_requests WHERE id=$req2"), 'R',
+       "second request rejected");
+    is(ip_of($hostb), '192.0.2.11', "host-b address unchanged");
+    is(apply_change($req1), 1, "first claim succeeds");
+    is(ip_of($hosta), '192.0.2.30', "host-a address changed");
+};
+
+subtest 'unchanged address is not a new claim' => sub {
+    my $req1 = submit_modify($hostb, set_ip('192.0.2.30'));
+    my ($req2, $res2) = approve_modify($hosta, sub { $_[0]{info} = 'again' });
+    is($res2, 1, "modify keeping a claimed address succeeds");
+    is(ip_of($hosta), '192.0.2.30', "host-a keeps its address");
+    is(apply_change($req1), 0, "competing claim fails");
+    is(field("SELECT status FROM dns_change_requests WHERE id=$req1"), 'R',
+       "competing request rejected");
+    is(ip_of($hostb), '192.0.2.11', "host-b address unchanged");
+};
+
+subtest 'only exact address matches in pending requests' => sub {
+    my $req1 = submit_modify($hostb, set_ip('192.0.2.40'));
+    my ($req2, $res2) = approve_modify($hosta, set_ip('192.0.2.4'));
+    is($res2, 1, "192.0.2.4 is not claimed by a request for 192.0.2.40");
+    is(ip_of($hosta), '192.0.2.4', "host-a address changed");
+    db_exec("UPDATE dns_change_requests SET status='R' WHERE id=$req1");
+};
+
+subtest 'address from an applied request is free again' => sub {
+    # The first subtest's applied request still contains 192.0.2.10.
+    my ($req, $res) = approve_modify($hostb, set_ip('192.0.2.10'));
+    is($res, 1, "apply_change succeeds");
+    is(ip_of($hostb), '192.0.2.10', "host-b address changed");
 };
 
 cleanup();

@@ -375,39 +375,49 @@ sub hostname_in_use($$) {
   return 0;
 }
 
-# ip_in_use_with_pending($serverid, $ip, $exclude_request_id) -> ($conflict_source, $conflict_id)
-# Check if IP is in use in hosts OR in pending/approved dns_change_requests
+# ip_in_use_with_pending($serverid, $ip, $exclude_request_id [, $exclude_host_id])
+#   -> ($conflict_source, $conflict_id)
+# Check if IP is in use by a host of the server OR claimed by a pending
+# dns_change_request in a zone of the server. The given request and host
+# (and other requests for that host) are not counted.
 # Returns: (undef, undef) if free, ('hosts', host_id) if in hosts, ('pending', req_id) if in pending request
-sub ip_in_use_with_pending($$$) {
-  my($serverid,$ip,$exclude_request_id)=@_;
+sub ip_in_use_with_pending($$$;$) {
+  my($serverid,$ip,$exclude_request_id,$exclude_host_id)=@_;
   my(@q);
 
   return (-1, -1) unless ($serverid > 0);
   return (-2, -2) unless (is_cidr($ip));
+  $exclude_request_id = int($exclude_request_id || 0);
+  $exclude_host_id = int($exclude_host_id || 0);
 
   # Check in hosts table (including a_entries)
   db_query("SELECT a.host FROM hosts h, a_entries a, zones z " .
 	   "WHERE z.server=$serverid AND h.zone=z.id AND a.host=h.id " .
-	   " AND a.ip = " . db_encode_str($ip) . " LIMIT 1;",\@q);
+	   " AND a.ip = " . db_encode_str($ip) .
+	   ($exclude_host_id > 0 ? " AND a.host != $exclude_host_id" : "") .
+	   " LIMIT 1;",\@q);
   if (@q > 0 && $q[0][0] > 0) {
     return ('hosts', $q[0][0]);
   }
 
-  # Check in pending/approved dns_change_requests
-  # Look for IP in change_data JSON
+  # Check in pending dns_change_requests (approved ones are already
+  # applied, so their addresses are in a_entries).
   undef @q;
-  my $exclude_clause = ($exclude_request_id > 0) ? " AND id != $exclude_request_id" : "";
   db_query("SELECT id, change_data FROM dns_change_requests " .
-	   "WHERE status IN ('P','A') AND zone_id = " .
-	   "(SELECT zone FROM hosts WHERE id = (SELECT host FROM a_entries WHERE ip = " . db_encode_str($ip) . " LIMIT 1)) " .
-	   $exclude_clause,\@q);
-  
-  # Parse change_data for IP match
+	   "WHERE status = 'P' AND zone_id IN " .
+	   "(SELECT id FROM zones WHERE server=$serverid)" .
+	   ($exclude_request_id > 0 ? " AND id != $exclude_request_id" : "") .
+	   ($exclude_host_id > 0 ?
+	    " AND (host_id IS NULL OR host_id != $exclude_host_id)" : ""),\@q);
+
+  # change_data is a Data::Dumper dump; match the address as a whole
+  # quoted value, so 192.0.2.1 does not match 192.0.2.10.
+  (my $bare = $ip) =~ s{/(?:32|128)$}{};
   for my $i (0..$#q) {
     my $req_id = $q[$i][0];
     my $change_data = $q[$i][1];
-    # Simple string search - if IP appears in change_data, it's likely in the request
-    if (defined $change_data && $change_data =~ /\Q$ip\E/) {
+    if (defined $change_data &&
+	$change_data =~ m{'\Q$bare\E(?:/(?:32|128))?'}i) {
       return ('pending', $req_id);
     }
   }
