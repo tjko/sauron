@@ -1,5 +1,11 @@
 0.9.0 (beta)
 
+	- Fix generating an invalid zone (TXT next to CNAME) for Static
+	  Aliases with TXT records. Aliases (CNAME and Static) can no longer
+	  get TXT records; existing ones are skipped with a warning when
+	  generating the zone and can still be deleted in the web UI. Before,
+	  TXT on a CNAME Alias was silently dropped [svamberg]
+
 	- Web UI: add a 'Move' button to CNAME aliases to point an existing
 	  alias to another host in the same zone (instead of deleting and
 	  re-creating it) [svamberg]

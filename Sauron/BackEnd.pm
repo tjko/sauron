@@ -2749,6 +2749,28 @@ sub _host_count_active_list_entries($$) {
   return $count;
 }
 
+# No other data may exist at a CNAME owner name (RFC 1034), so aliases (type 4)
+# can't get TXT entries. TXT rows stored before this was enforced are ignored
+# by the zone generator; leaving them unchanged doesn't block editing the alias.
+sub _alias_has_new_txt_entries($) {
+  my($rec) = @_;
+  my $new_rec = !($rec->{id} && $rec->{id} > 0);
+
+  return 0 unless (ref($rec->{txt_l}) eq 'ARRAY');
+  for my $row (@{$rec->{txt_l}}) {
+    next unless (ref($row) eq 'ARRAY');
+    my $id = $$row[0];
+    next if (defined($id) && $id !~ /^-?\d+$/); # header row
+    my $val = $$row[1];
+    next unless (defined($val) && $val !~ /^\s*$/);
+    my $state = $$row[3] || 0;
+    next if ($state == -1);
+    return 1 if ($new_rec || $state == 1 || $state == 2);
+  }
+
+  return 0;
+}
+
 sub _host_first_active_list_entry($$$) {
   my($list, $value_index, $comment_index) = @_;
 
@@ -2833,6 +2855,8 @@ sub host_required_data_error($) {
     if ($alias <= 0 && $cname_txt eq '') {
       return 'Alias record requires alias target.';
     }
+    return 'Alias (CNAME) record cannot have TXT entries.'
+      if (_alias_has_new_txt_entries($rec));
   }
 
   if ($type == 5 && !_host_has_active_list_entries($rec->{printer_l}, 1)) {
