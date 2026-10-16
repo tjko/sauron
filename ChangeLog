@@ -4,6 +4,10 @@
 	  IP conflict; the conflict check read the header row of the address
 	  list and treated the host's own addresses as used (#141) [svamberg]
 
+	- Web UI: add a 'Move' button to CNAME aliases to point an existing
+	  alias to another host in the same zone (instead of deleting and
+	  re-creating it) [svamberg]
+
 	- Fix editing the value or comment of a TXT record (host type TXT)
 	  in the web UI; 'Apply' reported success but kept the old value.
 	  The web UI now rejects more than one TXT entry for a TXT record

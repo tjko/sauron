@@ -174,7 +174,7 @@ jobs:
           SAURON_TEST_DSN: "dbi:Pg:dbname=sauron_test;host=postgres"
           SAURON_TEST_USER: ${{ env.POSTGRES_USER }}
           SAURON_TEST_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
-        run: prove -lv t/10-db-integration.t t/17-copy-zone.t t/18-delete-server.t t/19-txt-host-edit.t t/20-zone-naptr-edit.t t/22-approval-apply-modify.t
+        run: prove -lv t/10-db-integration.t t/17-copy-zone.t t/18-delete-server.t t/19-txt-host-edit.t t/20-zone-naptr-edit.t t/21-cname-alias-move.t t/22-approval-apply-modify.t
         shell: bash
 
       - name: Download and import root hints & OUI
