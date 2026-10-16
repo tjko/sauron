@@ -1,5 +1,8 @@
 0.9.0 (beta)
 
+	- Fix the context bar in the web UI showing the previously selected
+	  zone or server after changing the selection (#138) [svamberg]
+
 	- Fix approval workflow rejecting every approved Modify request as an
 	  IP conflict; the conflict check read the header row of the address
 	  list and treated the host's own addresses as used (#141). A Modify
