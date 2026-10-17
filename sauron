@@ -984,7 +984,7 @@ sub make_dns() {
                " AND (coalesce(z.expiration, 0) <= 0 OR coalesce(z.expiration, 0) > " .
                " extract(epoch from now())) " . # Exclude expired zones.
 #              "AND h.type=1 AND z.id=$zoneid " .
-               "AND (h.type=1 OR h.type=3 OR h.type=4 OR h.type=7) AND z.id=$zoneid " . # ** TVu 2020-06-16 +7 2020-11-02 +4 2025-06-16
+               "AND (h.type=1 OR h.type=3 OR h.type=7) AND z.id=$zoneid " . # ** TVu 2020-06-16 +7 2020-11-02
                "ORDER BY h.domain;",\@q);
       error(db_errormsg()) if (db_errormsg());
       if (@q > 0) {
@@ -1401,7 +1401,8 @@ sub make_dns() {
 
      # aliases (CNAME records)
      undef @q;
-     db_query("SELECT a.domain,b.domain,a.ttl,a.expiration,b.expiration " .
+     db_query("SELECT a.domain,b.domain,a.ttl,a.expiration,b.expiration," .
+              " (SELECT count(*) FROM txt_entries t WHERE t.type=2 AND t.ref=a.id) " .
               "FROM hosts a, hosts b,zones z " .
               "WHERE a.zone=z.id AND z.id=$zoneid " .
               " AND (coalesce(z.expiration, 0) <= 0 OR coalesce(z.expiration, 0) > " .
@@ -1439,11 +1440,14 @@ sub make_dns() {
            if ($bind_conf);
          printf TINYDNSFILE "C$domain\.$zonename\:$alias\:$ttl\:\:\n"
            if ($tiny_conf);
+         error("TXT on alias ignored (CNAME and other data): $q[$i][0]")
+           if ($q[$i][5] > 0);
        }
      }
      # aliases outside zone (Static Alias)
      undef @q;
-     db_query("SELECT h.domain,h.cname_txt,h.ttl,h.expiration " .
+     db_query("SELECT h.domain,h.cname_txt,h.ttl,h.expiration," .
+              " (SELECT count(*) FROM txt_entries t WHERE t.type=2 AND t.ref=h.id) " .
               "FROM hosts h,zones z " .
               "WHERE h.zone=z.id AND z.id=$zoneid " .
               " AND (coalesce(z.expiration, 0) <= 0 OR coalesce(z.expiration, 0) > " .
@@ -1476,22 +1480,8 @@ sub make_dns() {
            if ($bind_conf);
          printf TINYDNSFILE "C$domain\.$zonename\:$alias\:$ttl\:\:\n"
            if ($tiny_conf);
-
-         # TXT records for Static Alias (type=4) - ** 2025-06-16
-         my $txt = $txthash{$q[$i][0]};
-         if ($txt && ref($txt) eq 'ARRAY') {
-           for my $k (0 .. $#{$txt}) {
-             my $val = $$txt[$k];
-             $val =~ s/\"//g;
-             my $padding = length(sprintf $ZFORMAT, '', $ttl, $class, 'TXT', '');
-             printf ZONEFILE $ZFORMAT, '', $ttl, $class, 'TXT',
-               bind_fmt_long_data("$val", $padding)
-               if ($bind_conf);
-             $val =~ s/:/\\072/g;
-             my $txt_owner = ($domain ne '' ? "$domain.$zonename" : $zonename);
-             printf TINYDNSFILE "'$txt_owner\:$val\:$ttl\:\:\n" if ($tiny_conf);
-           }
-         }
+         error("TXT on alias ignored (CNAME and other data): $q[$i][0]")
+           if ($q[$i][4] > 0);
        }
      }
 
