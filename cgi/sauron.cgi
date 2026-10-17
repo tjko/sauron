@@ -443,6 +443,17 @@ elsif ($menuref=$menus{$menu}) {
 }
 else { print p,"Unknown menu '" . encode_entities($menu) . "'"; }
 
+# The context bar was printed before the menu handler ran, so it shows the
+# previous selection if the handler changed it. Emit the final server/zone
+# selection; sauron.js rebuilds the bar from it.
+unless (param('csv')) {
+  print '<span id="s-ctx-update" hidden',
+        ' data-server="', encode_entities($state{server} // ''), '"',
+        ' data-serverid="', (($state{serverid} // 0)+0), '"',
+        ' data-zone="', encode_entities($state{zone} // ''), '"',
+        ' data-zoneid="', (($state{zoneid} // 0)+0), '"></span>', "\n";
+}
+
 
 if ($debug_mode) {
   print "<hr><p>script name: " . script_name(),

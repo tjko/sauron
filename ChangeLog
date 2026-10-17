@@ -6,6 +6,16 @@
 	  generating the zone and can still be deleted in the web UI. Before,
 	  TXT on a CNAME Alias was silently dropped [svamberg]
 
+  - Fix the context bar in the web UI showing the previously selected
+	  zone or server after changing the selection (#138) [svamberg]
+
+	- Fix approval workflow rejecting every approved Modify request as an
+	  IP conflict; the conflict check read the header row of the address
+	  list and treated the host's own addresses as used (#141). A Modify
+	  now checks only added or changed addresses, and an address claimed
+	  by another pending request of the server is a conflict also when
+	  no host uses it yet [svamberg]
+
 	- Web UI: add a 'Move' button to CNAME aliases to point an existing
 	  alias to another host in the same zone (instead of deleting and
 	  re-creating it) [svamberg]
