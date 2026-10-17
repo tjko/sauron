@@ -377,12 +377,15 @@
   <arg>--help</>
   <arg><replaceable>OPTIONS</></>
   <arg choice=req><replaceable>servername</></>
-  <arg choice=req><replaceable>dhcpd.conf file</></>
+     <arg choice=req><replaceable>dhcp config file</></>
 </cmdsynopsis>
 <informaltable frame=all>
   <tgroup cols=2>
   <thead><row><entry>option</><entry>description</></row></thead>
   <tbody>
+     <row><entry><option>--kea</></>
+                <entry>Import KEA JSON configuration (otherwise format is auto-detected).</>
+     </row>
   <row><entry><option>--dir=<replaceable>directory</></></>
        <entry>Directory where included files are located (if not in 
               the directory specified in dhcpd.conf).</>

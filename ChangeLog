@@ -1,9 +1,338 @@
 0.9.0 (beta)
+
+	- Fix generating an invalid zone (TXT next to CNAME) for Static
+	  Aliases with TXT records. Aliases (CNAME and Static) can no longer
+	  get TXT records; existing ones are skipped with a warning when
+	  generating the zone and can still be deleted in the web UI. Before,
+	  TXT on a CNAME Alias was silently dropped [svamberg]
+
+  - Fix the context bar in the web UI showing the previously selected
+	  zone or server after changing the selection (#138) [svamberg]
+
+	- Fix approval workflow rejecting every approved Modify request as an
+	  IP conflict; the conflict check read the header row of the address
+	  list and treated the host's own addresses as used (#141). A Modify
+	  now checks only added or changed addresses, and an address claimed
+	  by another pending request of the server is a conflict also when
+	  no host uses it yet [svamberg]
+
+	- Web UI: add a 'Move' button to CNAME aliases to point an existing
+	  alias to another host in the same zone (instead of deleting and
+	  re-creating it) [svamberg]
+
+	- Fix editing the value or comment of a TXT record (host type TXT)
+	  in the web UI; 'Apply' reported success but kept the old value.
+	  The web UI now rejects more than one TXT entry for a TXT record
+	  instead of silently keeping only the first one [svamberg]
+
+	- Fix adding, editing and deleting NAPTR entries in the zone edit
+	  form; changes were silently ignored [svamberg]
+
+	- Reject TLS cipher lists and remote-hostnames with a trailing newline
+	  (also without the optional Net::SSLeay module) [svamberg]
+
+	- Fix host browse returning no records for 'Any type' and 'Alias'
+	  when $SAURON_ZERO_IP was not set in the config file; it now
+	  defaults to '0.0.0.0' [svamberg]
+
+	- Fix database schema consistency between createtables and the
+	  1.7 -> 1.8 upgrade [svamberg]
+	  - createtables (and make install) now creates the approval workflow
+	    tables; the pokemon base table moved to sql/common.sql
+	  - sql/nets.sql: add the ip_policy column (missing on new installs)
+	  - sql/dbconvert_1.7to1.8: also add nets.ip_policy if missing and
+	    convert deleted_hosts cuser/muser to TEXT; no longer changes table
+	    ownership and aborts unless run as the owner of all existing
+	    tables (DB_USER)
+	  - sql/drop_tables.sql: drop the approval and catalog tables, drop
+	    tables in dependency order, remove obsolete sequence drops
+	  - runsql: join multi-line statements with a space, so that
+	    sql/dbconvert_1.7to1.8 can be applied with runsql
+	  - README.upgrade: how to apply sql/dbconvert_1.7to1.8 as DB_USER
+
+	- Add DNS over TLS support: XoT (RFC 9103), DoT and DoH (RFC 8484)
+	  [svamberg]
+	  - New TLS profiles (ACLs -> TLS Profiles) emitted as top-level
+	    tls "<name>" { ... }; statements in named.conf; Sauron stores only
+	    certificate/key file paths, not the key material
+	  - Built-in 'ephemeral' (self-signed) and 'none' TLS objects usable
+	    wherever a profile name is expected; these names are reserved
+	  - Server: TLS listener (listen-on ... tls) with port, default zone
+	    TLS profile, and DoH listener with profile, port and endpoint path
+	  - Zone: "Use TLS for zone transfers" (allow-transfer transport tls),
+	    per-zone TLS profile override; masters and also-notify rows gained
+	    Port and TLS profile columns
+	  - Hardened input handling: integer-guarded profile ids, 'filepath'
+	    validator for certificate paths, generator skips profiles with
+	    unsafe values and falls back to /dns-query for invalid endpoints
+	  - Web form validation: protocols (TLSv1.2/TLSv1.3), ciphers checked
+	    with OpenSSL like named-checkconf (optional Net::SSLeay module),
+	    remote-hostname, TLS profile references and DoH endpoint path;
+	    form hints list allowed values and how to look up cipher names
+	  - Keep the plain DNS listener (listen-on { any; }) when a TLS or DoH
+	    listener is configured and the server has no explicit listen-on;
+	    otherwise BIND would stop listening on port 53
+	  - Requires BIND 9.18.11 or later; DoQ (RFC 9250) is not supported
+	  - Updated sql/tls_profiles.sql, servers.sql, zones.sql,
+	    cidr_entries.sql and dbconvert_1.7to1.8 to create and migrate
+	    the new table and columns
+	  - Integration tests: t/16-xot-generate.t
+	  - Deleting a server also deletes its TLS profiles
+	  - Renaming a TLS profile updates its references; a referenced profile
+	    cannot be deleted; profiles are always emitted from the generated
+	    server (they do not follow "Use access control from master")
+	  - Generator skips profiles with unsafe names, keeps comments on one
+	    line and stops on an unsafe TLS profile reference
+	  - Copy zone keeps the XoT settings (Use TLS, TLS profile, masters
+	    and also-notify port/TLS profile)
+	  - Documentation: docs/dns-over-tls.txt
+
+	- Deleting a server also deletes its ACLs (with their entries) and
+	  TSIG keys; previously they were left in the database orphaned
+	  [svamberg]
+	  - Server allow-query-cache, allow-notify and listen-on-v6 entries
+	    are deleted too (they were left behind as well)
+	  - A server that still has slave servers cannot be deleted (slaves
+	    use its zones, ACLs and keys); delete the slave servers first
+	  - Integration test: t/18-delete-server.t
+
+	- Fix "Copy zone" in the web UI [svamberg]
+	  - copy only real zones columns; catalog helper fields loaded by
+	    get_zone() made the insert fail
+	  - do not copy the a_entries.ipv6 column dropped in DB 1.6; the failed
+	    statement aborted the transaction, so the copy was lost even though
+	    copy_zone() reported success
+	  - remove a leftover debug print
+	  - Integration test: t/17-copy-zone.t
+
+	- Do not log "internal error (form_magic):16" when editing a zone
+	  (aggregate catalog composition field) [svamberg]
+
+	- Add 'make test-e2e' to run integration and E2E tests locally [svamberg]
+	  - Builds the Docker image from the working tree, seeds test servers
+	    and runs t/1*.t plus BIND/DHCP config generation, mirroring the
+	    integration-tests CI job
+	  - Uses an isolated compose project (sauron-e2e, docker-compose.e2e.yml)
+	    with no published ports and a tmpfs database, so it can run next to
+	    the dev stack and leaves nothing behind
+	  - Test runner: docker/e2e-tests.sh (PROVE_OPTS overrides prove flags)
+
+	- Fix adding CNAME/AREC alias in web UI failing with "Undefined
+	  subroutine db_lasterrormsg" [svamberg]
+	  - Sauron::CGI::Utils now imports Sauron::DB, so add/edit errors
+	    show the database message instead of crashing
+	  - Do not pass zone_id into the hosts INSERT (column does not exist);
+	    the approval check uses the record's zone instead
+
+	- Enforce RFC8945-compliant TSIG key name validation [svamberg]
+	  - Add valid_tsig_keyname() to Sauron::Util for DNS domain name validation
+	    (relative or FQDN, allowing alphanumeric, hyphens, underscores, dots)
+	  - keygen now uses valid_tsig_keyname() instead of valid_texthandle()
+	    to accept RFC8945-style key names with dots (e.g. <id>.<fqdn>)
+	  - Validation rules: labels must start with alphanumeric, no consecutive
+	    dots, no leading/trailing hyphens on labels, trailing dot allowed
+	  - BREAKING CHANGE: Existing TSIG keys with names starting with '_' or
+	    ending with '-' are now rejected. Check existing keys before upgrade:
+	      SELECT name FROM keys WHERE type=1 AND (name ~ '^_' OR name ~ '-$');
+	  - Unit tests: t/01-util.t (valid_tsig_keyname subtest)
+	  - Documentation: docs/tsig-key-management.txt, README.upgrade
+
+	- Add modern TSIG algorithm support (HMAC-SHA1/256/384/512) [svamberg]
+	  - keygen: generate keys with --algorithm (default HMAC-SHA256) and
+	    switch from dnssec-keygen to BIND's tsig-keygen, which is required
+	    for the HMAC family (path overridable via SAURON_TSIG_KEYGEN_PROG)
+	  - Store shared secrets in 8-byte RC5 blocks so the longer SHA secrets
+	    (20-64 bytes) are supported; existing HMAC-MD5 keys keep working
+	    byte-for-byte and require no migration (tsig_secret_encrypt/decrypt
+	    helpers in Sauron::Util)
+	  - setmasterkey re-encrypts secrets of any length and accepts the whole
+	    TSIG algorithm range (157-161)
+	  - sauron: emit the new algorithms in BIND configuration, trimming the
+	    decrypted secret back to its real length (keysize)
+	  - get_key_list() can match the whole TSIG family (algo == -1)
+	  - Unit tests for the encryption helpers (t/01-util.t)
+
+	- Add import-blocklist script for RPZ blocklist management [svamberg]
+	  - New Perl script for importing blocked domains from CSV files
+	  - Supports multiple sources with configurable column mapping
+	  - Incremental updates: add/modify/delete operations
+	  - Safety features to prevent accidental data loss:
+	    * --max-changes-percent: limit changes as percentage (default 25%)
+	    * --max-delete: maximum DELETE operations (default 1000)
+	    * --confirm-above: interactive confirmation for large changes
+	  - Automatic deduplication of domains in source CSV
+	  - Sample configuration for Czech government blocklists:
+	    * Ministerstvo financí (unauthorized gambling)
+	    * SÚKL (illegal medicines)
+	    * SZPI (dangerous foods)
+	    * ÚSKVBL (veterinary medicines)
+	  - Documentation: docs/import-blocklist.txt
+	  - Integration tests: t/15-import-blocklist.t
+	  - CI workflow updated to run tests on push/PR
+
+	- Fixed UTF-8 corruption in CGI edit/save flow (notably zone comments)
+	  where text could degrade to mojibake on repeated updates [svamberg]
+	  - DBI backend now enables pg_enable_utf8 and forces UTF8 client encoding
+	  - CGI request UTF-8 parameter decoding is enabled only when configured
+	    charset is UTF-8 (backward-compatible with legacy non-UTF setups)
+	  - Added compatibility repair path in form handling for common mojibake
+	    patterns in UTF-8 mode
+	  - Added dbcheck encoding detector:
+	    --check=encoding [--mojibake-chars=<chars>] [--mojibake-charset=<enc>]
+	    to scan text columns for likely mojibake patterns generated from
+	    selected diacritics
+	  - dbcheck encoding check now also supports interactive repair when
+	    used with --commit (still non-destructive without --commit)
+	  - Added upgrade notes for one-time repair of already corrupted records
+	    (README.upgrade)
+	- Reworked UTF-8 handling into a clean single decode/encode boundary
+	  model, superseding the earlier mojibake-repair heuristic [svamberg]
+	  - Root cause: with this CGI.pm + module stack, request parameters
+	    arrive as the raw UTF-8 octets reinterpreted as Latin-1 codepoints,
+	    with the UTF8 flag already set -- e.g. "ž" (octets C5 BE) becomes the
+	    codepoints U+00C5 U+00BE ("Å¾"). Sent to DBD::Pg/db_encode_str it is
+	    re-encoded to UTF-8, double-encoding the value on every save
+	    (e.g. "žluťoučký" -> "Å¾luÅ¥ouÄ\x8dký", getting worse with each
+	    edit, including via form-reloading "Add" buttons)
+	  - The previous fix_param_utf8() heuristic only repaired this inside
+	    form_check_form(), so any path that bypassed it (form-reloading
+	    buttons, sticky form re-render) still corrupted the text. Removed.
+	  - decode_cgi_params() (Sauron::CGIutil) now repairs every request
+	    parameter once at the boundary: map the codepoints back to octets
+	    (encode ISO-8859-1) and decode them as UTF-8. FB_CROAK makes it
+	    self-guarding -- already-correct wide text and non-UTF-8 values are
+	    left untouched, so it is idempotent across repeated round trips.
+	    The unreliable -utf8 / $CGI::PARAM_UTF8 path was dropped.
+	  - Data is then kept as Perl wide-character strings end to end: DBD::Pg
+	    pg_enable_utf8 decodes DB reads, and the response body is encoded
+	    exactly once via an explicit STDOUT binmode driven by the configured
+	    web charset (independent of the server locale)
+	  - Added regression tests including the UTF8-flagged mojibake case, the
+	    write-path invariant and round-trip stability (t/07-utf8-encoding.t)
+	- Added KEA DHCP configuration import support: parses KEA JSON
+	  configs (DHCPv4/DHCPv6) and converts subnets, pools, reservations, 
+	  shared-networks and options to ISC-like internal format used 
+	  by import-dhcp [svamberg]
+	- Generalized required-data validation for host record types [svamberg]
+	  - Added a centralized backend validator for type-specific required
+	    fields and entry lists
+	  - Applied validation consistently in add/update backend paths and
+	    CGI add/edit/restricted-add flows
+	  - Prevents semantically empty records from being saved
+	    (e.g. TXT without TXT entries, SRV without SRV entries)
+	  - Added dbcheck hosts consistency check for records missing required
+	    type-specific values (reports issues, no automatic fix)
+	- Approvals (new feature) [svamberg]
+	  - Mandatory justification requirement for approval requests
+	    - Two-step submission workflow: users must provide justification
+	      before approval request is created in the database
+	    - Prevents accidental submissions without proper documentation
+	    - Improves audit trail and reviewer context
+	  - Added a full web-based DNS approval workflow
+	    - New modules: Sauron::Approval and Sauron::CGI::Approvals
+	    - New CGI handlers and menu integration for approval requests,
+		  decision pages, and request detail views
+	    - Added helper script send-approval-reminders for pending approvals
+	  - Added database schema and migration support for approvals 
+	    - New schema file: sql/approval_workflow.sql
+	    - Updated init/tables.sql and dbconvert_1.7to1.8 to create and migrate
+	      approval-related tables
+	    - Updated config.in for approval workflow configuration options
+	  - Improved approval policy enforcement and security behavior 
+	    - Enforced approval checks in restricted host operations
+	    - Added superuser-specific approval advancement behavior
+	    - Removed token-based workflow path and tightened access control
+	  - Improved approval UI feedback and request usability
+	    - Better pending request display with level links and richer details
+	    - Added post-action navigation links and helpful submission feedback
+	    - Displayed approval level names in overviews and request details
+	  - Added approval-focused test coverage
+	    - New tests: t/05-approval-policy.t and t/06-approval-level-advance.t
+	- Added full CAA record support [svamberg]
+	  - New SQL table: caa_entries and upgrade
+	  - Apex CAA records are managed directly in zone edit form
+	  - Host CAA records are managed in host forms, including CAA-only records
+	  - import-zone/import-zone-comments and sauron generator handle CAA natively
+	  - Round-trip tests now verify CAA import and export
+	- DEPRECATED: Sauron::DB-Pg.pm module (legacy Pg.pm backend) is now 
+	  deprecated. Users are strongly encouraged to migrate to the default
+	  DB-DBI.pm module (DBI/DBD::Pg backend) which provides:
+	  - Better performance and reliability
+	  - Wider database compatibility
+	  - Better error handling and logging
+	  - More active maintenance and PostgreSQL version support
+	  Migration: Use 'ln -sf DB-DBI.pm Sauron/DB.pm' to switch backends,
+	  or reconfigure with './configure --with-DBI' and rebuild.
+	  The Pg.pm backend will be removed in a future version. Users will see
+	  deprecation warnings in system logs when using DB-Pg.pm.
+	- Added Catalog Zones (RFC 9432) [svamberg]
+	  - Full BIND 9.11+ support for DNS zone catalogs
+	  - New zone type 'C' (Catalog) for aggregating multiple zone metadata
+	  - Automatic zone distribution via AXFR transfers to secondary servers
+	  - Web interface for managing catalog membership
+	- Added Catalog Zone Groups support (RFC 9432 §5.2) [svamberg]
+	  - Member zones can be assigned to multiple named groups per catalog
+	  - Group definitions managed per catalog zone with optional comments
+	  - Web UI for group management with usage tracking and delete warnings
+	  - BIND zone file generator outputs group TXT records per member
+	  - New tables: zone_catalog_groups, catalog_group_defs
+	  - New "Catalog Groups" menu item and inline link from catalog zone view
+	- Added Aggregate Catalog Zones (type A) for multi-source catalog
+	  merging (RFC 9432) [svamberg]
+	  - New zone type 'A' merges members from multiple source catalog
+	    zones (type C) into a single output catalog zone
+	  - Priority-based conflict resolution when the same member zone
+	    appears in multiple source catalogs (lower priority wins)
+	  - New table: catalog_compositions (source/priority mapping)
+	  - CGI composition editor (ftype 16) for selecting sources and
+	    setting priorities
+	  - Generator produces merged zone file with conflict reporting
+	- Added 'catalog_only' flag for zones [svamberg]
+	  - Zones marked catalog_only are skipped entirely during generation
+	    (no named.conf entry, no zone file)
+	  - Intended for shadow catalog zones imported from external sources
+	- Added import-catalog-zone script [svamberg]
+	  - Imports external catalog zones via AXFR or zone file
+	  - Parses RFC 9432 PTR (member zones) and TXT (group assignments)
+	  - Creates shadow catalog zone (type C, catalog_only) in Sauron
+	  - --sync mode for incremental updates (add new, remove stale members)
+	  - --dryrun mode for safe preview without database changes
+	  - --group option auto-creates catalog group definition (zone-scoped)
+	  - --ignore-groups option skips RFC 9432 group TXT records
+	  - Automatic group definition creation from imported catalog data
+	- Added new option --keep-pending for sauron command [svamberg]
+	- Add check-reverse utility script for DNS PTR record validation [svamberg]
+	  - Verifies that A/AAAA records have corresponding PTR records in DNS
+	  - Intelligent reverse zone suggestions via WHOIS lookup and CIDR analysis
+	  - Support for RFC 2317 classless reverse zones (/25-/32 subnets)
+	  - Three-tier fallback strategy: authoritative SOA -> WHOIS block size -> 
+	    standard boundaries 
+	- Added TAP-based test suite using Test::More (t/ directory):
+	    - t/00-compile.t: compilation check for all .pm modules and scripts
+	    - t/01-util.t: unit tests for Sauron::Util (IP, CIDR, base64, etc.)
+	    - t/02-utilzone.t: unit tests for zone file parsing (forward/reverse)
+	    - t/03-utildhcp.t: unit tests for DHCP config parsing
+	    - t/04-sauron-module.t: Sauron::Sauron module loading tests
+	    - t/10-db-integration.t: database connectivity tests (requires SAURON_TEST_DSN)
+	    - t/11-import-generate.t: end-to-end import-zone/generatehosts/sauron tests
+	    - t/12-zone-roundtrip.t: zone import → generate → compare round-trip test
+	    - t/13-catalog-aggregate.t: import catalog zones, aggregate, compare tests
+	  - Added zone canonicalization tool (t/zone-canonicalize.pl) for
+	    diff-based comparison of zone files (normalizes FQDN, case, SOA serial)
+	  - Added comprehensive test zone (test/roundtrip.example.com.zone) with
+	    A, AAAA, CNAME, MX, NS, TXT, HINFO, WKS, SRV, SSHFP, TLSA, NAPTR,
+	    DS, delegations, and glue records
+	  - Added GitHub Actions CI pipeline (.github/workflows/ci.yml) running
+	    unit tests in Debian container with PostgreSQL integration tests
+	  - Added 'make test' target in Makefile.in
 	- Added Sauron::SetupIO module for correct encoding settings,
 	  sets encoding transport layers according to system settings
 	  (locale for STDIN, STDOUT, STDERR) using Encode::Locale [svamberg]
-	- Increased maximum login length to 321 characters to allow storage 
-	  of eduPersonUniqueId according to RFC4512. [svamberg]
+	- Removed fixed username length limits for account creation, account
+	  modification, and web login/history filters while keeping existing
+	  allowed-character validation rules. [svamberg]
+	- Changed audit user fields cuser and muser from CHAR(321) to TEXT in
+	  schema templates and conversion scripts. [svamberg]
 	- Removed 'WITH OIDS' from SQL table creation; not supported since 
 	  version 12. [svamberg]
 	- change libcrypt-cb5-perl to libcryptx-perl [svamberg]
@@ -15,7 +344,8 @@
 	- add sshfp support [valtri, svamberg]
 	- Generic support for enum types in record list [svamberg, valtri]
 	- add import SSHFP records [svamberg, valtri]
-	- add import NAPTR records into Cusom zone file entries [svamberg]
+	- add import NAPTR records [svamberg]
+	- add new NAPTR form [svamberg]
 	- add script 'addzone' for creating new zone [svamberg]
 	- add TLSA support [svamberg]
 	- add script compare-zones.pl to comparing two zone files [svamberg]
@@ -34,6 +364,31 @@
 	- Add $SAURON_TOPMENU_BGCOLOR and $SAURON_TOPMENU_FONTCOLOR
 	  for customizing top menu. [svamberg]
 	- Unified appearance of the top menu (ON/OFF frames) [svamberg]
+	- Frontend redesign: semantic HTML, CSS design system, progressive
+	  JS enhancement [sysrow]
+	  - Replaced legacy HTML 3.2 table-based layout with semantic markup
+	    using CSS grid (s-shell, s-sidebar, s-main, s-topbar); top bar
+	    colour and per-environment label driven by CSS custom property
+	  - Added icons/sauron.css: CSS custom property foundation, full
+	    component library, WCAG 2.1 AA focus indicators
+	  - Added icons/sauron.js (no framework, no build step): sortable
+	    tables, inline row filter, keyboard navigation, login auto-focus,
+	    AJAX form handling
+	  - Added semantic class output to CGIutil display primitives
+	    (display_form, form_magic, display_list, display_dialog, alerts)
+	  - Added success1() helper alongside alert1/alert2/warning1 and
+	    converted ad-hoc h1/h2/h3 status messages across all CGI handler
+	    modules to the semantic helpers
+	  - Replaced inline bgcolor/FONT attributes with semantic classes
+	    across all CGI handler modules; applied s-list classes to plugin
+	    tables and removed dead code
+	  - Removed frame_mode, DTD_HACK and FRAMEON/FRAMEOFF; registered
+	    new $SAURON_ENV_NAME config variable for per-environment
+	    labelling in the top bar
+	  - Wired icons/sauron.css and icons/sauron.js into LOGOFILES so
+	    `make install` copies them to $(bindir)/icons
+	  - Fall back to '.' when srcdir is unset in Makefile.in test
+	    targets, allowing `make test-unit` directly from a clone
 
 0.8.5
 

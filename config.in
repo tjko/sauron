@@ -42,6 +42,11 @@ $DB_PASSWORD = "bar";
 # $SAURON_MAILER_ARGS = '-t'; 
 # $SAURON_MAIL_FROM = 'postmaster@somedomain'; 
 
+# approval workflow configuration
+# $SAURON_BASE_URL = 'https://sauron.example.com';
+# $SAURON_APPROVAL_REMINDER_HOURS = 24;
+# $ALEVEL_APPROVAL_ADMIN = 5;
+
 # set to enable ping command in web interface
 # $SAURON_PING_PROG = '/bin/ping';
 # $SAURON_PING_ARGS = '-c5';  
@@ -129,8 +134,8 @@ $DB_PASSWORD = "bar";
 # authorization level needed to see host history
 # $ALEVEL_HISTORY = 1;
 
-# specify charset for CGI interface (default is iso-8859-1)
-# $SAURON_CHARSET = 'iso-8859-15';
+# specify charset for CGI interface (default is utf-8)
+# $SAURON_CHARSET = 'utf-8';
 
 # Set this to 1 to enable secure cookies. Note, this may cause problems
 # with some broken browsers, so it's not enabled by default.
@@ -178,9 +183,6 @@ $DB_PASSWORD = "bar";
 #  1 = zone read (write) access is not inherited from server privileges
 #      (user sees only zones she has explicitly given read (write) access)
 # $SAURON_PRIVILEGE_MODE = 1
-
-# set 1 to use hardcoded DTD instead the one genereated by CGI module
-# $SAURON_DTD_HACK = 0;
 
 # Set this to change behaviour of HINFO edit fields (for hosts):
 #    1 = Allow empty values (last in the drop-down list)
@@ -237,6 +239,15 @@ $DB_PASSWORD = "bar";
 
 #$SAURON_TOPMENU_BGCOLOR="#002d5f"; # default: #002d5f
 #$SAURON_TOPMENU_FONTCOLOR="white"; # default: white
+
+# Short label identifying the running environment (e.g. PROD, STAGING,
+# DEV). When set it is shown next to the Sauron title and is exposed to
+# CSS as --s-env-name. Combine with $SAURON_TOPMENU_BGCOLOR to give each
+# environment a distinct top bar; reduces the chance of editing the
+# wrong instance by mistake.
+#$SAURON_ENV_NAME = "PROD";    # production deployment
+#$SAURON_ENV_NAME = "STAGING"; # paired with e.g. $SAURON_TOPMENU_BGCOLOR="#7d3c98"
+#$SAURON_ENV_NAME = "DEV";     # paired with e.g. $SAURON_TOPMENU_BGCOLOR="#0d6efd"
 
 # $LOOPBACK_NET = "127.0.0.0/24";
 # $LOOPBACK_ZONE = "loopback.";

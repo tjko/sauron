@@ -1,0 +1,33 @@
+# Opt-in live-mount overlay for development (no image rebuild for Perl/CGI edits).
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+#
+# Mounts host sources over the installed paths inside the container:
+#   ./Sauron              -> /usr/local/sauron/Sauron
+#   ./Sauron/DB-DBI.pm    -> /usr/local/sauron/lib-dev/Sauron/DB.pm
+#   ./cgi                 -> /usr/local/sauron/cgi
+#   ./icons               -> /usr/local/sauron/icons
+#
+# Notes:
+# - No host-side Sauron/DB.pm symlink is required. DB-DBI.pm is mounted into
+#   a separate lib-dev path and prepended to PERL5LIB, so Perl resolves
+#   Sauron::DB from it while other Sauron::* modules come from ./Sauron.
+# - If you still need the deprecated DB-Pg.pm backend, change the DB-DBI.pm
+#   mount below to DB-Pg.pm.
+# - CGI shebangs on the host may say -I/opt/sauron; Apache sets PERL5LIB so
+#   modules still load from /usr/local/sauron (mounted sources are preferred
+#   via PERL5LIB order).
+# - Rebuild the image when Dockerfile, system packages, or entrypoint change.
+
+services:
+  sauron:
+    environment:
+      SAURON_ENV_NAME: DEV
+      # Mounted sources first, then the rest of the installed tree
+      PERL5LIB: /usr/local/sauron/lib-dev:/usr/local/sauron
+    volumes:
+      - ./Sauron:/usr/local/sauron/Sauron:ro
+      - ./Sauron/DB-DBI.pm:/usr/local/sauron/lib-dev/Sauron/DB.pm:ro
+      - ./cgi:/usr/local/sauron/cgi:ro
+      - ./icons:/usr/local/sauron/icons:ro

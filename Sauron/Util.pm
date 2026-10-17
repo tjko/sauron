@@ -9,13 +9,14 @@ require Exporter;
 use Sauron::SetupIO;
 use Time::Local 'timelocal_nocheck';
 use Digest::MD5;
+use Crypt::Cipher::RC5;
 # use Net::Netmask;
 use POSIX qw(strftime);
 use Net::IP qw(:PROC);
 use strict;
 use vars qw($VERSION @ISA @EXPORT);
 use Sys::Syslog qw(:DEFAULT setlogsock);
-Sys::Syslog::setlogsock('unix');
+eval { local $SIG{__WARN__} = sub {}; Sys::Syslog::setlogsock('unix') };
 use open ':locale';
 
 sub write2log{
@@ -37,6 +38,10 @@ $VERSION = '$Id:$ ';
 	     valid_domainname
              valid_hex
 	     valid_texthandle
+	     valid_tsig_keyname
+	     valid_tls_protocols
+	     valid_tls_ciphers
+	     valid_tls_hostname
              cidrok
              cidr4ok
              cidr6ok
@@ -83,6 +88,8 @@ $VERSION = '$Id:$ ';
          is_iaid
          trim
          dhcpduid
+	     tsig_secret_encrypt
+	     tsig_secret_decrypt
 	    );
 
 sub valid_base64($) {
@@ -208,6 +215,81 @@ sub valid_texthandle($) {
   return ($str =~ /^[a-zA-Z0-9_\-]+$/ ? 1 : 0);
 }
 
+# Validate TSIG key name according to RFC8945.
+# TSIG key name is a DNS domain name (relative or FQDN), e.g. <id>.<fqdn>
+# Allowed characters: alphanumeric, hyphens, dots, underscores
+# - Labels (parts between dots) must start with alphanumeric
+# - No consecutive dots
+# - Trailing dot is allowed (FQDN notation)
+sub valid_tsig_keyname($) {
+  my($str) = @_;
+  
+  return 0 unless (defined $str && $str ne '');
+  return 0 if ($str =~ /^\./);                   # cannot start with dot
+  return 0 if ($str =~ /\.\./);                  # no consecutive dots
+  
+  # Strip trailing dot if present (FQDN notation)
+  $str =~ s/\.$//;
+  return 0 if ($str eq '');                      # was just a single dot
+  
+  # Check each label (part between dots)
+  my @labels = split(/\./, $str);
+  for my $label (@labels) {
+    return 0 if ($label eq '');                  # empty label
+    return 0 unless ($label =~ /^[a-zA-Z0-9_\-]+$/);  # valid chars only
+    return 0 unless ($label =~ /^[a-zA-Z0-9]/);  # must start with alphanumeric
+    return 0 if ($label =~ /-$/);                # cannot end with hyphen
+  }
+  
+  return 1;
+}
+
+# Validate a TLS protocols list for a BIND tls{} block: space or comma
+# separated TLSv1.2 / TLSv1.3 (the only versions BIND accepts), no duplicates.
+sub valid_tls_protocols($) {
+  my($str) = @_;
+  my(%seen);
+
+  return 0 unless (defined $str && $str =~ /\S/);
+  for my $p (split(/[\s,]+/, $str)) {
+    next if ($p eq '');
+    return 0 unless ($p eq 'TLSv1.2' || $p eq 'TLSv1.3');
+    return 0 if ($seen{$p}++);
+  }
+  return 1;
+}
+
+# Validate a TLS remote-hostname (name expected in the peer certificate):
+# a fully qualified host name with at least two labels, written without
+# the trailing dot (certificate names do not carry it).
+sub valid_tls_hostname($) {
+  my($str) = @_;
+
+  return 0 unless (defined $str && $str =~ /^[A-Za-z0-9\-]+(\.[A-Za-z0-9\-]+)+\z/);
+  return 0 if ($str =~ /(^|\.)-|-(\.|$)/);
+  return (valid_domainname($str) ? 1 : 0);
+}
+
+# Validate an OpenSSL cipher list (BIND tls{} `ciphers`, TLSv1.2 and older).
+# Returns 1 if valid, 0 if invalid, and -1 if the list could only be checked
+# for allowed characters because Net::SSLeay is not installed.
+# Uses SSL_CTX_set_cipher_list() the same way named-checkconf does, so a list
+# that matches no cipher at all (e.g. "crc8" or only TLSv1.3 suites) fails.
+sub valid_tls_ciphers($) {
+  my($str) = @_;
+
+  return 0 unless (defined $str && $str =~ /^[A-Za-z0-9_!+\-:@=.,]+\z/);
+  return -1 unless (eval { require Net::SSLeay; 1 });
+
+  Net::SSLeay::load_error_strings();
+  Net::SSLeay::library_init();
+  my $ctx = Net::SSLeay::CTX_new();
+  return -1 unless ($ctx);
+  my $ok = Net::SSLeay::CTX_set_cipher_list($ctx, $str);
+  Net::SSLeay::CTX_free($ctx);
+  return ($ok ? 1 : 0);
+}
+
 # Change an URL to a link, not showing "http(s)://", possible parameters and fragment identifier.
 # Text not containing an URL or already having an anchor will not be affected.
 # Links will open in new target windows / tabs. TVu
@@ -225,8 +307,10 @@ sub url2link($) {
 # Does not test if masked portion is actually all zeros,
 # nor are private/reserved addresses checked.
 sub cidr4ok($) {
-    local ($_) = @_;
-    /^((25[0-5]|2[0-4]\d|[01]?\d{1,2})\.){0,3}(25[0-5]|2[0-4]\d|[01]?\d{1,2})(\/([012]?\d|3[012]))?$/;
+    my ($addr) = @_;
+
+    my $ip = NetAddr::IP->new($addr) or return 0;
+    return $ip->bits == 32 ? 1 : 0; # only IPv4 address is allowed
 }
 
 # Verify IPv6 CIDR is formally correct.
@@ -239,17 +323,13 @@ sub cidr4ok($) {
 # Mixed IPv6-IPv4 notation x:x:x:x:x:x:d.d.d.d is not allowed.
 # Netmask, if present, must be a multiple of 4.
 sub cidr6ok($) {
-    local ($_) = @_;
+    my ($addr) = @_;
 
-#   if (/\/(\d{1,3})$/) { return 0 if ($1 % 4); }
-    if (/\/(\d{1,3})$/ && $1 % 4) { return 0; }
-    s/\/([01]?\d{1,2}|12[0-8])$//;
-    return /^([\dA-F]{1,4}:){7}[\dA-F]{1,4}$/i if !/::/;
-    # Compression (::) is handled by converting :: to single 0
-    # - not complete decompression but for purposes of validity testing
-    # it is sufficient.
-    s/^::$/0:0/ || s/::$/:0/ || s/^::/0:/ || s/::/:0:/;
-    /^([\dA-F]{1,4}:){1,7}[\dA-F]{1,4}$/i;
+    # NetAddr::IP returns object or undef (invalid address)
+    my $ip = NetAddr::IP->new($addr) or return 0;
+    return 0 unless $ip->bits == 128; # only IPv6 address is allowed
+    return 0 if $ip->masklen % 4;  # mask must be a multiple of 4
+    return 1;
 }
 
 # Verify mixed IPv6-IPv4 CIDR:
@@ -257,14 +337,16 @@ sub cidr6ok($) {
 # compression within IPv6 part is allowed, e.g., x::x:d.d.d.d
 # Netmask, if present, must be a multiple of 4.
 sub cidr64ok($) {
-    local ($_) = @_;
+    my ($addr) = @_;
 
-#   if (/\/(\d{1,3})$/) { return 0 if ($1 % 4); }
-    if (/\/(\d{1,3})$/ && $1 % 4) { return 0; }
-    s/\/([01]?\d{1,2}|12[0-8])$//;
-    return /^([\dA-F]{1,4}:){5}[\dA-F]{1,4}:((25[0-5]|2[0-4]\d|[01]?\d{1,2})\.){3}(25[0-5]|2[0-4]\d|[01]?\d{1,2})$/i if !/::/;
-    s/^::$/0:0/ || s/::$/:0/ || s/^::/0:/ || s/::/:0:/;
-    /^([\dA-F]{1,4}:){1,5}[\dA-F]{1,4}:((25[0-5]|2[0-4]\d|[01]?\d{1,2})\.){3}(25[0-5]|2[0-4]\d|[01]?\d{1,2})$/i if !/::/;
+    my $ip = NetAddr::IP->new($addr) or return 0;
+    return 0 unless $ip->bits == 128; # only IPv6 address is allowed
+    return 0 if $ip->masklen % 4; # mask must be a multiple of 4
+
+    # We will check that the original string ends with a classic IPv4 notation.
+    # NetAddr::IP can already parse the IPv4 part, but we need to
+    # verify that the user has actually entered the form "xxx.xxx.xxx.xxx".
+    return ($addr =~ /(?:\d{1,3}\.){3}\d{1,3}$/) ? 1 : 0;
 }
 
 # Verify CIDR is correct, either IPv4 or IPv6 (including mixed).
@@ -1122,6 +1204,55 @@ sub trim($) {
     $s =~ s/\s+$//g;
 
     return $s;
+}
+
+
+#
+# TSIG shared secret encryption helpers.
+#
+# Sauron stores TSIG shared secrets in the database encrypted with the
+# Sauron master key using RC5.  The original code only handled a single
+# 8-byte (64-bit) block, which is enough for legacy HMAC-MD5 but not for
+# the modern HMAC-SHA* algorithms whose secrets are 20-64 bytes long.
+#
+# These helpers process the secret in 8-byte ECB blocks so secrets of any
+# length are supported.  For an 8-byte secret the output is byte-for-byte
+# identical to the old single-block code, so existing keys keep working.
+# The padding added to fill the last block is plain zero bytes; the real
+# secret length is tracked separately (the keysize column) and used to
+# trim the padding on decryption, so no ambiguous padding scheme is needed.
+#
+
+# tsig_secret_encrypt($masterkey, $secret)
+#   $masterkey - raw (binary) Sauron master key
+#   $secret    - raw (decoded) secret bytes
+# returns the raw (binary) ciphertext.
+sub tsig_secret_encrypt($$) {
+  my($masterkey,$secret) = @_;
+  my $cipher = Crypt::Cipher::RC5->new($masterkey,16);
+  # zero-pad to a full block boundary
+  $secret .= "\0" x ((8 - length($secret) % 8) % 8);
+  my $out = '';
+  for (my $i=0; $i < length($secret); $i += 8) {
+    $out .= $cipher->encrypt(substr($secret,$i,8));
+  }
+  return $out;
+}
+
+# tsig_secret_decrypt($masterkey, $crypted, $len)
+#   $masterkey - raw (binary) Sauron master key
+#   $crypted   - raw (binary) ciphertext
+#   $len       - real secret length in bytes (0 = keep full padded block(s))
+# returns the raw (binary) secret bytes.
+sub tsig_secret_decrypt($$$) {
+  my($masterkey,$crypted,$len) = @_;
+  my $cipher = Crypt::Cipher::RC5->new($masterkey,16);
+  my $out = '';
+  for (my $i=0; $i < length($crypted); $i += 8) {
+    $out .= $cipher->decrypt(substr($crypted,$i,8));
+  }
+  $out = substr($out,0,$len) if ($len > 0);
+  return $out;
 }
 
 

@@ -11,7 +11,6 @@ require 5;
 use NetAddr::IP; # For IPv6.
 use Getopt::Long;
 use MIME::Base64;
-use Crypt::Cipher::RC5;
 use Sauron::Util;
 use Sauron::DB;
 use Sauron::BackEnd;
@@ -31,9 +30,14 @@ $printer_conf=0;
 
 %yes_no_enum = (D=>'',Y=>'yes',N=>'no');
 %check_names_enum = (D=>'',W=>'warn',F=>'fail',I=>'ignore');
-%zone_type_enum = (M=>'master',S=>'slave',H=>'hint',F=>'forward');
+# Catalog zones (C) and aggregate catalog zones (A) are configured as type master in BIND (RFC 9432)
+%zone_type_enum = (M=>'master',S=>'slave',H=>'hint',F=>'forward',C=>'master',A=>'master');
 %forward_enum = (D=>'', O=>'only', F=>'first');
-%algorithm_enum = (157=>'hmac-md5');
+%algorithm_enum = (157=>'hmac-md5',
+		   158=>'hmac-sha1',
+		   159=>'hmac-sha256',
+		   160=>'hmac-sha384',
+		   161=>'hmac-sha512');
 
 $ZFORMAT = "%-22s %6s %2s  %-6s %s\n";
 
@@ -205,6 +209,32 @@ sub make_dns() {
     }
 
     unless ($zones_only) {
+      my $doh_http_ref='';
+
+      # TLS profiles for DNS Zone Transfer over TLS (XoT, RFC 9103). Unlike
+      # ACLs/keys they never follow named_flags_ac: they hold host-local
+      # certificate paths and are referenced by this server's settings.
+      print_tls_profiles($serverid);
+
+      # DoH (DNS over HTTPS, RFC 8484) endpoint, BIND 9.18+. Reuses the same
+      # TLS profiles. '/dns-query' maps to BIND's built-in `http default`.
+      if ($server{doh_profile} ne '') {
+        my $ep=($server{doh_endpoint} ne '' ? $server{doh_endpoint}:'/dns-query');
+        # Endpoint must be a safe URL path so it cannot inject config
+        unless ($ep =~ m{^/[\w./\-]*$}) {
+          error("Invalid DoH endpoint '$ep' for server $servername; " .
+                "using /dns-query");
+          $ep='/dns-query';
+        }
+        if ($ep eq '/dns-query') {
+          $doh_http_ref='default';
+        } else {
+          $doh_http_ref='"doh"';
+          print BINDFILE "// DoH endpoint (RFC 8484)\n";
+          print BINDFILE "http \"doh\" {\n\tendpoints { \"$ep\"; };\n};\n\n";
+        }
+      }
+
       # key & acl section
       print_keys_acls($server{named_flags_ac} ?
                       $server{masterserver} :
@@ -272,13 +302,44 @@ sub make_dns() {
       print_cidr_list('allow-notify',15,$tmpserverid,"\t");
       print_cidr_list('blackhole',9,$tmpserverid,"\t");
 
-      print_cidr_list("listen-on ".
+      my $listen4=print_cidr_list("listen-on ".
             ($server{listen_on_port}?"port $server{listen_on_port}":""),
             10,$serverid,"\t", 4);
 
-      print_cidr_list("listen-on-v6 ".
+      my $listen6=print_cidr_list("listen-on-v6 ".
             ($server{listen_on_port_v6}?"port $server{listen_on_port_v6}":""),
             10,$serverid,"\t", 6);
+
+      # Any listen-on statement replaces BIND's implicit plain DNS listener
+      # (port 53 on all interfaces). When only TLS/DoH listeners would be
+      # emitted, keep the plain listener explicitly so the server does not
+      # silently stop answering regular DNS queries.
+      if ($server{tls_listen_profile} ne '' || $server{doh_profile} ne '') {
+        print BINDFILE "\tlisten-on " .
+              ($server{listen_on_port} ? "port $server{listen_on_port} " : "") .
+              "{ any; };\n" unless ($listen4);
+        print BINDFILE "\tlisten-on-v6 " .
+              ($server{listen_on_port_v6} ? "port $server{listen_on_port_v6} " : "") .
+              "{ any; };\n" unless ($listen6);
+      }
+
+      # TLS listener for DNS Zone Transfer over TLS (XoT, RFC 9103)
+      if ($server{tls_listen_profile} ne '') {
+        my $tport=($server{tls_listen_port} ne '' ? $server{tls_listen_port}:853);
+        my $tref=tls_name_ref($server{tls_listen_profile});
+        print BINDFILE
+          "\tlisten-on port $tport tls $tref { any; };\n",
+          "\tlisten-on-v6 port $tport tls $tref { any; };\n";
+      }
+
+      # DoH listener (DNS over HTTPS, RFC 8484)
+      if ($server{doh_profile} ne '') {
+        my $dport=($server{doh_port} ne '' ? $server{doh_port} : 443);
+        my $tref=tls_name_ref($server{doh_profile});
+        print BINDFILE
+          "\tlisten-on port $dport tls $tref http $doh_http_ref { any; };\n",
+          "\tlisten-on-v6 port $dport tls $tref http $doh_http_ref { any; };\n";
+      }
 
       print BINDFILE "\tforward $forward_enum{$server{forward}};\n"
         if ($forward_enum{$server{forward}});
@@ -390,7 +451,14 @@ sub make_dns() {
       if (get_zone($zoneid,\%zone));
 
     $type=$zone_type_enum{$zone{type}};
-    fatal("uknown zone type '$zone{type}'!") unless ($type ne '');
+    fatal("unknown zone type '$zone{type}'!") unless ($type ne '');
+
+    # Skip catalog-only zones - they exist only as catalog members
+    if ($zone{'catalog_only'} eq 't') {
+      print "Skipping catalog-only zone: $zonename\n" if ($opt_verbose);
+      next;
+    }
+
     if ($loopcounter >= $normalzones) {
       $subtype=$type;
       # process zones from master server
@@ -447,8 +515,10 @@ sub make_dns() {
       }
       # allow_query
       print_cidr_list('allow-query',4,$zoneid,"\t");
-      # allow_transfer
-      print_cidr_list('allow-transfer',5,$zoneid,"\t");
+      # allow_transfer (require TLS transport for XoT if enabled, RFC 9103)
+      my $at_name='allow-transfer';
+      $at_name.=' transport tls' if ($zone{xot_transfer} eq 'Y');
+      print_cidr_list($at_name,5,$zoneid,"\t");
       # also_notify
       print_cidr_list('also-notify',6,$zoneid,"\t");
       # forwarders
@@ -460,16 +530,29 @@ sub make_dns() {
         if (($loopcounter >= $normalzones) && ($subtype eq 'master')) {
           @q=@master_server_ips;
         } else {
-          db_query("SELECT ip FROM cidr_entries WHERE type=3 AND ref=$zoneid " .
-                   "ORDER BY ip;",\@q);
+          db_query("SELECT ip,port,tls FROM cidr_entries " .
+                   "WHERE type=3 AND ref=$zoneid ORDER BY ip;",\@q);
           error(db_errormsg()) if (db_errormsg());
         }
         if (@q > 0) {
+          # XoT (RFC 9103): zone-wide default TLS profile (zone overrides
+          # server) applied to masters that lack an explicit per-row profile,
+          # but only when XoT is enabled for this zone.
+          my $def_tls=($zone{tls_profile} ne '' ? $zone{tls_profile}
+                                                : $server{tls_default_profile});
           print BINDFILE "\tmasters { ";
           for $j (0..(@q-1)) {
-            $ip=$q[$j][0];
+            my($ip,$port,$tls)=@{$q[$j]};
             $ip =~ s/\/32$//g;
             $ip =~ s/\/128$//g;
+            if ($zone{xot_transfer} eq 'Y') {
+              $tls=$def_tls if ((!defined($tls) || $tls eq '') && $def_tls ne '');
+            }
+            # DNS over TLS port (RFC 7858) when TLS is used without a port
+            $port=853 if ((!defined($port) || $port eq '') &&
+                          defined($tls) && $tls ne '');
+            $ip .= " port $port" if (defined($port) && $port ne '');
+            $ip .= " tls ".tls_name_ref($tls) if (defined($tls) && $tls ne '');
             print BINDFILE "\n\t\t\t\t$ip; ";
           }
           print BINDFILE "\n\t};\n";
@@ -489,7 +572,8 @@ sub make_dns() {
       print BINDFILE "};\n\n\n";
     }
 
-    next unless ($type eq 'master');
+    # Catalog zones are treated as master zones for file generation (RFC 9432)
+    next unless ($type eq 'master' || $zone{type} eq 'C' || $zone{type} eq 'A');
 
     if ($zone{'dummy'} eq 't') {
       print "Skipping zone creation for dummy zone: $zonename\n";
@@ -523,10 +607,10 @@ sub make_dns() {
         $ttl='';
     }
 
-    $ttl_refresh = ($zone{refresh} ? $zone{refresh} : $server{refresh});
-    $ttl_retry = ($zone{retry} ? $zone{retry} : $server{retry});
-    $ttl_expire = ($zone{expire} ? $zone{expire} : $server{expire});
-    $ttl_minimum = ($zone{minimum} ? $zone{minimum} : $server{minimum});
+    $ttl_refresh = (defined($zone{refresh}) && $zone{refresh} ne '' ? $zone{refresh} : $server{refresh});
+    $ttl_retry = (defined($zone{retry}) && $zone{retry} ne '' ? $zone{retry} : $server{retry});
+    $ttl_expire = (defined($zone{expire}) && $zone{expire} ne '' ? $zone{expire} : $server{expire});
+    $ttl_minimum = (defined($zone{minimum}) && $zone{minimum} ne '' ? $zone{minimum} : $server{minimum});
 
     undef @q;
     db_query("SELECT MAX(h.mdate),MAX(h.cdate) " .
@@ -557,7 +641,7 @@ sub make_dns() {
       #print "server: $server{mdate}, zone: $zone{mdate} ",
       #     "hosts: $hosts_mdate  - $serial_date\n";
       $serial=new_serial($serial);
-      $serial_date=time;
+      $serial_date=time unless ($opt_keep_pending);
       unless ($opt_noupdateserial) {
         print "Updating serial $zone{serial} --> $serial\n";
         fatal("Cannot update zone $zonename serial!")
@@ -571,7 +655,7 @@ sub make_dns() {
     fatal("no hostmaster defined either in server nor zone record for: " .
           "$zonename") if ($hostmaster eq '');
     fatal("server hostname not defined!") if ($hostname eq '');
-    fatal("no TTL defined!") unless ($TTL > 0);
+    fatal("no TTL defined!") unless ($TTL > 0 || $zone{type} eq 'C' || $zone{type} eq 'A');
     if ($bind_conf) {
       print ZONEFILE '$TTL ' . "$TTL\t; default TTL for this zone\n;\n";
       print ZONEFILE '$ORIGIN ' . "$zonename.\n;\n";
@@ -593,11 +677,34 @@ sub make_dns() {
                 "$ttl_refresh\:$ttl_retry\:$ttl_expire\:$ttl_minimum\:\:\n";
     }
 
-    foreach $i (1..$#{$zone{ns}}) {
-      printf ZONEFILE $ZFORMAT, '',$ttl,$class,'NS',$zone{ns}[$i][1]
+    # For catalog zones (RFC 9432) or zones without NS records, add placeholder NS
+    my $has_ns = 0;
+    if (defined($zone{ns}) && ref($zone{ns}) eq 'ARRAY' && @{$zone{ns}} > 1) {
+      for my $i (1..$#{$zone{ns}}) {
+        if ($zone{ns}[$i] && $zone{ns}[$i][1]) {
+          $has_ns = 1;
+          last;
+        }
+      }
+    }
+
+    if ($zone{type} eq 'C' || $zone{type} eq 'A' || !$has_ns) {
+      # Catalog/aggregate zone or no NS records - add placeholder NS record
+      printf ZONEFILE $ZFORMAT, '',$ttl,$class,'NS','invalid.'
         if ($bind_conf);
-      printf TINYDNSFILE "&$zonename\:\:$zone{ns}[$i][1]\:$ttl\:\:\n"
+      printf TINYDNSFILE "&$zonename\:\:invalid.\:$ttl\:\:\n"
         if ($tiny_conf);
+    }
+
+    # Generate any actual NS records (skip the header at index 0)
+    if (defined($zone{ns}) && ref($zone{ns}) eq 'ARRAY') {
+      foreach $i (1..$#{$zone{ns}}) {
+        next unless $zone{ns}[$i][1];  # Skip empty entries
+        printf ZONEFILE $ZFORMAT, '',$ttl,$class,'NS',$zone{ns}[$i][1]
+          if ($bind_conf);
+        printf TINYDNSFILE "&$zonename\:\:$zone{ns}[$i][1]\:$ttl\:\:\n"
+          if ($tiny_conf);
+      }
     }
 
     if ($rev eq 'f') {
@@ -933,7 +1040,7 @@ sub make_dns() {
               for $k (0 .. $#{$txt}) {
                   $val=$$txt[$k];
                   $val =~ s/\"//g;
-                  $padding = length(sprintf ZONEFILE $ZFORMAT, '',$ttl,$class,'TXT','');
+                  $padding = length(sprintf $ZFORMAT, '',$ttl,$class,'TXT','');
                   printf ZONEFILE $ZFORMAT, '',$ttl,$class,'TXT',
                       bind_fmt_long_data("$val", $padding)
                       if ($bind_conf);
@@ -1294,7 +1401,8 @@ sub make_dns() {
 
      # aliases (CNAME records)
      undef @q;
-     db_query("SELECT a.domain,b.domain,a.ttl,a.expiration,b.expiration " .
+     db_query("SELECT a.domain,b.domain,a.ttl,a.expiration,b.expiration," .
+              " (SELECT count(*) FROM txt_entries t WHERE t.type=2 AND t.ref=a.id) " .
               "FROM hosts a, hosts b,zones z " .
               "WHERE a.zone=z.id AND z.id=$zoneid " .
               " AND (coalesce(z.expiration, 0) <= 0 OR coalesce(z.expiration, 0) > " .
@@ -1332,11 +1440,14 @@ sub make_dns() {
            if ($bind_conf);
          printf TINYDNSFILE "C$domain\.$zonename\:$alias\:$ttl\:\:\n"
            if ($tiny_conf);
+         error("TXT on alias ignored (CNAME and other data): $q[$i][0]")
+           if ($q[$i][5] > 0);
        }
      }
-     # aliases outside zone
+     # aliases outside zone (Static Alias)
      undef @q;
-     db_query("SELECT h.domain,h.cname_txt,h.ttl,h.expiration " .
+     db_query("SELECT h.domain,h.cname_txt,h.ttl,h.expiration," .
+              " (SELECT count(*) FROM txt_entries t WHERE t.type=2 AND t.ref=h.id) " .
               "FROM hosts h,zones z " .
               "WHERE h.zone=z.id AND z.id=$zoneid " .
               " AND (coalesce(z.expiration, 0) <= 0 OR coalesce(z.expiration, 0) > " .
@@ -1369,6 +1480,8 @@ sub make_dns() {
            if ($bind_conf);
          printf TINYDNSFILE "C$domain\.$zonename\:$alias\:$ttl\:\:\n"
            if ($tiny_conf);
+         error("TXT on alias ignored (CNAME and other data): $q[$i][0]")
+           if ($q[$i][4] > 0);
        }
      }
 
@@ -1521,7 +1634,110 @@ sub make_dns() {
       }
     }
 
-    # TXT records
+    # NAPTR records
+    undef @q;
+    db_query("SELECT a.domain,a.ttl,a.expiration," .
+         " b.order_val,b.preference,b.flags,b.service,b.regexp,b.replacement " .
+         "FROM hosts a, naptr_entries b, zones z " .
+         "WHERE a.zone=z.id AND z.id=$zoneid " .
+         "AND (a.type=10 OR a.type=14) AND a.id=b.ref AND b.type=1 " .
+         "ORDER BY a.domain,b.order_val,b.preference;",\@q);
+    error(db_errormsg()) if (db_errormsg());
+    if (@q > 0) {
+      print ZONEFILE ";\n;\n; NAPTR records\n;\n" if ($bind_conf);
+      for $i (0 .. $#q) {
+      $domain=remove_origin($q[$i][0],$origin);
+      if ($domain =~ /\.$/) {
+      error("Out-of-zone NAPTR record skipped: $q[$i][0]");
+      next;
+      }
+      if ($domain =~ /\.($delegation_mask)$/) {
+      error("NAPTR in delegated zone skipped: $q[$i][0]");
+      next;
+      }
+      if (($q[$i][2] > 0) && ($q[$i][2] < $time_now_ticks)) {
+      error("Skipping expired NAPTR record: $q[$i][0]");
+      next;
+      }
+      $ttl=$q[$i][1];
+      $ttl='' unless ($ttl > 0);
+      $order=($q[$i][3] > 0 ? $q[$i][3] : 0);
+      $preference=($q[$i][4] > 0 ? $q[$i][4] : 0);
+      $flags=$q[$i][5];
+      $service=$q[$i][6];
+      $regex=$q[$i][7];
+      $replacement=$q[$i][8];
+
+      printf ZONEFILE $ZFORMAT, $domain,$ttl,$class,'NAPTR',
+        "$order $preference \"$flags\" \"$service\" \"$regex\" $replacement" if ($bind_conf);
+
+      # tinydns naptr format
+      my $tinydns_record = sprintf("\\%03o\\%03o", $order, $preference);
+      $tinydns_record .= sprintf("\\%03o", length($flags)) if $flags;
+      for (my $j = 0; $j < length($flags); $j++) {
+      $tinydns_record .= sprintf("\\%03o", ord(substr($flags, $j, 1)));
+      }
+      $tinydns_record .= sprintf("\\%03o", length($service)) if $service;
+      for (my $j = 0; $j < length($service); $j++) {
+      $tinydns_record .= sprintf("\\%03o", ord(substr($service, $j, 1)));
+      }
+      $tinydns_record .= sprintf("\\%03o", length($regex)) if $regex;
+      for (my $j = 0; $j < length($regex); $j++) {
+      $tinydns_record .= sprintf("\\%03o", ord(substr($regex, $j, 1)));
+      }
+      $replacement .= ".$zonename" unless ($replacement =~ /\.$/);
+      $tinydns_record .= sprintf("\\%03o", length($replacement)) if $replacement;
+      for (my $j = 0; $j < length($replacement); $j++) {
+      $tinydns_record .= sprintf("\\%03o", ord(substr($replacement, $j, 1)));
+      }
+      printf TINYDNSFILE ":%s:35:%s:\n", $domain, $tinydns_record if ($tiny_conf);
+      }
+    }
+
+    # CAA records
+    undef @q;
+    db_query("SELECT a.domain,a.ttl,a.expiration," .
+             " b.flags,b.tag,b.value " .
+             "FROM hosts a, caa_entries b, zones z " .
+             "WHERE a.zone=z.id AND z.id=$zoneid " .
+             "AND (a.type=1 OR a.type=3 OR a.type=8 OR a.type=10 OR " .
+             "     a.type=11 OR a.type=12 OR a.type=13 OR a.type=14 OR a.type=15) " .
+             "AND a.id=b.ref AND b.type=1 " .
+             "ORDER BY a.domain,b.flags,b.tag,b.value;",\@q);
+    error(db_errormsg()) if (db_errormsg());
+    if (@q > 0) {
+      print ZONEFILE ";\n;\n; CAA records\n;\n" if ($bind_conf);
+      for $i (0 .. $#q) {
+        $domain=remove_origin($q[$i][0],$origin);
+        if ($domain =~ /\.$/) {
+          error("Out-of-zone CAA record skipped: $q[$i][0]");
+          next;
+        }
+        if ($domain =~ /\.($delegation_mask)$/) {
+          error("CAA in delegated zone skipped: $q[$i][0]");
+          next;
+        }
+        if (($q[$i][2] > 0) && ($q[$i][2] < $time_now_ticks)) {
+          error("Skipping expired CAA record: $q[$i][0]");
+          next;
+        }
+        $ttl=$q[$i][1];
+        $ttl='' unless ($ttl > 0);
+        $flags=($q[$i][3] > 0 ? $q[$i][3] : 0);
+        $tag=$q[$i][4];
+        $val=$q[$i][5];
+        $val =~ s/^"(.*)"$/$1/;
+        $val =~ s/([\\"])/\\$1/g;
+
+        printf ZONEFILE $ZFORMAT, $domain,$ttl,$class,'CAA',
+               "$flags $tag \"$val\"" if ($bind_conf);
+
+        error("CAA records are not supported in tinydns output: $q[$i][0]")
+          if ($tiny_conf);
+      }
+    }
+
+    # TXT records from txt_entries table (legacy: type=2 entries linked to hosts)
     undef @q;
     db_query("SELECT a.domain,a.ttl,a.expiration,b.txt " .
                    "FROM hosts a, txt_entries b, zones z " .
@@ -1530,7 +1746,7 @@ sub make_dns() {
                    "ORDER BY a.domain,b.txt;",\@q);
     error(db_errormsg()) if (db_errormsg());
     if (@q > 0) {
-      print ZONEFILE ";\n;\n; TXT records\n;\n" if ($bind_conf);
+      print ZONEFILE ";\n;\n; TXT records (legacy)\n;\n" if ($bind_conf);
       for $i (0 .. $#q) {
         $domain=remove_origin($q[$i][0],$origin);
         if ($domain =~ /\.$/) {
@@ -1550,9 +1766,51 @@ sub make_dns() {
         $val=$q[$i][3];
         $val =~ s/\"//g;
 
-        $padding = length(sprintf $ZFORMAT, $domain, $ttl, $class, '');
+        $padding = length(sprintf $ZFORMAT, $domain,$ttl,$class, '');
         printf ZONEFILE $ZFORMAT, $domain,$ttl,$class,'TXT', 
             bind_fmt_long_data("$val", $padding) 
+            if ($bind_conf);
+        $val=~ s/:/\\072/g;
+        printf TINYDNSFILE "'$zonename\:$val\:$ttl\:\:\n" if ($tiny_conf);
+      }
+    }
+
+    # Standalone TXT hosts (type=13) - TXT value stored in cname_txt column
+    # Used for blocklist TXT records like _info.domain, _legal.domain, etc.
+    undef @q;
+    db_query("SELECT domain,ttl,expiration,cname_txt " .
+                   "FROM hosts " .
+                   "WHERE zone=$zoneid AND type=13 " .
+                   "ORDER BY domain;",\@q);
+    error(db_errormsg()) if (db_errormsg());
+    if (@q > 0) {
+      print ZONEFILE ";\n;\n; TXT records (standalone hosts)\n;\n" if ($bind_conf);
+      for $i (0 .. $#q) {
+        $domain=remove_origin($q[$i][0],$origin);
+        if ($domain =~ /\.$/) {
+          error("Out-of-zone TXT record skipped: $q[$i][0]");
+          next;
+        }
+        if ($domain =~ /\.($delegation_mask)$/) {
+          error("TXT in delegated zone skipped: $q[$i][0]");
+          next;
+        }
+        if (($q[$i][2] > 0) && ($q[$i][2] < $time_now_ticks)) {
+          error("Skipping expired TXT record: $q[$i][0]");
+          next;
+        }
+        $ttl=$q[$i][1];
+        $ttl='' unless ($ttl > 0);
+        $val=$q[$i][3];
+        # type=13 hosts may keep their TXT data in txt_entries (legacy path
+        # above) and have an empty/NULL cname_txt. Skip those, otherwise an
+        # empty value produces an invalid "( )" TXT record. ** MSv 2026-06-20
+        next unless (defined($val) && $val ne '');
+        $val =~ s/\"//g;
+
+        $padding = length(sprintf $ZFORMAT, $domain, $ttl, $class, '');
+        printf ZONEFILE $ZFORMAT, $domain,$ttl,$class,'TXT',
+            bind_fmt_long_data("$val", $padding)
             if ($bind_conf);
         $val=~ s/:/\\072/g;
         printf TINYDNSFILE "'$zonename\:$val\:$ttl\:\:\n" if ($tiny_conf);
@@ -1576,6 +1834,104 @@ sub make_dns() {
       for $i (1..$#{$zone{zentries}}) {
         print ZONEFILE $zone{zentries}[$i][1],"\n" if ($bind_conf);
         # Nothing we can do for tinydns here I guess ..
+      }
+    }
+
+    # Catalog zone metadata (RFC 9432)
+    if ($zone{type} eq 'C' && $bind_conf) {
+      my @catalog_members;
+      my $catalog_rec = {};
+
+      # Load catalog members
+      if (get_zone_catalog_members($zoneid, $catalog_rec) == 0 && $catalog_rec->{count} > 0) {
+        print ZONEFILE ";\n; Catalog zone members (RFC 9432)\n;\n";
+
+        # Version metadata record
+        print ZONEFILE "version\t$ttl\tIN\tTXT\t\"2\"\n";
+
+        # Member zone PTR records
+        for $i (0 .. $#{$catalog_rec->{members}}) {
+          my $member_zone = $catalog_rec->{members}[$i][1];
+          my $member_id = $catalog_rec->{members}[$i][0];
+          my $member_groups = $catalog_rec->{members}[$i][7];
+          $member_zone =~ s/\.$//;  # Remove trailing dot
+
+          printf ZONEFILE $ZFORMAT, "uuid-$member_id.zones",$ttl,'IN','PTR',"$member_zone."
+            if ($bind_conf);
+
+          # Group property TXT records (RFC 9432 §5.2)
+          if ($bind_conf && ref($member_groups) eq 'ARRAY') {
+            for my $grp (@{$member_groups}) {
+              printf ZONEFILE $ZFORMAT, "group.uuid-$member_id.zones",
+                  $ttl,'IN','TXT',"\"$grp\"";
+            }
+          }
+        }
+      } else {
+        print ZONEFILE ";\n; Catalog zone (no members currently)\n;\n" if ($bind_conf);
+        print ZONEFILE "version\t$ttl\tIN\tTXT\t\"2\"\n" if ($bind_conf);
+      }
+    }
+
+    # Aggregate catalog zone - merge members from source catalog zones (RFC 9432)
+    if ($zone{type} eq 'A' && $bind_conf) {
+      my (@comps, %seen_names, @conflicts);
+
+      # Load source catalog zones ordered by priority
+      db_query("SELECT cc.source_zone_id, z.name, cc.priority " .
+               "FROM catalog_compositions cc " .
+               "JOIN zones z ON cc.source_zone_id = z.id " .
+               "WHERE cc.composite_zone_id = $zoneid " .
+               "ORDER BY cc.priority ASC, z.name ASC", \@comps);
+
+      if (@comps > 0) {
+        print ZONEFILE ";\n; Aggregate catalog zone members (RFC 9432)\n;\n";
+        print ZONEFILE "version\t$ttl\tIN\tTXT\t\"2\"\n";
+
+        for my $comp (@comps) {
+          my ($src_id, $src_name, $prio) = @$comp;
+          my $src_rec = {};
+          get_zone_catalog_members($src_id, $src_rec);
+
+          print ZONEFILE ";\n; Source: $src_name (priority=$prio)\n;\n";
+
+          next unless ($src_rec->{count} > 0);
+          for $i (0 .. $#{$src_rec->{members}}) {
+            my $mzone_name = $src_rec->{members}[$i][1];
+            my $mzone_id   = $src_rec->{members}[$i][0];
+            my $mgroups    = $src_rec->{members}[$i][7];
+            $mzone_name =~ s/\.\.?$//;
+
+            my $lc_name = lc($mzone_name);
+            if ($seen_names{$lc_name}) {
+              push @conflicts,
+                "  '$mzone_name' from '$src_name' (prio=$prio) " .
+                "skipped; $seen_names{$lc_name} has higher precedence (lower priority)";
+              next;
+            }
+            $seen_names{$lc_name} = "$src_name (prio=$prio)";
+
+            printf ZONEFILE $ZFORMAT,
+                "uuid-$mzone_id.zones",
+                $ttl, 'IN', 'PTR', "$mzone_name.";
+
+            if (ref($mgroups) eq 'ARRAY') {
+              for my $grp (@{$mgroups}) {
+                printf ZONEFILE $ZFORMAT,
+                    "group.uuid-$mzone_id.zones",
+                    $ttl, 'IN', 'TXT', "\"$grp\"";
+              }
+            }
+          }
+        }
+
+        if (@conflicts) {
+          print "CONFLICTS in aggregate zone '$zonename':\n";
+          for my $c (@conflicts) { print "$c\n"; }
+        }
+      } else {
+        print ZONEFILE ";\n; Aggregate catalog zone (no source catalogs configured)\n;\n";
+        print ZONEFILE "version\t$ttl\tIN\tTXT\t\"2\"\n";
       }
     }
 
@@ -1640,7 +1996,7 @@ sub print_cidr_list($$$$$) {
   $family = ($family ? "AND family(c.ip)=$family" : "");
 
   db_query("SELECT c.mode,c.ip,c.acl,c.tkey,c.op,c.port,c.comment" .
-           ",a.name,k.name " .
+           ",a.name,k.name,c.tls " .
            "FROM cidr_entries c LEFT JOIN acls a ON c.acl=a.id " .
            " LEFT JOIN keys k ON c.tkey=k.id " .
            "WHERE c.type=$type AND c.ref=$ref $family " .
@@ -1650,7 +2006,7 @@ sub print_cidr_list($$$$$) {
     if (@q > 0) {
       print BINDFILE "${hdr}${name} {\n";
       for $j (0..(@q-1)) {
-        my ($mode,$ip,$acl,$tkey,$op,$port,$comment,$aclname,$keyname)
+        my ($mode,$ip,$acl,$tkey,$op,$port,$comment,$aclname,$keyname,$tls)
             = @{$q[$j]};
 
         $ip =~ s/\/32\s*$//;
@@ -1666,12 +2022,21 @@ sub print_cidr_list($$$$$) {
         # forward zones forwarders port
         if ($mode == 0 && $type == 12 && $port) { $val .= " port $port"; }
 
+        # also-notify over TLS (XoT, RFC 9103): per-target port and profile
+        if ($mode == 0 && $type == 6) {
+          $port=853 if ((!defined($port) || $port eq '') &&
+                        defined($tls) && $tls ne '');
+          $val .= " port $port" if (defined($port) && $port ne '');
+          $val .= " tls ".tls_name_ref($tls) if (defined($tls) && $tls ne '');
+        }
+
         printf BINDFILE "$hdr\t%1s %-39s %s\n",$op,"$val;",$com # 20 -> 39 for IPv6.
           if ($val);
       }
       print BINDFILE "\t};\n";
     }
 
+    return scalar(@q);
 }
 
 
@@ -3124,6 +3489,93 @@ sub print_subnets6() {
   }
 }
 
+sub valid_tls_name($) {
+  # Same character set as the web form ('tlsref'); values stored directly in
+  # the DB must not break out of the quoted "..." context in named.conf.
+  my($name) = @_;
+  return (defined($name) && $name =~ /^[a-zA-Z0-9_\-\.]+$/);
+}
+
+sub tls_name_ref($) {
+  # Reference for a TLS object after the `tls` keyword. BIND's built-in
+  # objects (ephemeral = self-signed in-memory cert, none = no TLS) must be
+  # referenced WITHOUT quotes; user-defined profile names are quoted.
+  my($name) = @_;
+  return $name if ($name eq 'ephemeral' || $name eq 'none');
+  # an unsafe reference cannot be dropped silently (a master would fall back
+  # to plain-text transfers), so stop the generation
+  fatal("invalid TLS profile reference '$name'") unless (valid_tls_name($name));
+  return "\"$name\"";
+}
+
+sub http_name_ref($) {
+  # Reference for an HTTP object after the `http` keyword. BIND's built-in
+  # objects (default = /dns-query endpoint, none) are referenced unquoted.
+  my($name) = @_;
+  return $name if ($name eq 'default' || $name eq 'none');
+  return "\"$name\"";
+}
+
+sub print_tls_profiles($) {
+  # Emit top-level `tls "<name>" { ... };` statements for DNS Zone Transfer
+  # over TLS (XoT, RFC 9103). Requires BIND 9.18.11+.
+  my($serverid) = @_;
+  my(@q,$i);
+
+  return unless ($serverid > 0);
+
+  db_query("SELECT name,cert_file,key_file,ca_file,dhparam_file,protocols," .
+           "ciphers,prefer_server_ciphers,session_tickets,remote_hostname," .
+           "comment FROM tls_profiles WHERE type=1 AND ref=$serverid " .
+           "ORDER BY name",\@q);
+  error(db_errormsg()) if (db_errormsg());
+  return unless (@q > 0);
+
+  print BINDFILE "// TLS profiles (XoT, RFC 9103)\n\n";
+  for $i (0..$#q) {
+    my($name,$cert,$key,$ca,$dh,$protocols,$ciphers,$psc,$st,$rhost,$comment)
+        = @{$q[$i]};
+    unless (valid_tls_name($name)) {
+      error("Skipping TLS profile with invalid name '$name'");
+      next;
+    }
+    # 'ephemeral' and 'none' are built-in BIND TLS objects, never defined
+    next if ($name eq 'ephemeral' || $name eq 'none');
+    # Defense in depth: skip the whole profile if any value would break out
+    # of the quoted "..." context (the web form already restricts these, but
+    # values may be set directly in the DB or via import). Skipping the entire
+    # profile fails safe (a referenced-but-undefined tls name is rejected by
+    # named-checkconf) instead of emitting a partial, invalid tls{} block.
+    my $unsafe=0;
+    for my $f ($cert,$key,$ca,$dh,$protocols,$ciphers,$rhost) {
+      $unsafe=1 if (defined($f) && $f =~ /["\n\r]/);
+    }
+    if ($unsafe) {
+      error("Skipping TLS profile \"$name\" with unsafe value(s)");
+      next;
+    }
+    $comment =~ s/[\r\n]+/ /g if (defined($comment));
+    print BINDFILE "tls \"$name\" {\n";
+    print BINDFILE "\t// $comment\n" if ($comment ne '');
+    print BINDFILE "\tcert-file \"$cert\";\n" if ($cert ne '');
+    print BINDFILE "\tkey-file \"$key\";\n" if ($key ne '');
+    print BINDFILE "\tca-file \"$ca\";\n" if ($ca ne '');
+    print BINDFILE "\tdhparam-file \"$dh\";\n" if ($dh ne '');
+    if ($protocols ne '') {
+      print BINDFILE "\tprotocols { " .
+            join(' ', map { "$_;" } split(/[\s,]+/,$protocols)) . " };\n";
+    }
+    print BINDFILE "\tciphers \"$ciphers\";\n" if ($ciphers ne '');
+    print BINDFILE "\tprefer-server-ciphers yes;\n" if ($psc eq 'Y');
+    print BINDFILE "\tprefer-server-ciphers no;\n"  if ($psc eq 'N');
+    print BINDFILE "\tsession-tickets yes;\n" if ($st eq 'Y');
+    print BINDFILE "\tsession-tickets no;\n"  if ($st eq 'N');
+    print BINDFILE "\tremote-hostname \"$rhost\";\n" if ($rhost ne '');
+    print BINDFILE "};\n\n";
+  }
+}
+
+
 sub print_keys_acls($) {
   my($serverid) = @_;
   my(@keys,@reflist,%refs,%keyhash,$i);
@@ -3161,6 +3613,7 @@ sub print_keys_acls($) {
               my $name = $keys[$i][1];
               my $algorithm = $algorithm_enum{$keys[$i][2]};
               my $key = $keys[$i][5];
+              my $keysize = $keys[$i][4];
               my $comment = $keys[$i][6];
 
               unless ($name) {
@@ -3176,8 +3629,11 @@ sub print_keys_acls($) {
                   error("Skipping key with empty secret key: $name");
                   next;
               }
-              my $h = Crypt::Cipher::RC5->new($SAURON_KEY,16);
-              my $dkey = encode_base64($h->decrypt(decode_base64($key)));
+              # Decrypt the shared secret and trim the block padding back to
+              # the real secret length (keysize is stored in bits).
+              my $dkey = encode_base64(
+                  tsig_secret_decrypt($SAURON_KEY,decode_base64($key),
+                                      int($keysize/8)),"");
               chomp($dkey);
 
               $comment =~ s/(^\s+|\s+$)//g;
@@ -3287,7 +3743,7 @@ sub make_printcap() {
 $VER = sauron_version();
 
 $result=GetOptions("help|h","all|a","bind|b","dhcp|d","dhcp6","printer|p","mail",
-                   "updateserial","noupdateserial","verbose","clean",
+                   "updateserial","noupdateserial","keep-pending","verbose","clean",
                    "check","dhcpclass=s","tinydns|t", "ignorelocal|i");
 
 if ($opt_help || @ARGV < 1 || $result < 1) {
@@ -3300,7 +3756,8 @@ if ($opt_help || @ARGV < 1 || $result < 1) {
       "\t--dhcp6              generate DHCPv6 (dhcpd) configuration files\n",
       "\t--clean              cleanup expired records and vacuum database\n",
       "\t--printer            generate PRINTER (lpd) configuration files\n\n",
-      "\t--updateserial       force serial update on master zones\n\n",
+      "\t--updateserial       force serial update on master zones\n",
+      "\t--keep-pending       keep PENDING markers (do not update serial_date)\n\n",
       "\t--ignorelocal        force ignore RFC1918 subnets\n\n",
       "\t--check              check validity of generated dhcp.conf,named.conf,\n",
       "\t                     and zone files\n\n",
@@ -3318,6 +3775,7 @@ $opt_dhcp6=($opt_dhcp6 ? 1 : 0);
 $opt_bind=($opt_bind ? 1 : 0);
 $opt_tinydns=($opt_tinydns ? 1 : 0);
 $opt_printer=($opt_printer ? 1 : 0);
+$opt_keep_pending=($opt_keep_pending ? 1 : 0);
 $opt_updateserial=($opt_updateserial ? 1 : 0);
 $opt_noupdateserial=($opt_noupdateserial ? 1 : 0);
 $opt_check=($opt_check ? 1 : 0);
@@ -3341,7 +3799,7 @@ $host =~ s/\n//g;
 
 
 fatal("target directory is a file! ($targetdir)") if (-f $targetdir);
-fatal("target directory does not exists ($targetdir)") if (! -d $targetdir);
+fatal("target directory does not exist ($targetdir)") if (! -d $targetdir);
 fatal("no permissions to target directory!")
         unless (-r $targetdir && -x $targetdir && -w $targetdir);
 fatal("--check option used but SAURON_NAMED_CHK_PROG not configured!")
