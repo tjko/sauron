@@ -108,37 +108,72 @@ our $inetNet = undef;
 our $formduid = undef;
 our $zonename;
 
+# Group names of a user for is_hidden_form_field(), keyed by uid. The CGI
+# serves one request per process, so this caches the lookup for one page.
+our %hidden_form_groups;
+my $hidden_form_config_warned = 0;
+
+# Returns arrayref of the user's group names. On a DB error (or a missing
+# uid) logs it and returns no groups: fields are shown, the form still works.
+sub hidden_form_user_groups($) {
+  my ($uid) = @_;
+  my @q;
+
+  unless (defined $uid && $uid =~ /^\d+$/) {
+    Sauron::Util::write2log("is_hidden_form_field: no valid uid in session, " .
+			    "form fields are not hidden")
+      unless (exists $hidden_form_groups{''});
+    return $hidden_form_groups{''} = [];
+  }
+  return $hidden_form_groups{$uid} if (exists $hidden_form_groups{$uid});
+
+  if (db_query("SELECT g.name FROM user_groups g, user_rights r " .
+	       "WHERE g.id=r.rref AND r.rtype=0 AND r.type=2 AND r.ref=? " .
+	       "ORDER BY g.id;", \@q, $uid) < 0) {
+    Sauron::Util::write2log("is_hidden_form_field: cannot read groups of uid " .
+			    "$uid, form fields are not hidden: " .
+			    db_lasterrormsg());
+    @q = ();
+  }
+  # errors are cached too: log once per page, not once per form field
+  return $hidden_form_groups{$uid} = [ map { $$_[0] } @q ];
+}
+
 sub is_hidden_form_field($) {
   my $rec = shift @_;
   my $tag = $rec->{tag};
-  return 0 if $tag =~/^$/; # field without tag
-  return 0 if (%main::state{superuser} eq 'yes');  # superuser is always permitted
+  return 0 if (!defined $tag || $tag eq ''); # field without tag
+  return 0 if (($main::state{superuser} // '') eq 'yes');  # superuser is always permitted
   return 0 if (exists $rec->{empty} && $rec->{empty} == 0); # do not hide mandatory items
   if (exists $rec->{hide} && defined $rec->{hide}) {
     return $rec->{hide};
   }
-  my (@q, $group);
+  my $hide = $main::SAURON_HIDE_FORM_FIELDS;
+  # nothing configured to hide: skip the group lookup
+  return 0 unless (defined $hide);
+  unless (ref($hide) eq 'HASH') {
+    Sauron::Util::write2log("is_hidden_form_field: \$SAURON_HIDE_FORM_FIELDS " .
+			    "is not a hash reference, ignored")
+      unless ($hidden_form_config_warned++);
+    return 0;
+  }
+  return 0 unless (%{$hide});
   my $module=(split /::/, (caller(1))[0])[-1];
 
-  db_query("SELECT g.name FROM user_groups g, user_rights r " .
-           "WHERE g.id=r.rref AND r.rtype=0 AND r.type=2 AND r.ref=$main::state{uid} " .
-           " ORDER BY g.id;",\@q);
+  # user is not listed in any group (or the lookup failed)
+  my $groups = hidden_form_user_groups($main::state{uid});
+  return 0 unless (@{$groups});
 
-  #print "<pre>" . Dumper (\@q) . "</pre>\n";
-  return 0 if (scalar(@{$q[0]}) == 0); # user is not listed in any group
-
-  foreach my $group (map { @$_ } @q) { # array of array into simple array
+  foreach my $group (@{$groups}) {
     # read the list of tags for each group, if this tag is missing, set false
-    #print "<pre>" . Dumper($main::SAURON_HIDE_FORM_FIELDS) . "</pre>\n";
-    #print "<pre>uid: $main::state{uid}\ngroup: $group\nmodule: $module\n</pre>";
 
     # which regexps match the group
-    foreach my $matching_group (grep { $group =~ /^$_$/ } keys %{$main::SAURON_HIDE_FORM_FIELDS}) {
-      if (exists $main::SAURON_HIDE_FORM_FIELDS->{$matching_group}->{$module}) {
+    foreach my $matching_group (grep { $group =~ /^$_$/ } keys %{$hide}) {
+      if (exists $hide->{$matching_group}->{$module}) {
 
         # Check if $tag is in the list of hidden tags and return 1 for hidden field
         return 1
-          if (grep { $_ eq $tag } @{$main::SAURON_HIDE_FORM_FIELDS->{$matching_group}->{$module}});
+          if (grep { $_ eq $tag } @{$hide->{$matching_group}->{$module}});
       }
     }
   }

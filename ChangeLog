@@ -1,5 +1,14 @@
 0.9.0 (beta)
 
+	- Fix the web UI dying on Add host and other forms ("Can't use an
+	  undefined value as an ARRAY reference" in CGIutil.pm) for users
+	  who are not a member of any user group, e.g. accounts provisioned
+	  from Perun, whether $SAURON_HIDE_FORM_FIELDS is set or not. The
+	  user's groups are now read once per page and only when
+	  $SAURON_HIDE_FORM_FIELDS is set; a failed lookup or a value that
+	  is not a hash reference is logged to syslog and shows all fields
+	  [svamberg]
+
 	- Fix generating an invalid zone (TXT next to CNAME) for Static
 	  Aliases with TXT records. Aliases (CNAME and Static) can no longer
 	  get TXT records; existing ones are skipped with a warning when
