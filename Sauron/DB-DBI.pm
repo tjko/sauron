@@ -12,7 +12,7 @@ use strict;
 use vars qw($VERSION @ISA @EXPORT);
 
 use Sys::Syslog qw(:DEFAULT setlogsock);
-Sys::Syslog::setlogsock('unix');
+eval { local $SIG{__WARN__} = sub {}; Sys::Syslog::setlogsock('unix') };
 
 $VERSION = '$Id:$ ';
 
@@ -67,11 +67,14 @@ sub db_connect2() {
   $user = ($main::DB_USER ? $main::DB_USER : '');
   $password = ($main::DB_PASSWORD ? $main::DB_PASSWORD : '');
 
-  $dbh = DBI->connect($dsn,$user,$password);
+  $dbh = DBI->connect($dsn,$user,$password,{ pg_enable_utf8 => 1 });
   unless ($dbh) {
     error("db_connect() failed: " . $DBI::errstr);
     return 0;
   }
+
+  # Keep DB connection text encoding consistent with CGI UTF-8 handling.
+  $dbh->do("SET client_encoding TO 'UTF8'");
 
   return 1;
 }
@@ -101,6 +104,7 @@ sub db_exec($) {
 
 # $db_last_oid=$sth->{pg_oid_status}; # ** Removed 2018-09-25 TVu
 # eval { $db_last_id = $sth->fetch()->[0]; }; # ** Added 2018-09-25 TVu
+  $db_last_id = -1; # reset if eval() fails
   eval { # ** Added 2018-10-01 TVu
       $db_last_id = $sqlstr =~ /returning/i ? $sth->fetch()->[0] : -1;
   };
@@ -206,7 +210,7 @@ sub db_build_list_str($) {
     $tmp.="," if ($tmp);
     #$f =~ s/\'/\\\'/g;
     $f =~ s/\'/\'\'/g;
-    $f =~ s/\"/\\\\\"/g;
+    $f =~ s/\"/\\\"/g;
     $tmp.="\"$f\"";
   }
 

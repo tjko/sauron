@@ -24,6 +24,8 @@ $CONF_FILE_PATH = '__CONF_FILE_PATH__';
 	     sauron_version
 	     print_config
 	     print_browser_config
+	     theme_stylesheet_args
+	     theme_style_block
 	    );
 
 
@@ -43,7 +45,7 @@ sub set_defaults() {
 
   $main::SAURON_DEBUG_MODE = 0;
   $main::SAURON_PRIVILEGE_MODE = 0;
-  $main::SAURON_CHARSET='iso-8859-1';
+  $main::SAURON_CHARSET='utf-8';
   $main::SAURON_PWD_MODE = 1;
   $main::SAURON_DHCP2_MODE = 0;
   $main::SAURON_MAIL_FROM = '';
@@ -61,10 +63,10 @@ sub set_defaults() {
   $main::SAURON_NMAP_TIMEOUT = 30;
   $main::SAURON_SECURE_COOKIES = 0;
   $main::SAURON_USER_TIMEOUT = 3600;
-  $main::SAURON_DTD_HACK = 0;
   $main::SAURON_ICON_PATH = '/sauron/icons';
   $main::SAURON_TOPMENU_BGCOLOR = '#002d5f';
   $main::SAURON_TOPMENU_FONTCOLOR = 'white';
+  $main::SAURON_ENV_NAME = '';
   $main::SAURON_AUTH_MODE = 0;
   $main::SAURON_AUTH_PROG = '';
   $main::SAURON_DHCP_CHK_PROG = '';
@@ -86,6 +88,11 @@ sub set_defaults() {
   $main::SAURON_REMOVE_WHITESPACE = 0;     # 2020-10-13 TVu
   $main::TTL_MIN_SEC = 600;                # 2021-02-11 TVu
   $main::TTL_MAX_SEC = 86400;              # 2021-02-11 TVu
+
+  $main::SAURON_BASE_URL = '';
+  $main::SAURON_APPROVAL_REMINDER_HOURS = 24;
+  $main::SAURON_ZERO_IP = '0.0.0.0'; # placeholder IP for aliases in host browse
+  $main::ALEVEL_APPROVAL_ADMIN = 5;
 
   $main::SAURON_RHF{huser}    = 0; # User
   $main::SAURON_RHF{dept}     = 0; # Dept.
@@ -144,10 +151,10 @@ sub print_config() {
   print "SAURON_NMAP_TIMEOUT=",$main::SAURON_NMAP_TIMEOUT,"\n";
   print "SAURON_SECURE_COOKIES=",$main::SAURON_SECURE_COOKIES,"\n";
   print "SAURON_USER_TIMEOUT=",$main::SAURON_USER_TIMEOUT,"\n";
-  print "SAURON_DTD_HACK=",$main::SAURON_DTD_HACK,"\n";
   print "SAURON_ICON_PATH=",$main::SAURON_ICON_PATH,"\n";
   print "SAURON_TOPMENU_BGCOLOR=",$main::SAURON_TOPMENU_BGCOLOR,"\n";
   print "SAURON_TOPMENU_FONTCOLOR=",$main::SAURON_TOPMENU_FONTCOLOR,"\n";
+  print "SAURON_ENV_NAME=",$main::SAURON_ENV_NAME,"\n";
   print "SAURON_AUTH_MODE=",$main::SAURON_AUTH_MODE,"\n";
   print "SAURON_AUTH_PROG=",$main::SAURON_AUTH_PROG,"\n";
   print "SAURON_DHCP_CHK_PROG=",$main::SAURON_DHCP_CHK_PROG,"\n";
@@ -231,6 +238,10 @@ sub load_config() {
 
   set_defaults();
   load_config_file("config",0022);
+  # Optional theme override — written by the web UI, not validated for
+  # permissions or return value (file may be empty while being written).
+  { my $tf = "$CONF_FILE_PATH/theme";
+    if (-f $tf && -r $tf && -s $tf) { package main; do $tf; } }
 
   fatal("DB_DSN not set in configuration file") unless ($main::DB_DSN);
   fatal("SERVER_ID not set in configuration file") unless ($main::SERVER_ID);
@@ -269,7 +280,7 @@ sub load_browser_config() {
 
   # set defaults
   $main::BROWSER_MAX = 100;
-  $main::BROWSER_CHARSET = 'iso-8859-1';
+  $main::BROWSER_CHARSET = 'utf-8';
   $main::BROWSER_SHOW_FIELDS = 'huser,location,info,dept';
   $main::BROWSER_HIDE_PRIVATE = 1;
   $main::BROWSER_HIDE_FIELDS = 'huser,location';
@@ -300,6 +311,31 @@ sub logmsg($$) {
   print LOGFILE localtime(time) . " " . $prog . "[$$]: [".lc($type)."] $msg\n";
   close(LOGFILE);
   return 0;
+}
+
+sub theme_stylesheet_args() {
+  my $base = $main::SAURON_ICON_PATH // '/sauron/icons';
+  return (
+    -style  => { -src => "$base/sauron.css" },
+    -script => { -src => "$base/sauron.js", -defer => 'defer' },
+  );
+}
+
+# Inline <style> mapping $SAURON_TOPMENU_BGCOLOR / FONTCOLOR / ENV_NAME
+# onto CSS custom properties. Colour values are whitelisted and the env
+# name is reduced to a safe character set so the inline string cannot
+# escape the CSS context.
+sub theme_style_block() {
+  my $bg   = $main::SAURON_TOPMENU_BGCOLOR;
+  my $fg   = $main::SAURON_TOPMENU_FONTCOLOR;
+  my $name = $main::SAURON_ENV_NAME // '';
+
+  $bg = '#002d5f' unless (defined $bg && $bg =~ /^(#[0-9a-fA-F]{3,8}|[a-zA-Z]+)$/);
+  $fg = '#ffffff' unless (defined $fg && $fg =~ /^(#[0-9a-fA-F]{3,8}|[a-zA-Z]+)$/);
+  $name =~ s/[^A-Za-z0-9 _\-]/ /g;
+  $name =~ s/^\s+|\s+$//g;
+
+  return "<style>:root{--s-env-color:$bg;--s-primary:$bg;--s-env-fg:$fg;--s-env-name:\"$name\";}</style>\n";
 }
 
 

@@ -25,6 +25,7 @@ CREATE TABLE cidr_entries (
 				      13=server (bind-globals),   
 				      14=server (allow_query_cache), x
 				      15=server (allow_notify),      x
+				      16=server (listen-on-v6),   (cidronly)
 				      */
         ref	    INT4 NOT NULL, /* ptr to table speciefied by type field
 					-->acls.id
@@ -42,7 +43,11 @@ CREATE TABLE cidr_entries (
 	op	    INT4 DEFAULT 0, /* rule operand:
 					0 = none,
 					1 = NOT */
-	port	    INT,            /* port value, used by: forwarders */      
+	port	    INT,            /* port value, used by: forwarders,
+						masters, also-notify (XoT) */
+	tls	    TEXT,           /* TLS profile name for XoT (RFC 9103),
+					used by: masters (type=3),
+					also-notify (type=6) -->tls_profiles.name */
 	comment     TEXT
 );
 

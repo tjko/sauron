@@ -65,6 +65,7 @@ INSTALL_PROGRAM = @INSTALL_PROGRAM@
 SQL_TABLES =	sql/common.sql \
 		sql/servers.sql \
 		sql/zones.sql \
+		sql/zone_catalogs.sql \
 		sql/hosts.sql \
 		sql/groups.sql \
 		sql/nets.sql \
@@ -73,7 +74,8 @@ SQL_TABLES =	sql/common.sql \
 		sql/ns_entries.sql \
 		sql/printer_classes.sql sql/printer_entries.sql \
 		sql/a_entries.sql sql/txt_entries.sql sql/srv_entries.sql \
-	        sql/users.sql sql/user_rights.sql sql/user_groups.sql \
+		sql/caa_entries.sql \
+		sql/users.sql sql/user_rights.sql sql/user_groups.sql \
 		sql/wks_entries.sql sql/wks_templates.sql \
 		sql/utmp.sql sql/hinfo_templates.sql \
 		sql/arec_entries.sql sql/root_servers.sql \
@@ -81,32 +83,39 @@ SQL_TABLES =	sql/common.sql \
 		sql/vlans.sql sql/vmps.sql sql/group_entries.sql \
 		sql/keys.sql sql/acls.sql sql/leases.sql \
 		sql/sshfp_entries.sql sql/tlsa_entries.sql \
-		sql/ds_entries.sql
+		sql/ds_entries.sql sql/naptr_entries.sql \
+		sql/catalog_group_defs.sql sql/zone_catalog_groups.sql \
+		sql/catalog_compositions.sql sql/tls_profiles.sql \
+		sql/approval_workflow.sql
+
 
 
 SQL_MISC =      sql/DEFAULTS.sql sql/misc.sql sql/copy_tables.sql \
 		sql/drop_tables.sql sql/hinfo_hw.sql sql/hinfo_sw.sql \
 		sql/dbconvert_1.0to1.1 sql/dbconvert_1.1to1.2 \
 		sql/dbconvert_1.2to1.3 sql/dbconvert_1.3to1.4 \
-                sql/dbconvert_1.4to1.5 sql/dbconvert_1.5to1.6 \
+		sql/dbconvert_1.4to1.5 sql/dbconvert_1.5to1.6 \
 		sql/dbconvert_1.6to1.7 sql/dbconvert_1.7to1.8
 
 
 PROGS = sauron addgroup adduser deluser delgroup modhosts \
-	import import-ethers import-jyu import-roots \
+	import import-blocklist import-ethers import-jyu import-roots \
 	last moduser runsql status update-dhcp-info \
 	export-networks generatehosts addhosts check-pending \
 	expire-hosts createtables import-zone remove-hosts \
 	update-hosts export-vmps import-nets import-dhcp \
 	export-ip-list export-hosts export-by-group keygen \
-	addzone import-zone-comments
+	addzone import-zone-comments compare-zones check-reverse \
+	import-catalog-zone \
+	send-approval-reminders
 
 MODULES = Sauron/Util.pm Sauron/BackEnd.pm Sauron/CGIutil.pm \
 	  Sauron/UtilZone.pm Sauron/Sauron.pm Sauron/UtilDhcp.pm \
-	  Sauron/DB-Pg.pm Sauron/DB-DBI.pm Sauron/SetupIO.pm
+	  Sauron/DB-Pg.pm Sauron/DB-DBI.pm Sauron/SetupIO.pm \
+	  Sauron/Approval.pm
 
 CGIMODULES = Utils.pm Servers.pm Groups.pm Templates.pm Nets.pm \
-	     Login.pm Zones.pm Hosts.pm ACLs.pm
+	     Login.pm Zones.pm Hosts.pm ACLs.pm Approvals.pm
 
 CONTRIB_FILES = contrib/additional-ether-codes.txt \
 		contrib/Ethernet.txt \
@@ -118,7 +127,8 @@ CONTRIB_FILES = contrib/additional-ether-codes.txt \
 PLUGINS = sample
 
 CGIFILES = cgi/sauron.cgi cgi/browser.cgi
-LOGOFILES = icons/logo.png icons/logo_large.png
+LOGOFILES = icons/logo.png icons/logo_large.png \
+		icons/sauron.css icons/sauron.js
 MISCFILES = COPYING COPYRIGHT
 
 DIRNAME = $(shell basename `pwd`)
@@ -153,6 +163,45 @@ check:
 	@for f in $(PROGS); do \
 		$(PERL) -w -c $$f; \
 	done
+
+# Run unit tests only (no DB required)
+test-unit:
+	@echo "Running unit tests..."
+	PERL5LIB=$(or $(srcdir),.) $(PERL) -MTest::Harness -e 'runtests(sort glob("t/0*.t"))'
+
+# Run all tests including integration (requires SAURON_TEST_DSN)
+test: test-unit
+	@echo "Running integration tests..."
+	PERL5LIB=$(or $(srcdir),.) $(PERL) -MTest::Harness -e 'runtests(sort glob("t/[1-9]*.t"))'
+
+# Run all tests with prove (nicer output)
+prove-unit:
+	cd $(or $(srcdir),.) && prove -l t/0*.t
+
+prove:
+	cd $(or $(srcdir),.) && prove -l t/
+
+# Run integration + E2E tests in an isolated Docker stack (no local DB needed)
+DOCKER_COMPOSE = docker compose
+E2E_COMPOSE = $(DOCKER_COMPOSE) -p sauron-e2e \
+	-f $(or $(srcdir),.)/docker-compose.yml \
+	-f $(or $(srcdir),.)/docker-compose.e2e.yml
+
+test-e2e:
+	rc=0; \
+	on_signal() { \
+		trap '' INT TERM HUP; \
+		$(E2E_COMPOSE) down -v --remove-orphans; \
+		exit $$1; \
+	}; \
+	trap 'on_signal 129' HUP; \
+	trap 'on_signal 130' INT; \
+	trap 'on_signal 143' TERM; \
+	$(E2E_COMPOSE) down -v --remove-orphans >/dev/null 2>&1 || true; \
+	$(E2E_COMPOSE) build sauron && \
+	$(E2E_COMPOSE) run --rm sauron /src/docker/e2e-tests.sh || rc=$$?; \
+	$(E2E_COMPOSE) down -v --remove-orphans || { drc=$$?; [ $$rc -ne 0 ] || rc=$$drc; }; \
+	exit $$rc
 
 clean:
 	rm -f *~ *.o core a.out make.log \#*\# $(OBJS) $(BINARIES)

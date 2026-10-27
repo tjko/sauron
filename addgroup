@@ -38,7 +38,7 @@ fatal("Invalid groupname '$opt_group'!")
 
 undef @q;
 db_query("SELECT id FROM user_groups WHERE name='$opt_group'",\@q);
-fatal("Group allready exists!") if ($q[0][0] > 0);
+fatal("Group already exists!") if ($q[0][0] > 0);
 
 unless ($opt_name) {
   print "Enter group description: ";

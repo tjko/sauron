@@ -6,19 +6,23 @@
 #
 package Sauron::CGI::Hosts;
 require Exporter;
-use CGI qw/:standard *table -utf8/;
+use CGI qw/:standard *table/;
 #use CGI qw/:cgi/; # enable when debugging with url()
 use Sauron::DB;
 use Sauron::CGIutil;
 use Sauron::BackEnd;
 use Sauron::Util;
 use Sauron::Sauron;
+use Sauron::Approval;
 use Sauron::CGI::Utils;
 use Sauron::SetupIO;
 use Sys::Syslog qw(:DEFAULT setlogsock);
-Sys::Syslog::setlogsock('unix');
+eval { local $SIG{__WARN__} = sub {}; Sys::Syslog::setlogsock('unix') };
 use Net::IP qw(:PROC);
 use Data::Dumper;
+use HTML::Entities;
+use MIME::Base64 qw(encode_base64 decode_base64);
+use Digest::MD5 qw(md5_hex);
 use strict;
 use vars qw($VERSION @ISA @EXPORT);
 
@@ -37,6 +41,228 @@ sub write2log{
   Sys::Syslog::syslog("info", encode_str("$msg"));
   Sys::Syslog::closelog();
 } # End of write2log
+
+sub _host_required_data_error($) {
+  my($rec) = @_;
+  my $err = Sauron::BackEnd::host_required_data_error($rec);
+
+  return $err if ($err ne '');
+  # A TXT host keeps a single value (hosts.cname_txt); update_host() would
+  # silently drop the other rows. Not enforced in BackEnd, since import-zone
+  # passes all TXT strings of a TXT-only name to add_host().
+  return 'TXT record allows only one TXT entry.'
+    if ($rec->{type} == 13 &&
+        Sauron::BackEnd::_host_count_active_list_entries($rec->{txt_l}, 1) > 1);
+  return '';
+}
+
+
+sub _approval_serialize {
+  my ($ref) = @_;
+  my $d;
+
+  return undef unless (defined $ref);
+  $d = Data::Dumper->new([$ref]);
+  $d->Terse(1);
+  $d->Indent(0);
+  return $d->Dump();
+}
+
+
+sub _approval_deserialize {
+  my ($text) = @_;
+  my $VAR1;
+
+  return undef unless (defined $text && $text ne '');
+  $text = '$VAR1 = ' . $text unless ($text =~ /^\$VAR1\s*=/);
+  eval $text;
+  return $@ ? undef : $VAR1;
+}
+
+
+sub _approval_payload_signature {
+  my ($state, $payload_b64) = @_;
+  my $secret = (defined($main::SAURON_KEY) ? $main::SAURON_KEY : '');
+
+  return md5_hex($secret . '|' . int($state->{uid} || 0) . '|' . $payload_b64);
+}
+
+
+sub _approval_operation_text {
+  my ($operation) = @_;
+
+  return 'Add new record' if ($operation eq 'A');
+  return 'Modify existing record' if ($operation eq 'M');
+  return 'Delete record' if ($operation eq 'D');
+  return $operation;
+}
+
+
+sub _render_approval_reason_form {
+  my ($state, $pending_ref, $reason, $error_msg) = @_;
+  my ($selfurl, $payload_text, $payload_b64, $payload_sig, $type_text);
+
+  $selfurl = $state->{selfurl} || '';
+  $payload_text = _approval_serialize($pending_ref);
+  $payload_b64 = encode_base64(($payload_text || ''), '');
+  $payload_sig = _approval_payload_signature($state, $payload_b64);
+  $type_text = $host_types{$pending_ref->{host_type}} || $pending_ref->{host_type};
+
+  print h2("Change submitted for approval");
+  print p("This change requires approval. Please provide a mandatory justification before the request is created.");
+  print p("<strong>Operation:</strong> " . encode_entities(_approval_operation_text($pending_ref->{operation} || '')));
+  print p("<strong>Record type:</strong> " . encode_entities($type_text));
+  print p("<strong>Domain:</strong> " . encode_entities($pending_ref->{domain} || ''));
+  alert1($error_msg) if (defined $error_msg && $error_msg ne '');
+
+  print start_form(-method=>'POST', -action=>$selfurl),
+    hidden('menu','hosts'),
+    hidden('sub','approval_submit'),
+    hidden('approval_payload',$payload_b64),
+    hidden('approval_sig',$payload_sig),
+    p('<strong>Approval justification (required):</strong>'),
+    textarea(-name=>'approval_reason', -default=>($reason || ''), -rows=>5, -columns=>80),
+    p(submit(-name=>'approval_submit_btn', -value=>'Submit for approval') . ' ' .
+      submit(-name=>'approval_cancel', -value=>'Cancel')),
+    end_form;
+}
+
+
+sub _render_approval_submitted {
+  my ($state, $req_id, $operation, $domain, $reason) = @_;
+  my $selfurl = $state->{selfurl} || '';
+
+  print h2("Change submitted for approval (request $req_id)");
+  print p("Your change has been submitted for approval and is waiting for review.");
+  print h3('Summary of submitted change:');
+  print p("<strong>Operation:</strong> " . encode_entities(_approval_operation_text($operation)));
+  print p("<strong>Domain:</strong> " . encode_entities($domain));
+  print p("<strong>Justification:</strong> " . encode_entities($reason));
+
+  print p("Links:");
+  print ul(
+    li("<a href=\"$selfurl?menu=approvals&sub=pending\">View pending approvals</a>"),
+    li("<a href=\"$selfurl?menu=approvals&sub=show_request&req_id=$req_id\">View this request details</a>")
+  );
+}
+
+
+sub _submit_pending_approval_request {
+  my ($state) = @_;
+  my ($payload_b64, $payload_sig, $payload_text, $pending_ref);
+  my ($operation, $host_type, $domain, $host_id, $policy_id, $reason);
+  my ($change_ref, $original_ref, %user, $email, $req_id);
+
+  if (param('approval_cancel')) {
+    warning1("Approval request canceled.");
+    print p("No approval request has been created.");
+    return 1;
+  }
+
+  $payload_b64 = param('approval_payload') || '';
+  $payload_sig = param('approval_sig') || '';
+
+  unless ($payload_b64 ne '' &&
+          $payload_sig eq _approval_payload_signature($state, $payload_b64)) {
+    alert1("Invalid or expired approval submission context.");
+    return 1;
+  }
+
+  $payload_text = decode_base64($payload_b64);
+  $pending_ref = _approval_deserialize($payload_text);
+  unless ($pending_ref && ref($pending_ref) eq 'HASH') {
+    alert1("Cannot read pending approval request data.");
+    return 1;
+  }
+
+  unless (int($pending_ref->{zoneid} || 0) == int($state->{zoneid} || 0)) {
+    alert1("Approval request data does not match current zone.");
+    return 1;
+  }
+
+  $reason = param('approval_reason');
+  $reason = '' unless (defined $reason);
+  $reason =~ s/^\s+//;
+  $reason =~ s/\s+$//;
+  if ($reason eq '') {
+    _render_approval_reason_form($state, $pending_ref, param('approval_reason'),
+                                 "Justification is required.");
+    return 1;
+  }
+
+  $operation = $pending_ref->{operation} || '';
+  $host_type = int($pending_ref->{host_type} || 0);
+  $domain = $pending_ref->{domain} || '';
+  $host_id = int($pending_ref->{host_id} || 0);
+
+  unless ($operation =~ /^[AMD]$/) {
+    alert1("Invalid approval operation.");
+    return 1;
+  }
+
+  $policy_id = check_approval_needed($state->{zoneid}, $operation, $host_type, $domain);
+  unless ($policy_id) {
+    alert1("Approval is no longer required for this change. Submit the change again.");
+    return 1;
+  }
+
+  $change_ref = _approval_deserialize($pending_ref->{change_data});
+  unless ($change_ref && ref($change_ref) eq 'HASH') {
+    alert1("Invalid change data for approval request.");
+    return 1;
+  }
+
+  if (defined($pending_ref->{original_data}) && $pending_ref->{original_data} ne '') {
+    $original_ref = _approval_deserialize($pending_ref->{original_data});
+    unless (defined $original_ref && ref($original_ref) eq 'HASH') {
+      alert1("Invalid original data for approval request.");
+      return 1;
+    }
+  }
+
+  get_user($state->{user}, \%user);
+  $email = $user{email} || '';
+
+  $req_id = submit_change_request($state->{zoneid}, $policy_id, $state->{uid},
+                                  $email, $operation, $host_id,
+                                  $change_ref, $original_ref, $reason);
+  if ($req_id) {
+    _render_approval_submitted($state, $req_id, $operation, $domain, $reason);
+    return 1;
+  }
+
+  alert1("Failed to submit approval request");
+  return 1;
+}
+
+
+sub _maybe_submit_approval {
+  my ($state, $operation, $host_type, $domain, $host_id, $change_ref, $original_ref) = @_;
+  my ($policy_id, %pending);
+
+  # DEBUG: Log approval check parameters
+  write2log("DEBUG: check_approval_needed(zone=$state->{zoneid}, op=$operation, type=$host_type, domain=$domain)");
+  
+  $policy_id = check_approval_needed($state->{zoneid}, $operation, $host_type, $domain);
+  
+  # DEBUG: Log result
+  write2log("DEBUG: check_approval_needed returned " . (defined $policy_id ? "policy_id=$policy_id" : "undef"));
+  
+  return 0 unless ($policy_id);
+
+  %pending = (
+    zoneid => int($state->{zoneid} || 0),
+    operation => $operation,
+    host_type => int($host_type || 0),
+    domain => ($domain || ''),
+    host_id => int($host_id || 0),
+    change_data => _approval_serialize($change_ref),
+    original_data => _approval_serialize($original_ref)
+  );
+
+  _render_approval_reason_form($state, \%pending, param('approval_reason'), '');
+  return 1;
+}
 
 
 
@@ -98,6 +324,30 @@ my %ds_digest_type=(
     3=>'GOST R 34.11-94',
     4=>'SHA-384'
 );
+
+my %naptr_flags=(
+    0=>'(non-terminal)',
+    1=>'S',
+    2=>'A',
+    3=>'U',
+    4=>'P'
+);
+
+my %caa_flags=(
+    0=>'Issue (0)',
+    128=>'Issuemail (128)'
+);
+
+my %caa_tags=(
+    'issue'=>'issue',
+    'issuewild'=>'issuewild',
+    'issueemail'=>'issueemail',
+    'issuevmc'=>'issuevmc',
+    'iodef'=>'iodef',
+    'contactemail'=>'contactemail',
+    'contactphone'=>'contactphone'
+);
+
 
 my %host_form = (
  data=>[
@@ -187,7 +437,7 @@ my %host_form = (
   {ftype=>6, tag=>'mx', name=>'MX template', iff=>['type','[13]']},
   {ftype=>7, tag=>'wks', name=>'WKS template', iff=>['type','1']},
 
-  {ftype=>0, name=>'Host specific',iff=>['type','(?:13|1|2|3|7)']},
+  {ftype=>0, name=>'Host specific',iff=>['type','(?:1|2|3|4|7|13|15)']},
   {ftype=>2, tag=>'ns_l', name=>'Name servers (NS)', type=>['domain','text'],
    fields=>2, maxlen=>[400,80],
    len=>[50,20], empty=>[0,1], elabels=>['NS','comment'], iff=>['type','2']},
@@ -197,6 +447,11 @@ my %host_form = (
    type=>['int','enum','enum','hex','text'],
    enum=>[undef, \%ds_algorithm, \%ds_digest_type, undef, undef],
    iff=>['type','2']},
+  {ftype=>2, tag=>'caa_l', name=>'CAA entries', fields=>4,len=>[5,20,40,20],
+   empty=>[0,0,0,1], maxlen=>[5,20,255,80], addempty=>[-1,0,0,0],
+   elabels=>['Flags','Tag','Value','Comment'],
+    type=>['caa_flags','caa_tag','text','text'],
+   whitesp=>['','P','P','P'], iff=>['type','(?:1|15)']},
 
   {ftype=>2, tag=>'wks_l', name=>'WKS', no_empty=>1, whitesp=>['','P','P'],
    type=>['text','text','text'], fields=>3, len=>[10,37,20], empty=>[0,0,1],
@@ -208,7 +463,7 @@ my %host_form = (
 
   {ftype=>2, tag=>'txt_l', name=>'TXT', type=>['text','text'],
    whitesp=>['P','P'], fields=>2, maxlen=>[253, 80],
-   len=>[50,20], empty=>[0,1], elabels=>['TXT','comment'], iff=>['type','(?:13|1|3|7)']},
+   len=>[50,20], empty=>[0,1], elabels=>['TXT','comment'], iff=>['type','(?:13|1|3|4|7)']},
 
   {ftype=>2, tag=>'printer_l', name=>'PRINTER entries', no_empty=>1,
    type=>['text','text'], fields=>2,len=>[50,20], empty=>[0,1],
@@ -241,7 +496,18 @@ my %host_form = (
    enum=>[\%tlsa_usage, \%tlsa_selector, \%tlsa_matching_type, undef, undef],
    iff=>['type','12']},
 
+  {ftype=>0, name=>'NAPTR records', no_edit=>1, iff=>['type','14']},
+  {ftype=>2, tag=>'naptr_l', name=>'NAPTR entries', fields=>7,len=>[3,3,2,5,20,20,20],
+   empty=>[0,0,1,1,1,0,1], maxlen=>[5,5,2,20,100,100,80],addempty=>[-1,-1,-1,-1,-1,-1,0],
+   elabels=>['Order','Preference','Flags','Service','Regexp','Replacement','Comment'],
+   type=>['priority','priority','enum','text','text','text','text'],
+   enum=>[undef, undef, \%naptr_flags, undef, undef, undef, undef],
+   iff=>['type','14']},
+
   {ftype=>0, name=>'Record info', no_edit=>0},
+  {ftype=>1, tag=>'approval_reason', name=>'Approval Justification (pre-fill)',
+   type=>'text', len=>60, maxlen=>500, empty=>1, whitesp=>'P',
+   title=>'Optional: if approval is required, this text pre-fills the mandatory justification form'},
   {ftype=>4, name=>'Record created', tag=>'cdate_str', no_edit=>1},
   {ftype=>4, name=>'Last modified', tag=>'mdate_str', no_edit=>1},
   {ftype=>1, name=>'Expiration date', tag=>'expiration', len=>30,
@@ -327,6 +593,12 @@ my %restricted_host_form = (
    iff=>['type','[159]']},
   {ftype=>6, tag=>'mx', name=>'MX template', iff=>['type','1']},
   {ftype=>7, tag=>'wks', name=>'WKS template', iff=>['type','1']},
+  {ftype=>0, name=>'CAA records', iff=>['type','15']},
+  {ftype=>2, tag=>'caa_l', name=>'CAA entries', fields=>4,len=>[5,20,40,20],
+   empty=>[0,0,0,1], maxlen=>[5,20,255,80], addempty=>[-1,0,0,0],
+   elabels=>['Flags','Tag','Value','Comment'],
+    type=>['caa_flags','caa_tag','text','text'],
+   whitesp=>['','P','P','P'], iff=>['type','15']},
   {ftype=>0, name=>'Record info'},
   {ftype=>1, name=>'Expiration date', tag=>'expiration', len=>30,
    type=>'expiration', empty=>1, iff=>['type','[1479]']}
@@ -356,7 +628,7 @@ my %new_host_form = (
   {ftype=>3, tag=>'net', name=>'Subnet', type=>'enum', preselectnet=>1,
    enum=>\%new_host_nets,elist=>\@new_host_netsl, iff=>['type','(1|101)']},
   {ftype=>1, tag=>'ip', macnotify=>1,
-   name=>'IP <FONT size=-1>(only if "Manual IP" selected from above)</FONT>',
+   name=>'IP', extrainfo=>'Only if "Manual IP" selected from above',
    type=>'ip', len=>39, empty=>1, iff=>['type','(1|101)']},
   {ftype=>1, tag=>'ip', name=>'IP',
    type=>'ip', len=>39, empty=>1, iff=>['type','9']},
@@ -435,11 +707,26 @@ my %new_host_form = (
    enum=>[\%tlsa_usage, \%tlsa_selector, \%tlsa_matching_type, undef, undef],
    iff=>['type','12']},
 
+  {ftype=>2, tag=>'naptr_l', name=>'NAPTR entries', fields=>7,len=>[5,5,5,5,5,5,20],
+   empty=>[0,0,1,1,1,0,1], maxlen=>[5,5,5,5,5,5,80],addempty=>[-1,-1,-1,-1,-1,-1,0],
+   dot=>1, # allows dot in replacement
+   elabels=>['Order','Preference','Flags','Service','Regexp','Replacement','Comment'],
+   type=>['priority','priority','enum','text','text','fqdn','text'],
+   enum=>[undef, undef, \%naptr_flags, undef, undef, undef, undef],
+   iff=>['type','14']},
+
   {ftype=>2, tag=>'txt_l', name=>'TXT entries', type=>['text','text'],
    whitesp=>['P','P'], fields=>2, maxlen=>[253, 80],
    len=>[50,20], empty=>[0,1], elabels=>['TXT','comment'], iff=>['type','13']},
 
-  {ftype=>0, name=>'SSHFP records', iff=>['type','1']},
+
+  {ftype=>0, name=>'Additional records', iff=>['type','1']},
+  {ftype=>2, tag=>'caa_l', name=>'CAA entries', fields=>4,len=>[5,20,40,20],
+   empty=>[0,0,0,1], maxlen=>[5,20,255,80], addempty=>[-1,0,0,0],
+   elabels=>['Flags','Tag','Value','Comment'],
+   type=>['caa_flags','caa_tag','text','text'],
+   whitesp=>['','P','P','P'], iff=>['type','(?:1|15)']},
+
   {ftype=>2, tag=>'sshfp_l', name=>'SSHFP entries', fields=>4,len=>[2,2,60,10],
    empty=>[0,0,0,1],elabels=>['Algorithm','Hashtype','Fingerprint','comment'],
    type=>['enum','enum','hex','text'], enum=>[\%sshfp_algorithms, \%sshfp_types, undef, undef],
@@ -463,7 +750,7 @@ my %restricted_new_host_form = (
   {ftype=>3, tag=>'net', name=>'Subnet', type=>'enum', preselectnet=>1,
    enum=>\%new_host_nets,elist=>\@new_host_netsl, iff=>['type','1']},
   {ftype=>1, tag=>'ip', macnotify=>1,
-   name=>'IP <FONT size=-1>(only if "Manual IP" selected from above)</FONT>',
+   name=>'IP', extrainfo=>'Only if "Manual IP" selected from above',
    type=>'ip', len=>30, empty=>1, iff=>['type','1']},
   {ftype=>1, tag=>'ip', name=>'IP',
    type=>'ip', len=>39, empty=>1, iff=>['type','9']},
@@ -483,13 +770,13 @@ my %restricted_new_host_form = (
   {ftype=>2, tag=>'printer_l', name=>'PRINTER entries',
    type=>['text','text'], fields=>2,len=>[50,20], empty=>[0,1],
    elabels=>['PRINTER','Comment'], iff=>['type','5']},
- # {ftype=>0, name=>'Group/Template selections', iff=>['type','[15]']},
-  {ftype=>10, tag=>'grp', name=>'Base group', iff=>['type','[15]'],
-   no_dhcp=>1}, # ** Base, no_dhcp 2021-11-29 TVu
+ # {ftype=>0, name=>'DHCP selections', iff=>['type','(1|5)']},
+  {ftype=>10, tag=>'grp', name=>'Base group', iff=>['type','(1|5)'],
+   no_dhcp=>1, empty=>1}, # ** Base, no_dhcp 2021-11-29 TVu - DHCP for Host, Printer
   {ftype=>11, tag=>'subgroups', name=>'SubGroups', fields=>2,
-   iff=>['type','[15]']},
-  {ftype=>6, tag=>'mx', name=>'MX template', iff=>['type','1']},
-  {ftype=>7, tag=>'wks', name=>'WKS template', iff=>['type','1']},
+   iff=>['type','(1|5)'], empty=>1},
+  {ftype=>6, tag=>'mx', name=>'MX template', iff=>['type','3']},
+  {ftype=>7, tag=>'wks', name=>'WKS template', iff=>['type','7']},
   {ftype=>0, name=>'Host info',iff=>['type','1']},
   {ftype=>1, tag=>'huser', name=>'User', type=>'text', len=>40, maxlen=>80,
    whitesp=>'P', empty=>$main::SAURON_RHF{huser}, iff=>['type','1']},
@@ -524,6 +811,11 @@ my %restricted_new_host_form = (
    whitesp=>'P', empty=>$main::SAURON_RHF{serial}, iff=>['type','1']},
   {ftype=>1, tag=>'misc', name=>'Misc.', type=>'text', len=>50,
    whitesp=>'P', empty=>$main::SAURON_RHF{misc}, iff=>['type','1']},
+  {ftype=>2, tag=>'caa_l', name=>'CAA entries', fields=>4,len=>[5,20,40,20],
+   empty=>[0,0,0,1], maxlen=>[5,20,255,80], addempty=>[-1,0,0,0],
+   elabels=>['Flags','Tag','Value','Comment'],
+   type=>['caa_flags','caa_tag','text','text'],
+   whitesp=>['','P','P','P'], iff=>['type','15']},
   {ftype=>0, name=>'Record info'},
   {ftype=>1, name=>'Expiration date', tag=>'expiration', len=>30,
    type=>'expiration', empty=>1, iff=>['type','[147]']}
@@ -649,9 +941,10 @@ sub make_net_list($$$$$$) {
 
 sub restricted_add_host($) {
   my($rec)=@_;
+  my($required_error);
 
   if (check_perms('host',$rec->{domain},1)) {
-    alert1("Invalid hostname: does not conform your restrictions");
+    alert1("Invalid hostname: does not conform to your restrictions");
     return -101;
   }
   if ($rec->{type} == 4 && check_perms('flags','CNAME',1)) {
@@ -670,6 +963,36 @@ sub restricted_add_host($) {
     alert1("You don't have permission to add TLSA records");
     return -109;
   }
+  if ($rec->{type} == 13 && check_perms('flags','TXT',1)) {
+    alert1("You don't have permission to add TXT records");
+    return -112;
+  }
+  if ($rec->{type} == 14 && check_perms('flags','NAPTR',1)) {
+    alert1("You don't have permission to add NAPTR records");
+    return -110;
+  }
+  if ($rec->{type} == 15 && check_perms('flags','CAA',1)) {
+    alert1("You don't have permission to add CAA records");
+    return -111;
+  }
+
+  $required_error = _host_required_data_error($rec);
+  if ($required_error ne '') {
+    alert1($required_error);
+    return -112;
+  }
+
+  # Check approval workflow before adding the host record
+  # This applies to all record types added via add_magic
+  if (defined($rec->{zone}) && $rec->{zone} > 0) {
+    my $policy_id = check_approval_needed($rec->{zone}, 'A', $rec->{type}, $rec->{domain});
+    if ($policy_id) {
+      # Approval is needed but add_magic doesn't support deferred adds
+      # Return error to indicate approval is required
+      alert1("This record requires approval before adding. Please use the standard Add menu.");
+      return -112;
+    }
+  }
 
   return add_host($rec);
 }
@@ -687,37 +1010,38 @@ sub show_host_record($$)
     return 1;
   }
 
-  $host_form{bgcolor}='#ffcccc'
+  # Host-type tinting: the form picks up an extra modifier class so the
+  # background colour can be themed in CSS instead of an inline bgcolor.
+  $host_form{cssclass} = 's-form s-form--expired'
     if ($host{expiration} > 0 && $host{expiration} < time());
-  # The following line was previously commented out. Why? TVu 20.09.2016
-  $host_form{bgcolor}='#ccffff' if ($host{type}==101);
+  $host_form{cssclass} = 's-form s-form--alias'
+    if ($host{type} == 101);
   print p,start_form(-method=>'GET',-action=>$selfurl),
     hidden('menu','hosts'),hidden('h_id',$id);
-  print "<table width=\"99%\"><tr><td align=\"left\">",
-    submit(-name=>'sub',-value=>'Refresh')," &nbsp; ";
-  print submit(-name=>'sub',-value=>'-> This Subnet')," &nbsp; " if ($host{type} == 1);
+  print '<div class="s-action-bar">',
+    '<div class="s-action-bar__left">',
+    submit(-name=>'sub',-value=>'Refresh'),' ';
+  print submit(-name=>'sub',-value=>'-> This Subnet'),' ' if ($host{type} == 1);
 
-  # This drop-down list is not strictly for IPv6, but will probably be useful with it.
-  # It is used to select IP for "This subnet", "Ping", "Traceroute", "Copy" and "Move"
-  # when a host has multiple IP addresses, especially both IPv4 and IPv6.
+  # Drop-down for selecting IP when a host has multiple addresses.
   my @opt;
   for my $ind1 (1..$#{$host{ip}}) {
     push @opt, $host{ip}[$ind1][1];
   }
   if (@opt) { print popup_menu('select_ip', \@opt); }
 
-  print "</td><td align=\"right\">";
-  print submit(-name=>'sub',-value=>'History'), " "
+  print '</div><div class="s-action-bar__right">';
+  print submit(-name=>'sub',-value=>'History'), ' '
     if (!check_perms('level',$main::ALEVEL_HISTORY,1));
-  print submit(-name=>'sub',-value=>'Network Settings'), " "
+  print submit(-name=>'sub',-value=>'Network Settings'), ' '
     if ($host{type} == 1);
-  print submit(-name=>'sub',-value=>'Ping'), " "
+  print submit(-name=>'sub',-value=>'Ping'), ' '
     if ($host{type} == 1 && $main::SAURON_PING_PROG &&
 	!check_perms('level',$main::ALEVEL_PING,1));
   print submit(-name=>'sub',-value=>'Traceroute')
     if ($host{type} == 1 && $main::SAURON_TRACEROUTE_PROG &&
 	!check_perms('level',$main::ALEVEL_TRACEROUTE,1));
-  print "</td></tr></table>";
+  print '</div></div>';
   my %fqdnzone; # ****
   if (get_zone($host{zone}, \%fqdnzone) == 0) {
     $host{fqdn} = $host{domain} . '.' . $fqdnzone{name} . '.';
@@ -746,7 +1070,8 @@ sub show_host_record($$)
 	      ($host{cname_alias} && $rwx && check_perms('flags','CNAME',1) ||
 	       $host{static_alias} && $rwx && check_perms('flags','SCNAME',1)) ||
 	      $host{type} == 7 && $rwx && check_perms('flags','AREC',1) ||
-	      $host{type} == 8 && $rwx && check_perms('flags','SRV',1));
+        $host{type} == 8 && $rwx && check_perms('flags','SRV',1) ||
+        $host{type} == 15 && $rwx && check_perms('flags','CAA',1));
 
     # CNAME and AREC aliases can't be copied because there are bugs in the program,
     # and finding those bugs proved to be too time-consuming. 2020-09-14 TVu
@@ -756,9 +1081,13 @@ sub show_host_record($$)
       # Added check of SRV flag. TVu 2020-11-09
       unless ($host{type} == 4 && ($host{cname_alias} || $host{static_alias} && $rwx && check_perms('flags','SCNAME',1)) ||
 	      $host{type} == 7 ||
-	      $host{type} == 8 && $rwx && check_perms('flags','SRV',1));
+        $host{type} == 8 && $rwx && check_perms('flags','SRV',1) ||
+        $host{type} == 15 && $rwx && check_perms('flags','CAA',1));
 
-    print submit(-name=>'sub',-value=>'Move'), " " if ($host{type} == 1);
+    print submit(-name=>'sub',-value=>'Move'), " "
+      if ($host{type} == 1 ||
+	  $host{type} == 4 && $host{cname_alias} &&
+	  !($rwx && check_perms('flags','CNAME',1)));
 
     #print submit(-name=>'sub',-value=>'Alias'), " " if ($host{type} == 1);
 
@@ -816,8 +1145,10 @@ sub browse_hosts($$)
           hidden('menu','hosts'),hidden('sub','browse'),
           hidden('bh_page','0');
   form_magic('bh',\%bdata,\%browse_hosts_form);
-  print submit(-name=>'bh_submit',-value=>'Search')," &nbsp;&nbsp; ",
+  print '<div class="s-btn-group">',
+        submit(-name=>'bh_submit',-value=>'Search'),' ',
         submit(-name=>'bh_submit',-value=>'Clear'),
+        '</div>';
         end_form;
 
   return 0;
@@ -826,6 +1157,129 @@ sub browse_hosts($$)
 
 # HOSTS menu
 #
+# Find a host record by name in the given zone. Accepts a name relative
+# to the zone or an FQDN (with or without the trailing dot). Host names
+# may be stored relative or absolute (with the trailing dot), so the
+# absolute spellings are tried after the relative ones.
+sub _find_zone_host($$) {
+  my($zoneid,$name) = @_;
+  my(%zone,@q,@names);
+
+  return () if ($name eq '' || get_zone($zoneid,\%zone) < 0);
+  (my $zname = $zone{name}) =~ s/\.$//;
+  if ($name =~ /\.$/) {
+    return () unless ($name =~ /^(.+)\.\Q$zname\E\.$/i);
+    @names = ($1, $name);
+  } else {
+    @names = ($name);
+    push @names, $1, "$name." if ($name =~ /^(.+)\.\Q$zname\E$/i);
+    push @names, "$name.$zname.";
+  }
+  for my $n (@names) {
+    undef @q;
+    db_query("SELECT id,type,domain FROM hosts WHERE zone=$zoneid " .
+	     "AND domain=" . db_encode_str($n) . ";",\@q);
+    return @{$q[0]} if (@q > 0);
+  }
+  return ();
+}
+
+# Point an existing CNAME alias to another host in the same zone.
+sub move_cname_alias($$$) {
+  my($state,$perms,$host) = @_;
+  my($target,$tid,$ttype,$tdomain,$res,%oldhost,%zone);
+
+  my $selfurl = $state->{selfurl};
+
+  return if (check_perms('zone','RW'));
+  if (check_perms('zone','RWX',1) && check_perms('flags','CNAME',1)) {
+    alert1("You don't have permission to edit CNAME Aliases");
+    return;
+  }
+  unless ($host->{cname_alias} && $host->{alias} > 0) {
+    alert1("Only CNAME aliases can be moved to another host.");
+    show_host_record($state,$perms);
+    return;
+  }
+  # Permissions and approval policy are those of the selected zone.
+  if ($host->{zone} != $state->{zoneid}) {
+    alert1("Alias is not in the selected zone ($state->{zone}).");
+    show_host_record($state,$perms);
+    return;
+  }
+  if (get_zone($host->{zone},\%zone) < 0) {
+    alert2("Cannot get zone record (id=$host->{zone})!");
+    return;
+  }
+
+  if (param('move_cancel')) {
+    alert1("Alias not moved.");
+    show_host_record($state,$perms);
+    return;
+  }
+
+  # Only a POST may change the record (no moves via crafted links).
+  if (param('move_confirm') && request_method() eq 'POST') {
+    $target = lc(param('new_target') // '');
+    $target =~ s/^\s+|\s+$//g;
+    ($tid,$ttype,$tdomain) = _find_zone_host($host->{zone},$target);
+
+    if ($target eq '') {
+      alert1("Target host not specified.");
+    } elsif (!$tid) {
+      alert1("Cannot find host '" . encode_entities($target) .
+	     "' in zone $zone{name}");
+    } elsif ($ttype != 1) {
+      alert1("Target must be a host record, not $host_types{$ttype}.");
+    } elsif ($tid == $host->{alias}) {
+      alert1("Alias already points to $tdomain.");
+    } elsif (check_perms('host',$tdomain,1)) {
+      alert1("Not authorized to add aliases to host $tdomain.");
+    } else {
+      my $old_target = $host->{alias_d};
+      %oldhost = %{$host};
+      $host->{alias} = $tid;
+      $host->{alias_d} = $tdomain; # shown in approval request details
+
+      return if (_maybe_submit_approval($state, 'M', $host->{type},
+					$host->{domain}, $host->{id},
+					$host, \%oldhost));
+
+      $res = update_host($host);
+      if ($res < 0) {
+	alert1("Alias update failed! ($res)");
+	alert2(db_lasterrormsg());
+      } else {
+	update_history($state->{uid},$state->{sid},1,
+		       "MOVE: $host_types{4} ",
+		       "domain: $oldhost{domain}, " .
+		       "alias for: $old_target --> $tdomain",$oldhost{id});
+	success1("Alias moved: $old_target --> $tdomain");
+      }
+      show_host_record($state,$perms);
+      return;
+    }
+  }
+
+  print h2("Move alias to another host:"),
+        p,start_form(-method=>'POST',-action=>$selfurl),
+        hidden('menu','hosts'),hidden('h_id',$host->{id}),hidden('sub','Move'),
+        '<table class="s-form">',
+        '<tr class="s-form__row"><td class="s-form__label">Alias:</td>',
+        '<td class="s-form__value">',$host->{domain},'</td></tr>',
+        '<tr class="s-form__row"><td class="s-form__label">Current target:</td>',
+        '<td class="s-form__value">',$host->{alias_d},'</td></tr>',
+        '<tr class="s-form__row"><td class="s-form__label">New target host:</td>',
+        '<td class="s-form__value">',
+        textfield(-name=>'new_target',-size=>40,-maxlength=>253),
+        '</td></tr>',
+        '</table>',
+        submit(-name=>'move_confirm',-value=>'Move'), ' ',
+        submit(-name=>'move_cancel',-value=>'Cancel'),
+        end_form;
+  display_form($host,\%host_form);
+}
+
 sub menu_handler {
   my($state,$perms) = @_;
 
@@ -865,6 +1319,15 @@ sub menu_handler {
   }
 
   my $sub=param('sub');
+
+  if ($sub eq 'approval_submit' ||
+      defined(param('approval_payload')) ||
+      defined(param('approval_submit_btn')) ||
+      defined(param('approval_cancel'))) {
+    _submit_pending_approval_request($state);
+    return;
+  }
+
   $host_form{alias_l_url}="$selfurl?menu=hosts&h_id=";
   $host_form{alias_a_url}="$selfurl?menu=hosts&h_id=";
   $host_form{alias_d_url}="$selfurl?menu=hosts&h_id=";
@@ -895,10 +1358,35 @@ sub menu_handler {
 	    alert1("You don't have permission to delete SRV records");
 	    return -108;
 	}
+	if ($host{type} == 11 && check_perms('flags','SSHFP',1)) {
+	    alert1("You don't have permission to delete SSHFP records");
+	    return -110;
+	}
+	if ($host{type} == 12 && check_perms('flags','TLSA',1)) {
+	    alert1("You don't have permission to delete TLSA records");
+	    return -111;
+	}
+	if ($host{type} == 13 && check_perms('flags','TXT',1)) {
+	    alert1("You don't have permission to delete TXT records");
+	    return -112;
+	}
+	if ($host{type} == 14 && check_perms('flags','NAPTR',1)) {
+	    alert1("You don't have permission to delete NAPTR records");
+	    return -113;
+	}
+  if ($host{type} == 15 && check_perms('flags','CAA',1)) {
+      alert1("You don't have permission to delete CAA records");
+      return -109;
+  }
     }
 
     if (check_perms('delhost',$host{domain})) {
       show_host_record($state,$perms);
+      return;
+    }
+
+    if (_maybe_submit_approval($state, 'D', $host{type}, $host{domain}, $host{id},
+                               {id=>$host{id}, domain=>$host{domain}}, \%host)) {
       return;
     }
 
@@ -930,10 +1418,9 @@ sub menu_handler {
       my $old_list = param('list');
       my $old_net_id = param('net_id');
 
-      print "\n<table><tr><td>";
+      print '<div class="s-action-bar"><div class="s-action-bar__left">';
 
       if ($select_ip) {
-
 	  param('menu', 'hosts');
 	  param('sub', 'browse');
 	  param('bh_net', $net_cidr);
@@ -941,18 +1428,14 @@ sub menu_handler {
 	  hidden('menu', 'hosts'), hidden('sub', 'browse'),
 	  hidden('bh_net', $net_cidr);
 	  print submit(-name=>'foobar', -value=>'Browse This Subnet');
-	  print end_form,"\n";
-
-	  print "</td><td>";
+	  print end_form,' ';
 
 	  param('menu', 'nets');
 	  param('net_id', $net_id);
 	  print start_form(-method=>'GET', -action=>$selfurl),
 	  hidden('menu', 'nets'), hidden('net_id', $net_id);
 	  print submit(-name=>'foobar', -value=>'Go to This Subnet');
-	  print end_form,"\n";
-
-	  print "</td><td>";
+	  print end_form,' ';
 
 	  param('menu', 'nets');
 	  param('sub', 'Net Info');
@@ -961,13 +1444,9 @@ sub menu_handler {
 	  hidden('menu', 'nets'), hidden('sub', 'Net Info'),
 	  hidden('net_id', $net_id);
 	  print submit(-name=>'foobar', -value=>'Go to Net Info');
-	  print end_form,"\n";
-
-	  print "</td><td>";
-
+	  print end_form,' ';
       }
 
-# If a CNAME alias was deleted, create a button to navigate to the host the alias referred to.
       if ($host{type} == 4 && $host{cname_alias} == 1 &&
 	  $host{alias} > 0 && $host{alias_d}) {
 	  param('menu', 'hosts');
@@ -975,10 +1454,7 @@ sub menu_handler {
 	  print start_form(-method=>'GET', -action=>$selfurl),
 	  hidden('menu', 'hosts'), hidden('h_id', $host{alias});
 	  print submit(-name=>'foobar', -value=>"Go to $host{alias_d}", autofocus=>'true');
-	  print end_form,"\n";
-
-	  print "</td><td>";
-
+	  print end_form,' ';
       }
 
       param('menu', 'nets');
@@ -986,9 +1462,9 @@ sub menu_handler {
       print start_form(-method=>'GET', -action=>$selfurl),
       hidden('menu', 'nets'), hidden('list', 'all');
       print submit(-name=>'foobar', -value=>'Go to Nets/All');
-      print end_form,"\n";
+      print end_form;
 
-      print "</td></table>";
+      print '</div></div>';
 
       param('menu', $old_menu);
       param('sub', $old_sub);
@@ -1009,7 +1485,7 @@ sub menu_handler {
 		       "DISABLE: $host_types{$host{type}} ",
 		       "domain: $host{domain}, ip:$host{ip}[1][1], " .
 		       "ether: $host{ether}",$host{id});
-	print h3("Host disabled (converted to a host reservation)");
+	success1("Host disabled (converted to a host reservation).");
       }
     }
     show_host_record($state,$perms);
@@ -1034,7 +1510,7 @@ sub menu_handler {
       # Alias inherits TTL from host. 2019-01-08 TVu
       if (param('aliasadd_alias')) {
 	my $sql = "update hosts set ttl = (select ttl from hosts where id = " .
-	  param('aliasadd_alias') . ") where id = $res;";
+	  int(param('aliasadd_alias')) . ") where id = $res;";
 	db_exec($sql); # No error checking.
       }
       update_history($state->{uid},$state->{sid},1,
@@ -1057,6 +1533,10 @@ sub menu_handler {
       show_host_record($state,$perms);
       return;
     }
+    if ($host{type} == 4) {
+      move_cname_alias($state,$perms,\%host);
+      return;
+    }
     # These moves are now supported.
     #   if ($#{$host{ip}} > 1) {
     #     alert2("Host has multiple IPs!");
@@ -1064,7 +1544,7 @@ sub menu_handler {
     #     return;
     #   }
     if (param('move_cancel')) {
-      print h2("Host record not moved");
+      alert1("Host record not moved.");
       show_host_record($state,$perms);
       return;
     } elsif (param('move_confirm')) {
@@ -1104,7 +1584,7 @@ sub menu_handler {
 			   "MOVE: $host_types{$host{type}} ",
 			   "domain: $host{domain}, IP: $old_ip --> $host{ip}[$ind2][1]",
 			   $host{id});
-	    print h2('Host moved.');
+	    success1('Host moved.');
 	    show_host_record($state,$perms);
 	    return;
 	  } else {
@@ -1115,6 +1595,10 @@ sub menu_handler {
       print h2("Move host to another IP");
       # my $tmpnet=new Net::IP(param('move_net'));
       # $newip=auto_address($serverid,param('move_net'));
+      unless (is_cidr(param('move_net'))) {
+	alert1("Invalid network address!");
+	return;
+      }
       $newip = get_free_ip_by_net($serverid, param('move_net'), $data{ether}, '',
 				  get_net_ip_policy($serverid, param('move_net')));
       unless (is_cidr($newip)) {
@@ -1128,27 +1612,32 @@ sub menu_handler {
       print p,start_form(-method=>'GET',-action=>$selfurl),
             hidden('menu','hosts'),hidden('h_id',$id),hidden('sub','Move'),
             hidden('select_ip', param('select_ip')),
-            hidden('move_confirm'),hidden('move_net'),p,"<TABLE>",
-# Support for moving hosts with multiple IPs.
-	    Tr(td("Current IP:"),
-	       td(param('select_ip'))),
-	    Tr(td("New IP:"),
-	       td(textfield(-name=>'new_ip',-size=>40, -maxlength=>40,
-			    -default=>$newip))),
-	    Tr(td("New User:"),
-	       td(textfield(-name=>'new_user',-size=>40,-maxlength=>40,
-			 -default=>$host{huser}))),
-	    Tr(td("New Department:"),
-	       td(textfield(-name=>'new_dept',-size=>30,-maxlength=>30,
-			 -default=>$host{dept}))),
-	    Tr(td("New Location:"),
-	       td(textfield(-name=>'new_loc',-size=>30,-maxlength=>30,
-			    -default=>$host{location}))),
-	    Tr(td("New Info:"),
-	       td(textfield(-name=>'new_info',-size=>30,-maxlength=>30,
-			    -default=>$host{info}))),
-	    "</TR></TABLE><BR>",
-	    submit(-name=>'move_confirm2',-value=>'Update'), " ",
+            hidden('move_confirm'),hidden('move_net'),p,
+	    '<table class="s-form">',
+	    '<tr class="s-form__row"><td class="s-form__label">Current IP:</td>',
+	    '<td class="s-form__value">',param('select_ip'),'</td></tr>',
+	    '<tr class="s-form__row"><td class="s-form__label">New IP:</td>',
+	    '<td class="s-form__value">',
+	    textfield(-name=>'new_ip',-size=>40,-maxlength=>40,-default=>$newip),
+	    '</td></tr>',
+	    '<tr class="s-form__row"><td class="s-form__label">New User:</td>',
+	    '<td class="s-form__value">',
+	    textfield(-name=>'new_user',-size=>40,-maxlength=>40,-default=>$host{huser}),
+	    '</td></tr>',
+	    '<tr class="s-form__row"><td class="s-form__label">New Department:</td>',
+	    '<td class="s-form__value">',
+	    textfield(-name=>'new_dept',-size=>30,-maxlength=>30,-default=>$host{dept}),
+	    '</td></tr>',
+	    '<tr class="s-form__row"><td class="s-form__label">New Location:</td>',
+	    '<td class="s-form__value">',
+	    textfield(-name=>'new_loc',-size=>30,-maxlength=>30,-default=>$host{location}),
+	    '</td></tr>',
+	    '<tr class="s-form__row"><td class="s-form__label">New Info:</td>',
+	    '<td class="s-form__value">',
+	    textfield(-name=>'new_info',-size=>30,-maxlength=>30,-default=>$host{info}),
+	    '</td></tr>',
+	    '</table>',
+	    submit(-name=>'move_confirm2',-value=>'Update'), ' ',
 	    submit(-name=>'move_cancel',-value=>'Cancel'),p,
 	    end_form;
       display_form(\%host,\%host_form);
@@ -1192,7 +1681,7 @@ sub menu_handler {
 			       "MOVE: $host_types{$host{type}} ",
 			       "domain: $host{domain} move: $zone --> " .
 			       "$newzone{name}",$host{id});
-		print h2("Host moved from $zone to $newzone{name}");
+		success1("Host moved from $zone to $newzone{name}.");
 		return;
 	    }
 	    alert1("Failed to move host to another zone ($res)");
@@ -1204,24 +1693,33 @@ sub menu_handler {
 # Support for moving hosts with multiple IPs.
 #   $ip=$host{ip}[1][1];
     $ip = param('select_ip');
+    unless (is_ip($ip) || is_cidr($ip)) {
+      alert1("Invalid IP address!");
+      return;
+    }
     undef @q;
     db_query("SELECT net FROM nets WHERE server=$serverid AND subnet=true " .
-	     "AND net >> '$ip';",\@q);
+	     "AND net >> " . db_encode_str($ip) . ";",\@q);
     print h2("Move host to another subnet or zone: ");
     print p,start_form(-method=>'GET',-action=>$selfurl),
           hidden('menu','hosts'),hidden('h_id',$id),
           hidden('select_ip', param('select_ip')),
           hidden('sub','Move'),
-          "Move host to: <TABLE><TR><TD>",
+          '<table class="s-form">',
+          '<tr class="s-form__row"><td class="s-form__label">Move to subnet:</td>',
+          '<td class="s-form__value">',
           popup_menu(-name=>'move_net',-values=>\@netkeys,
-		     -default=>$q[0][0],-labels=>\%nethash),"</TD><TD>",
+		     -default=>$q[0][0],-labels=>\%nethash),' ',
           submit(-name=>'move_confirm',-value=>'Move (to another subnet)'),
-          "</TD></TR><TR><TD>",
+          '</td></tr>',
+          '<tr class="s-form__row"><td class="s-form__label">Move to zone:</td>',
+          '<td class="s-form__value">',
           popup_menu(-name=>'move_zone',-values=>\@zonelist,
-		     -default=>$host{zone},-labels=>\%zonehash),"</TD><TD>",
+		     -default=>$host{zone},-labels=>\%zonehash),' ',
           submit(-name=>'move_confirm2',-value=>'Move (to another zone)'),
-          "</TD></TR></TABLE>",
-          submit(-name=>'move_cancel',-value=>'Cancel'), " ",
+          '</td></tr>',
+          '</table>',
+          submit(-name=>'move_cancel',-value=>'Cancel'), ' ',
           end_form;
     display_form(\%host,\%host_form);
     return;
@@ -1250,6 +1748,26 @@ sub menu_handler {
 	    alert1("You don't have permission to edit SRV records");
 	    return -108;
 	}
+	if ($host{type} == 11 && check_perms('flags','SSHFP',1)) {
+	    alert1("You don't have permission to edit SSHFP records");
+	    return -110;
+	}
+	if ($host{type} == 12 && check_perms('flags','TLSA',1)) {
+	    alert1("You don't have permission to edit TLSA records");
+	    return -111;
+	}
+	if ($host{type} == 13 && check_perms('flags','TXT',1)) {
+	    alert1("You don't have permission to edit TXT records");
+	    return -112;
+	}
+	if ($host{type} == 14 && check_perms('flags','NAPTR',1)) {
+	    alert1("You don't have permission to edit NAPTR records");
+	    return -113;
+	}
+  if ($host{type} == 15 && check_perms('flags','CAA',1)) {
+      alert1("You don't have permission to edit CAA records");
+      return -109;
+  }
     }
 
     $host{type}=1 if ($sub eq 'Enable');
@@ -1276,7 +1794,7 @@ sub menu_handler {
     }
 
     if (param('h_cancel')) {
-      print h2("No changes made to host record.");
+      warning1("No changes made to host record.");
       show_host_record($state,$perms);
       return;
     }
@@ -1299,6 +1817,12 @@ sub menu_handler {
 	  alert2("Invalid hostname: does not conform to your restrictions");
 	} else {
 	  $update_ok=1;
+
+	  my $required_error = _host_required_data_error(\%host);
+	  if ($required_error ne '') {
+	    alert2($required_error);
+	    $update_ok=0;
+	  }
 
 	  if ($host{type}==1 || $host{type}==101) {
 	    for $i (1..($#{$host{ip}})) {
@@ -1362,6 +1886,11 @@ sub menu_handler {
 		unless ($host{expiration} > 0 && $host{expiration} < $tmp)
 	      }
 
+      if (_maybe_submit_approval($state, 'M', $host{type}, $host{domain}, $host{id},
+               \%host, \%oldhost)) {
+        return;
+      }
+
 	    $res=update_host(\%host);
 	    if ($res < 0) {
 	      alert1("Host record update failed! ($res)");
@@ -1382,7 +1911,7 @@ sub menu_handler {
 			     ($host{ip}[1][1] ne $old_ips[1] ?
 			      "ip: $old_ips[1] --> $host{ip}[1][1] ":""),
 			     $host{id});
-	      print h2("Host record succesfully updated.");
+	      success1("Host record successfully updated.");
 	      show_host_record($state,$perms);
 	      return;
 	    }
@@ -1422,7 +1951,7 @@ sub menu_handler {
         display_form(\%data,\%host_net_info_form);
         print "<br>";
     }
-    print "<br><hr noshade><br>";
+    print '<div class="s-section-sep"></div>';
     show_host_record($state,$perms);
     return;
   }
@@ -1447,8 +1976,8 @@ sub menu_handler {
 	$res= run_command($main::SAURON_PING_PROG,[$main::SAURON_PING_ARGS,$ip],
 			 $main::SAURON_PING_TIMEOUT);
 	print "</pre><br>";
-	print "<FONT color=\"red\">PING TIMED OUT!</FONT><BR>"
-	  if (($res& 255) == 14);
+	print '<span class="s-form__error">PING TIMED OUT!</span><br>'
+	  if (($res & 255) == 14);
       } else {
 	alert2("Missing/invalid IP address");
       }
@@ -1481,8 +2010,8 @@ sub menu_handler {
 	$res= run_command($main::SAURON_TRACEROUTE_PROG,\@arguments,
 			 $main::SAURON_TRACEROUTE_TIMEOUT);
 	print "</pre><br>";
-	print "<FONT color=\"red\">TRACEROUTE TIMED OUT!</FONT><BR>"
-	  if (($res& 255) == 14);
+	print '<span class="s-form__error">TRACEROUTE TIMED OUT!</span><br>'
+	  if (($res & 255) == 14);
       } else {
 	alert2("Missing/invalid IP address");
       }
@@ -1573,7 +2102,7 @@ sub menu_handler {
 	param('bh_domain_anydom',$10);
 	param('bh_search_txt',$11) if ($11); # TVu 2020-11-03
       } else {
-	print h2('No previous search found');
+	warning1('No previous search found.');
 	browse_hosts($state,$perms);
 	return;
       }
@@ -1592,7 +2121,7 @@ sub menu_handler {
     my $page=param('bh_page');
     my $offset=$page*$limit;
 
-    $type=param('bh_type');
+    $type=int(param('bh_type'));
     if ($type > 0) {
       $typerule=" AND a.type=$type ";
       $typerule=" AND (a.type=$type OR a.type=101) " if ($type==1);
@@ -1604,12 +2133,12 @@ sub menu_handler {
     }
     my $netrule;
     if (param('bh_net') ne 'ANY') {
-      $netrule=" AND b.ip << '" . param('bh_net') . "' ";
+      $netrule=" AND b.ip << " . db_encode_str(param('bh_net')) . " ";
       $typerule=" AND (a.type=1 OR a.type=6 OR a.type=101) " # Include glue records with "Show
 	  if (param('foobar') eq 'Show Hosts');              # Hosts" (subnet). TVu 2021-02-01
     }
     if (param('bh_cidr')) {
-      $netrule=" AND b.ip <<= '" . param('bh_cidr') . "' ";
+      $netrule=" AND b.ip <<= " . db_encode_str(param('bh_cidr')) . " ";
     }
     my $domainrule;
     if (param('bh_domain') ne '') {
@@ -1709,7 +2238,7 @@ sub menu_handler {
 	  $from_mx = ' mx_templates mx, ';
 	  $where_mx = ' a.mx = mx.id and mx.zone = z.id and ';
 	  if (param('bh_pattern')) {
-	      $where_mx .= 'mx.name ~ \'' . param('bh_pattern') . '\' and ';
+              $where_mx .= 'mx.name ~ ' . db_encode_str(param('bh_pattern')) . ' and ';
 	  }
 	  $extrarule = '';
       }
@@ -1743,16 +2272,16 @@ sub menu_handler {
 # Regular expression search for TXT. TVu 2020-11-03
     my ($txtrule1, $txtrule2);
 # If user chose something other than Any type (0), Host (1),
-# Plain MX (3) or AREC alias (7), TXT is ignored.
-    if (param('bh_search_txt') && param('bh_type') =~ /^(0|1|3|7)$/) {
+# Plain MX (3), Static/CNAME alias (4) or AREC alias (7), TXT is ignored.
+    if (param('bh_search_txt') && param('bh_type') =~ /^(0|1|3|4|7)$/) {
 	$txtrule1 = 'txt_entries te,';
 	$txtrule2 = 'and te.type = 2 and te.ref = a.id and te.txt ~* ' .
 	    db_encode_str(param('bh_search_txt'));
-# If user chose Any type and gave a TXT, only types 1, 3 and 7 are searched.
-# These are the only types that should have TXT records.
-# The main purpose of this limitation is to avoid finding hosts which represent zones.
+# If user chose Any type and gave a TXT, only host types that can carry TXT
+# records are searched.
+  # The main purpose of this limitation is to avoid finding hosts which represent zones.
 	if (param('bh_type') == 0) {
-	    $txtrule2 .= ' and (a.type = 1 or a.type = 3 or a.type = 7) ';
+      $txtrule2 .= ' and (a.type = 1 or a.type = 3 or a.type = 4 or a.type = 7) ';
 	}
     }
 
@@ -1822,9 +2351,11 @@ sub menu_handler {
     db_query($sql,\@q);
     my $count=scalar @q;
     if ($count < 1) {
-#     alert2("No matching records found.");
-      alert2('No matching records found' .
-	     (param('bh_domain_anydom') eq 'on' ? '' : ' in this zone') . '.'); # 14 Jun 2017 TVu
+      my $scope = param('bh_domain_anydom') eq 'on' ? 'any zone' : 'this zone';
+      print '<div class="s-empty-state">',
+            '<p class="s-empty-state__title">No hosts found</p>',
+            '<p class="s-empty-state__hint">No records matched your search in ', $scope, '.</p>',
+            '</div>';
       browse_hosts($state,$perms);
       return;
     }
@@ -1871,21 +2402,18 @@ sub menu_handler {
       return;
     }
 
-    #    print "<TABLE width=\"99%\" cellspacing=1 cellpadding=1 border=0 " .
-    #          "BGCOLOR=\"ffffff\">",
-    #          "<TR><TD><B>Zone:</B> $zone</TD>",
-    #          "<TD align=right>Page: ".($page+1)."</TD></TR></TABLE>";
-
-    print "<TABLE width=\"99%\" cellspacing=1 cellpadding=1 border=0 " .
-	  "BGCOLOR=\"ffffff\"><TR>"; # ****
-    print "<TD><B>Zone:</B> $zone</TD>" unless (param('bh_domain_anydom') eq 'on'); # ****
-    if (param('bh_net') && param('bh_net') ne 'ANY') { # ****
+    print '<div class="s-results-bar">';
+    print '<span class="s-results-bar__crumb"><b>Zone:</b> ' . encode_entities($zone) . '</span>'
+	unless (param('bh_domain_anydom') eq 'on');
+    if (param('bh_net') && param('bh_net') ne 'ANY') {
 	my @net;
 	db_query("SELECT netname, name FROM nets " .
-		 "WHERE net = '" . param('bh_net') . "'", \@net);
-	print '<TD><B>Net:</B> ' . param('bh_net') . " &ndash; $net[0][0] &ndash; $net[0][1]<TD>";
+		 "WHERE net = " . db_encode_str(param('bh_net')), \@net);
+	print '<span class="s-results-bar__crumb"><b>Net:</b> ' .
+              encode_entities(param('bh_net')) . " &ndash; $net[0][0] &ndash; $net[0][1]</span>";
     }
-    print "<TD align=right>Page: ".($page+1)."</TD></TR></TABLE>"; # ****
+    print '<span class="s-results-bar__page">Page ' . ($page+1) . '</span>';
+    print '</div>';
 
     my %nmaphash;
     my $pingsweep=0;
@@ -1925,8 +2453,8 @@ sub menu_handler {
 
     my $sorturl="$selfurl?menu=hosts&sub=browse&lastsearch=1";
     print
-      "<TABLE width=\"99%\" border=0 cellspacing=1 cellpadding=1 ".
-      " BGCOLOR=\"#ccccff\"><TR bgcolor=#aaaaff>",
+      '<table class="s-list">',
+      '<tr class="s-list__head">',
       th([($pingsweep ? 'Status':'#'),
 	  "<a href=\"$sorturl&bh_order=1\">Hostname</a>",
 	  'Type',
@@ -1946,15 +2474,15 @@ sub menu_handler {
 		    ipv6compress(cidr64ok($ip) ? ipv64unmix($ip) : $ip) eq '::');
       my $ether=$q[$i][5];
       # $ether =~  s/^(..)(..)(..)(..)(..)(..)$/\1:\2:\3:\4:\5:\6/;
-      $ether='<font color="#009900">ALIASED</font>' if ($q[$i][11] > 0);
-      $ether='<font color="#990000">N/A</a>' unless($ether);
+      $ether='<span class="s-badge--success">ALIASED</span>' if ($q[$i][11] > 0);
+      $ether='<span class="s-muted">N/A</span>' unless($ether);
       my $duid = $q[$i][12];
-      $duid = '<font color="#990000">N/A</a>' unless($duid);
+      $duid = '<span class="s-muted">N/A</span>' unless($duid);
       my $iaid = $q[$i][13];
       my $iaidhex;
 
       unless($iaid) {
-        $iaid = '<font color="#990000">N/A</a>';
+        $iaid = '<span class="s-muted">N/A</span>';
         $iaidhex = '';
       }
       else {
@@ -1965,23 +2493,22 @@ sub menu_handler {
 	        "$q[$i][4]</A>";
       my $info = join_strings(', ',(@{$q[$i]})[6,7,8,9]);
 
-      my $trcolor='#eeeeee';
-      $trcolor='#ffffcc' if ($i % 2 == 0);
-      $trcolor='#ffcccc' if ($q[$i][10] > 0 && $q[$i][10] < time());
-      $trcolor='#ccffff' if (param('bh_type')==1 && $type == 101);
+      my $host_state = '';
+      $host_state = 'expired'     if ($q[$i][10] > 0 && $q[$i][10] < time());
+      $host_state = 'reservation' if (param('bh_type')==1 && $type == 101);
 
       if ($pingsweep) {
 	if ($type == 1) {
 	  if ($nmaphash{$ip} =~ /^Up/) {
-	    $nro = "<FONT color=\"green\" size=-1>Up</FONT>";
+	    $nro = '<span class="s-badge--success">Up</span>';
 	  } else {
-	    $nro = "<FONT color=\"red\" size=-1>Down $nmaphash{$ip}</FONT>";
+	    $nro = '<span class="s-badge--danger">Down ' . encode_entities($nmaphash{$ip}) . '</span>';
 	  }
 	} else {
 	  $nro = "&nbsp;";
 	}
       } else {
-	$nro = "<FONT size=-1>".($i+1)."</FONT>";
+	$nro = ($i+1);
       }
       my $host_ty = $host_types{$q[$i][3]};
       if ($host_ty eq 'Alias') { # TVu 08.04.2016
@@ -1989,47 +2516,47 @@ sub menu_handler {
 	  if ($host{'cname_alias'}) { $host_ty = 'CNAME Alias'; }
 	  else { $host_ty = 'Static Alias'; }
       }
-      print "<TR bgcolor=\"$trcolor\">",
+      print '<tr class="s-list__row"',
+	    ($host_state ? ' data-host-state="'.$host_state.'"' : ''), '>',
 	    td([$nro, $hostname,
-#		"<FONT size=-1>$host_types{$q[$i][3]}</FONT>",$ip,
-		"<FONT size=-1>$host_ty</FONT>",$ip,
-	        "<font size=-3 face=\"courier\">$ether&nbsp;</font>",
-	        "<font size=-3 face=\"courier\">$duid&nbsp;</font>",
-	        "<font size=-3 face=\"courier\">$iaid $iaidhex</font>",
-	        "<FONT size=-1>".$info."&nbsp;</FONT>"]),"</TR>";
+		"<small>$host_ty</small>", $ip,
+	        "<small><code>$ether&nbsp;</code></small>",
+	        "<small><code>$duid&nbsp;</code></small>",
+	        "<small><code>$iaid $iaidhex</code></small>",
+	        "<small>".$info."&nbsp;</small>"]), '</tr>';
 
     }
-    print "</TABLE><BR><CENTER>[";
+    print '</table>';
 
     my $params="bh_type=".param('bh_type')."&bh_order=".param('bh_order').
              "&bh_net=".param('bh_net')."&bh_cidr=".param('bh_cidr').
 	     "&bh_stype=".param('bh_stype')."&bh_pattern=".param('bh_pattern').
-	     "&bh_search_txt=".param('bh_search_txt'). # TVu 2020-11-03
-	     "&bh_domain=".param('bh_domain')."&bh_domain_anydom=".param('bh_domain_anydom'). # ****
+	     "&bh_search_txt=".param('bh_search_txt').
+	     "&bh_domain=".param('bh_domain')."&bh_domain_anydom=".param('bh_domain_anydom').
 	     "&bh_size=".param('bh_size')."&bh_grp=".param('bh_grp');
 
+    print '<nav class="s-pagination">';
     my $npage;
     if ($page > 0) {
-      $npage=$page-1;;
-      print "<A HREF=\"$selfurl?menu=hosts&sub=browse&bh_page=$npage&".
-	      "$params\">prev</A>";
-    } else { print "prev"; }
-    print "] [";
+      $npage=$page-1;
+      print "<a class=\"s-pagination__link\" href=\"$selfurl?menu=hosts&sub=browse&bh_page=$npage&".
+	      "$params\">&lsaquo; prev</a>";
+    } else { print '<span class="s-pagination__link is-disabled">&lsaquo; prev</span>'; }
     if ($count >= $limit) {
       $npage=$page+1;
-      print "<A HREF=\"$selfurl?menu=hosts&sub=browse&bh_page=$npage&".
-	      "$params\">next</A>";
-    } else { print "next"; }
+      print "<a class=\"s-pagination__link\" href=\"$selfurl?menu=hosts&sub=browse&bh_page=$npage&".
+	      "$params\">next &rsaquo;</a>";
+    } else { print '<span class="s-pagination__link is-disabled">next &rsaquo;</span>'; }
 
 #    print "]</CENTER><BR>",
 #          "<div align=right><font size=-2>",
 #          "<a title=\"foo.csv\" href=\"$sorturl&csv=1\">",
 #          "[Download results in CSV format]</a> &nbsp;</font></div>";
 
-    print "]</CENTER><BR>\n";
+    print '</nav>';
 
-    print "<table width=100% border=0 cellspacing=5 cellpadding=5 align=top>" .
-	"<tr><td>"; #  width=50%
+    print '<div class="s-action-bar">';
+    print '<div class="s-action-bar__left">';
 
     if ($main::SAURON_NMAP_PROG && param('bh_type') == 1 &&
 	!check_perms('level',$main::ALEVEL_NMAP,1)) {
@@ -2038,44 +2565,41 @@ sub menu_handler {
 	hidden('bh_page',$page),
 	hidden('lastsearch','1'),hidden('pingsweep','1');
 	print submit(-name=>'foobar',-value=>'Ping Sweep');
-	print end_form;
+	print end_form,' ';
     }
-# Create buttons for Net and Net Info if a cidr was passed as parameter.
+
     if (param('bh_net') && is_cidr(param('bh_net'))) {
 	my $old_menu = param('menu');
 	my $old_sub = param('sub');
 	param('menu', 'nets');
-	param('sub', 'Net Info');
-	print "</td><td>";
-	print "\n\n",start_form(-method=>'GET',-action=>$selfurl),
-	hidden('menu','nets'),"\n",
-	hidden('net_id',get_net_by_cidr($serverid, param('bh_net'))),"\n";
-	print submit(-name=>'foobar',-value=>'Net');
-	print end_form,"\n\n";
-	print "</td><td>";
 	print start_form(-method=>'GET',-action=>$selfurl),
-	hidden('menu','nets'),"\n",hidden('sub','Net Info'),"\n",
-	hidden('net_id',get_net_by_cidr($serverid, param('bh_net'))),"\n";
+	hidden('menu','nets'),
+	hidden('net_id',get_net_by_cidr($serverid, param('bh_net')));
+	print submit(-name=>'foobar',-value=>'Net');
+	print end_form,' ';
+	param('sub', 'Net Info');
+	print start_form(-method=>'GET',-action=>$selfurl),
+	hidden('menu','nets'),hidden('sub','Net Info'),
+	hidden('net_id',get_net_by_cidr($serverid, param('bh_net')));
 	print submit(-name=>'foobar',-value=>'Net Info');
-	print end_form,"\n\n";
+	print end_form;
 	param('menu', $old_menu);
 	param('sub', $old_sub);
     }
 
-    print "</td><td><div align=right>";
+    print '</div><div class="s-action-bar__right">';
 
     my $csv_timestamp_v=[sort keys %csv_timestamp];
-    print start_form(-method=>'POST',-action=>$selfurl),
+    print start_form(-method=>'POST',-action=>$selfurl,-class=>'s-inline-form'),
 	    hidden('menu','hosts'),hidden('sub','browse'),
             hidden('lastsearch','1'),
             "CSV Timestamps&nbsp;",
             popup_menu(-name=>'csv',-values=>$csv_timestamp_v,
 		       -labels=>\%csv_timestamp),
             submit(-name=>'results.csv',-value=>'Download CSV');
-
     print end_form;
 
-    print "</div></td></tr></table>\n";
+    print '</div></div>';
 
     return;
   }
@@ -2085,7 +2609,7 @@ sub menu_handler {
     $data{zone}=$zoneid;
     $data{router}=0;
     $data{grp}=-1; $data{mx}=-1; $data{wks}=-1;
-    $data{mx_l}=[]; $data{ns_l}=[]; $data{printer_l}=[]; $data{srv_l}=[]; $data{sshfp_l}=[]; $data{tlsa_l}=[]; $data{ds_l}=[]; $data{txt_l}=[];
+    $data{mx_l}=[]; $data{ns_l}=[]; $data{printer_l}=[]; $data{srv_l}=[]; $data{sshfp_l}=[]; $data{tlsa_l}=[]; $data{ds_l}=[]; $data{txt_l}=[]; $data{caa_l}=[];
     $data{subgroups}=[];
     $data{dept}=$perms->{defdept} if ($perms->{defdept});
     $data{expiration}=time()+$perms->{elimit}*86400 if ($perms->{elimit} > 0);
@@ -2094,7 +2618,12 @@ sub menu_handler {
     $newhostform = \%new_host_form;
     return if (check_perms('zone','RW'));
     if (check_perms('zone','RWX',1)) {
-      # check privilege flags if user doesn't have RWX permissions
+      # User DOES NOT have RWX (RW-only user) - use restricted form for type=1
+      if ($type==1) {
+        $newhostform = \%restricted_new_host_form;
+      }
+    } else {
+      # User HAS RWX - check privilege flags
       if ($type==1) { }
       elsif ($type==2) { return if check_perms('flags','DELEG'); }
       elsif ($type==3) { return if check_perms('flags','MX'); }
@@ -2105,6 +2634,9 @@ sub menu_handler {
       elsif ($type==9) { return if check_perms('flags','DHCP'); }
       elsif ($type==11) { return if check_perms('flags','SSHFP'); }
       elsif ($type==12) { return if check_perms('flags','TLSA'); }
+      elsif ($type==13) { return if check_perms('flags','TXT'); }
+      elsif ($type==14) { return if check_perms('flags','NAPTR'); }
+      elsif ($type==15) { return if check_perms('flags','CAA'); }
       elsif ($type==101) {
 	if (check_perms('level',$main::ALEVEL_RESERVATIONS,1) &&
 	    check_perms('flags','RESERV',1)) {
@@ -2116,8 +2648,6 @@ sub menu_handler {
 	alert1("Access Denied!");
 	return;
       }
-
-      $newhostform = \%restricted_new_host_form if ($type==1);
     }
 
     # Use default host name template, if defined. TVu 02 Jun 2015
@@ -2144,7 +2674,7 @@ sub menu_handler {
     }
 
     if (param('addhost_cancel')) {
-      print h2("$host_types{$type} record creation canceled.");
+      warning1("$host_types{$type} record creation canceled.");
       if (param('copy_id')) {
 	param('h_id',param('copy_id'));
 	show_host_record($state,$perms);
@@ -2175,96 +2705,109 @@ sub menu_handler {
 	    return;
 	  }
 	  $data{ip}=$ip;
-	}
-	if ($data{net} eq 'MANUAL' && not is_cidr($data{ip})) {
-	  alert1("IP number must be specified if using Manual IP!");
-	} elsif ($u_id=domain_in_use($zoneid,$data{domain})) {
-	  alert1("Domain name already in use!");
-	  print "Conflicting host: ",
-	     "<a href=\"$selfurl?menu=hosts&h_id=$u_id\">$data{domain}</a>.";
-	} elsif (is_cidr($data{ip}) && ip_in_use($serverid,$data{ip})) {
-	  alert1("IP number already in use!");
-	} elsif (check_perms('host',$data{domain},1)) {
-	  alert1("Invalid hostname: does not conform your restrictions");
-	} elsif (is_cidr($data{ip}) && check_perms('ip',$data{ip},1)) {
-	  alert1("Invalid IP number: outside allowed range(s): $data{ip}");
-	} else {
-	  print h2("Add");
-	  if ($data{type} == 1 || $data{type} == 101) {
-	    $ip=$data{ip}; delete $data{ip};
-	    $data{ip}=[[0,$ip,'t','t','']];
-	  } elsif ($data{type} == 6) {
-	    $ip=$data{glue}; delete $data{glue};
-	    $data{ip}=[[0,$ip,'t','t','']];
-	  } elsif ($data{type} == 9) {
-	    $ip=$data{ip}; delete $data{ip};
-	    $data{ip}=[[0,$ip,'f','f','']] if (is_cidr($ip));
-	  }
-	  delete $data{net};
-	  #show_hash(\%data);
-	  if ($perms->{elimit} > 0) { # enforce expiration limit, if it exists
-	    $tmp=time()+$perms->{elimit}*86400;
-	    $data{expiration}=$tmp
-	      unless ($data{expiration} > 0 && $data{expiration} < $tmp)
-	  }
-	  $res=add_host(\%data);
-	  if ($res > 0) {
-	    update_history($state->{uid},$state->{sid},1,
-			   "ADD: $host_types{$data{type}} ",
-			   "domain: $data{domain}",$res);
-	    print h2("Host added successfully");
+  }
+  if ($data{net} eq 'MANUAL' && not is_cidr($data{ip})) {
+    alert1("IP number must be specified if using Manual IP!");
+  } elsif ($u_id=domain_in_use($zoneid,$data{domain})) {
+    alert1("Domain name already in use!");
+    print "Conflicting host: ",
+       "<a href=\"$selfurl?menu=hosts&h_id=$u_id\">$data{domain}</a>.";
+  } elsif (is_cidr($data{ip}) && ip_in_use($serverid,$data{ip})) {
+    alert1("IP number already in use!");
+  } elsif (check_perms('host',$data{domain},1)) {
+    alert1("Invalid hostname: does not conform to your restrictions");
+  } elsif (is_cidr($data{ip}) && check_perms('ip',$data{ip},1)) {
+    alert1("Invalid IP number: outside allowed range(s): $data{ip}");
+  } else {
+    my $required_error;
 
-            # check reverse zone only if defined IP address
-            if (defined $data{ip}[0][1]) {
-              # check if exists revers zone
-              db_query("SELECT COUNT(name) " .
-                       "FROM zones " .
-                       "WHERE reverse=true " .
-                       " AND server=$serverid " .
-                       " AND '$data{ip}[0][1]' << reversenet", \@q);
-              if ($q[0][0] == 0) {
-                warning1('There is no reverse zone for this IP address. ' .
-                         'It will not be possible to create a PTR record.');
-              }
-            }
+    print h2("Add");
+    if ($data{type} == 1 || $data{type} == 101) {
+      $ip=$data{ip}; delete $data{ip};
+      $data{ip}=[[0,$ip,'t','t','']];
+    } elsif ($data{type} == 6) {
+      $ip=$data{glue}; delete $data{glue};
+      $data{ip}=[[0,$ip,'t','t','']];
+    } elsif ($data{type} == 9) {
+      $ip=$data{ip}; delete $data{ip};
+      $data{ip}=[[0,$ip,'f','f','']] if (is_cidr($ip));
+    }
+    delete $data{net};
 
-	    param('h_id',$res);
-	    show_host_record($state,$perms);
-	    return;
-	  } else {
-	    alert1("Cannot add host record!");
-	    if (db_lasterrormsg() =~ /ether_key/) {
-	      alert2("Duplicate MAC (Ethernet) address $data{ether}");
-	      db_query("SELECT id,domain FROM hosts " .
-		       "WHERE ether='$data{ether}' AND zone=$zoneid",\@q);
-	      if ($q[0][0] > 0) {
-		print "Conflicting host: ",
-  	          "<a href=\"$selfurl?menu=hosts&h_id=$q[0][0]\">$q[0][1]</a>";
-	      }
-	    } elsif(db_lasterrormsg() =~ /duid_key/) {
-              alert2("Duplicate DUID $data{duid}");
-              db_query("SELECT id,domain FROM hosts " .
-                       "WHERE duid='$data{duid}' AND zone=$zoneid",\@q);
-              if ($q[0][0] > 0) {
-                print "Conflicting host: ",
-                  "<a href=\"$selfurl?menu=hosts&h_id=$q[0][0]\">$q[0][1]</a>";
+    $required_error = _host_required_data_error(\%data);
+    if ($required_error ne '') {
+      alert1($required_error);
+    } else {
+      #show_hash(\%data);
+      if ($perms->{elimit} > 0) { # enforce expiration limit, if it exists
+        $tmp=time()+$perms->{elimit}*86400;
+        $data{expiration}=$tmp
+          unless ($data{expiration} > 0 && $data{expiration} < $tmp)
+      }
+
+    if (_maybe_submit_approval($state, 'A', $data{type}, $data{domain}, undef,
+             \%data, undef)) {
+      return;
+    }
+      $res=add_host(\%data);
+      if ($res > 0) {
+        update_history($state->{uid},$state->{sid},1,
+           "ADD: $host_types{$data{type}} ",
+           "domain: $data{domain}",$res);
+        success1("Host added successfully.");
+
+              # check reverse zone only if defined IP address
+              if (defined $data{ip}[0][1]) {
+                # check if exists revers zone
+                db_query("SELECT COUNT(name) " .
+                         "FROM zones " .
+                         "WHERE reverse=true " .
+                         " AND server=$serverid " .
+                         " AND '$data{ip}[0][1]' << reversenet", \@q);
+                if ($q[0][0] == 0) {
+                  warning1('There is no reverse zone for this IP address. ' .
+                           'It will not be possible to create a PTR record.');
+                }
               }
-            }
-          elsif(db_lasterrormsg() =~ /duid_iaid_key/) {
-              alert2("Duplicate DUID+IAID $data{duid} - $data{'iaid'}");
-              db_query("SELECT id,domain FROM hosts " .
-                       "WHERE duid='$data{duid}' AND iaid='$data{'iaid'}' AND zone=$zoneid",\@q);
-              if ($q[0][0] > 0) {
-                print "Conflicting host: ",
-                  "<a href=\"$selfurl?menu=hosts&h_id=$q[0][0]\">$q[0][1]</a>";
-              }
-            } else {
-	      alert2(db_lasterrormsg());
-	    }
-	  }
-	}
+
+        param('h_id',$res);
+        show_host_record($state,$perms);
+        return;
       } else {
-	alert1("Invalid data in form!");
+        alert1("Cannot add host record!");
+        if (db_lasterrormsg() =~ /ether_key/) {
+    alert2("Duplicate MAC (Ethernet) address $data{ether}");
+    db_query("SELECT id,domain FROM hosts " .
+       "WHERE ether='$data{ether}' AND zone=$zoneid",\@q);
+    if ($q[0][0] > 0) {
+      print "Conflicting host: ",
+  	            "<a href=\"$selfurl?menu=hosts&h_id=$q[0][0]\">$q[0][1]</a>";
+    }
+        } elsif(db_lasterrormsg() =~ /duid_key/) {
+                alert2("Duplicate DUID $data{duid}");
+                db_query("SELECT id,domain FROM hosts " .
+                         "WHERE duid='$data{duid}' AND zone=$zoneid",\@q);
+                if ($q[0][0] > 0) {
+                  print "Conflicting host: ",
+                    "<a href=\"$selfurl?menu=hosts&h_id=$q[0][0]\">$q[0][1]</a>";
+                }
+              }
+            elsif(db_lasterrormsg() =~ /duid_iaid_key/) {
+                alert2("Duplicate DUID+IAID $data{duid} - $data{'iaid'}");
+                db_query("SELECT id,domain FROM hosts " .
+                         "WHERE duid='$data{duid}' AND iaid='$data{'iaid'}' AND zone=$zoneid",\@q);
+                if ($q[0][0] > 0) {
+                  print "Conflicting host: ",
+                    "<a href=\"$selfurl?menu=hosts&h_id=$q[0][0]\">$q[0][1]</a>";
+                }
+              } else {
+    alert2(db_lasterrormsg());
+        }
+      }
+    }
+  }
+      } else {
+	alert1("Invalid data in form! (code: $res)");
       }
     }
     print h2("Add $host_types{$type} record");
@@ -2273,7 +2816,9 @@ sub menu_handler {
           hidden('menu','hosts'),hidden('sub','add'),hidden('type',$type);
     print hidden('copy_id') if (param('copy_id'));
     if (param('select_ip')) { # select_ip exists only when host is added using Copy TVu 15.03.2017
-	$data{ip_policy} = get_net_ip_policy($serverid, param('select_ip'));
+	if (is_ip(param('select_ip')) || is_cidr(param('select_ip'))) {
+	  $data{ip_policy} = get_net_ip_policy($serverid, param('select_ip'));
+	}
     }
     form_magic('addhost',\%data,$newhostform);
     print submit(-name=>'addhost_submit',-value=>'Create'), " ",

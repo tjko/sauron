@@ -122,8 +122,27 @@ unless ($pzoneid > 0) {
   }
   $zonehash{txt}=[];
   foreach $rtmp (@{$rec->{TXT}}) { push @{$zonehash{txt}}, [0,$rtmp,'']; }
-  foreach $rtmp (@{$rec->{CAA}}) { push @{$zonehash{zentries}}, [0,"@ IN CAA $rtmp",'']; }
-  foreach $rtmp (@{$rec->{NAPTR}}) { push @{$zonehash{zentries}}, [0,"@ IN NAPTR $rtmp",'']; }
+  $zonehash{caa}=[];
+  foreach $rtmp (@{$rec->{CAA}}) {
+    my ($flags,$tag,$value) = split(/\s+/, $rtmp, 3);
+    next unless (defined $value);
+    $value =~ s/^"(.*)"$/$1/;
+    push @{$zonehash{caa}}, [0,$flags,$tag,$value,''];
+  }
+  $zonehash{naptr}=[];
+  if (@{$rec->{NAPTR}} > 0) {
+    print "Processing " . scalar(@{$rec->{NAPTR}}) . " NAPTR records for zone apex\n" if ($opt_verbose);
+  }
+  foreach $rtmp (@{$rec->{NAPTR}}) {
+    my @naptr_parts = split(/ /, $rtmp);
+    # NAPTR format: order preference flags service regexp replacement
+    if (@naptr_parts >= 6) {
+      push @{$zonehash{naptr}}, [0,@naptr_parts[0..5],''];
+      print "  Added NAPTR: order=$naptr_parts[0], pref=$naptr_parts[1], flags=$naptr_parts[2], service=$naptr_parts[3]\n" if ($opt_verbose);
+    } else {
+      print STDERR "Warning: Invalid NAPTR record (needs 6 parts, got " . scalar(@naptr_parts) . "): $rtmp\n";
+    }
+  }
   $zonehash{ip}=[];
   foreach $rtmp (@{$rec->{A}}) { push @{$zonehash{ip}},[0,$rtmp,'true','true']; }
   foreach $rtmp (@{$rec->{AAAA}}) { push @{$zonehash{ip}},[0,$rtmp,'true','true']; }
@@ -182,28 +201,42 @@ foreach $host (sort keys %zonedata) {
 
   $nslist = db_build_list_str($rec->{NS});
   $host2 = remove_origin($host,$origin);
+  
+  # Determine hosttype based on record types present
+  # Use explicit checks to avoid overwriting previous assignments
+  my $has_ip = (@{$rec->{A}} > 0 || @{$rec->{AAAA}} > 0);
+  my $has_ns = ($nslist && $nslist ne '');
+  my $has_mx = (@{$rec->{MX}} > 0);
+  my $has_srv = (@{$rec->{SRV}} > 0);
+  my $has_tlsa = (@{$rec->{TLSA}} > 0);
+  my $has_txt = (@{$rec->{TXT}} > 0);
+  my $has_naptr = (@{$rec->{NAPTR}} > 0);
+  my $has_caa = (@{$rec->{CAA}} > 0);
+  my $has_sshfp = (@{$rec->{SSHFP}} > 0);
+  
   $hosttype=0;
-  $hosttype=1 if (@{$rec->{A}} > 0 || @{$rec->{AAAA}} > 0);
-  $hosttype=2 if ($nslist && $host2 ne '@');
-  $hosttype=3 if ($nslist eq '' && @{$rec->{A}} < 1 && @{$rec->{AAAA}} < 1 && @{$rec->{MX}} > 0);
-  $hosttype=8 if (@{$rec->{SRV}} > 0);
-  $hosttype=12 if (@{$rec->{TLSA}} > 0);
-  $hosttype=13 if ((@{$rec->{TXT}} > 0) and $hosttype == 0);
-  $hosttype=14 if (@{$rec->{NAPTR}} > 0);
+  # Priority-based hosttype assignment (higher priority types checked first)
+  if ($has_ns && $host2 ne '@') {
+    $hosttype=2;  # delegation/glue record
+  } elsif ($has_ip) {
+    $hosttype=1;  # regular host with IP address
+  } elsif ($has_mx && !$has_ns) {
+    $hosttype=3;  # MX only (no IP, no NS)
+  } elsif ($has_srv) {
+    $hosttype=8;  # SRV records
+  } elsif ($has_tlsa) {
+    $hosttype=12; # TLSA records
+  } elsif ($has_txt && !$has_ip) {
+    $hosttype=13; # TXT only (no IP)
+  } elsif ($has_naptr) {
+    $hosttype=14; # NAPTR records
+  } elsif ($has_caa && !$has_ip) {
+    $hosttype=15; # CAA only (no IP)
+  } elsif ($has_sshfp) {
+    $hosttype=11; # SSHFP only (no IP)
+  }
 
   if ($hosttype == 0) {
-    if (@{$rec->{NAPTR}} > 0) {
-      foreach $tmp (@{$rec->{NAPTR}}) {
-	$res = add_record("txt_entries",
-			  { type=>12,
-			    ref=>$zoneid,
-			    txt=>"$host2 $rec->{TTL} IN NAPTR \"$tmp\""
-			  });
-	fatal("Failed to insert NAPTR record:\n   $host2 $rec->{TTL} IN NAPTR \"$tmp\"") if ($res < 0);
-      }
-      next;
-    }
-
     print STDERR "Ignoring unknown host entry: $host\n";
     delete $zonedata{$host};
     next;
@@ -218,8 +251,13 @@ foreach $host (sort keys %zonedata) {
     }
   }
 
-  fatal("empty hostname adfter stripping origin: $host") unless ($host2);
+  fatal("empty hostname after stripping origin: $host") unless ($host2);
   print "host: $host ($host2) (type=$hosttype)\n" if ($opt_verbose);
+  if ($hosttype == 14 && @{$rec->{NAPTR}} > 0) {
+    for my $k (0..$#{$rec->{NAPTR}}) {
+      print "  NAPTR[$k]: $rec->{NAPTR}[$k]\n" if ($opt_verbose);
+    }
+  }
 
   $mxlist = db_build_list_str($rec->{MX});
   $mx=($mxhash{$mxlist} ? $mxhash{$mxlist} : -1);
@@ -250,6 +288,17 @@ foreach $host (sort keys %zonedata) {
   for $k (0..$#{$rec->{TLSA}}) {
     push @tlsa_l, [0,split(' ', $rec->{TLSA}->[$k]),''];
   }
+  undef @naptr_l;
+  for $k (0..$#{$rec->{NAPTR}}) {
+    push @naptr_l, [0,split(/ /, $rec->{NAPTR}->[$k]),''];
+  }
+  undef @caa_l;
+  for $k (0..$#{$rec->{CAA}}) {
+    my ($flags,$tag,$value) = split(/\s+/, $rec->{CAA}->[$k], 3);
+    next unless (defined $value);
+    $value =~ s/^"(.*)"$/$1/;
+    push @caa_l, [0,$flags,$tag,$value,''];
+  }
   undef @txt_l;
   for $k (0..$#{$rec->{TXT}}) {
     push @txt_l, [0,$rec->{TXT}->[$k],''];
@@ -271,10 +320,12 @@ foreach $host (sort keys %zonedata) {
 		   txt_l=>\@txt_l,
 		   ns_l=>\@ns_l,
 		   ds_l=>\@ds_l,
-                   srv_l=>\@srv_l,
-                   sshfp_l=>\@sshfp_l,
-                   tlsa_l=>\@tlsa_l,
-                   txt_l=>\@txt_l,
+		   srv_l=>\@srv_l,
+		   sshfp_l=>\@sshfp_l,
+		   tlsa_l=>\@tlsa_l,
+		   naptr_l=>\@naptr_l,
+       caa_l=>\@caa_l,
+		   txt_l=>\@txt_l,
 		   ip=>\@ip_l
 		});
   fatal("failed to insert host record for: $host (rc: $res)") if ($res < 0);

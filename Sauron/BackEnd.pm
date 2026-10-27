@@ -12,7 +12,7 @@ use Sauron::DB;
 use Sauron::Util;
 use Sauron::SetupIO;
 use Sys::Syslog qw(:DEFAULT setlogsock);
-Sys::Syslog::setlogsock('unix');
+eval { local $SIG{__WARN__} = sub {}; Sys::Syslog::setlogsock('unix') };
 use Net::IP qw (:PROC);
 
 use strict;
@@ -25,11 +25,14 @@ $VERSION = '$Id:$ ';
 	     sauron_db_version
 	     get_db_version
 	     set_muser
+	     set_muid_msid
 	     auto_address
 	     next_free_ip
 	     ip_in_use
 	     domain_in_use
 	     hostname_in_use
+	     ip_in_use_with_pending
+	     domain_in_use_with_pending
 	     new_sid
 	     get_host_network_settings
 
@@ -90,7 +93,7 @@ $VERSION = '$Id:$ ';
 	     delete_hinfo_template
 
 	     get_group_by_name
-             get_group_type_by_name
+       get_group_type_by_name
 	     get_group
 	     update_group
 	     add_group
@@ -102,12 +105,12 @@ $VERSION = '$Id:$ ';
 	     add_user
 	     delete_user
 	     get_user_group_id
-             get_user_group
-             delete_user_group
-             get_user_status
+       get_user_group
+       delete_user_group
+       get_user_status
 
 	     get_net_by_cidr
-             get_net_cidr_by_ip
+       get_net_cidr_by_ip
 	     get_net_list
 	     get_net
 	     update_net
@@ -119,12 +122,12 @@ $VERSION = '$Id:$ ';
 	     add_vlan
 	     delete_vlan
 	     get_vlan_list
-             get_vlanno
+       get_vlanno
 	     get_vlan_by_name
 
-             ip_policy_names
-             get_net_ip_policy
-             get_free_ip_by_net
+       ip_policy_names
+       get_net_ip_policy
+       get_free_ip_by_net
 	     get_ip_sugg
 
 	     get_vmps_by_name
@@ -148,6 +151,13 @@ $VERSION = '$Id:$ ';
 	     get_acl_list
 	     get_acl_by_name
 
+	     get_tls_profile
+	     update_tls_profile
+	     add_tls_profile
+	     delete_tls_profile
+	     get_tls_profile_list
+	     get_tls_profile_refs
+
 	     add_news
 	     get_news_list
 
@@ -161,14 +171,37 @@ $VERSION = '$Id:$ ';
 
 	     get_history_host
 	     get_history_session
+	     get_history_zone
+	     get_history_server
 
 	     save_state
 	     load_state
 	     remove_state
+
+	     is_catalog_zone
+	     validate_zone_for_catalog
+	     get_zone_catalog_members
+	     get_zone_catalogs
+	     add_zone_to_catalog
+	     remove_zone_from_catalog
+
+	     get_catalog_group_defs
+	     add_catalog_group_def
+	     delete_catalog_group_def
+	     get_member_groups
+	     set_member_groups
+	     get_catalog_group_usage
+
+	     get_catalog_compositions
+	     add_catalog_composition
+	     remove_catalog_composition
+	     update_catalog_compositions
+	     write2log
 	    );
 
-
+# Catalog zones support (RFC 9432) - six functions exported above
 my($muser);
+my($muid, $msid);  # User ID and Session ID for history logging
 
 
 
@@ -203,6 +236,12 @@ sub sauron_db_version() {
 sub set_muser($) {
   my($usr)=@_;
   $muser=$usr;
+}
+
+sub set_muid_msid($$) {
+  my($uid, $sid)=@_;
+  $muid=$uid;
+  $msid=$sid;
 }
 
 
@@ -334,6 +373,92 @@ sub hostname_in_use($$) {
 	   "WHERE h.zone=$zoneid AND domain ~* " . db_encode_str("^$domain(\\.|\$)") . ";",\@q);
   return $q[0][0] if ($q[0][0] > 0);
   return 0;
+}
+
+# ip_in_use_with_pending($serverid, $ip, $exclude_request_id [, $exclude_host_id])
+#   -> ($conflict_source, $conflict_id)
+# Check if IP is in use by a host of the server OR claimed by a pending
+# dns_change_request in a zone of the server. The given request and host
+# (and other requests for that host) are not counted.
+# Returns: (undef, undef) if free, ('hosts', host_id) if in hosts, ('pending', req_id) if in pending request
+sub ip_in_use_with_pending($$$;$) {
+  my($serverid,$ip,$exclude_request_id,$exclude_host_id)=@_;
+  my(@q);
+
+  return (-1, -1) unless ($serverid > 0);
+  return (-2, -2) unless (is_cidr($ip));
+  $exclude_request_id = int($exclude_request_id || 0);
+  $exclude_host_id = int($exclude_host_id || 0);
+
+  # Check in hosts table (including a_entries)
+  db_query("SELECT a.host FROM hosts h, a_entries a, zones z " .
+	   "WHERE z.server=$serverid AND h.zone=z.id AND a.host=h.id " .
+	   " AND a.ip = " . db_encode_str($ip) .
+	   ($exclude_host_id > 0 ? " AND a.host != $exclude_host_id" : "") .
+	   " LIMIT 1;",\@q);
+  if (@q > 0 && $q[0][0] > 0) {
+    return ('hosts', $q[0][0]);
+  }
+
+  # Check in pending dns_change_requests (approved ones are already
+  # applied, so their addresses are in a_entries).
+  undef @q;
+  db_query("SELECT id, change_data FROM dns_change_requests " .
+	   "WHERE status = 'P' AND zone_id IN " .
+	   "(SELECT id FROM zones WHERE server=$serverid)" .
+	   ($exclude_request_id > 0 ? " AND id != $exclude_request_id" : "") .
+	   ($exclude_host_id > 0 ?
+	    " AND (host_id IS NULL OR host_id != $exclude_host_id)" : ""),\@q);
+
+  # change_data is a Data::Dumper dump; match the address as a whole
+  # quoted value, so 192.0.2.1 does not match 192.0.2.10.
+  (my $bare = $ip) =~ s{/(?:32|128)$}{};
+  for my $i (0..$#q) {
+    my $req_id = $q[$i][0];
+    my $change_data = $q[$i][1];
+    if (defined $change_data &&
+	$change_data =~ m{'\Q$bare\E(?:/(?:32|128))?'}i) {
+      return ('pending', $req_id);
+    }
+  }
+
+  return (undef, undef);
+}
+
+# domain_in_use_with_pending($zoneid, $domain, $exclude_request_id) -> ($conflict_source, $conflict_id)
+# Check if domain is in use in hosts OR in pending/approved dns_change_requests
+# Returns: (undef, undef) if free, ('hosts', host_id) if in hosts, ('pending', req_id) if in pending request
+sub domain_in_use_with_pending($$$) {
+  my($zoneid,$domain,$exclude_request_id)=@_;
+  my(@q);
+
+  return (-1, -1) unless ($zoneid > 0);
+
+  # Check in hosts table
+  db_query("SELECT h.id FROM hosts h ".
+	   "WHERE h.zone=$zoneid AND domain=" . db_encode_str($domain) . " LIMIT 1;",\@q);
+  if (@q > 0 && $q[0][0] > 0) {
+    return ('hosts', $q[0][0]);
+  }
+
+  # Check in pending/approved dns_change_requests
+  undef @q;
+  my $exclude_clause = ($exclude_request_id > 0) ? " AND id != $exclude_request_id" : "";
+  db_query("SELECT id, change_data FROM dns_change_requests " .
+	   "WHERE status IN ('P','A') AND zone_id = $zoneid " .
+	   $exclude_clause,\@q);
+  
+  # Parse change_data for domain match
+  for my $i (0..$#q) {
+    my $req_id = $q[$i][0];
+    my $change_data = $q[$i][1];
+    # Search for domain in change_data (simple string match)
+    if (defined $change_data && $change_data =~ /['"]\Q$domain\E['"]/i) {
+      return ('pending', $req_id);
+    }
+  }
+
+  return (undef, undef);
 }
 
 sub new_sid() {
@@ -680,7 +805,7 @@ sub copy_records($$$$$$$) {
 
   $tmp="SELECT $reffield,$fields FROM $stable WHERE $key IN ($selectsql)";
   #print "$tmp\n";
-  db_query($tmp,\@data);
+  return -2 if (db_query($tmp,\@data) < 0);
   #print "<br>$stable records to copy: " . @data . "\n";
   return 0 if (@data < 1);
 
@@ -699,7 +824,7 @@ sub add_std_fields($) {
   return unless (ref($rec) eq 'HASH');
 
   $rec->{cdate_str}=($rec->{cdate} > 0 ?
-		     localtime($rec->{cdate}).' by '.$rec->{cuser} : 'UNKOWN');
+		     localtime($rec->{cdate}).' by '.$rec->{cuser} : 'UNKNOWN');
   $rec->{mdate_str}=($rec->{mdate} > 0 ?
 		     localtime($rec->{mdate}).' by '.$rec->{muser} : '');
 }
@@ -760,6 +885,89 @@ sub update_textarea_field($$$$$$) { # Textarea 12 Apr 2017 TVu
 ############################################################################
 # server table functions
 
+# Compare two record hashes and return a string describing the changes.
+# Returns: "field1 (old -> new), field2 ([list])" etc.
+sub diff_records($$$$) {
+  my($old_rec, $new_rec, $skip_fields, $array_fields) = @_;
+  my @changes;
+  my @skip = split(/,/, $skip_fields || '');
+  my %skip_hash = map { $_ => 1 } @skip;
+  my @arr_flds = split(/,/, $array_fields || '');
+  my %arr_hash = map { $_ => 1 } @arr_flds;
+
+  # Skip standard fields that are auto-updated
+  $skip_hash{cdate} = 1;
+  $skip_hash{cuser} = 1;
+  $skip_hash{mdate} = 1;
+  $skip_hash{muser} = 1;
+  $skip_hash{id} = 1;
+
+  # Helper function to extract values from array fields (skip header row and deleted entries)
+  # For multi-column fields (like MX with priority), include all relevant columns
+  my $extract_array_values = sub {
+    my($arr) = @_;
+    return '' unless (ref($arr) eq 'ARRAY');
+    my @vals;
+    for my $row (@{$arr}) {
+      next unless (ref($row) eq 'ARRAY');
+      # Skip header row (first element is not a number)
+      my $id = $$row[0];
+      next unless (defined($id) && $id =~ /^-?\d+$/);
+      # Skip entries marked for deletion (state = -1 in last column)
+      my $state = $$row[$#{$row}];
+      next if (defined($state) && $state eq '-1');
+      # Extract values from columns (skip id at index 0 and state at last index)
+      # For MX: [id, pri, mx, comment, state] -> show "pri:mx" (skip empty comment)
+      # For NS: [id, ns, comment, state] -> show "ns" (skip empty comment)
+      my @row_vals;
+      for my $i (1..$#{$row}-1) {  # Skip first (id) and last (state) columns
+        # Only skip if it's the last non-state column AND it's empty (likely comment)
+        # Otherwise include the value
+        my $is_last_data_col = ($i == $#{$row}-1);
+        my $val = $$row[$i];
+        if (defined($val) && $val ne '') {
+          push @row_vals, $val;
+        } elsif (!$is_last_data_col) {
+          # Include empty string placeholder for non-last columns to preserve structure
+          push @row_vals, '';
+        }
+      }
+      # Clean up: remove trailing empty values (comments)
+      while (@row_vals && $row_vals[-1] eq '') { pop @row_vals; }
+      push @vals, join(':', @row_vals) if (@row_vals > 0);
+    }
+    return join(',', @vals);
+  };
+
+  foreach my $key (keys %{$new_rec}) {
+    next if $skip_hash{$key};
+    next unless defined($$new_rec{$key});
+
+    my $old_val = (defined($$old_rec{$key}) ? $$old_rec{$key} : '');
+    my $new_val = $$new_rec{$key};
+
+    # Handle array fields (lists)
+    if ($arr_hash{$key}) {
+      my $old_str = $extract_array_values->($old_val);
+      my $new_str = $extract_array_values->($new_val);
+      $old_str =~ s/^\s+|\s+$//g;
+      $new_str =~ s/^\s+|\s+$//g;
+      if ($old_str ne $new_str) {
+        push @changes, "$key (" . ($old_str eq '' ? '[]' : $old_str) . " -> " . 
+                       ($new_str eq '' ? '[]' : $new_str) . ")";
+      }
+    }
+    # Handle simple scalar values
+    elsif (!ref($old_val) && !ref($new_val)) {
+      if ($old_val ne $new_val) {
+        push @changes, "$key ('$old_val' -> '$new_val')";
+      }
+    }
+  }
+
+  return join(', ', @changes);
+}
+
 sub get_server_id($) {
   my ($server) = @_;
   my (@q);
@@ -806,7 +1014,9 @@ sub get_server($$) {
 		    "cdate,cuser,mdate,muser,lastrun," .
 		    "df_port6,df_max_delay6,df_max_uupdates6,df_mclt6,df_split6,".
 		    "df_loadbalmax6,dhcp_flags,".
-            "listen_on_port_v6,transfer_source_v6,query_src_ip_v6,query_src_port_v6",
+            "listen_on_port_v6,transfer_source_v6,query_src_ip_v6,query_src_port_v6," .
+            "tls_default_profile,tls_listen_profile,tls_listen_port," .
+            "doh_profile,doh_port,doh_endpoint",
 		    $id,$rec,"id");
   return -1 if ($res < 0);
   fix_bools($rec,"no_roots,zones_only");
@@ -870,7 +1080,10 @@ sub get_server($$) {
 
 sub update_server($) {
   my($rec) = @_;
-  my($r,$id);
+  my($r,$id,%old_rec,$changes);
+
+  # Load original server record for history diff
+  get_server($rec->{id}, \%old_rec) if ($rec->{id} > 0);
 
   del_std_fields($rec);
   delete $rec->{dhcp_flags};
@@ -903,6 +1116,11 @@ sub update_server($) {
   $r=update_record('servers',$rec);
   if ($r < 0) { db_rollback(); return $r; }
   $id=$rec->{id};
+
+  # Compute changes for history log
+  $changes = diff_records(\%old_rec, $rec, 
+                          'cdate_str,mdate_str,pending_info,zonehostid',
+                          'allow_transfer,allow_query,allow_recursion,blackhole,listen_on,listen_on_v6,forwarders,dhcp,dhcp_l,dhcp6,dhcp6_l,txt,logging,custom_opts,bind_globals,allow_query_cache,allow_notify');
 
   # allow_transfer
   $r=update_aml_field(1,$id,$rec,'allow_transfer');
@@ -954,23 +1172,29 @@ sub update_server($) {
   # custom options (BIND)
   $r=update_array_field("txt_entries",3,"txt,comment,type,ref",
 			 'custom_opts',$rec,"11,$id");
+  if ($r < 0) { db_rollback(); return -21; }
   # Globals (BIND)
   $r=update_array_field("txt_entries",3,"txt,comment,type,ref",
 			 'bind_globals',$rec,"13,$id");
-  if ($r < 0) { db_rollback(); return -21; }
+  if ($r < 0) { db_rollback(); return -22; }
 
   # allow_query_cache
   $r=update_aml_field(14,$id,$rec,'allow_query_cache');
-  if ($r < 0) { db_rollback(); return -22; }
+  if ($r < 0) { db_rollback(); return -23; }
 
   # allow_notify
   $r=update_aml_field(15,$id,$rec,'allow_notify');
-  if ($r < 0) { db_rollback(); return -23; }
+  if ($r < 0) { db_rollback(); return -24; }
 
   # listen_on
   $r=update_aml_field(16,$id,$rec,'listen_on_v6');
-  if ($r < 0) { db_rollback(); return -24; }
+  if ($r < 0) { db_rollback(); return -25; }
 
+  # Log server update to history (before commit)
+  my $server_name = $rec->{name} || "ID=$id";
+  my $info_str = "name: $server_name";
+  $info_str .= " | Changes: $changes" if ($changes);
+  update_history($muid, $msid, 3, "EDIT: Server", $info_str, $id);
 
   return db_commit();
 }
@@ -1034,195 +1258,161 @@ sub add_server($) {
   # custom options
   $res = add_array_field('txt_entries','txt,comment','custom_opts',$rec,
 			 'type,ref',"11,$id");
+  if ($res < 0) { db_rollback(); return -19; }
   # bind globals
   $res = add_array_field('txt_entries','txt,comment','bind_globals',$rec,
 			 'type,ref',"13,$id");
-  if ($res < 0) { db_rollback(); return -19; }
+  if ($res < 0) { db_rollback(); return -20; }
 
   # allow_query_cache
   $res = update_aml_field(14,$id,$rec,'allow_query_cache');
-  if ($res < 0) { db_rollback(); return -20; }
+  if ($res < 0) { db_rollback(); return -21; }
 
   # allow_notify
   $res = update_aml_field(15,$id,$rec,'allow_notify');
-  if ($res < 0) { db_rollback(); return -21; }
+  if ($res < 0) { db_rollback(); return -22; }
 
+  # Log server creation to history
+  my $server_name = $rec->{name} || '';
+  update_history($muid, $msid, 3, "ADD: Server", "name: $server_name", $id);
 
   return -100 if (db_commit() < 0);
   return $id;
 }
 
-sub delete_server($) {
+sub _delete_server_parts($) {
   my($id) = @_;
   my($res);
 
-  return -100 unless ($id > 0);
-
-  db_begin();
-
   # cidr_entries
   $res=db_exec("DELETE FROM cidr_entries " .
-	       "WHERE (type=1 OR type=7 OR type=8 OR type=9 OR type=10 " .
-	       " OR type=11) AND ref=$id;");
+               "WHERE type IN (1,7,8,9,10,11,14,15,16) AND ref=$id;");
   if ($res < 0) { db_rollback(); return -1; }
 
   $res=db_exec("DELETE FROM cidr_entries WHERE id IN ( " .
-	        "SELECT a.id FROM cidr_entries a, zones z " .
-	        "WHERE z.server=$id AND " .
-                " (a.type=12 OR a.type=6 OR a.type=5 OR a.type=4 OR " .
-	        "  a.type=3 OR a.type=2) " .
-	        " AND a.ref=z.id);");
+               "SELECT a.id FROM cidr_entries a, zones z " .
+               "WHERE z.server=$id AND " .
+               " (a.type=12 OR a.type=6 OR a.type=5 OR a.type=4 OR " .
+               "  a.type=3 OR a.type=2) " .
+               " AND a.ref=z.id);");
   if ($res < 0) { db_rollback(); return -2; }
 
   # dhcp_entries
-# Local DHCP settings 2020-07-20 TVu
-  $res=db_exec("DELETE FROM dhcp_entries WHERE type=7 AND ref=$id;");
+  $res=db_exec("DELETE FROM dhcp_entries WHERE (type=7 OR type=1 OR type=17 OR type=11) AND ref=$id;");
   if ($res < 0) { db_rollback(); return -3; }
-  $res=db_exec("DELETE FROM dhcp_entries WHERE type=1 AND ref=$id;");
-  if ($res < 0) { db_rollback(); return -3; }
+  
   $res=db_exec("DELETE FROM dhcp_entries WHERE id IN ( " .
-	        "SELECT a.id FROM dhcp_entries a, zones z " .
-	        "WHERE z.server=$id AND a.type=2 AND a.ref=z.id);");
+               "SELECT a.id FROM dhcp_entries a, zones z " .
+               "WHERE z.server=$id AND a.type=2 AND a.ref=z.id);");
   if ($res < 0) { db_rollback(); return -4; }
+
   $res=db_exec("DELETE FROM dhcp_entries WHERE id IN ( " .
-	        "SELECT a.id FROM dhcp_entries a, zones z, hosts h " .
-	        "WHERE z.server=$id AND h.zone=z.id AND a.type=3 " .
-	        " AND a.ref=h.id);");
+               "SELECT a.id FROM dhcp_entries a, zones z, hosts h " .
+               "WHERE z.server=$id AND h.zone=z.id AND a.type=3 " .
+               " AND a.ref=h.id);");
   if ($res < 0) { db_rollback(); return -5; }
+
   $res=db_exec("DELETE FROM dhcp_entries WHERE id IN ( " .
-	        "SELECT a.id FROM dhcp_entries a, nets n " .
-	        "WHERE n.server=$id AND a.type=4 AND a.ref=n.id);");
+               "SELECT a.id FROM dhcp_entries a, nets n " .
+               "WHERE n.server=$id AND a.type=4 AND a.ref=n.id);");
   if ($res < 0) { db_rollback(); return -6; }
+
   $res=db_exec("DELETE FROM dhcp_entries WHERE id IN ( " .
-	        "SELECT a.id FROM dhcp_entries a, groups g " .
-	        "WHERE g.server=$id AND a.type=5 AND a.ref=g.id);");
+               "SELECT a.id FROM dhcp_entries a, groups g " .
+               "WHERE g.server=$id AND a.type=5 AND a.ref=g.id);");
   if ($res < 0) { db_rollback(); return -7; }
+
   $res=db_exec("DELETE FROM dhcp_entries WHERE id IN ( " .
-	        "SELECT a.id FROM dhcp_entries a, vlans v " .
-	        "WHERE v.server=$id AND a.type=6 AND a.ref=v.id);");
+               "SELECT a.id FROM dhcp_entries a, vlans v " .
+               "WHERE v.server=$id AND a.type=6 AND a.ref=v.id);");
   if ($res < 0) { db_rollback(); return -8; }
 
-# dhcp_entries6
-# Local DHCP settings 2020-07-20 TVu
-  $res=db_exec("DELETE FROM dhcp_entries WHERE type=17 AND ref=$id;");
-  if ($res < 0) { db_rollback(); return -13; }
-  $res=db_exec("DELETE FROM dhcp_entries WHERE type=11 AND ref=$id;");
-  if ($res < 0) { db_rollback(); return -13; }
-  $res=db_exec("DELETE FROM dhcp_entries WHERE id IN ( " .
-	        "SELECT a.id FROM dhcp_entries a, zones z " .
-	        "WHERE z.server=$id AND a.type=12 AND a.ref=z.id);");
-  if ($res < 0) { db_rollback(); return -14; }
-  $res=db_exec("DELETE FROM dhcp_entries WHERE id IN ( " .
-	        "SELECT a.id FROM dhcp_entries a, zones z, hosts h " .
-	        "WHERE z.server=$id AND h.zone=z.id AND a.type=13 " .
-	        " AND a.ref=h.id);");
-  if ($res < 0) { db_rollback(); return -15; }
-  $res=db_exec("DELETE FROM dhcp_entries WHERE id IN ( " .
-	        "SELECT a.id FROM dhcp_entries a, nets n " .
-	        "WHERE n.server=$id AND a.type=14 AND a.ref=n.id);");
-  if ($res < 0) { db_rollback(); return -16; }
-  $res=db_exec("DELETE FROM dhcp_entries WHERE id IN ( " .
-	        "SELECT a.id FROM dhcp_entries a, groups g " .
-	        "WHERE g.server=$id AND a.type=15 AND a.ref=g.id);");
+  # txt_entries
+  $res=db_exec("DELETE FROM txt_entries " .
+               "WHERE (type=3 OR type=10 OR type=11) AND ref=$id;");
   if ($res < 0) { db_rollback(); return -17; }
-  $res=db_exec("DELETE FROM dhcp_entries WHERE id IN ( " .
-	        "SELECT a.id FROM dhcp_entries a, vlans v " .
-	        "WHERE v.server=$id AND a.type=16 AND a.ref=v.id);");
-  if ($res < 0) { db_rollback(); return -8; }
-
-
-  # host_info
-  # FIXME
 
   # mx_entries
   $res=db_exec("DELETE FROM mx_entries WHERE id IN ( " .
-	       "SELECT a.id FROM mx_entries a, zones z, hosts h " .
-	  "WHERE z.server=$id AND h.zone=z.id AND a.type=2 AND a.ref=h.id);");
+               "SELECT a.id FROM mx_entries a, zones z, hosts h " .
+               "WHERE z.server=$id AND h.zone=z.id AND a.type=2 AND a.ref=h.id);");
   if ($res < 0) { db_rollback(); return -9; }
+
   $res=db_exec("DELETE FROM mx_entries WHERE id IN ( " .
-	       "SELECT a.id FROM mx_entries a, zones z, mx_templates m " .
-	  "WHERE z.server=$id AND m.zone=z.id AND a.type=3 AND a.ref=m.id);");
+               "SELECT a.id FROM mx_entries a, zones z, mx_templates m " .
+               "WHERE z.server=$id AND m.zone=z.id AND a.type=3 AND a.ref=m.id);");
   if ($res < 0) { db_rollback(); return -10; }
 
   # wks_entries
   $res=db_exec("DELETE FROM wks_entries WHERE id IN ( " .
-	       "SELECT a.id FROM wks_entries a, zones z, hosts h " .
-	  "WHERE z.server=$id AND h.zone=z.id AND a.type=1 AND a.ref=h.id);");
+               "SELECT a.id FROM wks_entries a, zones z, hosts h " .
+               "WHERE z.server=$id AND h.zone=z.id AND a.type=1 AND a.ref=h.id);");
   if ($res < 0) { db_rollback(); return -11; }
-  $res=db_exec("DELETE FROM wks_entries WHERE id IN ( " .
-	       "SELECT a.id FROM wks_entries a, wks_templates w " .
-	       "WHERE w.server=$id AND a.type=2 AND a.ref=w.id);");
-  if ($res < 0) { db_rollback(); return -12; }
 
+  $res=db_exec("DELETE FROM wks_entries WHERE id IN ( " .
+               "SELECT a.id FROM wks_entries a, wks_templates w " .
+               "WHERE w.server=$id AND a.type=2 AND a.ref=w.id);");
+  if ($res < 0) { db_rollback(); return -12; }
 
   # ns_entries
   $res=db_exec("DELETE FROM ns_entries WHERE id IN ( " .
-	       "SELECT a.id FROM ns_entries a, zones z, hosts h " .
-	  "WHERE z.server=$id AND h.zone=z.id AND a.type=2 AND a.ref=h.id);");
+               "SELECT a.id FROM ns_entries a, zones z, hosts h " .
+               "WHERE z.server=$id AND h.zone=z.id AND a.type=2 AND a.ref=h.id);");
   if ($res < 0) { db_rollback(); return -14; }
-
 
   # printer_entries
   $res=db_exec("DELETE FROM printer_entries WHERE id IN ( " .
-	       "SELECT a.id FROM printer_entries a, groups g " .
-	       "WHERE g.server=$id AND a.type=1 AND a.ref=g.id);");
+               "SELECT a.id FROM printer_entries a, groups g " .
+               "WHERE g.server=$id AND a.type=1 AND a.ref=g.id);");
   if ($res < 0) { db_rollback(); return -15; }
+
   $res=db_exec("DELETE FROM printer_entries WHERE id IN ( " .
-	       "SELECT a.id FROM printer_entries a, zones z, hosts h " .
-	  "WHERE z.server=$id AND h.zone=z.id AND a.type=2 AND a.ref=h.id);");
+               "SELECT a.id FROM printer_entries a, zones z, hosts h " .
+               "WHERE z.server=$id AND h.zone=z.id AND a.type=2 AND a.ref=h.id);");
   if ($res < 0) { db_rollback(); return -16; }
-
-
-  # txt_entries
-  $res=db_exec("DELETE FROM txt_entries " .
-	       "WHERE (type=3 OR type=10 OR type=11) AND ref=$id;");
-  if ($res < 0) { db_rollback(); return -17; }
-  $res=db_exec("DELETE FROM txt_entries WHERE id IN ( " .
-	       "SELECT a.id FROM txt_entries a, zones z " .
-
-#	       "WHERE z.server=$id AND a.type=12 AND a.ref=z.id);");
-
-	       "WHERE z.server=$id AND (a.type=4 OR a.type=12) AND a.ref=z.id);"); # 2020-07-30 TVu
-
-  if ($res < 0) { db_rollback(); return -180; }
-  $res=db_exec("DELETE FROM txt_entries WHERE id IN ( " .
-	       "SELECT a.id FROM txt_entries a, zones z, hosts h " .
-	  "WHERE z.server=$id AND h.zone=z.id AND a.type=2 AND a.ref=h.id);");
-  if ($res < 0) { db_rollback(); return -18; }
-
 
   # a_entries
   $res=db_exec("DELETE FROM a_entries WHERE id IN ( " .
-	       "SELECT a.id FROM a_entries a, zones z, hosts h " .
-	       "WHERE z.server=$id AND h.zone=z.id AND a.host=h.id);");
+               "SELECT a.id FROM a_entries a, zones z, hosts h " .
+               "WHERE z.server=$id AND h.zone=z.id AND a.host=h.id);");
   if ($res < 0) { db_rollback(); return -19; }
+
+  # caa_entries
+  $res=db_exec("DELETE FROM caa_entries WHERE id IN ( " .
+               "SELECT a.id FROM caa_entries a, zones z, hosts h " .
+               "WHERE z.server=$id AND h.zone=z.id AND a.type=1 AND a.ref=h.id);");
+  if ($res < 0) { db_rollback(); return -191; }
 
   # arec_entries
   $res=db_exec("DELETE FROM arec_entries WHERE id IN ( " .
-	       "SELECT a.id FROM arec_entries a, zones z, hosts h " .
-	       "WHERE z.server=$id AND h.zone=z.id AND a.host=h.id);");
+               "SELECT a.id FROM arec_entries a, zones z, hosts h " .
+               "WHERE z.server=$id AND h.zone=z.id AND a.host=h.id);");
   if ($res < 0) { db_rollback(); return -20; }
 
   # srv_entries
   $res=db_exec("DELETE FROM srv_entries WHERE id IN ( " .
-	       "SELECT a.id FROM srv_entries a, zones z, hosts h " .
-            "WHERE z.server=$id AND h.zone=z.id AND a.type=1 AND a.ref=h.id)");
+               "SELECT a.id FROM srv_entries a, zones z, hosts h " .
+               "WHERE z.server=$id AND h.zone=z.id AND a.type=1 AND a.ref=h.id);");
   if ($res < 0) { db_rollback(); return -21; }
 
   # group_entries
   $res=db_exec("DELETE FROM group_entries WHERE id IN ( " .
-	       "SELECT a.id FROM group_entries a, zones z, hosts h " .
-	       "WHERE z.server=$id AND h.zone=z.id AND a.host=h.id);");
+               "SELECT a.id FROM group_entries a, zones z, hosts h " .
+               "WHERE z.server=$id AND h.zone=z.id AND a.host=h.id);");
   if ($res < 0) { db_rollback(); return -22; }
 
   # wks_templates
   $res=db_exec("DELETE FROM wks_templates WHERE server=$id;");
   if ($res < 0) { db_rollback(); return -25; }
 
+  # tls_profiles (XoT, RFC 9103)
+  $res=db_exec("DELETE FROM tls_profiles WHERE type=1 AND ref=$id;");
+  if ($res < 0) { db_rollback(); return -29; }
+
   # mx_templates
   $res=db_exec("DELETE FROM mx_templates WHERE id IN ( " .
-	       "SELECT a.id FROM mx_templates a, zones z " .
-	       "WHERE z.server=$id AND a.zone=z.id);");
+               "SELECT a.id FROM mx_templates a, zones z " .
+               "WHERE z.server=$id AND a.zone=z.id);");
   if ($res < 0) { db_rollback(); return -26; }
 
   # groups
@@ -1233,21 +1423,100 @@ sub delete_server($) {
   $res=db_exec("DELETE FROM nets WHERE server=$id;");
   if ($res < 0) { db_rollback(); return -28; }
 
-  # hosts
-  $res=db_exec("DELETE FROM hosts WHERE id IN ( " .
-	       "SELECT a.id FROM hosts a, zones z " .
-	       "WHERE z.server=$id AND a.zone=z.id);");
-  if ($res < 0) { db_rollback(); return -29; }
+  # ACLs (with their entries) and TSIG keys of the server
+  $res=db_exec("DELETE FROM cidr_entries WHERE type=0 AND ref IN ( " .
+               "SELECT id FROM acls WHERE server=$id);");
+  if ($res < 0) { db_rollback(); return -32; }
 
-  # zones
-  $res=db_exec("DELETE FROM zones WHERE server=$id;");
-  if ($res < 0) { db_rollback(); return -30; }
+  $res=db_exec("DELETE FROM acls WHERE server=$id;");
+  if ($res < 0) { db_rollback(); return -33; }
 
+  $res=db_exec("DELETE FROM keys WHERE type=1 AND ref=$id;");
+  if ($res < 0) { db_rollback(); return -34; }
+
+  # vlans
+  # Poznámka: VLAN nejsou smazány, pouze zóny a jejich obsah
+  # To odpovídá původní logice
+
+  # server itself
   $res=db_exec("DELETE FROM servers WHERE id=$id;");
   if ($res < 0) { db_rollback(); return -31; }
 
-  return db_commit();
-  #return db_rollback();
+  return 0;
+}
+
+
+sub delete_server($) {
+  my($id) = @_;
+  my($res);
+
+  return -100 unless ($id > 0);
+
+  # Get server name for history log BEFORE deletion
+  my %server_data;
+  get_server($id, \%server_data);
+  my $server_name = $server_data{name} || "ID=$id";
+
+  write2log("SERVER_DELETE_START: Deleting server ID=$id");
+  db_begin();
+
+  # slave servers use the master's zones, ACLs and keys; delete them first.
+  # Lock servers so no slave can be assigned to this server by a concurrent
+  # add_server()/update_server() between this check and the deletion.
+  my @slaves;
+  if (db_exec("LOCK TABLE servers IN SHARE ROW EXCLUSIVE MODE") < 0 ||
+      db_query("SELECT id FROM servers WHERE masterserver=$id", \@slaves) < 0) {
+    db_rollback();
+    write2log("SERVER_DELETE_FAILED: Server ID=$id was NOT deleted - slave server check failed");
+    return -102;
+  }
+  if (@slaves > 0) {
+    db_rollback();
+    write2log("SERVER_DELETE_FAILED: Server ID=$id was NOT deleted - it has slave servers");
+    return -101;
+  }
+
+  # get all zones of server
+  my @zone_ids;
+  my @q;
+  if (db_query("SELECT id FROM zones WHERE server=$id", \@q) < 0) {
+    db_rollback();
+    write2log("SERVER_DELETE_FAILED: Server ID=$id was NOT deleted - zone query failed");
+    return -103;
+  }
+  for my $i (0..$#q) {
+      push @zone_ids, $q[$i][0];
+  }
+
+  # Delete all zones of server
+  for my $zone_id (@zone_ids) {
+      $res = _delete_zone_parts($zone_id);
+      if ($res < 0) {
+          db_rollback();
+          write2log("SERVER_DELETE_FAILED: Server ID=$id was NOT deleted - failure to delete zone ID=$zone_id with error $res");
+          return $res;
+      }
+  }
+
+
+  # Delete other parts of server
+  $res = _delete_server_parts($id);
+  if ($res < 0) {
+    db_rollback();
+    write2log("SERVER_DELETE_FAILED: Server ID=$id was NOT deleted - failure to delete server parts with error $res");
+    return $res;
+  }
+
+  if (db_commit() < 0) {
+    write2log("SERVER_DELETE_FAILED: Server ID=$id was NOT deleted - commit failure");
+    return -200;
+  }
+
+  # Log server deletion to history (after commit)
+  update_history($muid, $msid, 3, "DELETE: Server", "name: $server_name", $id);
+  write2log("SERVER_DELETE_SUCCESS: Server ID=$id successfully deleted");
+
+  return 0;
 }
 
 ############################################################################
@@ -1313,40 +1582,64 @@ sub get_zone($$) {
   my ($res,@q,$hid,$sid);
 
   $res = get_record("zones",
-	       "server,active,dummy,type,reverse,class,name,nnotify," .
+	       "server,active,dummy,catalog_only,type,reverse,class,name,nnotify," .
 	       "hostmaster,serial,refresh,retry,expire,minimum,ttl," .
 	       "chknames,reversenet,comment,cdate,cuser,mdate,muser," .
-	       "forward,serial_date,flags,rdate,transfer_source,transfer_source_v6,expiration",
+	       "forward,serial_date,flags,rdate,transfer_source,transfer_source_v6,expiration," .
+	       "xot_transfer,tls_profile",
 	       $id,$rec,"id");
   return -1 if ($res < 0);
-  fix_bools($rec,"active,dummy,reverse,noreverse");
+  fix_bools($rec,"active,dummy,catalog_only,reverse,noreverse");
   $sid=$rec->{server};
 
-  if ($rec->{type} eq 'M') {
+  if ($rec->{type} eq 'M' || $rec->{type} eq 'C' || $rec->{type} eq 'A') {
     $hid=get_host_id($id,'@');
     if ($hid > 0) {
       get_array_field("ns_entries",3,"id,ns,comment","NS,Comments",
 		      "type=2 AND ref=$hid ORDER BY ns",$rec,'ns');
-      get_array_field("mx_entries",4,"id,pri,mx,comment",
-		      "Priority,MX,Comments",
-		      "type=2 AND ref=$hid ORDER BY pri,mx",$rec,'mx');
-      get_array_field("txt_entries",3,"id,txt,comment","TXT,Comments",
-		      "type=2 AND ref=$hid ORDER BY id",$rec,'txt');
-      get_array_field("a_entries",4,"id,ip,reverse,forward",
-		      "IP,reverse,forward","host=$hid ORDER BY ip",$rec,'ip');
+
+      # For non-catalog zones, also load MX, TXT, NAPTR and IP records
+      if ($rec->{type} eq 'M') {
+        get_array_field("mx_entries",4,"id,pri,mx,comment",
+		        "Priority,MX,Comments",
+		        "type=2 AND ref=$hid ORDER BY pri,mx",$rec,'mx');
+        get_array_field("txt_entries",3,"id,txt,comment","TXT,Comments",
+		        "type=2 AND ref=$hid ORDER BY id",$rec,'txt');
+        get_array_field("caa_entries",5,"id,flags,tag,value,comment",
+            "Flags,Tag,Value,Comments",
+            "type=1 AND ref=$hid ORDER BY flags,tag,value",$rec,'caa');
+        get_array_field("naptr_entries",8,"id,order_val,preference,flags,service,regexp,replacement,comment",
+		        "Order,Preference,Flags,Service,Regexp,Replacement,Comments",
+		        "type=1 AND ref=$hid ORDER BY order_val,preference,flags,service,regexp,replacement",$rec,'naptr');
+        get_array_field("a_entries",4,"id,ip,reverse,forward",
+		        "IP,reverse,forward","host=$hid ORDER BY ip",$rec,'ip');
+      }
 
       $rec->{zonehostid}=$hid;
+    } else {
+      # Initialize empty NS array if host record missing (for catalog zones)
+      # This ensures the form can still be edited
+      $rec->{ns} = [['NS','Comments']];  # Header row
+      if ($rec->{type} eq 'M') {
+        $rec->{mx} = [['Priority','MX','Comments']];
+        $rec->{txt} = [['TXT','Comments']];
+        $rec->{caa} = [['Flags','Tag','Value','Comments']];
+        $rec->{naptr} = [['Order','Preference','Flags','Service','Regexp','Replacement','Comments']];
+        $rec->{ip} = [['IP','reverse','forward']];
+      }
     }
   }
 
   get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comments",
 		  "type=2 AND ref=$id ORDER BY id",$rec,'dhcp');
   get_aml_field($sid,2,$id,$rec,'allow_update');
-  get_array_field("cidr_entries",3,"id,ip,comment","IP,Comments",
+  get_array_field("cidr_entries",5,"id,ip,port,tls,comment",
+		  "IP,Port,TLS profile,Comments",
 		  "type=3 AND ref=$id ORDER BY ip",$rec,'masters');
   get_aml_field($sid,4,$id,$rec,'allow_query');
   get_aml_field($sid,5,$id,$rec,'allow_transfer');
-  get_array_field("cidr_entries",3,"id,ip,comment","IP,Comments",
+  get_array_field("cidr_entries",5,"id,ip,port,tls,comment",
+		  "IP,Port,TLS profile,Comments",
 		  "type=6 AND ref=$id ORDER BY ip",$rec,'also_notify');
   get_array_field("cidr_entries",4,"id,ip,port,comment","IP,Port,Comments",
 		  "type=12 AND ref=$id ORDER BY ip",$rec,'forwarders');
@@ -1361,6 +1654,122 @@ sub get_zone($$) {
   $rec->{pending_info}=($q[0][0] > 0 ?
 			"<FONT color=\"#ff0000\">$q[0][0]</FONT>" : 'None');
 
+  # Catalog zones support (RFC 9432)
+  if ($rec->{type} eq 'C') {
+    # Zone is a catalog - load its members
+    my $rec_catalogs = {};
+    get_zone_catalog_members($id, $rec_catalogs);
+    $rec->{catalog_members} = $rec_catalogs->{members};
+    $rec->{catalog_member_count} = $rec_catalogs->{count};
+
+    # Format member zones list for display
+    if ($rec_catalogs->{count} > 0) {
+      my @member_list;
+      # Type names mapping
+      my %zone_type_names = (M=>'Master', S=>'Slave', F=>'Forward', H=>'Hint', C=>'Catalog');
+      for my $member (@{$rec_catalogs->{members}}) {
+        my $zone_name = $member->[1];    # zone name
+        my $zone_type = $member->[2];    # zone type (M, S, F, H, C)
+        my $server_name = $member->[4];  # server name
+        my $type_label = $zone_type_names{$zone_type} || $zone_type;  # Get readable type name
+        my $groups = $member->[7];       # groups arrayref
+        my $group_str = '';
+        if (ref($groups) eq 'ARRAY' && @{$groups}) {
+          $group_str = ' [' . join(', ', @{$groups}) . ']';
+        }
+        push @member_list, "$zone_name ($type_label)$group_str";
+      }
+      $rec->{catalog_members_list} = join(', ', @member_list);
+    } else {
+      $rec->{catalog_members_list} = 'None';
+    }
+
+    # Load group definitions for this catalog zone
+    my $rec_gdefs = {};
+    get_catalog_group_defs($id, $rec_gdefs);
+    if ($rec_gdefs->{count} > 0) {
+      my @gdef_list;
+      for my $gdef (@{$rec_gdefs->{groups}}) {
+        my $gname = $gdef->[1];
+        my $gcomment = $gdef->[2];
+        push @gdef_list, $gcomment ? "$gname ($gcomment)" : $gname;
+      }
+      $rec->{catalog_group_defs_list} = join(', ', @gdef_list);
+    } else {
+      $rec->{catalog_group_defs_list} = 'None';
+    }
+  } elsif ($rec->{type} eq 'A') {
+    # Aggregate catalog zone - load compositions
+    my $rec_comps = {};
+    get_catalog_compositions($id, $rec_comps);
+    $rec->{compositions} = $rec_comps->{compositions};
+    $rec->{composition_count} = $rec_comps->{count};
+
+    # Format compositions list for display
+    if ($rec_comps->{count} > 0) {
+      my @comp_list;
+      for my $comp (@{$rec_comps->{compositions}}) {
+        my $src_name = $comp->[2];
+        my $prio = $comp->[3];
+        push @comp_list, "$src_name (priority=$prio)";
+      }
+      $rec->{compositions_list} = join(', ', @comp_list);
+    } else {
+      $rec->{compositions_list} = 'None';
+    }
+
+    # Load available source catalog zones for selection
+    my @avail;
+    db_query("SELECT id, name, comment FROM zones " .
+             "WHERE server = $sid AND type = 'C' " .
+             "ORDER BY name", \@avail);
+    $rec->{available_source_catalogs} = \@avail;
+
+    # Build list of currently selected source IDs
+    my @selected_ids;
+    if ($rec_comps->{count} > 0) {
+      for my $comp (@{$rec_comps->{compositions}}) {
+        push @selected_ids, $comp->[1];  # source_zone_id
+      }
+    }
+    $rec->{selected_source_catalogs} = \@selected_ids;
+
+    # Build priorities hash {source_zone_id => priority}
+    my %prio_hash;
+    if ($rec_comps->{count} > 0) {
+      for my $comp (@{$rec_comps->{compositions}}) {
+        $prio_hash{$comp->[1]} = $comp->[3];
+      }
+    }
+    $rec->{composition_priorities} = \%prio_hash;
+  } else {
+    # Zone is a regular zone - load which catalogs contain it
+    my $rec_cats = {};
+    get_zone_catalogs($id, $rec_cats);
+    $rec->{zone_catalogs} = $rec_cats->{catalogs};
+    $rec->{zone_catalog_count} = $rec_cats->{count};
+
+    # Format catalog list for display
+    if ($rec_cats->{count} > 0) {
+      my @catalog_list;
+      for my $cat (@{$rec_cats->{catalogs}}) {
+        push @catalog_list, $cat->[1];  # zone name
+      }
+      $rec->{zone_catalogs_list} = join(', ', sort @catalog_list);
+    } else {
+      $rec->{zone_catalogs_list} = 'None';
+    }
+
+    # For Master zones, load available catalogs for selection
+    if ($rec->{type} eq 'M') {
+      my $rec_sel = {};
+      get_catalog_zones_for_selection($id, $sid, $rec_sel);
+      $rec->{available_catalogs} = $rec_sel->{available_catalogs};
+      $rec->{catalog_zones_selected} = $rec_sel->{catalog_zones_selected};
+      $rec->{catalog_group_defs} = $rec_sel->{catalog_group_defs};
+      $rec->{member_groups} = $rec_sel->{member_groups};
+    }
+  }
 
   $rec->{txt_auto_generation}=($rec->{flags} & 0x01 ? 1 : 0);
 
@@ -1370,11 +1779,46 @@ sub get_zone($$) {
 
 sub update_zone($) {
   my($rec) = @_;
-  my($r,$id,$new_net,$hid);
+  my($r,$id,$new_net,$hid,%old_rec,$changes);
+  my(@current_catalogs, @new_catalogs, %new_cat_hash, %current_cat_hash);
+
+  # Load original zone record for history diff
+  get_zone($rec->{id}, \%old_rec) if ($rec->{id} > 0);
 
   del_std_fields($rec);
   delete $rec->{pending_info};
   delete $rec->{zonehostid};
+
+  # Catalog zones support - save before cleanup
+  my $selected_catalogs = $rec->{catalog_zones_selected} || [];
+  my $selected_member_groups = $rec->{member_groups} || {};
+
+  # Aggregate catalog zones support - save before cleanup
+  my $selected_compositions = $rec->{selected_source_catalogs} || [];
+  my $composition_priorities = $rec->{composition_priorities} || {};
+
+  # Catalog zones support - clean up before update
+  delete $rec->{catalog_members};
+  delete $rec->{catalog_member_count};
+  delete $rec->{catalog_members_list};
+  delete $rec->{zone_catalogs};
+  delete $rec->{zone_catalog_count};
+  delete $rec->{zone_catalogs_list};
+  delete $rec->{available_catalogs};
+  delete $rec->{catalog_zones_selected};
+  delete $rec->{catalog_zones_selected_links};
+  delete $rec->{catalog_group_defs};
+  delete $rec->{catalog_group_defs_list};
+  delete $rec->{catalog_group_manage_link};
+  delete $rec->{member_groups};
+
+  # Aggregate catalog zones support - clean up before update
+  delete $rec->{compositions};
+  delete $rec->{composition_count};
+  delete $rec->{compositions_list};
+  delete $rec->{available_source_catalogs};
+  delete $rec->{selected_source_catalogs};
+  delete $rec->{composition_priorities};
 
   $rec->{flags}=0;
   $rec->{flags}|=0x01 if ($rec->{txt_auto_generation});
@@ -1401,23 +1845,47 @@ sub update_zone($) {
   if ($r < 0) { db_rollback(); return $r; }
 
   return -199 unless ($rec->{type});
-  if ($rec->{type} eq 'M') {
+  if ($rec->{type} eq 'M' || $rec->{type} eq 'C' || $rec->{type} eq 'A') {
     $hid=get_host_id($id,'@');
-    return -200 unless ($hid > 0);
 
-    $r=update_array_field("a_entries",4,"ip,reverse,forward,host",
-			  'ip',$rec,"$hid");
-    if ($r < 0) { db_rollback(); return -10; }
+    # If host record doesn't exist for catalog/aggregate/master zone, create it
+    if ($hid <= 0) {
+      if ($rec->{type} eq 'C' || $rec->{type} eq 'A') {
+        # For catalog/aggregate zones, create the @ host record if missing
+        $hid = add_record('hosts',{zone=>$id,type=>10,domain=>'@',
+                                   comment=>'zone record'});
+        if ($hid < 0) { db_rollback(); return -201; }
+      } else {
+        # For master zones, this should not happen - it's an error
+        return -200;
+      }
+    }
 
+    # For catalog zones, only update NS records
+    # For master zones, update all record types
+    if ($rec->{type} eq 'M') {
+      $r=update_array_field("a_entries",4,"ip,reverse,forward,host",
+			    'ip',$rec,"$hid");
+      if ($r < 0) { db_rollback(); return -10; }
+
+      $r=update_array_field("mx_entries",4,"pri,mx,comment,type,ref",
+			    'mx',$rec,"2,$hid");
+      if ($r < 0) { db_rollback(); return -13; }
+      $r=update_array_field("txt_entries",3,"txt,comment,type,ref",
+			    'txt',$rec,"2,$hid");
+      if ($r < 0) { db_rollback(); return -14; }
+      $r=update_array_field("caa_entries",5,"flags,tag,value,comment,type,ref",
+    			    'caa',$rec,"1,$hid");
+      if ($r < 0) { db_rollback(); return -141; }
+      $r=update_array_field("naptr_entries",8,"order_val,preference,flags,service,regexp,replacement,comment,type,ref",
+			    'naptr',$rec,"1,$hid");
+      if ($r < 0) { db_rollback(); return -140; }
+    }
+
+    # NS records for both Master and Catalog zones
     $r=update_array_field("ns_entries",3,"ns,comment,type,ref",
 			  'ns',$rec,"2,$hid");
     if ($r < 0) { db_rollback(); return -12; }
-    $r=update_array_field("mx_entries",4,"pri,mx,comment,type,ref",
-			  'mx',$rec,"2,$hid");
-    if ($r < 0) { db_rollback(); return -13; }
-    $r=update_array_field("txt_entries",3,"txt,comment,type,ref",
-			  'txt',$rec,"2,$hid");
-    if ($r < 0) { db_rollback(); return -14; }
   }
 
   # dhcp
@@ -1428,8 +1896,8 @@ sub update_zone($) {
   # allow_update
   $r=update_aml_field(2,$id,$rec,'allow_update');
   if ($r < 0) { db_rollback(); return -16; }
-  # masters
-  $r=update_array_field("cidr_entries",3,"ip,comment,type,ref",
+  # masters (with optional XoT port/tls profile, RFC 9103)
+  $r=update_array_field("cidr_entries",5,"ip,port,tls,comment,type,ref",
 			'masters',$rec,"3,$id");
   if ($r < 0) { db_rollback(); return -17; }
   # allow_query
@@ -1438,8 +1906,8 @@ sub update_zone($) {
   # allow_transfer
   $r=update_aml_field(5,$id,$rec,'allow_transfer');
   if ($r < 0) { db_rollback(); return -19; }
-  # also_notify
-  $r=update_array_field("cidr_entries",3,"ip,comment,type,ref",
+  # also_notify (with optional XoT port/tls profile, RFC 9103)
+  $r=update_array_field("cidr_entries",5,"ip,port,tls,comment,type,ref",
 			'also_notify',$rec,"6,$id");
   if ($r < 0) { db_rollback(); return -20; }
   # forwarders
@@ -1474,141 +1942,260 @@ sub update_zone($) {
 
   if ($r < 0) { db_rollback(); return -21; }
 
+  # Process catalog zone selection changes
+  if ($rec->{type} eq 'M' && $id > 0) {
+    # Get current catalogs for this zone
+    my @current_catalogs = ();
+    my @q;
+    $r = db_query("SELECT catalog_zone_id FROM zone_catalogs " .
+             "WHERE member_zone_id = $id", \@q);
+    if ($r < 0) { 
+      db_rollback(); 
+      write2log("ERROR: Failed to get current catalogs for zone $id: $r");
+      return -25; 
+    }
+    for my $row (@q) {
+      push @current_catalogs, $row->[0];
+    }
+    my $curr_debug = join(",", @current_catalogs);
+
+    # Get new catalogs from form submission
+    my @new_catalogs = ();
+    if (ref($selected_catalogs) eq 'ARRAY') {
+      @new_catalogs = @{$selected_catalogs};
+      # Ensure they are numeric IDs
+      @new_catalogs = map { int($_) } @new_catalogs;
+      my $new_debug = join(",", @new_catalogs);
+    }
+
+    # Build hashes for comparison
+    my %current_hash = map { $_ => 1 } @current_catalogs;
+    my %new_hash = map { $_ => 1 } @new_catalogs;
+
+    # Remove catalogs that are no longer selected
+    for my $cat_id (@current_catalogs) {
+      unless ($new_hash{$cat_id}) {
+        $r = remove_zone_from_catalog($id, $cat_id);
+        if ($r < 0) { db_rollback(); return -23; }
+      }
+    }
+
+    # Add catalogs that are newly selected
+    for my $cat_id (@new_catalogs) {
+      unless ($current_hash{$cat_id}) {
+        $r = add_zone_to_catalog($id, $cat_id);
+        if ($r < 0 && $r != -10) { db_rollback(); return -24; }  # -10 means already exists, which is ok
+      }
+    }
+
+    # Update group assignments for each selected catalog
+    if (ref($selected_member_groups) eq 'HASH') {
+      for my $cat_id (@new_catalogs) {
+        my $groups = $selected_member_groups->{$cat_id} || [];
+        $r = set_member_groups($id, $cat_id, $groups);
+        if ($r < 0) {
+          write2log("ERROR: Failed to set groups for zone $id in catalog $cat_id: $r");
+          db_rollback();
+          return -26;
+        }
+      }
+    }
+  }
+
+  # Process aggregate catalog zone composition changes
+  if ($rec->{type} eq 'A' && $id > 0) {
+    $r = update_catalog_compositions($id, $selected_compositions,
+                                     $composition_priorities);
+    if ($r < 0) {
+      write2log("ERROR: Failed to update compositions for aggregate zone $id: $r");
+      db_rollback();
+      return -27;
+    }
+  }
+
+  # Compute changes for history log
+  my $zone_name = $rec->{name} || "ID=$id";
+  $changes = diff_records(\%old_rec, $rec,
+                          'cdate_str,mdate_str,pending_info,zonehostid',
+                          'ns,mx,txt,caa,naptr,ip,dhcp,allow_update,masters,allow_query,allow_transfer,also_notify,forwarders,zentries,zentries_ta');
+
+  # Log zone update to history (before commit)
+  my $info_str = "name: $zone_name";
+  $info_str .= " | Changes: $changes" if ($changes);
+  update_history($muid, $msid, 2, "EDIT: Zone", $info_str, $id);
+
   return db_commit();
 }
 
+# Internal helper function for deleting part of a zone (without transaction)
+# Called from delete_zone() and delete_server()
+sub _delete_zone_parts($) {
+    my($id) = @_;
+    my($res);
+
+    # cidr_entries
+    $res=db_exec("DELETE FROM cidr_entries WHERE " .
+                 "(type=2 OR type=3 OR type=4 OR type=5 OR type=6 OR " .
+                 " type=12 OR type=13) " .
+                 " AND ref=$id");
+    if ($res < 0) { return -1; }
+
+    # dhcp_entries
+    $res=db_exec("DELETE FROM dhcp_entries WHERE type=2 AND ref=$id");
+    if ($res < 0) { return -2; }
+    $res=db_exec("DELETE FROM dhcp_entries WHERE id IN ( " .
+                 "SELECT a.id FROM dhcp_entries a, hosts h " .
+                 "WHERE h.zone=$id AND a.type=3 AND a.ref=h.id)");
+    if ($res < 0) { return -3; }
+    
+    # mx_entries
+    $res=db_exec("DELETE FROM mx_entries WHERE id IN ( " .
+                 "SELECT a.id FROM mx_entries a, hosts h " .
+                 "WHERE h.zone=$id AND a.type=2 AND a.ref=h.id)");
+    if ($res < 0) { return -5; }
+    $res=db_exec("DELETE FROM mx_entries WHERE id IN ( " .
+                 "SELECT a.id FROM mx_entries a, mx_templates m " .
+                 "WHERE m.zone=$id AND a.type=3 AND a.ref=m.id)");
+    if ($res < 0) { return -6; }
+    
+    # wks_entries
+    $res=db_exec("DELETE FROM wks_entries WHERE id IN ( " . 
+                 "SELECT a.id FROM wks_entries a, hosts h " . 
+                 "WHERE h.zone=$id AND a.type=1 AND a.ref=h.id)");
+    if ($res < 0) { return -7; }
+
+    # ns_entries
+    $res=db_exec("DELETE FROM ns_entries WHERE id IN ( " . 
+                 "SELECT a.id FROM ns_entries a, hosts h " . 
+                 "WHERE h.zone=$id AND a.type=2 AND a.ref=h.id)");
+    if ($res < 0) { return -9; }
+        
+    # printer_entries
+    $res=db_exec("DELETE FROM printer_entries WHERE id IN ( " .
+                 "SELECT a.id FROM printer_entries a, hosts h " .
+                 "WHERE h.zone=$id AND a.type=2 AND a.ref=h.id)");
+    if ($res < 0) { return -10; }
+    
+    # txt_entries
+    $res=db_exec("DELETE FROM txt_entries WHERE (type=4 OR type=12) AND ref=$id");
+    if ($res < 0) { return -11; }
+    $res=db_exec("DELETE FROM txt_entries WHERE id IN ( " .
+                 "SELECT a.id FROM txt_entries a, hosts h " .
+                 "WHERE h.zone=$id AND a.type=2 AND a.ref=h.id)");
+    if ($res < 0) { return -12; }
+
+    # caa_entries
+    $res=db_exec("DELETE FROM caa_entries WHERE id IN ( " .
+           "SELECT a.id FROM caa_entries a, hosts h " .
+           "WHERE h.zone=$id AND a.type=1 AND a.ref=h.id)");
+    if ($res < 0) { return -121; }
+
+    # a_entries
+    $res=db_exec("DELETE FROM a_entries WHERE id IN ( " .
+                 "SELECT a.id FROM a_entries a, hosts h " .
+                 "WHERE h.zone=$id AND a.host=h.id)");
+    if ($res < 0) { return -13; }
+
+    # arec_entries
+    $res=db_exec("DELETE FROM arec_entries WHERE id IN ( " .
+                 "SELECT a.id FROM arec_entries a, hosts h " .
+                 "WHERE h.zone=$id AND a.host=h.id)");
+    if ($res < 0) { return -14; }
+
+    # mx_templates
+    $res=db_exec("DELETE FROM mx_templates WHERE zone=$id");
+    if ($res < 0) { return -15; }
+
+    # srv_entries
+    $res=db_exec("DELETE FROM srv_entries WHERE id IN ( " .
+                 "SELECT a.id FROM srv_entries a, hosts h " .
+                 "WHERE h.zone=$id AND a.type=1 AND a.ref=h.id)");
+    if ($res < 0) { return -16; }
+
+    # sshfp_entries
+    $res=db_exec("DELETE FROM sshfp_entries WHERE id IN ( " .
+                 "SELECT a.id FROM sshfp_entries a, hosts h " .
+                 "WHERE h.zone=$id AND a.type=1 AND a.ref=h.id)");
+    if ($res < 0) { return -17; }
+
+    # tlsa_entries
+    $res=db_exec("DELETE FROM tlsa_entries WHERE id IN ( " .
+                 "SELECT a.id FROM tlsa_entries a, hosts h " .
+                 "WHERE h.zone=$id AND a.type=1 AND a.ref=h.id)");
+    if ($res < 0) { return -18; }
+
+    # naptr_entries
+    $res=db_exec("DELETE FROM naptr_entries WHERE id IN ( " .
+                 "SELECT a.id FROM naptr_entries a, hosts h " .
+                 "WHERE h.zone=$id AND a.type=1 AND a.ref=h.id)");
+    if ($res < 0) { return -19; }
+
+    # group_entries
+    $res=db_exec("DELETE FROM group_entries WHERE id IN ( " .
+                 "SELECT a.id FROM group_entries a, hosts h " .
+                 "WHERE h.zone=$id AND a.host=h.id)");
+    if ($res < 0) { return -20; }
+
+    # zone_catalog_groups (must be deleted before zone_catalogs due to FK)
+    $res=db_exec("DELETE FROM zone_catalog_groups WHERE zone_catalog_id IN (" .
+                 "SELECT id FROM zone_catalogs " .
+                 "WHERE catalog_zone_id=$id OR member_zone_id=$id)");
+    if ($res < 0) { return -21; }
+
+    # catalog_group_defs (for catalog zones)
+    $res=db_exec("DELETE FROM catalog_group_defs WHERE catalog_zone_id=$id");
+    if ($res < 0) { return -22; }
+
+    # zone_catalogs
+    $res=db_exec("DELETE FROM zone_catalogs " .
+                 "WHERE catalog_zone_id=$id OR member_zone_id=$id");
+    if ($res < 0) { return -23; }
+
+    # hosts
+    $res=db_exec("DELETE FROM hosts WHERE zone=$id");
+    if ($res < 0) { return -25; }
+
+    # zone record
+    $res=db_exec("DELETE FROM zones WHERE id=$id");
+    if ($res < 0) { return -50; }
+
+    # user_rights
+    $res=db_exec("DELETE FROM user_rights WHERE (rtype=2 OR rtype=4 " .
+                 "OR rtype=9 OR rtype=10 OR rtype=11) AND rref=$id");
+    if ($res < 0) { return -90; }
+
+    return 0;
+}
+
 sub delete_zone($) {
-  my($id) = @_;
-  my($res);
+    my($id) = @_;
+    my($res);
 
-  return -100 unless ($id > 0);
+    return -100 unless ($id > 0);
 
-  db_begin();
+    write2log("ZONE_DELETE_START: Deleting zone ID=$id");
+    db_begin();
 
-  # cidr_entries
-  print "<BR>Deleting CIDR entries...\n";
-  $res=db_exec("DELETE FROM cidr_entries WHERE " .
-	       "(type=2 OR type=3 OR type=4 OR type=5 OR type=6 OR " .
-	       " type=12 OR type=13) " .
-	       " AND ref=$id");
-  if ($res < 0) { db_rollback(); return -1; }
+    $res = _delete_zone_parts($id);
+    if ($res < 0) {
+        db_rollback();
+        write2log("ZONE_DELETE_FAILED: Zone ID=$id WAS NOT deleted - error $res");
+        return $res;
+    }
 
-  # dhcp_entries
-  print "<BR>Deleting DHCP entries...\n";
-  $res=db_exec("DELETE FROM dhcp_entries WHERE type=2 AND ref=$id");
-  if ($res < 0) { db_rollback(); return -2; }
-  $res=db_exec("DELETE FROM dhcp_entries WHERE id IN ( " .
-	        "SELECT a.id FROM dhcp_entries a, hosts h " .
-	        "WHERE h.zone=$id AND a.type=3 AND a.ref=h.id)");
-  if ($res < 0) { db_rollback(); return -3; }
+    # Log zone deletion to history (before commit, using stored zone name)
+    my %zone_data;
+    get_zone($id, \%zone_data);
+    my $zone_name = $zone_data{name} || "ID=$id";
+    
+    if (db_commit() < 0) {
+        write2log("ZONE_DELETE_FAILED: Zone ID=$id WAS NOT deleted - commit failure");
+        return -200;
+    }
 
-  # mx_entries
-  print "<BR>Deleting MX entries...\n";
-  #$res=db_exec("DELETE FROM mx_entries WHERE type=1 AND ref=$id");
-  #if ($res < 0) { db_rollback(); return -4; }
-  $res=db_exec("DELETE FROM mx_entries WHERE id IN ( " .
-	       "SELECT a.id FROM mx_entries a, hosts h " .
-	       "WHERE h.zone=$id AND a.type=2 AND a.ref=h.id)");
-  if ($res < 0) { db_rollback(); return -5; }
-  $res=db_exec("DELETE FROM mx_entries WHERE id IN ( " .
-	       "SELECT a.id FROM mx_entries a, mx_templates m " .
-	       "WHERE m.zone=$id AND a.type=3 AND a.ref=m.id)");
-  if ($res < 0) { db_rollback(); return -6; }
-
-  # wks_entries
-  print "<BR>Deleting WKS entries...\n";
-  $res=db_exec("DELETE FROM wks_entries WHERE id IN ( " .
-	       "SELECT a.id FROM wks_entries a, hosts h " .
-	       "WHERE h.zone=$id AND a.type=1 AND a.ref=h.id)");
-  if ($res < 0) { db_rollback(); return -7; }
-
-  # ns_entries
-  print "<BR>Deleting NS entries...\n";
-  #$res=db_exec("DELETE FROM ns_entries WHERE type=1 AND ref=$id");
-  #if ($res < 0) { db_rollback(); return -8; }
-  $res=db_exec("DELETE FROM ns_entries WHERE id IN ( " .
-	       "SELECT a.id FROM ns_entries a, hosts h " .
-	       "WHERE h.zone=$id AND a.type=2 AND a.ref=h.id)");
-  if ($res < 0) { db_rollback(); return -9; }
-
-
-  # printer_entries
-  print "<BR>Deleting PRINTER entries...\n";
-  $res=db_exec("DELETE FROM printer_entries WHERE id IN ( " .
-	       "SELECT a.id FROM printer_entries a, hosts h " .
-	       "WHERE h.zone=$id AND a.type=2 AND a.ref=h.id)");
-  if ($res < 0) { db_rollback(); return -10; }
-
-  # txt_entries
-  print "<BR>Deleting TXT entries...\n";
-
-# $res=db_exec("DELETE FROM txt_entries WHERE type=12 AND ref=$id");
-
-  $res=db_exec("DELETE FROM txt_entries WHERE (type=4 OR type=12) AND ref=$id"); # 2020-07-30 TVu
-
-  if ($res < 0) { db_rollback(); return -11; }
-  $res=db_exec("DELETE FROM txt_entries WHERE id IN ( " .
-	       "SELECT a.id FROM txt_entries a, hosts h " .
-	       "WHERE h.zone=$id AND a.type=2 AND a.ref=h.id)");
-  if ($res < 0) { db_rollback(); return -12; }
-
-  # a_entries
-  print "<BR>Deleting A entries...\n";
-  $res=db_exec("DELETE FROM a_entries WHERE id IN ( " .
-	       "SELECT a.id FROM a_entries a, hosts h " .
-	       "WHERE h.zone=$id AND a.host=h.id)");
-  if ($res < 0) { db_rollback(); return -13; }
-
-  # arec_entries
-  print "<BR>Deleting AREC entries...\n";
-  $res=db_exec("DELETE FROM arec_entries WHERE id IN ( " .
-	       "SELECT a.id FROM arec_entries a, hosts h " .
-	       "WHERE h.zone=$id AND a.host=h.id)");
-  if ($res < 0) { db_rollback(); return -14; }
-
-  # mx_templates
-  print "<BR>Deleting MX templates...\n";
-  $res=db_exec("DELETE FROM mx_templates WHERE zone=$id");
-  if ($res < 0) { db_rollback(); return -15; }
-
-  # srv_entries
-  print "<BR>Deleting SRV entries...\n";
-  $res=db_exec("DELETE FROM srv_entries WHERE id IN ( " .
-	       "SELECT a.id FROM srv_entries a, hosts h " .
-	       "WHERE h.zone=$id AND a.type=1 AND a.ref=h.id)");
-  if ($res < 0) { db_rollback(); return -15; }
-
-  # srv_entries
-  print "<BR>Deleting SSHFP entries...\n";
-  $res=db_exec("DELETE FROM sshfp_entries WHERE id IN ( " .
-	       "SELECT a.id FROM sshfp_entries a, hosts h " .
-	       "WHERE h.zone=$id AND a.type=1 AND a.ref=h.id)");
-  if ($res < 0) { db_rollback(); return -15; }
-
-  # arec_entries
-  print "<BR>Deleting (sub)group entries...\n";
-  $res=db_exec("DELETE FROM group_entries WHERE id IN ( " .
-	       "SELECT a.id FROM group_entries a, hosts h " .
-	       "WHERE h.zone=$id AND a.host=h.id)");
-  if ($res < 0) { db_rollback(); return -16; }
-
-  # hosts
-  print "<BR>Deleting Hosts...\n";
-  $res=db_exec("DELETE FROM hosts WHERE zone=$id");
-  if ($res < 0) { db_rollback(); return -25; }
-
-
-  print "<BR>Deleting Zone record...\n";
-  $res=db_exec("DELETE FROM zones WHERE id=$id");
-  if ($res < 0) { db_rollback(); return -50; }
-
-
-  print "<BR>Deleting User rights records...\n";
-  $res=db_exec("DELETE FROM user_rights WHERE (rtype=2 OR rtype=4 " .
-	       "OR rtype=9 OR rtype=10 OR rtype=11) AND rref=$id");
-  if ($res < 0) { db_rollback(); return -100; }
-
-  return db_commit();
+    update_history($muid, $msid, 2, "DELETE: Zone", "name: $zone_name", $id);
+    write2log("ZONE_DELETE_SUCCESS: Zone ID=$id successfully deleted");
+    return 0;
 }
 
 sub add_zone($) {
@@ -1632,29 +2219,41 @@ sub add_zone($) {
   $rec->{id}=$id=$res;
 
 
-  if ($rec->{type} eq 'M') {
+  if ($rec->{type} eq 'M' || $rec->{type} eq 'C' || $rec->{type} eq 'A') {
     # zone's host record (@)
     $res = add_record('hosts',{zone=>$id,type=>10,domain=>'@',
 			       comment=>'zone record'});
     if ($res < 0) { db_rollback(); return -101; }
     $hid=$res;
 
-    # ns
+    # ns - for both Master and Catalog zones
     $res = add_array_field('ns_entries','ns,comment','ns',$rec,
 			   'type,ref',"2,$hid");
     if ($res < 0) { db_rollback(); return -102; }
-    # mx
-    $res = add_array_field('mx_entries','pri,mx,comment','mx',$rec,
-			   'type,ref',"2,$hid");
-    if ($res < 0) { db_rollback(); return -103; }
-    # txt
-    $res = add_array_field('txt_entries','txt,comment','txt',$rec,
-			   'type,ref',"2,$hid");
-    if ($res < 0) { db_rollback(); return -104; }
-    # ip
-    $res = add_array_field('a_entries','ip,reverse,forward','ip',$rec,
-			   'host',"$hid");
-    if ($res < 0) { db_rollback(); return -105; }
+
+    # For Master zones only
+    if ($rec->{type} eq 'M') {
+      # mx
+      $res = add_array_field('mx_entries','pri,mx,comment','mx',$rec,
+			     'type,ref',"2,$hid");
+      if ($res < 0) { db_rollback(); return -103; }
+      # txt
+      $res = add_array_field('txt_entries','txt,comment','txt',$rec,
+			     'type,ref',"2,$hid");
+      if ($res < 0) { db_rollback(); return -104; }
+      # caa
+      $res = add_array_field('caa_entries','flags,tag,value,comment','caa',$rec,
+    			     'type,ref',"1,$hid");
+      if ($res < 0) { db_rollback(); return -1041; }
+      # naptr
+      $res = add_array_field('naptr_entries','order_val,preference,flags,service,regexp,replacement,comment',
+			     'naptr',$rec,'type,ref',"1,$hid");
+      if ($res < 0) { db_rollback(); return -1040; }
+      # ip
+      $res = add_array_field('a_entries','ip,reverse,forward','ip',$rec,
+			     'host',"$hid");
+      if ($res < 0) { db_rollback(); return -105; }
+    }
   }
 
   # dhcp
@@ -1688,6 +2287,11 @@ sub add_zone($) {
 			 'type,ref',"12,$id");
   if ($res < 0) { db_rollback(); return -8; }
 
+  # Log zone creation to history
+  my $zone_type = $rec->{type} || 'M';
+  my $zone_name = $rec->{name} || '';
+  update_history($muid, $msid, 2, "ADD: Zone type=$zone_type", "name: $zone_name", $id);
+
   return -100 if (db_commit() < 0);
   return $id;
 }
@@ -1702,6 +2306,14 @@ sub copy_zone($$$$) {
   delete $z{pending_info};
   delete $z{zonehostid};
   delete $z{txt_auto_generation};
+  # get_zone() adds helper fields (catalog info etc.) that are not columns
+  # of the zones table; copy only the real columns
+  db_query("SELECT column_name FROM information_schema.columns " .
+	   "WHERE table_name='zones'",\@q);
+  return -1 unless (@q > 0);
+  my %zcols = map { $_->[0] => 1 } @q;
+  for $i (keys %z) { delete $z{$i} unless ($zcols{$i}); }
+  undef @q;
 
 
   if ($z{reverse} =~ /^(t|true)$/) {
@@ -1728,8 +2340,9 @@ sub copy_zone($$$$) {
   print "<BR>Copying records pointing to zone record..." if ($verbose);
 
   # cidr_entries
-  $res=db_exec("INSERT INTO cidr_entries (type,ref,ip,comment) " .
-	       "SELECT type,$newid,ip,comment FROM cidr_entries " .
+  # port/tls carry XoT (RFC 9103) settings of masters/also-notify
+  $res=db_exec("INSERT INTO cidr_entries (type,ref,ip,port,tls,comment) " .
+	       "SELECT type,$newid,ip,port,tls,comment FROM cidr_entries " .
 	       "WHERE (type=2 OR type=3 OR type=4 OR type=5 OR type=6 " .
 	       " OR type=12) AND ref=$id;");
   if ($res < 0) { db_rollback(); return -3; }
@@ -1776,13 +2389,12 @@ sub copy_zone($$$$) {
 
   db_query("SELECT a.id,b.id,a.domain FROM hosts a, hosts b " .
 	   "WHERE a.zone=$id AND b.zone=$newid AND a.domain=b.domain;",\@hids);
-  print "<br>hids = " . $#hids;
   for $i (0..$#hids) { $hidh{$hids[$i][0]}=$hids[$i][1]; }
 
   # a_entries
   print "<BR>Copying A records..." if ($verbose);
   $res=copy_records('a_entries','a_entries','id','host',\@hids,
-     'ip,ipv6,type,reverse,forward,comment',
+     'ip,type,reverse,forward,comment',
      "SELECT a.id FROM a_entries a,hosts h WHERE a.host=h.id AND h.zone=$id");
   if ($res < 0) { db_rollback(); return -12; }
 
@@ -1834,6 +2446,14 @@ sub copy_zone($$$$) {
      "WHERE a.type=2 AND a.ref=h.id AND h.zone=$id");
   if ($res < 0) { db_rollback(); return -18; }
 
+    # caa_entries
+    print "<BR>Copying CAA records..." if ($verbose);
+    $res=copy_records('caa_entries','caa_entries','id','ref',\@hids,
+      'type,flags,tag,value,comment',
+      "SELECT a.id FROM caa_entries a,hosts h " .
+      "WHERE a.type=1 AND a.ref=h.id AND h.zone=$id");
+    if ($res < 0) { db_rollback(); return -181; }
+
   # srv_entries
   print "<BR>Copying SRV records..." if ($verbose);
   $res=copy_records('srv_entries','srv_entries','id','ref',\@hids,
@@ -1884,7 +2504,11 @@ sub copy_zone($$$$) {
 	   "WHERE h.zone=$id AND h.id=a.host",\@q);
   for $i (0..$#q) {
     #print "$i: $q[$i][0] --> $hidh{$q[$i][0]}, $q[$i][1] --> $hidh{$q[$i][1]}<br>";
-    return -23 unless ($hidh{$q[$i][0]} && $hidh{$q[$i][1]});
+    unless ($hidh{$q[$i][0]} && $hidh{$q[$i][1]}) {
+      db_rollback();
+      return -23;
+    }
+
     $q[$i][0]=$hidh{$q[$i][0]};
     $q[$i][1]=$hidh{$q[$i][1]};
   }
@@ -1955,11 +2579,32 @@ sub get_host($$) {
 		  "Algorithm,Type,Fingerprint,Comments",
 		  "type=1 AND ref=$id ORDER BY algorithm,hashtype,fingerprint",$rec,'sshfp_l');
   get_array_field("tlsa_entries",6,"id,usage,selector,matching_type,association_data,comment",
-		  "Usage,Selector,Matching Type,Asociation Data,Comments",
+		  "Usage,Selector,Matching Type,Association Data,Comments",
 		  "type=1 AND ref=$id ORDER BY usage,selector,matching_type,association_data",$rec,'tlsa_l');
-  get_array_field("txt_entries",3,"id,txt,comment",
-		  "Text,Comments",
-		  "type=2 AND ref=$id ORDER BY txt",$rec,'txt_l');
+  get_array_field("naptr_entries",8,"id,order_val,preference,flags,service,regexp,replacement,comment",
+		  "Order,Preference,Flags,Service,Regexp,Replacement,Comments",
+		  "type=1 AND ref=$id ORDER BY order_val,preference,flags,service,regexp,replacement",$rec,'naptr_l');
+  get_array_field("caa_entries",5,"id,flags,tag,value,comment",
+      "Flags,Tag,Value,Comments",
+      "type=1 AND ref=$id ORDER BY flags,tag,value",$rec,'caa_l');
+
+    # For TXT hosts (type=13), TXT value is stored in hosts.cname_txt.
+    # Keep txt_l in the same shape as get_array_field() output so existing
+    # form validation/serialization logic works unchanged. The row needs a
+    # non-zero id, otherwise form_check_form() can't match it on submit and
+    # treats an edited value as a new row (leaving the original one active).
+    # It is negative so that it never matches a real txt_entries.id.
+  if ($rec->{type} == 13) {
+      $rec->{txt_l} = [
+  	      ['Text', 'Comments'],
+  	      [-1, ($rec->{cname_txt} // ''), ($rec->{comment} // ''), 0]
+  	  ];
+  } else {
+      get_array_field("txt_entries",3,"id,txt,comment",
+  		      "Text,Comments",
+  		      "type=2 AND ref=$id ORDER BY txt",$rec,'txt_l');
+  }
+
 # Get CNAME aliases.
   get_array_field("hosts",5,"0,id,domain,type,1","Domain,cname",
 	          "type=4 AND alias=$id ORDER BY domain",$rec,'alias_l');
@@ -2081,6 +2726,186 @@ sub get_host($$) {
   return 0;
 }
 
+sub _host_has_active_list_entries($$) {
+  my($list, $value_index) = @_;
+
+  return (_host_count_active_list_entries($list, $value_index) > 0);
+}
+
+sub _host_count_active_list_entries($$) {
+  my($list, $value_index) = @_;
+  my $count = 0;
+
+  return 0 unless (ref($list) eq 'ARRAY');
+
+  for my $row (@{$list}) {
+    next unless (ref($row) eq 'ARRAY');
+
+    # Skip header rows from get_array_field() (e.g. ["Text","Comments"]).
+    my $id = $$row[0];
+    next if (defined($id) && $id !~ /^-?\d+$/);
+
+    my $state = $$row[$#{$row}];
+    next if (defined($state) && $state =~ /^-1$/); # Marked for deletion.
+
+    if (defined($value_index)) {
+      my $val = $$row[$value_index];
+      next unless (defined($val) && $val !~ /^\s*$/);
+    }
+
+    $count++;
+  }
+
+  return $count;
+}
+
+# No other data may exist at a CNAME owner name (RFC 1034), so aliases (type 4)
+# can't get TXT entries. TXT rows stored before this was enforced are ignored
+# by the zone generator; leaving them unchanged doesn't block editing the alias.
+sub _alias_has_new_txt_entries($) {
+  my($rec) = @_;
+  my $new_rec = !($rec->{id} && $rec->{id} > 0);
+
+  return 0 unless (ref($rec->{txt_l}) eq 'ARRAY');
+  for my $row (@{$rec->{txt_l}}) {
+    next unless (ref($row) eq 'ARRAY');
+    my $id = $$row[0];
+    next if (defined($id) && $id !~ /^-?\d+$/); # header row
+    my $val = $$row[1];
+    next unless (defined($val) && $val !~ /^\s*$/);
+    my $state = $$row[3] || 0;
+    next if ($state == -1);
+    return 1 if ($new_rec || $state == 1 || $state == 2);
+  }
+
+  return 0;
+}
+
+sub _host_first_active_list_entry($$$) {
+  my($list, $value_index, $comment_index) = @_;
+
+  return ('','') unless (ref($list) eq 'ARRAY');
+
+  for my $row (@{$list}) {
+    next unless (ref($row) eq 'ARRAY');
+
+    my $id = $$row[0];
+    next if (defined($id) && $id !~ /^-?\d+$/);
+
+    my $state = $$row[$#{$row}];
+    next if (defined($state) && $state =~ /^-1$/);
+
+    my $val = (defined($value_index) ? $$row[$value_index] : '');
+    $val = '' unless defined($val);
+    $val =~ s/^\s+//;
+    $val =~ s/\s+$//;
+    next if ($val eq '');
+
+    my $comment = (defined($comment_index) ? $$row[$comment_index] : '');
+    $comment = '' unless defined($comment);
+
+    return ($val, $comment);
+  }
+
+  return ('','');
+}
+
+# TXT host (type 13): its value and comment live in hosts.cname_txt and
+# hosts.comment, edited as a single txt_l row (see get_host()).
+sub _txt_host_from_txt_l($) {
+  my($rec) = @_;
+
+  return unless ($rec->{type} == 13);
+  my($txt_val, $txt_comment) = _host_first_active_list_entry($rec->{txt_l}, 1, 2);
+  $rec->{cname_txt} = $txt_val;
+  $rec->{comment} = $txt_comment;
+}
+
+sub _host_has_ip_entries($) {
+  my($rec) = @_;
+
+  return 0 unless (ref($rec) eq 'HASH');
+  return 0 unless (defined($rec->{ip}));
+
+  if (ref($rec->{ip}) eq 'ARRAY') {
+    return _host_has_active_list_entries($rec->{ip}, 1);
+  }
+
+  return ($rec->{ip} !~ /^\s*$/ && is_cidr($rec->{ip}));
+}
+
+sub host_required_data_error($) {
+  my($rec) = @_;
+  my($type, $alias, $cname_txt);
+
+  return 'Invalid host record data.' unless (ref($rec) eq 'HASH');
+
+  $type = int($rec->{type} || 0);
+
+  if (($type == 1 || $type == 6 || $type == 9 || $type == 101) &&
+      !_host_has_ip_entries($rec)) {
+    return 'Host record requires at least one IP address.';
+  }
+
+  if ($type == 2 && !_host_has_active_list_entries($rec->{ns_l}, 1)) {
+    return 'Delegation record requires at least one NS entry.';
+  }
+
+  if ($type == 3) {
+    return '' if ($rec->{mx} && $rec->{mx} > 0);
+    return 'Plain MX record requires MX template or at least one MX entry.'
+      unless (_host_has_active_list_entries($rec->{mx_l}, 2));
+  }
+
+  if ($type == 4) {
+    $alias = int($rec->{alias} || 0);
+    $cname_txt = (defined($rec->{cname_txt}) ? $rec->{cname_txt} : '');
+    $cname_txt =~ s/^\s+//;
+    $cname_txt =~ s/\s+$//;
+    if ($alias <= 0 && $cname_txt eq '') {
+      return 'Alias record requires alias target.';
+    }
+    return 'Alias (CNAME) record cannot have TXT entries.'
+      if (_alias_has_new_txt_entries($rec));
+  }
+
+  if ($type == 5 && !_host_has_active_list_entries($rec->{printer_l}, 1)) {
+    return 'Printer record requires at least one PRINTER entry.';
+  }
+
+  if ($type == 7 &&
+      int($rec->{alias} || 0) <= 0 &&
+      !_host_has_active_list_entries($rec->{alias_a}, 1)) {
+    return 'AREC Alias record requires at least one target host.';
+  }
+
+  if ($type == 8 && !_host_has_active_list_entries($rec->{srv_l}, 1)) {
+    return 'SRV record requires at least one SRV entry.';
+  }
+
+  if ($type == 11 && !_host_has_active_list_entries($rec->{sshfp_l}, 1)) {
+    return 'SSHFP record requires at least one SSHFP entry.';
+  }
+
+  if ($type == 12 && !_host_has_active_list_entries($rec->{tlsa_l}, 1)) {
+    return 'TLSA record requires at least one TLSA entry.';
+  }
+
+  if ($type == 13 && !_host_has_active_list_entries($rec->{txt_l}, 1)) {
+    return 'TXT record requires at least one TXT entry.';
+  }
+
+  if ($type == 14 && !_host_has_active_list_entries($rec->{naptr_l}, 1)) {
+    return 'NAPTR record requires at least one NAPTR entry.';
+  }
+
+  if ($type == 15 && !_host_has_active_list_entries($rec->{caa_l}, 1)) {
+    return 'CAA record requires at least one CAA entry.';
+  }
+
+  return '';
+}
+
 
 sub update_host($) {
   my($rec) = @_;
@@ -2100,9 +2925,17 @@ sub update_host($) {
   delete $rec->{dhcp_info};
   delete $rec->{dhcp_date_str};
   delete $rec->{fqdn};
+  delete $rec->{approval_reason};
+
+  _txt_host_from_txt_l($rec);
+
   $rec->{alias} = -1 if ($rec->{cname_txt});
 
   $rec->{domain}=lc($rec->{domain}) if (defined $rec->{domain});
+
+  if (host_required_data_error($rec) ne '') {
+    return -27;
+  }
 
   db_begin();
   $r=update_record('hosts',$rec);
@@ -2139,27 +2972,41 @@ sub update_host($) {
 			"usage,selector,matching_type,association_data,comment,type,ref",
 			'tlsa_l',$rec,"1,$id");
   if ($r < 0) { db_rollback(); return -20; }
-  $r=update_array_field("txt_entries",3,
+  $r=update_array_field("naptr_entries",8,
+			"order_val,preference,flags,service,regexp,replacement,comment,type,ref",
+			'naptr_l',$rec,"1,$id");
+  if ($r < 0) { db_rollback(); return -21; }
+  $r=update_array_field("caa_entries",5,
+			"flags,tag,value,comment,type,ref",
+			'caa_l',$rec,"1,$id");
+  if ($r < 0) { db_rollback(); return -211; }
+  if ($rec->{type} == 13) {
+    $r = db_exec("DELETE FROM txt_entries WHERE type=2 AND ref=$id");
+    if ($r < 0) { db_rollback(); return -22; }
+  }
+  else {
+    $r=update_array_field("txt_entries",3,
 			"txt,comment,type,ref",
 			'txt_l',$rec,"2,$id");
-  if ($r < 0) { db_rollback(); return -21; }
+    if ($r < 0) { db_rollback(); return -22; }
+  }
   $r=update_array_field("a_entries",4,"ip,reverse,forward,host",
 			'ip',$rec,"$id");
-  if ($r < 0) { db_rollback(); return -22; }
+  if ($r < 0) { db_rollback(); return -23; }
 
   if ($rec->{type}==7) {
     $r=update_array_field("arec_entries",2,"arec,host",
 			  'alias_a',$rec,"$id");
-    if ($r < 0) { db_rollback(); return -23; }
+    if ($r < 0) { db_rollback(); return -24; }
   }
 
   $r=update_array_field("group_entries",2,"grp,host",
 			'subgroups',$rec,"$id");
-  if ($r < 0) { db_rollback(); return -24; }
+  if ($r < 0) { db_rollback(); return -25; }
 
   $r=update_array_field("dhcp_entries",3,"dhcp,comment,type,ref",
 			'dhcp_l6',$rec,"13,$id");
-  if ($r < 0) { db_rollback(); return -25; }
+  if ($r < 0) { db_rollback(); return -26; }
 
   return db_commit();
 }
@@ -2197,6 +3044,10 @@ sub delete_host($) {
   # txt_entries
   $res=db_exec("DELETE FROM txt_entries WHERE type=2 AND ref=$id;");
   if ($res < 0) { db_rollback(); return -6; }
+
+  # caa_entries
+  $res=db_exec("DELETE FROM caa_entries WHERE type=1 AND ref=$id;");
+  if ($res < 0) { db_rollback(); return -61; }
 
   # a_entries
   $res=db_exec("DELETE FROM a_entries WHERE host=$id;");
@@ -2245,8 +3096,8 @@ sub delete_host($) {
   $res=db_exec("DELETE FROM tlsa_entries WHERE type=1 AND ref=$id;");
   if ($res < 0) { db_rollback(); return -16; }
 
-  # txt_entries
-  $res=db_exec("DELETE FROM txt_entries WHERE type=2 AND ref=$id;");
+  # naptr_entries
+  $res=db_exec("DELETE FROM naptr_entries WHERE type=1 AND ref=$id;");
   if ($res < 0) { db_rollback(); return -17; }
 
   # group_entries
@@ -2269,12 +3120,25 @@ sub delete_host($) {
 
 sub add_host($) {
   my($rec) = @_;
-  my($res,$i,$id,$a_id);
+  my($res,$i,$id,$a_id, @q);
 
   delete $rec->{cname_alias};
   delete $rec->{static_alias};
+  delete $rec->{approval_reason};
 
   return -100 unless ($rec->{zone} > 0);
+
+  _txt_host_from_txt_l($rec);
+
+  # Catalog zones cannot have hosts added (RFC 9432)
+  if (is_catalog_zone($rec->{zone})) {
+    return -999;  # ERROR: Cannot add hosts to catalog zones
+  }
+
+  if (host_required_data_error($rec) ne '') {
+    return -27;
+  }
+
   db_begin();
   if ($rec->{type}==7) {
     $a_id=$rec->{alias};
@@ -2342,21 +3206,33 @@ sub add_host($) {
 			 'tlsa_l',$rec,'type,ref',"1,$id");
   if ($res < 0) { db_rollback(); return -10; }
 
-  # TXTs
-  $res = add_array_field('txt_entries','txt,comment',
-			 'txt_l',$rec,'type,ref',"2,$id");
+  # NAPTRs
+  $res = add_array_field('naptr_entries','order_val,preference,flags,service,regexp,replacement,comment',
+			 'naptr_l',$rec,'type,ref',"1,$id");
   if ($res < 0) { db_rollback(); return -11; }
+
+  # CAAs
+  $res = add_array_field('caa_entries','flags,tag,value,comment',
+			 'caa_l',$rec,'type,ref',"1,$id");
+  if ($res < 0) { db_rollback(); return -111; }
+
+  # TXTs
+  if ($rec->{type} != 13) {
+    $res = add_array_field('txt_entries','txt,comment',
+			   'txt_l',$rec,'type,ref',"2,$id");
+    if ($res < 0) { db_rollback(); return -12; }
+  }
 
   # ARECs
   if ($rec->{type}==7) {
     $res=db_exec("INSERT INTO arec_entries (host,arec) VALUES($id,$a_id);");
-    if ($res < 0) { db_rollback(); return -12; }
+    if ($res < 0) { db_rollback(); return -13; }
   }
 
   # subgroups
   $res = add_array_field('group_entries','grp',
 			 'subgroups',$rec,'host',"$id");
-  if ($res < 0) { db_rollback(); return -13; }
+  if ($res < 0) { db_rollback(); return -14; }
 
   return -20 if (db_commit() < 0);
   return $id;
@@ -2369,7 +3245,7 @@ sub get_host_types() {
     return (0 => 'Any type', 1 => 'Host', 2 => 'Delegation', 3 => 'Plain MX',
 	    4 => 'Alias', 5 => 'Printer', 6 => 'Glue', 7 => 'AREC Alias',
 	    8 => 'SRV', 9 => 'DHCP only', 10 => 'Zone', 11=>'SSHFP only',
-            12 => 'TLSA only', 13 => 'TXT',
+      12 => 'TLSA only', 13 => 'TXT', 14 => 'NAPTR', 15 => 'CAA',
 	    101 => 'Host reservation');
 }
 
@@ -3578,13 +4454,13 @@ sub get_ip_sugg($$$) {
 	    "where dummy = 't' and net << '$cidr' order by netname;";
 	db_query($sql, \@row_v);
 	for my $ind2 (0..$#row_v) {
-	    $netid = $row_v[$ind1][3];
-	    $alevel_n = $row_v[$ind1][4];
+	    $netid = $row_v[$ind2][3];
+	    $alevel_n = $row_v[$ind2][4];
 # Show virtual net to user only if alevel and permissions allow.
 	    if ($alevel_u >= 998 || $alevel_u >= $alevel_n && (!%{$perms->{net}} || $perms->{net}->{$netid})) {
 		$netname = $row_v[$ind2][0];
 		$cidr = $row_v[$ind2][1];
-		$ip_policy = $row_v[$ind1][2];
+		$ip_policy = $row_v[$ind2][2];
 		$new_ip = get_free_ip_by_net($serverid, $cidr, $mac, $old_ip, $ip_policy);
 		if (is_ip($new_ip)) {
 		    $list .= "<option value='$new_ip'>\n$netname - $new_ip</option>\n";
@@ -3757,7 +4633,12 @@ sub get_key_list($$$$) {
   undef %{$rec};
   $$rec{-1}='--None--';
   return if ($serverid < 1);
-  $algorule=" AND algorithm=$algo " if ($algo > 0);
+  if ($algo > 0) {
+    $algorule=" AND algorithm=$algo ";
+  } elsif (defined($algo) && $algo == -1) {
+    # Whole TSIG family (HMAC-MD5/SHA1/SHA256/SHA384/SHA512).
+    $algorule=" AND algorithm >= 157 AND algorithm <= 161 ";
+  }
 
   db_query("SELECT id,name FROM keys " .
 	   "WHERE type=1 AND ref=$serverid $algorule ORDER BY name;",\@q);
@@ -3881,6 +4762,147 @@ sub get_acl_by_name($$) {
   db_query("SELECT id FROM acls " .
 	   "WHERE server=$serverid AND name=$name",\@q);
   return ($q[0][0] > 0 ? $q[0][0] : -1);
+}
+
+
+############################################################################
+# TLS profile functions (DNS Zone Transfer over TLS, XoT, RFC 9103)
+
+# 'ephemeral' and 'none' are built-in BIND TLS objects; they must not be
+# used as user-defined profile names (they are emitted without a tls{} block).
+sub tls_profile_reserved_name($) {
+  my($name) = @_;
+  return (defined($name) && $name =~ /^(?:ephemeral|none)$/i);
+}
+
+sub get_tls_profile($$) {
+  my ($id,$rec) = @_;
+
+  return -100 unless ($id =~ /^\d+$/ && $id > 0);
+  return -100 if (get_record("tls_profiles",
+		      "ref,name,cert_file,key_file,ca_file,dhparam_file," .
+		      "protocols,ciphers,prefer_server_ciphers," .
+		      "session_tickets,remote_hostname,comment," .
+		      "cdate,cuser,mdate,muser", $id,$rec,"id"));
+  add_std_fields($rec);
+  return 0;
+}
+
+# Profiles are referenced by name from servers, zones and masters/also-notify
+# rows of the same server. Returns a list of descriptions of those references.
+sub get_tls_profile_refs($$) {
+  my($serverid,$name) = @_;
+  my(@q,@refs,$i);
+
+  return () unless ($serverid =~ /^\d+$/ && $serverid > 0 && $name ne '');
+  my $n=db_encode_str($name);
+
+  db_query("SELECT name,tls_listen_profile,tls_default_profile,doh_profile " .
+	   "FROM servers WHERE id=$serverid",\@q);
+  for $i (0..$#q) {
+    push @refs, "server $q[$i][0]: TLS listener" if ($q[$i][1] eq $name);
+    push @refs, "server $q[$i][0]: default TLS profile" if ($q[$i][2] eq $name);
+    push @refs, "server $q[$i][0]: DoH listener" if ($q[$i][3] eq $name);
+  }
+  undef @q;
+  db_query("SELECT name FROM zones WHERE server=$serverid AND tls_profile=$n " .
+	   "ORDER BY name",\@q);
+  push @refs, map { "zone $_->[0]: TLS profile" } @q;
+  undef @q;
+  db_query("SELECT DISTINCT z.name,c.type FROM cidr_entries c, zones z " .
+	   "WHERE c.ref=z.id AND z.server=$serverid AND c.type IN (3,6) " .
+	   "AND c.tls=$n ORDER BY z.name,c.type",\@q);
+  push @refs, map { "zone $_->[0]: " .
+		    ($_->[1] == 3 ? 'masters' : 'also-notify') } @q;
+  return @refs;
+}
+
+sub update_tls_profile($) {
+  my($rec) = @_;
+  my($r,%old);
+
+  return -1 unless ($rec->{id} =~ /^\d+$/ && $rec->{id} > 0);
+  return -3 if (tls_profile_reserved_name($rec->{name}));
+  return -2 if (get_tls_profile($rec->{id},\%old) < 0);
+  del_std_fields($rec);
+
+  db_begin();
+  $r=update_record('tls_profiles',$rec);
+  if ($r < 0) { db_rollback(); return $r; }
+
+  # renamed: update the name-based references of the same server
+  if (defined($rec->{name}) && $rec->{name} ne $old{name}) {
+    my $sid=$old{ref};
+    my $on=db_encode_str($old{name});
+    my $nn=db_encode_str($rec->{name});
+    for my $f (qw(tls_listen_profile tls_default_profile doh_profile)) {
+      $r=db_exec("UPDATE servers SET $f=$nn WHERE id=$sid AND $f=$on");
+      if ($r < 0) { db_rollback(); return -4; }
+    }
+    $r=db_exec("UPDATE zones SET tls_profile=$nn " .
+	       "WHERE server=$sid AND tls_profile=$on");
+    if ($r < 0) { db_rollback(); return -5; }
+    $r=db_exec("UPDATE cidr_entries SET tls=$nn WHERE tls=$on AND " .
+	       "type IN (3,6) AND ref IN (SELECT id FROM zones " .
+	       "WHERE server=$sid)");
+    if ($r < 0) { db_rollback(); return -6; }
+  }
+
+  return db_commit();
+}
+
+sub add_tls_profile($) {
+  my($rec) = @_;
+  my($res);
+
+  return -3 if (tls_profile_reserved_name($rec->{name}));
+
+  db_begin();
+  $rec->{cdate}=time;
+  $rec->{cuser}=$muser if !$rec->{'cuser'};
+  $rec->{type}=1 unless ($rec->{type} > 0);
+  $res=add_record('tls_profiles',$rec);
+  if ($res < 0) { db_rollback(); return -1; }
+  $rec->{id}=$res;
+
+  return -10 if (db_commit() < 0);
+  return $res;
+}
+
+sub delete_tls_profile($) {
+  my($id) = @_;
+  my($res);
+
+  return -100 unless ($id =~ /^\d+$/ && $id > 0);
+
+  # still referenced: deleting it would leave dangling tls "<name>" references
+  my %p;
+  return -2 if (get_tls_profile($id,\%p) < 0);
+  return -20 if (get_tls_profile_refs($p{ref},$p{name}) > 0);
+
+  db_begin();
+  $res=db_exec("DELETE FROM tls_profiles WHERE id=$id");
+  if ($res < 0) { db_rollback(); return -1; }
+
+  return db_commit();
+}
+
+sub get_tls_profile_list($$$) {
+  my($serverid,$rec,$lst) = @_;
+  my(@q,$i);
+
+  undef @{$lst};
+  undef %{$rec};
+  push @{$lst}, '';
+  $$rec{''}='(none)';
+  return unless ($serverid > 0);
+
+  db_query("SELECT name FROM tls_profiles " .
+	   "WHERE type=1 AND ref=$serverid ORDER BY name",\@q);
+  for $i (0..$#q) {
+    push @{$lst}, $q[$i][0];
+    $$rec{$q[$i][0]}=$q[$i][0];
+  }
 }
 
 
@@ -4059,6 +5081,10 @@ sub update_history($$$$$$) {
   my($date,$a,$i,$sql);
 
 # uid and sid are -1 in some command line scripts
+# Use -1 as default if undefined
+  $uid = -1 unless (defined $uid);
+  $sid = -1 unless (defined $sid);
+  
   return -1 unless ($uid > 0 || $uid == -1);
   return -2 unless ($sid > 0 || $sid == -1);
   return -3 unless ($type > 0);
@@ -4163,6 +5189,38 @@ sub get_history_session($$)
   return 0;
 }
 
+sub get_history_zone($$)
+{
+  my ($id,$list) = @_;
+  my (@q,%users,$i);
+
+  return -1 unless ($id > 0);
+  db_query("SELECT date,action,info,uid FROM history ".
+	   "WHERE type=2 AND ref=$id ORDER BY date ",$list);
+  db_query("SELECT id,username FROM users",\@q);
+  for $i (0..$#q) { $users{$q[$i][0]}=$q[$i][1]; }
+  for $i (0..$#{$list}) {
+    $$list[$i][3] = $users{$$list[$i][3]} if ($users{$$list[$i][3]});
+  }
+  return 0;
+}
+
+sub get_history_server($$)
+{
+  my ($id,$list) = @_;
+  my (@q,%users,$i);
+
+  return -1 unless ($id > 0);
+  db_query("SELECT date,action,info,uid FROM history ".
+	   "WHERE type=3 AND ref=$id ORDER BY date ",$list);
+  db_query("SELECT id,username FROM users",\@q);
+  for $i (0..$#q) { $users{$q[$i][0]}=$q[$i][1]; }
+  for $i (0..$#{$list}) {
+    $$list[$i][3] = $users{$$list[$i][3]} if ($users{$$list[$i][3]});
+  }
+  return 0;
+}
+
 
 sub save_state($$) {
   my($id,$state)=@_;
@@ -4261,6 +5319,535 @@ sub remove_state($) {
   return 1;
 }
 
+###############################################################################
+# Catalog zones support (RFC 9432)
+
+sub is_catalog_zone($) {
+  my($zone_id) = @_;
+  my(@q);
+
+  return -1 unless ($zone_id > 0);
+
+  db_query("SELECT type FROM zones WHERE id=$zone_id", \@q);
+  return -2 unless (@q > 0);
+
+  return ($q[0][0] eq 'C' ? 1 : 0);
+}
+
+sub validate_zone_for_catalog($$) {
+  my($zone_id, $catalog_zone_id) = @_;
+  my(@q, %zone, %catalog);
+
+  return -1 unless ($zone_id > 0 && $catalog_zone_id > 0);
+  return -2 if ($zone_id == $catalog_zone_id);  # Prevent self-reference
+
+  # Check that catalog zone is actually type 'C'
+  db_query("SELECT type FROM zones WHERE id=$catalog_zone_id", \@q);
+  return -3 unless (@q > 0 && $q[0][0] eq 'C');
+
+  # Check that zone to be added is not type 'C'
+  db_query("SELECT type FROM zones WHERE id=$zone_id", \@q);
+  return -4 unless (@q > 0 && $q[0][0] ne 'C');
+
+  return 0;  # Valid
+}
+
+sub get_zone_catalog_members($$) {
+  my($catalog_zone_id, $rec) = @_;
+  my(@q, @g, $i);
+
+  return -1 unless ($catalog_zone_id > 0);
+
+  $rec = {} unless (ref($rec) eq 'HASH');
+
+  db_query("SELECT zc.member_zone_id, z.name, z.type, z.server, s.name, " .
+           "zc.version, zc.id " .
+           "FROM zone_catalogs zc " .
+           "JOIN zones z ON zc.member_zone_id = z.id " .
+           "JOIN servers s ON z.server = s.id " .
+           "WHERE zc.catalog_zone_id = $catalog_zone_id " .
+           "ORDER BY z.name", \@q);
+
+  # Load groups for each membership
+  for $i (0 .. $#q) {
+    my $membership_id = $q[$i][6];
+    my @member_groups;
+    db_query("SELECT group_name FROM zone_catalog_groups " .
+             "WHERE zone_catalog_id = $membership_id " .
+             "ORDER BY group_name", \@g);
+    @member_groups = map { $_->[0] } @g;
+    $q[$i][7] = \@member_groups;  # groups as arrayref at index 7
+  }
+
+  $rec->{count} = @q;
+  $rec->{members} = \@q;
+
+  return 0;
+}
+
+sub get_zone_catalogs($$) {
+  my($zone_id, $rec) = @_;
+  my(@q, @g, $i);
+
+  return -1 unless ($zone_id > 0);
+
+  $rec = {} unless (ref($rec) eq 'HASH');
+
+  db_query("SELECT zc.catalog_zone_id, z.name, z.server, zc.version, zc.id " .
+           "FROM zone_catalogs zc " .
+           "JOIN zones z ON zc.catalog_zone_id = z.id " .
+           "WHERE zc.member_zone_id = $zone_id " .
+           "ORDER BY z.name", \@q);
+
+  # Load groups for each membership
+  for $i (0 .. $#q) {
+    my $membership_id = $q[$i][4];
+    my @member_groups;
+    db_query("SELECT group_name FROM zone_catalog_groups " .
+             "WHERE zone_catalog_id = $membership_id " .
+             "ORDER BY group_name", \@g);
+    @member_groups = map { $_->[0] } @g;
+    $q[$i][5] = \@member_groups;  # groups as arrayref at index 5
+  }
+
+  $rec->{count} = @q;
+  $rec->{catalogs} = \@q;
+
+  return 0;
+}
+
+sub get_catalog_zones_for_selection($$$) {
+  my($zone_id, $server_id, $rec) = @_;
+  my(@q, @available, @selected, %selected_ids);
+
+  return -1 unless ($server_id > 0);
+
+  $rec = {} unless (ref($rec) eq 'HASH');
+
+  # Get all catalog zones from this server
+  db_query("SELECT id, name, comment FROM zones " .
+           "WHERE server = $server_id AND type = 'C' " .
+           "ORDER BY name", \@available);
+
+  # Build list for form display (ftype 14)
+  my @catalog_list;
+  my %catalog_group_defs;
+  for my $zone_row (@available) {
+    push @catalog_list, [$zone_row->[0], $zone_row->[1], $zone_row->[2]];
+
+    # Load group definitions for each catalog zone
+    my @gdefs;
+    db_query("SELECT id, group_name, comment FROM catalog_group_defs " .
+             "WHERE catalog_zone_id = $zone_row->[0] " .
+             "ORDER BY group_name", \@gdefs);
+    $catalog_group_defs{$zone_row->[0]} = \@gdefs;
+  }
+  $rec->{available_catalogs} = \@catalog_list;
+  $rec->{catalog_group_defs} = \%catalog_group_defs;
+
+  # Get currently selected catalogs for this zone (if zone_id is valid)
+  if ($zone_id > 0) {
+    db_query("SELECT catalog_zone_id, id FROM zone_catalogs " .
+             "WHERE member_zone_id = $zone_id " .
+             "ORDER BY catalog_zone_id", \@selected);
+
+    # Create a hash of selected IDs and load their groups
+    my %member_groups;
+    for my $sel_row (@selected) {
+      $selected_ids{$sel_row->[0]} = 1;
+
+      # Load assigned groups for this membership
+      my @grps;
+      db_query("SELECT group_name FROM zone_catalog_groups " .
+               "WHERE zone_catalog_id = $sel_row->[1] " .
+               "ORDER BY group_name", \@grps);
+      $member_groups{$sel_row->[0]} = [ map { $_->[0] } @grps ];
+    }
+
+    # Build selected array for form
+    my @selected_cat_ids;
+    for my $zone_row (@available) {
+      if ($selected_ids{$zone_row->[0]}) {
+        push @selected_cat_ids, $zone_row->[0];
+      }
+    }
+    $rec->{catalog_zones_selected} = \@selected_cat_ids;
+    $rec->{member_groups} = \%member_groups;
+  } else {
+    $rec->{catalog_zones_selected} = [];
+    $rec->{member_groups} = {};
+  }
+
+  return 0;
+}
+
+sub add_zone_to_catalog($$) {
+  my($zone_id, $catalog_zone_id) = @_;
+  my($res, $version);
+
+  return -1 unless ($zone_id > 0 && $catalog_zone_id > 0);
+
+  # Validate relationship
+  $res = validate_zone_for_catalog($zone_id, $catalog_zone_id);
+  return $res if ($res < 0);
+
+  # Check if zone is already in catalog
+  my(@q);
+  $res = db_query("SELECT id FROM zone_catalogs " .
+           "WHERE catalog_zone_id=$catalog_zone_id AND member_zone_id=$zone_id", \@q);
+  return -11 if ($res < 0);  # Query failed
+  return -10 if (@q > 0);  # Already exists
+
+  # Insert new relationship
+  # BIND 9 catalog zones use version '2' (RFC 9432)
+  $version = '2';
+
+  my $insert_sql = "INSERT INTO zone_catalogs (catalog_zone_id, member_zone_id, version) " .
+                   "VALUES($catalog_zone_id, $zone_id, '$version')";
+
+  $res = db_exec($insert_sql);
+
+  if ($res < 0) {
+    write2log("ERROR: Failed to add zone $zone_id to catalog $catalog_zone_id: $res");
+  }
+
+  return $res;
+}
+
+sub remove_zone_from_catalog($$) {
+  my($zone_id, $catalog_zone_id) = @_;
+  my($res);
+
+  return -1 unless ($zone_id > 0 && $catalog_zone_id > 0);
+
+  $res = db_exec("DELETE FROM zone_catalogs " .
+                 "WHERE catalog_zone_id=$catalog_zone_id AND member_zone_id=$zone_id");
+
+  return $res;
+}
+
+
+# get_catalog_group_defs($catalog_zone_id, $rec)
+# Returns predefined group definitions for a catalog zone.
+# rec->{groups} = [[id, group_name, comment], ...]
+# rec->{count} = number of groups
+sub get_catalog_group_defs($$) {
+  my($catalog_zone_id, $rec) = @_;
+  my(@q);
+
+  return -1 unless ($catalog_zone_id > 0);
+
+  $rec = {} unless (ref($rec) eq 'HASH');
+
+  db_query("SELECT id, group_name, comment FROM catalog_group_defs " .
+           "WHERE catalog_zone_id = $catalog_zone_id " .
+           "ORDER BY group_name", \@q);
+
+  $rec->{count} = scalar @q;
+  $rec->{groups} = \@q;
+
+  return 0;
+}
+
+# add_catalog_group_def($catalog_zone_id, $group_name, $comment)
+# Adds a new group definition to a catalog zone.
+# Returns: 0 on success, negative on error
+sub add_catalog_group_def($$$) {
+  my($catalog_zone_id, $group_name, $comment) = @_;
+  my($res, @q);
+
+  return -1 unless ($catalog_zone_id > 0);
+  return -2 unless (defined($group_name) && $group_name ne '');
+
+  # Verify this is a catalog zone
+  $res = is_catalog_zone($catalog_zone_id);
+  return -3 unless ($res == 1);
+
+  # Check if group already exists
+  db_query("SELECT id FROM catalog_group_defs " .
+           "WHERE catalog_zone_id=$catalog_zone_id AND group_name=" .
+           db_encode_str($group_name), \@q);
+  return -10 if (@q > 0);  # Already exists
+
+  my $comment_sql = defined($comment) && $comment ne ''
+                    ? db_encode_str($comment) : 'NULL';
+
+  $res = db_exec("INSERT INTO catalog_group_defs " .
+                 "(catalog_zone_id, group_name, comment) VALUES(" .
+                 "$catalog_zone_id, " . db_encode_str($group_name) .
+                 ", $comment_sql)");
+
+  if ($res < 0) {
+    write2log("ERROR: Failed to add group def '$group_name' to catalog $catalog_zone_id: $res");
+  }
+
+  return $res;
+}
+
+# delete_catalog_group_def($catalog_zone_id, $group_name)
+# Removes a group definition from a catalog zone.
+# Also removes all group assignments using this name within the catalog.
+# Returns: 0 on success, negative on error
+sub delete_catalog_group_def($$) {
+  my($catalog_zone_id, $group_name) = @_;
+  my($res);
+
+  return -1 unless ($catalog_zone_id > 0);
+  return -2 unless (defined($group_name) && $group_name ne '');
+
+  # Delete group assignments that reference this group within this catalog
+  $res = db_exec("DELETE FROM zone_catalog_groups WHERE id IN (" .
+                 "SELECT zcg.id FROM zone_catalog_groups zcg " .
+                 "JOIN zone_catalogs zc ON zcg.zone_catalog_id = zc.id " .
+                 "WHERE zc.catalog_zone_id = $catalog_zone_id " .
+                 "AND zcg.group_name = " . db_encode_str($group_name) . ")");
+  return $res if ($res < 0);
+
+  # Delete the group definition
+  $res = db_exec("DELETE FROM catalog_group_defs " .
+                 "WHERE catalog_zone_id=$catalog_zone_id AND group_name=" .
+                 db_encode_str($group_name));
+
+  return $res;
+}
+
+# get_member_groups($zone_id, $catalog_zone_id, $rec)
+# Returns groups assigned to a member zone within a specific catalog.
+# rec->{groups} = ['group1', 'group2', ...]
+sub get_member_groups($$$) {
+  my($zone_id, $catalog_zone_id, $rec) = @_;
+  my(@q, @g);
+
+  return -1 unless ($zone_id > 0 && $catalog_zone_id > 0);
+
+  $rec = {} unless (ref($rec) eq 'HASH');
+
+  # Get the membership ID
+  db_query("SELECT id FROM zone_catalogs " .
+           "WHERE catalog_zone_id=$catalog_zone_id AND member_zone_id=$zone_id", \@q);
+  return -2 unless (@q > 0);
+
+  my $membership_id = $q[0][0];
+
+  db_query("SELECT group_name FROM zone_catalog_groups " .
+           "WHERE zone_catalog_id = $membership_id " .
+           "ORDER BY group_name", \@g);
+
+  $rec->{groups} = [ map { $_->[0] } @g ];
+
+  return 0;
+}
+
+# set_member_groups($zone_id, $catalog_zone_id, \@groups)
+# Sets the groups for a member zone within a specific catalog.
+# Performs diff: adds new groups, removes deselected groups.
+# Returns: 0 on success, negative on error
+sub set_member_groups($$$) {
+  my($zone_id, $catalog_zone_id, $new_groups) = @_;
+  my($res, @q, @g);
+
+  return -1 unless ($zone_id > 0 && $catalog_zone_id > 0);
+
+  # Get the membership ID
+  db_query("SELECT id FROM zone_catalogs " .
+           "WHERE catalog_zone_id=$catalog_zone_id AND member_zone_id=$zone_id", \@q);
+  return -2 unless (@q > 0);
+
+  my $membership_id = $q[0][0];
+
+  # Get current groups
+  db_query("SELECT group_name FROM zone_catalog_groups " .
+           "WHERE zone_catalog_id = $membership_id", \@g);
+  my %current = map { $_->[0] => 1 } @g;
+
+  # Build new groups hash
+  my @new = ref($new_groups) eq 'ARRAY' ? @{$new_groups} : ();
+  my %new_hash = map { $_ => 1 } @new;
+
+  # Remove groups no longer selected
+  for my $gname (keys %current) {
+    unless ($new_hash{$gname}) {
+      $res = db_exec("DELETE FROM zone_catalog_groups " .
+                     "WHERE zone_catalog_id=$membership_id AND group_name=" .
+                     db_encode_str($gname));
+      return $res if ($res < 0);
+    }
+  }
+
+  # Add newly selected groups
+  for my $gname (@new) {
+    unless ($current{$gname}) {
+      $res = db_exec("INSERT INTO zone_catalog_groups " .
+                     "(zone_catalog_id, group_name) VALUES(" .
+                     "$membership_id, " . db_encode_str($gname) . ")");
+      return $res if ($res < 0);
+    }
+  }
+
+  return 0;
+}
+
+# get_catalog_group_usage($catalog_zone_id, $group_name, $rec)
+# Returns list of member zones that use a specific group within a catalog.
+# rec->{zones} = [[zone_id, zone_name, zone_type], ...]
+# rec->{count} = number of zones using this group
+sub get_catalog_group_usage($$$) {
+  my($catalog_zone_id, $group_name, $rec) = @_;
+  my(@q);
+
+  return -1 unless ($catalog_zone_id > 0);
+  return -2 unless (defined($group_name) && $group_name ne '');
+
+  $rec = {} unless (ref($rec) eq 'HASH');
+
+  db_query("SELECT z.id, z.name, z.type " .
+           "FROM zone_catalog_groups zcg " .
+           "JOIN zone_catalogs zc ON zcg.zone_catalog_id = zc.id " .
+           "JOIN zones z ON zc.member_zone_id = z.id " .
+           "WHERE zc.catalog_zone_id = $catalog_zone_id " .
+           "AND zcg.group_name = " . db_encode_str($group_name) . " " .
+           "ORDER BY z.name", \@q);
+
+  $rec->{count} = scalar @q;
+  $rec->{zones} = \@q;
+
+  return 0;
+}
+
+
+# Aggregate catalog zone (type 'A') composition functions
+
+# get_catalog_compositions($composite_zone_id, $rec)
+# Returns list of source catalog zones that compose an aggregate zone.
+# rec->{compositions} = [[id, source_zone_id, name, priority], ...]
+# rec->{count} = number of source zones
+sub get_catalog_compositions($$) {
+  my($composite_zone_id, $rec) = @_;
+  my(@q);
+
+  return -1 unless ($composite_zone_id > 0);
+
+  $rec = {} unless (ref($rec) eq 'HASH');
+
+  db_query("SELECT cc.id, cc.source_zone_id, z.name, cc.priority " .
+           "FROM catalog_compositions cc " .
+           "JOIN zones z ON cc.source_zone_id = z.id " .
+           "WHERE cc.composite_zone_id = $composite_zone_id " .
+           "ORDER BY cc.priority ASC, z.name", \@q);
+
+  $rec->{count} = scalar @q;
+  $rec->{compositions} = \@q;
+
+  return 0;
+}
+
+
+# add_catalog_composition($composite_zone_id, $source_zone_id, $priority)
+# Adds a source catalog zone to an aggregate zone.
+sub add_catalog_composition($$$) {
+  my($composite_zone_id, $source_zone_id, $priority) = @_;
+  my($res, @q);
+
+  return -1 unless ($composite_zone_id > 0 && $source_zone_id > 0);
+  return -2 if ($composite_zone_id == $source_zone_id);
+  $priority = 100 unless (defined($priority) && $priority > 0);
+
+  # Verify composite zone is type 'A'
+  db_query("SELECT type FROM zones WHERE id=$composite_zone_id", \@q);
+  return -3 unless (@q > 0 && $q[0][0] eq 'A');
+
+  # Verify source zone is type 'C'
+  db_query("SELECT type FROM zones WHERE id=$source_zone_id", \@q);
+  return -4 unless (@q > 0 && $q[0][0] eq 'C');
+
+  # Check if already exists
+  db_query("SELECT id FROM catalog_compositions " .
+           "WHERE composite_zone_id=$composite_zone_id " .
+           "AND source_zone_id=$source_zone_id", \@q);
+  return -10 if (@q > 0);
+
+  $res = db_exec("INSERT INTO catalog_compositions " .
+                 "(composite_zone_id, source_zone_id, priority) " .
+                 "VALUES($composite_zone_id, $source_zone_id, $priority)");
+
+  return $res;
+}
+
+
+# remove_catalog_composition($composite_zone_id, $source_zone_id)
+# Removes a source catalog zone from an aggregate zone.
+sub remove_catalog_composition($$) {
+  my($composite_zone_id, $source_zone_id) = @_;
+
+  return -1 unless ($composite_zone_id > 0 && $source_zone_id > 0);
+
+  return db_exec("DELETE FROM catalog_compositions " .
+                 "WHERE composite_zone_id=$composite_zone_id " .
+                 "AND source_zone_id=$source_zone_id");
+}
+
+
+# update_catalog_compositions($composite_zone_id, $selected_sources, $priorities)
+# Diff-based update of aggregate zone compositions.
+# $selected_sources = arrayref of source_zone_ids
+# $priorities = hashref {source_zone_id => priority}
+sub update_catalog_compositions($$$) {
+  my($composite_zone_id, $selected_sources, $priorities) = @_;
+  my($r, @q);
+
+  return -1 unless ($composite_zone_id > 0);
+
+  # Get current compositions
+  db_query("SELECT source_zone_id, priority FROM catalog_compositions " .
+           "WHERE composite_zone_id = $composite_zone_id", \@q);
+  my %current;
+  for my $row (@q) {
+    $current{$row->[0]} = $row->[1];
+  }
+
+  # Build new state
+  my @new_sources = ref($selected_sources) eq 'ARRAY' ? @{$selected_sources} : ();
+  my %new_hash;
+  for my $src_id (@new_sources) {
+    my $prio = (ref($priorities) eq 'HASH' && $priorities->{$src_id})
+               ? int($priorities->{$src_id}) : 100;
+    $prio = 1 if ($prio < 1);
+    $new_hash{$src_id} = $prio;
+  }
+
+  # Remove compositions no longer selected
+  for my $src_id (keys %current) {
+    unless ($new_hash{$src_id}) {
+      $r = db_exec("DELETE FROM catalog_compositions " .
+                   "WHERE composite_zone_id=$composite_zone_id " .
+                   "AND source_zone_id=$src_id");
+      return $r if ($r < 0);
+    }
+  }
+
+  # Add or update compositions
+  for my $src_id (keys %new_hash) {
+    my $prio = $new_hash{$src_id};
+    if ($current{$src_id}) {
+      # Update priority if changed
+      if ($current{$src_id} != $prio) {
+        $r = db_exec("UPDATE catalog_compositions " .
+                     "SET priority=$prio " .
+                     "WHERE composite_zone_id=$composite_zone_id " .
+                     "AND source_zone_id=$src_id");
+        return $r if ($r < 0);
+      }
+    } else {
+      # Add new composition
+      $r = db_exec("INSERT INTO catalog_compositions " .
+                   "(composite_zone_id, source_zone_id, priority) " .
+                   "VALUES($composite_zone_id, $src_id, $prio)");
+      return $r if ($r < 0);
+    }
+  }
+
+  return 0;
+}
 
 1;
 # eof

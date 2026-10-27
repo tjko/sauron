@@ -6,17 +6,19 @@
 #
 package Sauron::CGI::Utils;
 require Exporter;
-use CGI qw/:standard *table -utf8/;
+use CGI qw/:standard *table/;
 use Digest::MD5;
+use Sauron::DB;
 use Sauron::CGIutil;
 use Sauron::BackEnd;
 use Sauron::Util;
 use Sauron::Sauron;
 use Sauron::SetupIO;
+use HTML::Entities;
 use strict;
 use vars qw($VERSION @ISA @EXPORT);
 use Sys::Syslog qw(:DEFAULT setlogsock);
-Sys::Syslog::setlogsock('unix');
+eval { local $SIG{__WARN__} = sub {}; Sys::Syslog::setlogsock('unix') };
 use open ':locale';
 
 $VERSION = '$Id:$ ';
@@ -49,8 +51,8 @@ our %host_types;
 %boolean_enum = (f=>'No',t=>'Yes');
 %host_types=(0=>'Any type',1=>'Host',2=>'Delegation',3=>'Plain MX',
 	     4=>'Alias',5=>'Printer',6=>'Glue',7=>'AREC Alias',
-	     8=>'SRV',9=>'DHCP',10=>'Zone',11=>'SSHFP',
-             12=>'TLSA',13=>'TXT',
+       8=>'SRV',9=>'DHCP',10=>'Zone',11=>'SSHFP',
+       12=>'TLSA',13=>'TXT',14=>'NAPTR',15=>'CAA',
 	     101=>'Host reservation');
 
 
@@ -375,39 +377,40 @@ sub edit_magic($$$$$$$) {
   my $selfurl = script_name() . path_info();
 
   if (($id eq '') || ($id < 1)) {
-    print h2("$name id not specified!");
+    alert1("$name id not specified.");
     return -1;
   }
 
   if (param($prefix . '_cancel') ne '') {
-    print h2("No changes made to $name record.");
+    warning1("No changes made to $name record.");
     return 2;
   }
 
   if (param($prefix . '_submit') ne '') {
     if(&$get_func($id,\%h) < 0) {
-      print h2("Cannot find $name record anymore! ($id)");
+      alert1("Cannot find $name record anymore! ($id).");
       return -2;
     }
     unless (($res=form_check_form($prefix,\%h,$form))) {
       $res=&$update_func(\%h);
       if ($res < 0) {
-	print "<FONT color=\"red\">",h1("$name record update failed! ($res)"),
-	      "</FONT>";
+        my $dbmsg = db_lasterrormsg();
+        my $detail = ($dbmsg && $dbmsg ne '') ? $dbmsg : "result code=$res";
+        alert1("$name record update failed: $detail");
       } else {
-	print h2("$name record successfully updated");
+	success1("$name record successfully updated");
 	#&$get_func($id,\%h);
 	#display_form(\%h,$form);
 	return 1;
       }
     } else {
-      print "<FONT color=\"red\">",h2("Invalid data in form!"),"</FONT>";
+      alert1("Invalid data in form!");
     }
   }
 
   unless (param($prefix . '_re_edit') eq '1') {
     if (&$get_func($id,\%h)) {
-      print h2("Cannot get $name record (id=$id)!");
+      alert1("Cannot get $name record (id=$id).");
       return -3;
     }
   }
@@ -429,7 +432,7 @@ sub add_magic($$$$$$) {
   my $selfurl = script_name() . path_info();
 
   if (param($prefix . '_cancel')) {
-    print h2("$name record not created!");
+    alert1("$name record not created.");
     return -1;
   }
 
@@ -437,14 +440,15 @@ sub add_magic($$$$$$) {
     unless (($res=form_check_form($prefix,$data,$form))) {
       $res=&$add_func($data);
       if ($res < 0) {
-	print "<FONT color=\"red\">",h1("Adding $name record failed! ($res)"),
-	      "</FONT>";
+        my $dbmsg = db_lasterrormsg();
+        my $detail = ($dbmsg && $dbmsg ne '') ? $dbmsg : "result code=$res";
+        alert1("Adding $name record failed: $detail");
       } else {
-	print h3("$name record successfully added");
+	success1("$name record successfully added");
 	return $res;
       }
     } else {
-      print "<FONT color=\"red\">",h2("Invalid data in form!"),"</FONT>";
+      alert1("Invalid data in form!");
     }
   }
 
@@ -457,52 +461,60 @@ sub add_magic($$$$$$) {
   return 0;
 }
 
-sub delete_magic($$$$$$$) {
-  my($prefix,$name,$menu,$form,$get_func,$del_func,$id) = @_;
+sub delete_magic($$$$$$$;$) {
+  my($prefix,$name,$menu,$form,$get_func,$del_func,$id,$error_func) = @_;
   my(%h,$res);
   my $selfurl = script_name() . path_info();
 
   if (($id eq '') || ($id < 1)) {
-    print h2("$name id not specified!");
+    alert1("$name id not specified.");
     return -1;
   }
 
   if (param($prefix . '_cancel') ne '') {
-    print h2("$name record not deleted.");
+    alert1("$name record not deleted.");
     return 2;
   }
 
   if (param($prefix . '_confirm') ne '') {
     if(&$get_func($id,\%h) < 0) {
-      print h2("Cannot find $name record anymore! ($id)");
+      alert1("Cannot find $name record anymore! ($id).");
       return -2;
     }
 
     $res=&$del_func($id);
     if ($res < 0) {
-      print "<FONT color=\"red\">",h1("$name record delete failed!"),
-      "<br>result code=$res</FONT>";
+      my $detail;
+      if ($error_func) {
+        my $msg = &$error_func($res);
+        $detail = $msg if (defined $msg && $msg ne '');
+      }
+      unless (defined $detail) {
+        my $dbmsg = db_lasterrormsg();
+        $detail = ($dbmsg && $dbmsg ne '') ? $dbmsg : "result code=$res";
+      }
+      alert1("$name record delete failed: $detail");
       return -10;
     } else {
-      print h2("$name record successfully deleted");
+      success1("$name record successfully deleted");
       return 1;
     }
   }
 
 
   if (&$get_func($id,\%h)) {
-    print h2("Cannot get $name record (id=$id)!");
+    alert1("Cannot get $name record (id=$id).");
     return -3;
   }
 
-  print h2("Delete $name:"),p,
-          start_form(-method=>'POST',-action=>$selfurl),
+  print h2("Delete $name:");
+  display_form(\%h,$form);
+  print start_form(-method=>'POST',-action=>$selfurl),
           hidden('menu',$menu),hidden('sub','Delete'),
           hidden('select_ip', scalar(param('select_ip'))),
           hidden($prefix . "_id",$id);
   print submit(-name=>$prefix . '_confirm',-value=>'Delete'),"  ",
         submit(-name=>$prefix . '_cancel',-value=>'Cancel'),end_form;
-  display_form(\%h,$form);
   return 0;
 }
 

@@ -1,0 +1,200 @@
+OUI/MA-L                                                    Organization                                 
+company_id                                                  Organization                                 
+                                                            Address                                      
+
+28-6F-B9   (hex)		Nokia Shanghai Bell Co., Ltd.
+286FB9     (base 16)		Nokia Shanghai Bell Co., Ltd.
+				No.388 Ning Qiao Road,Jin Qiao Pudong Shanghai
+				Shanghai     201206
+				CN
+
+08-EA-44   (hex)		Extreme Networks Headquarters
+08EA44     (base 16)		Extreme Networks Headquarters
+				2121 RDU Center Drive 
+				Morrisville  NC  27560
+				US
+
+F4-EA-B5   (hex)		Extreme Networks Headquarters
+F4EAB5     (base 16)		Extreme Networks Headquarters
+				2121 RDU Center Drive 
+				Morrisville  NC  27560
+				US
+
+B8-7C-F2   (hex)		Extreme Networks Headquarters
+B87CF2     (base 16)		Extreme Networks Headquarters
+				2121 RDU Center Drive 
+				Morrisville  NC  27560
+				US
+
+E0-A1-29   (hex)		Extreme Networks Headquarters
+E0A129     (base 16)		Extreme Networks Headquarters
+				2121 RDU Center Drive
+				Morrisville  NC  27560
+				US
+
+A8-C6-47   (hex)		Extreme Networks Headquarters
+A8C647     (base 16)		Extreme Networks Headquarters
+				2121 RDU Center Drive 
+				Morrisville  NC  27560
+				US
+
+A4-73-AB   (hex)		Extreme Networks Headquarters
+A473AB     (base 16)		Extreme Networks Headquarters
+				2121 RDU Center Drive 
+				Morrisville  NC  27560
+				US
+
+0C-9B-78   (hex)		Extreme Networks Headquarters
+0C9B78     (base 16)		Extreme Networks Headquarters
+				2121 RDU Center Drive 
+				Morrisville  NC  27560
+				US
+
+A4-C7-F6   (hex)		Extreme Networks Headquarters
+A4C7F6     (base 16)		Extreme Networks Headquarters
+				2121 RDU Center Drive 
+				Morrisville  NC  27560
+				US
+
+B4-2D-56   (hex)		Extreme Networks Headquarters
+B42D56     (base 16)		Extreme Networks Headquarters
+				2121 RDU Center Drive 
+				Morrisville  NC  27560
+				US
+
+88-7E-25   (hex)		Extreme Networks Headquarters
+887E25     (base 16)		Extreme Networks Headquarters
+				2121 RDU Center Drive 
+				Morrisville  NC  27560
+				US
+
+00-19-77   (hex)		Extreme Networks Headquarters
+001977     (base 16)		Extreme Networks Headquarters
+				2121 RDU Center Drive 
+				Morrisville  NC  27560
+				US
+
+38-E2-CA   (hex)		Katun Corporation
+38E2CA     (base 16)		Katun Corporation
+				7760 France Ave SSuite 340
+				Bloomington  MN  55438
+				US
+
+E8-0A-B9   (hex)		Cisco Systems, Inc
+E80AB9     (base 16)		Cisco Systems, Inc
+				80 West Tasman Drive
+				San Jose  CA  94568
+				US
+
+78-46-5F   (hex)		Fiberhome Telecommunication Technologies Co.,LTD
+78465F     (base 16)		Fiberhome Telecommunication Technologies Co.,LTD
+				No.5 DongXin Road
+				Wuhan  Hubei  430074
+				CN
+
+90-75-DE   (hex)		Zebra Technologies Inc.
+9075DE     (base 16)		Zebra Technologies Inc.
+				ONE ZEBRA PLAZA
+				HOLTSVILLE  NY  11742
+				US
+
+80-BA-16   (hex)		Micas Networks Inc.
+80BA16     (base 16)		Micas Networks Inc.
+				 250 Tasman Drive, Ste 170, San Jose, CA 95134
+				San Jose  CA  95134
+				US
+
+10-E9-92   (hex)		INGRAM MICRO SERVICES
+10E992     (base 16)		INGRAM MICRO SERVICES
+				100 CHEMIN DE BAILLOT
+				MONTAUBAN    82000
+				FR
+
+78-F2-76   (hex)		Cyklop Fastjet Technologies (Shanghai) Inc.
+78F276     (base 16)		Cyklop Fastjet Technologies (Shanghai) Inc.
+				No 18?Lane 699, Zhang Wengmiao Rd,  Fengxian district, Shanghai China
+				Shanghai    201401
+				CN
+
+20-F8-3B   (hex)		Nabu Casa, Inc.
+20F83B     (base 16)		Nabu Casa, Inc.
+				8 The Green, Suite 12630
+				Dover  DE  19901
+				US
+
+F0-1B-24   (hex)		zte corporation
+F01B24     (base 16)		zte corporation
+				12/F.,zte R&D building ,kejinan Road,Shenzhen,P.R.China
+				shenzhen   guangdong  518057
+				CN
+
+B8-4C-87   (hex)		IEEE Registration Authority
+B84C87     (base 16)		IEEE Registration Authority
+				445 Hoes Lane
+				Piscataway  NJ  08554
+				US
+
+E4-F1-4C   (hex)		Private
+E4F14C     (base 16)		Private
+
+E0-06-30   (hex)		HUAWEI TECHNOLOGIES CO.,LTD
+E00630     (base 16)		HUAWEI TECHNOLOGIES CO.,LTD
+				No.2 Xin Cheng Road, Room R6,Songshan Lake Technology Park
+				Dongguan    523808
+				CN
+
+04-D1-68   (hex)		Sunplus Technology Co., Ltd.
+04D168     (base 16)		Sunplus Technology Co., Ltd.
+				19, Innovation First Road, Hsinchu Science Park
+				Hsinchu    300
+				TW
+
+64-4C-69   (hex)		CONPROVE
+644C69     (base 16)		CONPROVE
+				75, Visconde de Ouro Preto St.
+				Uberlândia  Minas Gerais  38405-202
+				BR
+
+DC-D1-60   (hex)		Tianjin Changdatong Technology Co.,LTD
+DCD160     (base 16)		Tianjin Changdatong Technology Co.,LTD
+				Unit 601, 602, Building 1, Zhongxing Industrial Base, No. 2 East 7th Road, Tianjin Pilot Free Trade Zone (Airport Economic Zone)
+				Tianjin    300308
+				CN
+
+64-4E-D7   (hex)		HP Inc.
+644ED7     (base 16)		HP Inc.
+				10300 Energy Dr
+				Spring  TX  77389
+				US
+
+9C-E3-30   (hex)		Cisco Meraki
+9CE330     (base 16)		Cisco Meraki
+				500 Terry A. Francois Blvd
+				San Francisco    94158
+				US
+
+04-A9-59   (hex)		New H3C Technologies Co., Ltd
+04A959     (base 16)		New H3C Technologies Co., Ltd
+				466 Changhe Road, Binjiang District
+				Hangzhou  Zhejiang  310052
+				CN
+
+0C-B9-83   (hex)		Honor Device Co., Ltd.
+0CB983     (base 16)		Honor Device Co., Ltd.
+				Suite 3401, Unit A, Building 6, Shum Yip Sky Park, No. 8089, Hongli West Road, Xiangmihu Street, Futian District 
+				Shenzhen   Guangdong  518040
+				CN
+
+2C-B3-01   (hex)		Honor Device Co., Ltd.
+2CB301     (base 16)		Honor Device Co., Ltd.
+				Suite 3401, Unit A, Building 6, Shum Yip Sky Park, No. 8089, Hongli West Road, Xiangmihu Street, Futian District 
+				Shenzhen   Guangdong  518040
+				CN
+
+E0-C2-B7   (hex)		Masimo Corporation
+E0C2B7     (base 16)		Masimo Corporation
+				52 Discovery
+				Irvine  CA  92618
+				US
+
+C8-8B-E8   (hex)		Masimo Corporation

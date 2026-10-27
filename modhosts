@@ -275,7 +275,7 @@ if ($opt_move) {
 }
 
 if ($opt_rename) {
-  fatal("invalid substituion regexp for parameter rename: $opt_rename")
+  fatal("invalid substitution regexp for parameter rename: $opt_rename")
     unless ($opt_rename =~ /^s\/(.*)\/(.*)\/$/);
   $rename1=$1; $rename2=$2;
   print "Rename rule: s/$rename1/$rename2/\n";

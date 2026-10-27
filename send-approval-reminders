@@ -1,0 +1,35 @@
+#!/usr/bin/perl -I/usr/local/sauron
+
+use Getopt::Long;
+use Sauron::Util;
+use Sauron::DB;
+use Sauron::Sauron;
+use Sauron::SetupIO;
+use Sauron::Approval;
+use open ':locale';
+
+set_encoding();
+load_config();
+
+db_connect();
+
+my $hours = 0;
+my $dry_run = 0;
+
+GetOptions(
+	'hours=i' => \$hours,
+	'dry-run' => \$dry_run
+) or fatal("Usage: send-approval-reminders [--hours N] [--dry-run]");
+
+$hours = $main::SAURON_APPROVAL_REMINDER_HOURS unless ($hours > 0);
+$hours = 24 unless ($hours > 0);
+
+if ($dry_run) {
+	print "Would send reminders for tokens older than $hours hours\n";
+	exit 0;
+}
+
+my $count = send_reminder_emails($hours);
+print "Sent $count reminder emails\n";
+
+exit 0;
