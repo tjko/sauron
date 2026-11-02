@@ -226,13 +226,22 @@ subtest 'KEA writer' => sub {
         'option domain-name-servers ns1.example');
     dhcp_scope_add_stmt($m, $m->{global}, kea_json_to_statement('{"renew-timer":100}', 4));
     my $cl = dhcp_model_add($m, 'classes', { name => 'vip', type => 3,
-        members => [ { id => 'aa:bb:cc:dd:ee:01', name => 'h1' } ] });
+        members => [ { id => 'aa:bb:cc:dd:ee:01', name => 'h1' },
+                     { id => 'aa:bb:cc:dd:ee:09', name => 'dyn' } ] });
     my $pxe = dhcp_model_add($m, 'classes', { name => 'pxe', type => 103, members => [] });
     dhcp_scope_add_stmt($m, $pxe->{scope}, kea_json_to_statement('{"test":"member(\'x\')"}', 4));
     my $vl = dhcp_model_add($m, 'vlans', { name => 'lab', id => 5, nets => [] });
     my $net = dhcp_model_add($m, 'nets', { cidr => '10.1.0.0/24', id => 42,
                                            router => '10.1.0.1', pools => [] });
     push @{$vl->{nets}}, $net;
+    # same router given by code only: replaces the router option
+    dhcp_scope_add_stmt($m, $net->{scope},
+        kea_json_to_statement('{"option-data":{"code":3,"data":"10.1.0.254"}}', 4));
+    dhcp_scope_add_stmt($m, $net->{scope}, kea_json_to_statement('{"lease-database":{}}', 4));
+    dhcp_scope_add_isc($m, $net->{scope}, 'option wpad code 252 = text');
+    my $net2 = dhcp_model_add($m, 'nets', { cidr => '10.2.0.0/24', id => 7, pools => [] });
+    dhcp_scope_add_stmt($m, $net2->{scope}, kea_json_to_statement('{"id":42}', 4));
+    my $net3 = dhcp_model_add($m, 'nets', { cidr => '10.3.0.0/24', id => 1, pools => [] });
     my $pool = dhcp_model_add($m, 'pools', { name => 'p' });
     push @{$pool->{ranges}}, parse_isc_statement('range 10.1.0.100 10.1.0.110', 4);
     dhcp_scope_add_isc($m, $pool->{scope}, $_)
@@ -253,8 +262,15 @@ subtest 'KEA writer' => sub {
     my $sn = $cfg->{'shared-networks'}[0];
     is($sn->{name}, 'lab', 'shared network');
     my $s = $sn->{subnet4}[0];
-    is($s->{id}, 42, 'subnet id from Sauron net id');
-    is($s->{'option-data'}[0]{data}, '10.1.0.1', 'router');
+    is($s->{id}, 2, 'Sauron id clashing with a KEA id replaced by an unused one');
+    is_deeply($s->{'option-data'}, [ { code => 3, data => '10.1.0.254' } ],
+              'router replaced by the same option given by code');
+    ok(!exists $s->{'option-def'}, 'no option-def in subnet');
+    is_deeply([ map { $_->{name} } @{$cfg->{'option-def'}} ], [ 'wpad' ], 'option-def global');
+    ok(!exists $s->{'lease-database'}, 'global only parameter left out of subnet');
+    my %ids = map { ($_->{subnet} => $_->{id}) } @{$cfg->{subnet4}};
+    is_deeply(\%ids, { '10.2.0.0/24' => 42, '10.3.0.0/24' => 1 },
+              'explicit KEA id and Sauron ids kept');
     is_deeply($s->{pools}, [ { pool => '10.1.0.100 - 10.1.0.110', 'client-class' => 'vip' } ],
               'pool with class, lifetime left out');
     my $r = $s->{reservations}[0];
@@ -266,7 +282,12 @@ subtest 'KEA writer' => sub {
     ok($w{'skipped in KEA output: ISC only statement: ddns-update-style none'}, 'ISC only reported');
     ok($w{'pool p: parameter max-valid-lifetime is not allowed in a KEA pool, ignored'},
        'pool lifetime reported');
-    ok($w{'host h1.example: address 10.2.0.1 is not in any subnet'}, 'address outside subnets');
+    ok($w{'subnet 10.1.0.0/24: subnet id 42 already used, using 2'}, 'id clash reported');
+    is_deeply($cfg->{reservations},
+              [ { 'hw-address' => 'aa:bb:cc:dd:ee:09', 'client-classes' => ['vip'] } ],
+              'class member without reservation gets a global reservation');
+    ok($cfg->{'reservations-global'} && $cfg->{'reservations-in-subnet'},
+       'global and subnet reservations enabled');
 };
 
 # =========================================================================

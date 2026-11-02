@@ -16,6 +16,7 @@
 package Sauron::DhcpDB;
 require Exporter;
 use NetAddr::IP;
+use Socket ();
 use Net::IP qw(:PROC);
 use Sauron::DB;
 use Sauron::Util;
@@ -325,8 +326,9 @@ sub _load_subnet($$$$$$) {
       my ($start,$end) = @_;
       my $pool = dhcp_model_add($model,'pools',{ name => $p->[1], net => $s->[0],
 						 start => $start, end => $end });
-      my $rs = parse_isc_statement(($v6 ? 'range6 ' : 'range ') .
-				   ($start eq $end ? $start : "$start $end"),
+      # a single address is 'range X' in ISC, but range6 needs both ends
+      my $rs = parse_isc_statement(($v6 ? "range6 $start $end" :
+				    'range ' . ($start eq $end ? $start : "$start $end")),
 				   $model->{family});
       push @{$pool->{ranges}}, $rs;
       _add_entries($model,$pool->{scope},$p->[2]);
@@ -358,16 +360,8 @@ sub _load_subnet($$$$$$) {
   return $net;
 }
 
-sub _ipobj($$) {
-  my ($v6,$ip) = @_;
-  return ($v6 ? new Net::IP($ip) : new NetAddr::IP($ip));
-}
-
-# true if address/net object $b is within net object $a
-sub _contains($$$) {
-  my ($v6,$a,$b) = @_;
-  return ($v6 ? ($a->overlaps($b) == $IP_B_IN_A_OVERLAP) : $a->contains($b));
-}
+sub _ipobj($$) { return dhcp_ip_obj($_[0],$_[1]); }
+sub _contains($$$) { return dhcp_ip_in($_[0],$_[1],$_[2]); }
 
 # true if there is at least one address between address objects $a and $b
 sub _gap($$$) {
@@ -646,28 +640,42 @@ sub _host_entries_ungrouped($$$$) {
 
 ###########################################################################
 
-# dhcp_db_resolver($serverid,$family) - returns coderef($name) giving the
-# first address of host $name (FQDN, trailing dot optional) of the server,
-# undef if unknown; used where KEA needs an address and ISC accepted a name
+# dhcp_db_resolver($serverid,$family) - returns coderef($name) giving an
+# address of host $name (FQDN, trailing dot optional): the first address
+# of the host in the server's zones, else from DNS (as dhcpd resolves
+# names); undef if unknown. Used where KEA needs an address and ISC
+# accepted a name.
 sub dhcp_db_resolver($$) {
   my ($sid,$family) = @_;
-  my (@q,%ip);
+  my $f = ($family == 6 ? 6 : 4);
+  my $ip;
 
-  db_query("SELECT h.domain,z.name,a.ip FROM hosts h,zones z,a_entries a " .
-	   "WHERE z.server=$sid AND h.zone=z.id AND a.host=h.id " .
-	   $_EXPIRED_ZONE . " AND family(a.ip) = " . ($family == 6 ? 6 : 4) .
-	   " ORDER BY h.id,a.ip",\@q);
-  foreach my $r (@q) {
-    my $fqdn = $r->[0];
-    $fqdn .= ".$r->[1]" unless ($fqdn =~ /\.$/);
-    $fqdn =~ s/\.+$//;
-    $ip{lc($fqdn)} = $r->[2] unless (exists $ip{lc($fqdn)});
-  }
   return sub {
     my ($name) = @_;
     return undef unless (defined $name);
     (my $n = lc($name)) =~ s/\.+$//;
-    return $ip{$n};
+
+    unless ($ip) {
+      my @q;
+      $ip = {};
+      db_query("SELECT h.domain,z.name,a.ip FROM hosts h,zones z,a_entries a " .
+	       "WHERE z.server=$sid AND h.zone=z.id AND a.host=h.id " .
+	       $_EXPIRED_ZONE . " AND family(a.ip) = $f ORDER BY h.id,a.ip",\@q);
+      foreach my $r (@q) {
+	my $fqdn = $r->[0];
+	$fqdn .= ".$r->[1]" unless ($fqdn =~ /\.$/);
+	$fqdn =~ s/\.+$//;
+	$ip->{lc($fqdn)} = $r->[2] unless (exists $ip->{lc($fqdn)});
+      }
+    }
+    return $ip->{$n} if (defined $ip->{$n});
+
+    my ($err,@res) = Socket::getaddrinfo($n,undef,
+		       { family => ($f == 6 ? Socket::AF_INET6() : Socket::AF_INET()),
+			 socktype => Socket::SOCK_STREAM() });
+    return undef if ($err || !@res);
+    my ($e,$addr) = Socket::getnameinfo($res[0]{addr},Socket::NI_NUMERICHOST());
+    return ($e ? undef : ($ip->{$n} = $addr));
   };
 }
 

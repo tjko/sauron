@@ -22,6 +22,8 @@
 package Sauron::DhcpModel;
 require Exporter;
 use Sauron::DhcpDefs;
+use NetAddr::IP;
+use Net::IP qw(:PROC);
 use strict;
 use vars qw($VERSION @ISA @EXPORT);
 
@@ -32,9 +34,25 @@ $VERSION = '$Id:$ ';
 	     dhcp_model_warn dhcp_scope_add_isc dhcp_scope_add_stmt
 	     dhcp_scope_add_kea_options dhcp_scope_add_kea_option_defs
 	     dhcp_scope_add_kea_params
-	     dhcp_scope_to_isc dhcp_scope_to_kea);
+	     dhcp_scope_to_isc dhcp_scope_to_kea dhcp_ip_obj dhcp_ip_in);
 
 my %_COLLECTIONS = map { $_ => 1 } qw(vlans nets pools groups classes hosts);
+
+# dhcp_ip_obj($v6,$ip) - address/net object (NetAddr::IP for IPv4,
+# Net::IP for IPv6), undef for invalid input
+sub dhcp_ip_obj($$) {
+  my ($v6,$ip) = @_;
+  return ($v6 ? new Net::IP($ip) : new NetAddr::IP($ip));
+}
+
+# dhcp_ip_in($v6,$net,$addr) - true if address/net object $addr is within
+# net object $net (objects from dhcp_ip_obj)
+sub dhcp_ip_in($$$) {
+  my ($v6,$net,$addr) = @_;
+  return 0 unless ($net && $addr);
+  return ($v6 ? ($net->overlaps($addr) == $IP_B_IN_A_OVERLAP)
+	      : $net->contains($addr));
+}
 
 # dhcp_model_new($family) - create empty model for address family 4 or 6
 sub dhcp_model_new($) {
