@@ -25,6 +25,12 @@
 	  entries (1000 characters) are allowed. add_net/add_vlan now keep
 	  comments and quote DHCP entries correctly [svamberg]
 
+	- KEA: dynamic DNS statements are converted between ISC and KEA:
+	  ddns-update-style (none = KEA default, interim/standard enable
+	  dhcp-ddns updates), ddns-updates <-> ddns-send-updates,
+	  ddns-domainname <-> ddns-qualifying-suffix, allow/deny/ignore
+	  client-updates <-> ddns-override-client-update [svamberg]
+
 	- update-dhcp-info reads KEA logs too (DHCP4/DHCP6_LEASE_ALLOC and
 	  _REUSE; KEA log file, classic or RFC 3339 syslog time stamps);
 	  DHCPv6 leases are matched by the host's DUID. dhcpd syslog lines

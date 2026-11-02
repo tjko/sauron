@@ -103,10 +103,10 @@ subtest 'parse ISC parameters and other statements' => sub {
     $st = isc('match if substring(option vendor-class-identifier,0,9) = "PXEClient"');
     is($st->{kind}, 'match', 'match if');
 
-    $st = isc('ddns-update-style none');
+    $st = isc('one-lease-per-client true');
     is($st->{kind}, 'raw', 'unknown statement is raw');
     is($st->{fmt}, DHCP_FMT_ISC, 'raw statement is ISC only');
-    is(format_isc_statement($st), 'ddns-update-style none', 'raw kept verbatim');
+    is(format_isc_statement($st), 'one-lease-per-client true', 'raw kept verbatim');
 };
 
 subtest 'ISC re-format from structure' => sub {
@@ -194,7 +194,7 @@ subtest 'ISC statement to KEA' => sub {
        'allow unknown-clients -> UNKNOWN');
     ok(kea(isc('deny members of "x"'))->{error}, 'deny members of unsupported');
 
-    ok(kea(isc('ddns-update-style none'))->{error}, 'raw statement not in KEA');
+    ok(kea(isc('one-lease-per-client true'))->{error}, 'raw statement not in KEA');
     like(kea(isc('match if option user-class = "x"'))->{error},
          qr/needs translation/, 'ISC expression is not copied to KEA');
 };
@@ -336,7 +336,7 @@ subtest 'model and scopes' => sub {
 
     dhcp_scope_add_isc($m, $net->{scope}, $_) foreach (
         'option routers 10.1.0.1', 'default-lease-time 600',
-        'ddns-update-style none', 'allow members of "vip"');
+        'one-lease-per-client true', 'allow members of "vip"');
     dhcp_scope_add_kea_params($m, $net->{scope},
         { 'renew-timer' => 100, subnet => '10.1.0.0/24', pools => [] },
         [ 'subnet', 'pools' ]);
@@ -359,9 +359,42 @@ subtest 'model and scopes' => sub {
     $m->{warnings} = [];
     is_deeply([ dhcp_scope_to_isc($m, $net->{scope}) ],
               [ 'option routers 10.1.0.1', 'default-lease-time 600',
-                'ddns-update-style none', 'allow members of "vip"' ],
+                'one-lease-per-client true', 'allow members of "vip"' ],
               'ISC lines, KEA only statements skipped');
     is(scalar @{$m->{warnings}}, 2, 'skipped statements reported');
+};
+
+# =========================================================================
+# dynamic DNS
+# =========================================================================
+subtest 'DDNS statements' => sub {
+    my $J = JSON::PP->new->canonical->allow_nonref;
+    my @c = (
+        [ 'ddns-update-style none', '{"none":1}' ],
+        [ 'ddns-update-style interim', '{"param":["dhcp-ddns",{"enable-updates":true}]}' ],
+        [ 'ddns-updates off', '{"param":["ddns-send-updates",false]}' ],
+        [ 'ddns-updates on', '{"param":["ddns-send-updates",true]}' ],
+        [ 'ddns-domainname "dyn.example"', '{"param":["ddns-qualifying-suffix","dyn.example"]}' ],
+        [ 'ignore client-updates', '{"param":["ddns-override-client-update",true]}' ],
+        [ 'deny client-updates', '{"param":["ddns-override-client-update",true]}' ],
+        [ 'allow client-updates', '{"param":["ddns-override-client-update",false]}' ],
+    );
+    foreach my $c (@c) {
+        my $st = isc($c->[0]);
+        is($J->encode(kea($st)), $c->[1], "$c->[0] -> KEA");
+        is(reformat($st), $c->[0], "$c->[0] re-formatted");
+    }
+    ok(kea(isc('ddns-update-style ad-hoc'))->{error}, 'ad-hoc has no KEA equivalent');
+    my ($e, $w) = dhcp_entry_check('ddns-update-style none', 0, 4);
+    is($w, '', 'ddns-update-style none needs no hint (KEA default)');
+
+    is(format_isc_statement(kea_param_to_statement('ddns-send-updates', JSON::PP::true(), 4)),
+       'ddns-updates on', 'KEA ddns-send-updates -> ISC');
+    is(format_isc_statement(kea_param_to_statement('ddns-override-client-update',
+                                                   JSON::PP::false(), 4)),
+       'allow client-updates', 'KEA ddns-override-client-update -> ISC');
+    is(kea_param_to_statement('dhcp-ddns', { 'enable-updates' => JSON::PP::true() }, 4)->{kind},
+       'kea', 'dhcp-ddns stays KEA only');
 };
 
 # =========================================================================
@@ -371,8 +404,8 @@ subtest 'dhcp_entry_check' => sub {
     my @c = (
         [ 'default-lease-time 600', 0, 4, '', '' ],
         [ 'option routers gw.example', 0, 4, '', '' ],
-        [ 'ddns-update-style none', 0, 4, '', qr/no KEA equivalent/ ],
-        [ 'ddns-update-style none', 1, 4, '', '' ],
+        [ 'one-lease-per-client true', 0, 4, '', qr/no KEA equivalent/ ],
+        [ 'one-lease-per-client true', 1, 4, '', '' ],
         [ 'match if option user-class = "x"', 0, 4, '', qr/not converted to KEA/ ],
         [ '{"renew-timer":900}', 2, 4, '', '' ],
         [ '{"renew-timer":900}', 0, 4, qr/set the format to KEA only/, '' ],

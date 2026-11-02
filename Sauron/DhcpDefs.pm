@@ -120,7 +120,14 @@ my @_PARAMS = (
   [ 'filename',           'boot-file-name',     'text',   4 ],
   [ 'server-name',        'server-hostname',    'text',   4 ],
   [ 'authoritative',      'authoritative',      'flag',   4 ],
+  # dynamic DNS (KEA sends updates through kea-dhcp-ddns)
+  [ 'ddns-updates',       'ddns-send-updates',  'onoff',  0 ],
+  [ 'ddns-domainname',    'ddns-qualifying-suffix', 'text', 0 ],
+  [ 'client-updates',     'ddns-override-client-update', 'clientupd', 0 ],
+  [ 'ddns-update-style',  'dhcp-ddns',          'ddnsstyle', 0 ],
 );
+# ISC parameters whose KEA form is not converted back (KEA only there)
+my %_PARAM_NO_REVERSE = ('dhcp-ddns' => 1);
 
 # ISC option-def type <-> KEA option-def type
 my %_ISC2KEA_TYPE = (
@@ -196,7 +203,8 @@ my (%_PARAM_ISC,%_PARAM_KEA);
 foreach my $r (@_PARAMS) {
   my $d = { isc => $r->[0], kea => $r->[1], type => $r->[2],
 	    family => $r->[3] };
-  $_PARAM_ISC{$d->{isc}} = $_PARAM_KEA{$d->{kea}} = $d;
+  $_PARAM_ISC{$d->{isc}} = $d;
+  $_PARAM_KEA{$d->{kea}} = $d unless ($_PARAM_NO_REVERSE{$d->{kea}});
 }
 
 sub _family($) { return ($_[0] && $_[0] == 6 ? 6 : 4); }
@@ -283,6 +291,16 @@ sub _is_ip6($) {
 # types whose values are kept in ISC literal form ("text" or hex)
 sub _isc_literal_type($) {
   return ($_[0] eq 'binary' || $_[0] eq 'string') ? 1 : 0;
+}
+
+# ISC on/off (also true/false, 1/0, JSON booleans) -> 1/0, undef if invalid
+sub _onoff($) {
+  my ($v) = @_;
+  return undef unless (defined $v);
+  return ($v ? 1 : 0) if (ref($v) eq 'JSON::PP::Boolean');
+  return 1 if ($v =~ /^(on|true|1)$/i);
+  return 0 if ($v =~ /^(off|false|0)$/i);
+  return undef;
 }
 
 # ISC boolean literal -> KEA 'true'/'false', undef if invalid
@@ -493,6 +511,11 @@ sub parse_isc_statement($$;$) {
     $st->{fmt} = DHCP_FMT_ISC unless ($st->{def});
     return $st;
   }
+  if ($s =~ /^(allow|deny|ignore)\s+client-updates$/i) {
+    @$st{qw(kind name value def)} = ('param','client-updates',lc($1),
+				      dhcp_param_def('isc','client-updates',$family));
+    return $st;
+  }
   if ($s =~ /^(\S+)\s+(.+)$/ && ($def = dhcp_param_def('isc',lc($1),$family))) {
     @$st{qw(kind name value def)} = ('param',$def->{isc},_unquote($2),$def);
     return $st;
@@ -528,6 +551,9 @@ sub format_isc_statement($) {
     if ($def->{type} eq 'flag') {
       return ($st->{value} ? '' : 'not ') . $def->{isc};
     }
+    return "$def->{isc} " . (_onoff($st->{value}) ? 'on' : 'off')
+      if ($def->{type} eq 'onoff');
+    return "$st->{value} client-updates" if ($def->{type} eq 'clientupd');
     return "$def->{isc} " . _isc_value_text($def->{type},$st->{value});
   }
   if ($k eq 'permit') {
@@ -655,6 +681,24 @@ sub isc_statement_to_kea($;$) {
     }
     elsif ($def->{type} eq 'flag') {
       $val = ($val ? JSON::PP::true() : JSON::PP::false());
+    }
+    elsif ($def->{type} eq 'onoff') {
+      my $b = _onoff($val);
+      return { error => "invalid on/off value '$val' ($def->{isc})" }
+	unless (defined $b);
+      $val = ($b ? JSON::PP::true() : JSON::PP::false());
+    }
+    elsif ($def->{type} eq 'clientupd') {
+      # allow = honour the client's FQDN flags, deny/ignore = override them
+      $val = ($val eq 'allow' ? JSON::PP::false() : JSON::PP::true());
+    }
+    elsif ($def->{type} eq 'ddnsstyle') {
+      # no updates is KEA's default; interim/standard enable updates through
+      # kea-dhcp-ddns (connection settings: KEA only 'dhcp-ddns' entry)
+      return { none => 1 } if ($val eq 'none');
+      return { error => "ddns-update-style $val has no KEA equivalent" }
+	unless ($val =~ /^(interim|standard)$/);
+      $val = { 'enable-updates' => JSON::PP::true() };
     }
     elsif ($def->{type} eq 'ip4' && !_is_ip4($val)) {
       my $ip = ($resolve ? $resolve->($val) : undef);
@@ -799,9 +843,10 @@ sub kea_param_to_statement($$$) {
   my $st = { family => _family($family) };
 
   if ($def && (!ref($value) || ref($value) eq 'JSON::PP::Boolean')) {
-    @$st{qw(kind name value def fmt)} =
-      ('param',$def->{isc},
-       ($def->{type} eq 'flag' ? ($value ? 1 : 0) : $value),$def,DHCP_FMT_BOTH);
+    my $v = $value;
+    $v = ($value ? 1 : 0) if ($def->{type} =~ /^(flag|onoff)$/);
+    $v = ($value ? 'ignore' : 'allow') if ($def->{type} eq 'clientupd');
+    @$st{qw(kind name value def fmt)} = ('param',$def->{isc},$v,$def,DHCP_FMT_BOTH);
     return $st;
   }
 

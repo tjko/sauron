@@ -222,7 +222,7 @@ subtest 'KEA writer' => sub {
     $m->{server} = { name => 's', comment => 'c' };
     $m->{local} = dhcp_scope_new();
     dhcp_scope_add_isc($m, $m->{global}, $_) foreach (
-        'default-lease-time 600', 'ddns-update-style none',
+        'default-lease-time 600', 'one-lease-per-client true',
         'option domain-name-servers ns1.example');
     dhcp_scope_add_stmt($m, $m->{global}, kea_json_to_statement('{"renew-timer":100}', 4));
     my $cl = dhcp_model_add($m, 'classes', { name => 'vip', type => 3,
@@ -279,7 +279,7 @@ subtest 'KEA writer' => sub {
     is_deeply([ sort map { $_->{name} } @{$r->{'option-data'}} ], [ 'host-name', 'root-path' ],
               'host and group options merged');
     my %w = map { $_ => 1 } @{$m->{warnings}};
-    ok($w{'skipped in KEA output: ISC only statement: ddns-update-style none'}, 'ISC only reported');
+    ok($w{'skipped in KEA output: ISC only statement: one-lease-per-client true'}, 'ISC only reported');
     ok($w{'pool p: parameter max-valid-lifetime is not allowed in a KEA pool, ignored'},
        'pool lifetime reported');
     ok($w{'subnet 10.1.0.0/24: subnet id 42 already used, using 2'}, 'id clash reported');

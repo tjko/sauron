@@ -207,7 +207,10 @@ sub dhcp_scope_to_kea($$;$$) {
   foreach my $st (@{$scope->{stmts}}) {
     next if ($st->{kind} =~ /^(range|fixed-address|host-id)$/);
     my $r = isc_statement_to_kea($st,$resolve);
-    if ($r->{error}) {
+    if ($r->{none}) {
+      # KEA's default behaviour already matches the statement
+    }
+    elsif ($r->{error}) {
       dhcp_model_warn($model,"skipped in KEA output: $r->{error}");
     }
     elsif ($r->{'option-data'}) { push @{$res{'option-data'}}, $r->{'option-data'}; }

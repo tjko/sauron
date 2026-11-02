@@ -56,7 +56,7 @@ subtest 'BackEnd lists with fmt' => sub {
     my $gid = add_group({ server => $sid, name => 'fmtgrp', type => 1,
         dhcp => [ [ undef, 'default-lease-time 600', 'c1', 0, 2 ],
                   [ undef, '{"renew-timer":100}', '', 2, 2 ],
-                  [ undef, 'ddns-update-style none' ],
+                  [ undef, 'one-lease-per-client true' ],
                   [ 0, 'max-lease-time 1', '', 2 ] ] });   # former layout
     ok($gid > 0, 'add_group with DHCP entries');
 
@@ -66,7 +66,7 @@ subtest 'BackEnd lists with fmt' => sub {
     is_deeply([ map { [ @$_[1..3] ] } @{$g{dhcp}}[1..4] ],
               [ [ 'default-lease-time 600', 'c1', 0 ],
                 [ '{"renew-timer":100}', undef, 2 ],
-                [ 'ddns-update-style none', undef, 0 ],
+                [ 'one-lease-per-client true', undef, 0 ],
                 [ 'max-lease-time 1', undef, 0 ] ],
               'rows with fmt (missing fmt 0, 4 element row = former layout)');
 
@@ -76,7 +76,7 @@ subtest 'BackEnd lists with fmt' => sub {
     ok(update_group(\%g) >= 0, 'update_group');
     my $r = rows("SELECT dhcp,fmt FROM dhcp_entries WHERE type=5 AND ref=$gid ORDER BY id");
     is_deeply($r, [ [ 'default-lease-time 600', 0 ], [ '{"renew-timer":100}', 2 ],
-                    [ 'ddns-update-style none', 1 ], [ 'max-lease-time 1', 0 ],
+                    [ 'one-lease-per-client true', 1 ], [ 'max-lease-time 1', 0 ],
                     [ 'max-lease-time 900', 0 ] ],
               'fmt updated, former row layout stored as 0');
 
@@ -130,10 +130,10 @@ subtest 'CGI form row check' => sub {
     is($res, 2, 'invalid KEA JSON rejected');
     ($res) = $set->('{"renew-timer":5}', 0);
     is($res, 2, 'KEA JSON with ISC format rejected');
-    ($res) = $set->('ddns-update-style none', 0);
+    ($res) = $set->('one-lease-per-client true', 0);
     is($res, 0, 'ISC statement without KEA equivalent accepted (warning only)');
     my ($e, $w) = Sauron::CGIutil::form_row_check($form->{data}[0],
-                                                  [ 'ddns-update-style none', '', 0 ]);
+                                                  [ 'one-lease-per-client true', '', 0 ]);
     like($w, qr/no KEA equivalent/, 'warning shown for it');
 
     # existing rows: unchanged ones are neither marked modified nor block
