@@ -513,6 +513,10 @@ ALTER TABLE zones ADD COLUMN tls_profile TEXT;
 ALTER TABLE cidr_entries ADD COLUMN tls TEXT;
 
 
+/* DHCP entries for one configuration format only (ISC dhcpd / KEA) */
+ALTER TABLE dhcp_entries ADD COLUMN fmt INT4 DEFAULT 0;
+
+
 /* set DB version */
 
 UPDATE settings SET value='1.8' where setting='dbversion';

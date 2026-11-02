@@ -30,7 +30,8 @@ $VERSION = '$Id:$ ';
 	     dhcp_option_def_register
 	     parse_isc_statement format_isc_statement
 	     isc_statement_to_kea kea_option_to_statement
-	     kea_option_def_to_statement kea_param_to_statement);
+	     kea_option_def_to_statement kea_param_to_statement
+	     kea_statement_to_json kea_json_to_statement);
 
 use constant DHCP_FMT_BOTH => 0;
 use constant DHCP_FMT_ISC  => 1;
@@ -800,6 +801,68 @@ sub kea_param_to_statement($$$) {
   }
 
   @$st{qw(kind key value fmt)} = ('kea',$key,$value,DHCP_FMT_KEA);
+  return $st;
+}
+
+
+###########################################################################
+# KEA only statements in the database (dhcp_entries.fmt = DHCP_FMT_KEA)
+#
+# The dhcp column holds a JSON object with one member:
+#   {"option-data": {...}}   option-data element
+#   {"option-def": {...}}    option-def element
+#   {"test": "expr"}         client class test expression
+#   {"<param>": value}       any other scope parameter
+
+my $_JSON = JSON::PP->new->canonical(1)->allow_nonref(1);
+
+# kea_statement_to_json($stmt) - database text of a KEA only statement,
+# undef for statements that are not KEA only
+sub kea_statement_to_json($) {
+  my ($st) = @_;
+  my $k = $st->{kind};
+
+  return undef unless ($st->{fmt} && $st->{fmt} == DHCP_FMT_KEA);
+  return $_JSON->encode({ $st->{key} => $st->{value} }) if ($k eq 'kea');
+  return $_JSON->encode({ 'option-data' => $st->{kea} })
+    if ($k eq 'option' && $st->{kea});
+  return $_JSON->encode({ 'option-def' => $st->{kea} })
+    if ($k eq 'option-def' && $st->{kea});
+  return $_JSON->encode({ test => $st->{kea_test} })
+    if ($k eq 'match' && defined $st->{kea_test});
+  return undef;
+}
+
+# kea_json_to_statement($text,$family) - KEA only statement from database
+# text; invalid text gives a 'raw' statement with 'error' set
+sub kea_json_to_statement($$) {
+  my ($text,$family) = @_;
+  my ($h,$key,$val);
+  my $st = { fmt => DHCP_FMT_KEA, family => _family($family), json => $text };
+
+  $h = eval { $_JSON->decode(defined $text ? $text : '') };
+  unless ($h && ref($h) eq 'HASH' && keys(%$h) == 1) {
+    @$st{qw(kind error)} = ('raw',"invalid KEA entry (expected JSON object " .
+			    "with one member): " . (defined $text ? $text : ''));
+    return $st;
+  }
+  ($key) = keys %$h;
+  $val = $h->{$key};
+
+  if ($key eq 'option-data' && ref($val) eq 'HASH') {
+    @$st{qw(kind kea)} = ('option',$val);
+    $st->{name} = (defined $val->{name} ? $val->{name} : "code-" .
+		   (defined $val->{code} ? $val->{code} : '?'));
+  }
+  elsif ($key eq 'option-def' && ref($val) eq 'HASH') {
+    @$st{qw(kind kea name)} = ('option-def',$val,$val->{name});
+  }
+  elsif ($key eq 'test' && !ref($val)) {
+    @$st{qw(kind kea_test)} = ('match',$val);
+  }
+  else {
+    @$st{qw(kind key value)} = ('kea',$key,$val);
+  }
   return $st;
 }
 

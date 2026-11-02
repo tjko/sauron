@@ -23,7 +23,11 @@ $VERSION = '$Id:$ ';
 #   $force  always append ';' (QUIRK of pool entries)
 sub _line($$;$) {
   my ($model,$st,$force) = @_;
-  my $t = (defined $st->{orig} ? $st->{orig} : format_isc_statement($st));
+  my $t;
+
+  # KEA only statements are never written
+  $t = (defined $st->{orig} ? $st->{orig} : format_isc_statement($st))
+    unless ($st->{fmt} && $st->{fmt} == DHCP_FMT_KEA);
 
   unless (defined $t) {
     dhcp_model_warn($model,"skipped in ISC output: " .

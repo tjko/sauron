@@ -2348,8 +2348,8 @@ sub copy_zone($$$$) {
   if ($res < 0) { db_rollback(); return -3; }
 
   # dhcp_entries
-  $res=db_exec("INSERT INTO dhcp_entries (type,ref,dhcp,comment) " .
-	       "SELECT type,$newid,dhcp,comment FROM dhcp_entries " .
+  $res=db_exec("INSERT INTO dhcp_entries (type,ref,dhcp,comment,fmt) " .
+	       "SELECT type,$newid,dhcp,comment,fmt FROM dhcp_entries " .
 	       "WHERE type=2 AND ref=$id;");
   if ($res < 0) { db_rollback(); return -4; }
 

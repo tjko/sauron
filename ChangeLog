@@ -15,6 +15,16 @@
 	    classes and dynamic pools (removed site specific hack)
 	  [svamberg]
 
+	- import-dhcp: KEA import rewritten on the DHCP model. Options are
+	  converted to valid ISC syntax (quoting, DHCPv6 option names,
+	  options given by code, option-def), parameters are mapped
+	  (valid-lifetime, boot-file-name, ...), global reservations,
+	  client-id based reservations, reservation client-classes and
+	  pool client-class are imported, <?include?> is supported (--dir).
+	  KEA settings without an ISC equivalent are no longer dropped but
+	  stored as KEA only DHCP entries (new dhcp_entries.fmt column,
+	  sql/*.sql and sql/dbconvert_1.7to1.8 updated) [svamberg]
+
 	- Fix the web UI dying on Add host and other forms ("Can't use an
 	  undefined value as an ARRAY reference" in CGIutil.pm) for users
 	  who are not a member of any user group, e.g. accounts provisioned

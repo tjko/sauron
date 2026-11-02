@@ -28,7 +28,7 @@ use vars qw($VERSION @ISA @EXPORT);
 $VERSION = '$Id:$ ';
 
 @ISA = qw(Exporter);
-@EXPORT = qw(dhcp_model_from_db);
+@EXPORT = qw(dhcp_model_from_db dhcp_model_to_db);
 
 # dhcp_entries.type per address family
 my %_ETYPE = (
@@ -41,25 +41,38 @@ my %_ETYPE = (
 my $_EXPIRED_ZONE = " AND (coalesce(z.expiration, 0) <= 0 OR " .
   "coalesce(z.expiration, 0) > extract(epoch from now())) ";
 
-# add dhcp_entries rows (text, comment) to scope
-sub _add_entries($$$;$) {
-  my ($model,$scope,$rows,$fixup) = @_;
+# statement for a dhcp_entries row (text, comment, fmt)
+sub _row_stmt($$$) {
+  my ($model,$scope,$row) = @_;
+  my ($text,$comment,$fmt) = @$row;
+  my $st;
 
-  foreach my $r (@$rows) {
-    my ($text,$comment) = @$r;
-    $text = '' unless (defined $text);
-    $text = $fixup->($text) if ($fixup);
-    my $st = dhcp_scope_add_isc($model,$scope,$text);
+  $text = '' unless (defined $text);
+  if ($fmt && $fmt == DHCP_FMT_KEA) {
+    $st = kea_json_to_statement($text,$model->{family});
+    dhcp_model_warn($model,$st->{error}) if ($st->{error});
+    dhcp_scope_add_stmt($model,$scope,$st);
+  } else {
+    $st = dhcp_scope_add_isc($model,$scope,$text);
     $st->{orig} = $text;
-    $st->{comment} = $comment;
+    $st->{fmt} = DHCP_FMT_ISC if ($fmt && $fmt == DHCP_FMT_ISC);
   }
+  $st->{comment} = $comment;
+  return $st;
+}
+
+# add dhcp_entries rows (text, comment, fmt) to scope
+sub _add_entries($$$) {
+  my ($model,$scope,$rows) = @_;
+
+  _row_stmt($model,$scope,$_) foreach (@$rows);
 }
 
 sub _entries($$) {
   my ($type,$ref) = @_;
   my @q;
 
-  db_query("SELECT dhcp, comment FROM dhcp_entries " .
+  db_query("SELECT dhcp, comment, fmt FROM dhcp_entries " .
 	   "WHERE type=$type AND ref=$ref ORDER BY id",\@q);
   return \@q;
 }
@@ -416,10 +429,10 @@ sub _load_hosts($$) {
 
   # host entries
   undef @q;
-  db_query("SELECT h.id,d.dhcp,d.comment FROM hosts h,zones z,dhcp_entries d " .
+  db_query("SELECT h.id,d.dhcp,d.comment,d.fmt FROM hosts h,zones z,dhcp_entries d " .
 	   "WHERE z.server=$sid AND h.zone=z.id AND d.type=$et->{host} " .
 	   $_EXPIRED_ZONE . " AND d.ref=h.id ORDER BY h.id,d.id",\@q);
-  push @{$hentries{$_->[0]}}, [ (defined $_->[1] ? $_->[1] : ''), $_->[2] ]
+  push @{$hentries{$_->[0]}}, [ (defined $_->[1] ? $_->[1] : ''), $_->[2], $_->[3] ]
     foreach (@q);
 
   @nets = map { _ipobj($v6,$_->{cidr}) } @{$model->{netblocks}};
@@ -451,15 +464,19 @@ sub _load_hosts($$) {
 						macros => \@macros, hosts => [] });
 	$rows = _entries($et->{group},$gid);
 	foreach my $r (@$rows) {
+	  if ($r->[2] && $r->[2] == DHCP_FMT_KEA) {
+	    _row_stmt($model,$grp->{scope},$r);
+	    next;
+	  }
 	  (my $t = (defined $r->[0] ? $r->[0] : '')) =~ s/\\"/"/g;
 	  my $line = $t;
 	  $line .= ';' unless ($line =~ /[;\{\}]\s*$/);
 	  # entries with %{macro} are applied per host
 	  if ($line =~ /\%\{\w+\}/) {
-	    push @macros, $line;
+	    push @macros, [ $line, $r->[2] ];
 	    next;
 	  }
-	  _add_entries($model,$grp->{scope},[[ $t, $r->[1] ]]);
+	  _row_stmt($model,$grp->{scope},[ $t, $r->[1], $r->[2] ]);
 	}
 
 	for my $j (0..$#nets) {
@@ -549,14 +566,16 @@ sub _expand_macros($$) {
   return $str;
 }
 
-sub _add_host_stmt($$$$$) {
-  my ($model,$host,$line,$comment,$macro) = @_;
+sub _add_host_stmt($$$$$;$) {
+  my ($model,$host,$line,$comment,$macro,$fmt) = @_;
 
-  my $st = dhcp_scope_add_isc($model,$host->{scope},$line);
-  $st->{orig} = $line;
-  $st->{comment} = $comment;
+  my $st = _row_stmt($model,$host->{scope},[ $line, $comment, $fmt ]);
   $st->{macro} = 1 if ($macro);
   return $st;
+}
+
+sub _kea_only($) {
+  return ($_[0] && $_[0] == DHCP_FMT_KEA) ? 1 : 0;
 }
 
 # host in a group: own entries, group %{macros}, automatic domain name;
@@ -574,25 +593,30 @@ sub _host_entries_grouped($$$$$) {
   # group macros are added while the list has no filename/root-path
   # (a host's own filename/root-path, or the first such macro, stops it)
   foreach my $m (@$macros) {
-    push @lst, [ $m, undef ]
-      unless (grep { $_->[0] =~ /(filename|option\s+root-path)\s+/ } @lst);
+    push @lst, [ $m->[0], undef, $m->[1] ]
+      unless (grep { !_kea_only($_->[2]) &&
+		     $_->[0] =~ /(filename|option\s+root-path)\s+/ } @lst);
   }
 
   if ($o->{auto_domainnames}) {
     my ($opt,$re) = _auto_domain_option($o,$v6);
     push @lst, [ "$opt \"$adomain\"", undef ]
-      unless ((grep { $_->[0] =~ $re } @lst) and $adomain);
+      unless ((grep { !_kea_only($_->[2]) && $_->[0] =~ $re } @lst) and $adomain);
   }
 
   %var = (domain => $adomain, fqdn => $host->{name}, host => $short);
   $var{ether} = $host->{hw_address} unless ($v6);
 
   foreach my $e (@lst) {
+    if (_kea_only($e->[2])) {
+      _add_host_stmt($model,$host,$e->[0],$e->[1],0,$e->[2]);
+      next;
+    }
     my $line = $e->[0];
     $line .= ';' unless ($line =~ /[;\{\}]\s*$/);
     my $macro = ($line =~ /\%\{\w+\}/) ? 1 : 0;
     $line = _expand_macros($line,\%var) if ($macro);
-    _add_host_stmt($model,$host,$line,$e->[1],$macro);
+    _add_host_stmt($model,$host,$line,$e->[1],$macro,$e->[2]);
   }
 }
 
@@ -607,11 +631,213 @@ sub _host_entries_ungrouped($$$$) {
     ($adomain = $host->{name}) =~ s/^[^\.]+\.//;
     # unless the host has its own domain-name entry
     _add_host_stmt($model,$host,"$opt \"$adomain\";",undef,0)
-      if ($adomain && !grep { $_->[0] =~ $re } @{$entries || []});
+      if ($adomain && !grep { !_kea_only($_->[2]) && $_->[0] =~ $re }
+	  @{$entries || []});
   }
   foreach my $e (@{$entries || []}) {
-    _add_host_stmt($model,$host,$e->[0],$e->[1],0);
+    _add_host_stmt($model,$host,$e->[0],$e->[1],0,$e->[2]);
   }
+}
+
+
+###########################################################################
+# import: store a model (e.g. read from a KEA configuration) in the DB
+
+# insert scope statements as dhcp_entries rows of type $type
+sub _insert_entries($$$$) {
+  my ($model,$type,$ref,$scope) = @_;
+
+  foreach my $st (@{$scope->{stmts}}) {
+    my ($text,$fmt);
+    next if ($st->{kind} eq 'range');
+    if ($st->{fmt} && $st->{fmt} == DHCP_FMT_KEA) {
+      ($text,$fmt) = (kea_statement_to_json($st),DHCP_FMT_KEA);
+    } else {
+      ($text,$fmt) = (format_isc_statement($st),($st->{fmt} || DHCP_FMT_BOTH));
+    }
+    unless (defined $text) {
+      dhcp_model_warn($model,"cannot store statement: " .
+		      (defined $st->{name} ? $st->{name} : $st->{kind}));
+      next;
+    }
+    fatal("cannot add DHCP entry: " . db_errormsg())
+      if (db_exec("INSERT INTO dhcp_entries (type,ref,dhcp,comment,fmt) " .
+		  "VALUES($type,$ref," . db_encode_str($text) . "," .
+		  db_encode_str($st->{comment}) . ",$fmt)") < 0);
+  }
+}
+
+# canonical text form of an address (DB inet output form)
+sub _normip($) {
+  my ($ip) = @_;
+
+  return $ip unless (defined $ip && $ip =~ /:/);
+  my $x = ip_expand_address($ip,6);
+  return (defined $x ? ip_compress_address($x,6) : lc($ip));
+}
+
+# dhcp_model_to_db($model,$serverid,\%opts) - store imported model
+#   global    import global statements (server DHCP entries)
+#   chaosnet  name of the shared-network treated as the default VLAN
+#   verbose   progress messages
+# Existing VLANs, nets and groups of the same name are reused (their
+# entries are not duplicated). Hosts are matched to existing host records
+# by address. Returns number of updated hosts; fatal() on database errors.
+sub dhcp_model_to_db($$$) {
+  my ($model,$sid,$o) = @_;
+  my $v6 = ($model->{family} == 6);
+  my $f = $model->{family};
+  my $et = $_ETYPE{$f};
+  my (%vlanid,%netid,%classid,@q,%hostbyip,%routerip,%macs,$count);
+  my $chaosnet = (defined $o->{chaosnet} ? $o->{chaosnet} : 'CHAOS');
+  my $vc = 0;
+
+  _insert_entries($model,$et->{global},$sid,$model->{global}) if ($o->{global});
+
+  # shared-networks
+  foreach my $vl (@{$model->{vlans}}) {
+    my $name = $vl->{name};
+    if ($name eq $chaosnet) {
+      $vlanid{$name} = -1;
+      print "Treating shared-network $name as default VLAN\n";
+      next;
+    }
+    my $vname = (valid_texthandle($name) ? $name : 'vlan-' . (++$vc));
+    my $id = get_vlan_by_name($sid,$vname);
+    if ($id > 0) {
+      dhcp_model_warn($model,"VLAN $vname exists, its entries are not changed");
+    } else {
+      $id = add_vlan({ server => $sid, name => $vname, description => $name });
+      fatal("cannot add VLAN ($name) " . db_errormsg()) if ($id < 0);
+      _insert_entries($model,$et->{vlan},$id,$vl->{scope});
+    }
+    print "shared-network: $name (id=$id)\n" if ($o->{verbose});
+    $vlanid{$name} = $id;
+  }
+
+  # subnets
+  my $nc = 0;
+  foreach my $net (@{$model->{nets}}) {
+    my $vlan = (defined $net->{vlan} ? $vlanid{$net->{vlan}} : -1);
+    my $id = get_net_by_cidr($sid,$net->{cidr});
+    if ($id > 0) {
+      dhcp_model_warn($model,"net $net->{cidr} exists, its entries are not changed");
+    } else {
+      my $name = ($v6 ? 'net6-' : 'net-') . (++$nc);
+      $id = add_net({ server => $sid, netname => $name, name => $name,
+		      net => $net->{cidr}, subnet => 'true', vlan => $vlan });
+      fatal("cannot add NET ($net->{cidr}) " . db_errormsg()) if ($id < 0);
+      _insert_entries($model,$et->{net},$id,$net->{scope});
+    }
+    print "net: $net->{cidr} (id=$id, vlan=$vlan)\n" if ($o->{verbose});
+    $netid{$net->{cidr}} = $id;
+    $routerip{_normip($net->{router})} = 1 if (defined $net->{router});
+  }
+
+  # classes and pools are groups
+  foreach my $grp ((map { [ $_, $_->{type} ] } @{$model->{classes}}),
+		   (map { [ $_, 2 ] } @{$model->{pools}})) {
+    my ($node,$type) = @$grp;
+    my @r;
+    db_query("SELECT id FROM groups WHERE server=$sid AND name=" .
+	     db_encode_str($node->{name}),\@r);
+    my $id = (@r ? $r[0][0] : -1);
+    if ($id > 0) {
+      dhcp_model_warn($model,"group $node->{name} exists, its entries are not changed");
+    } else {
+      $id = add_group({ server => $sid, name => $node->{name}, type => $type });
+      fatal("cannot add group ($node->{name}) " . db_errormsg()) if ($id < 0);
+      _insert_entries($model,$et->{group},$id,$node->{scope});
+    }
+    print "group: $node->{name} (type=$type, id=$id)\n" if ($o->{verbose});
+    $node->{db_id} = $id;
+    $classid{$node->{name}} = $id if ($type != 2);
+  }
+
+  # existing hosts by address (the first one when shared)
+  db_query("SELECT h.id,h.domain,a.ip FROM hosts h,zones z,a_entries a " .
+	   "WHERE z.server=$sid AND h.zone=z.id AND h.type=1 " .
+	   " AND a.host=h.id AND family(a.ip) = $f ORDER BY a.ip,h.id",\@q);
+  foreach my $r (@q) {
+    $hostbyip{_normip($r->[2])} = $r unless ($hostbyip{_normip($r->[2])});
+  }
+  unless ($v6) {
+    undef @q;
+    db_query("SELECT h.ether,h.id FROM hosts h,zones z " .
+	     "WHERE z.server=$sid AND h.zone=z.id AND h.type=1 " .
+	     " AND h.ether NOTNULL AND h.ether != ''",\@q);
+    $macs{$_->[0]} = $_->[1] foreach (@q);
+  }
+
+  $count = 0;
+  foreach my $h (@{$model->{hosts}}) {
+    my ($dbh) = grep { defined $_ } map { $hostbyip{_normip($_)} } @{$h->{addresses}};
+    unless ($dbh) {
+      dhcp_model_warn($model,"host $h->{name} (" . join(', ',@{$h->{addresses}}) .
+		      ") not found, skipped");
+      next;
+    }
+    my %rec = (id => $dbh->[0]);
+    if ($v6 && $h->{duid}) {
+      $rec{duid} = uc($h->{duid});
+    }
+    elsif (!$v6 && $h->{hw_address}) {
+      (my $ether = uc($h->{hw_address})) =~ s/://g;
+      if ($macs{$ether} && $macs{$ether} != $dbh->[0]) {
+	$rec{ether_alias} = $macs{$ether};
+      } else {
+	$rec{ether} = $ether;
+	$macs{$ether} = $dbh->[0];
+      }
+    }
+    my @sub = grep { $_ } map { $classid{$_} } @{$h->{classes} || []};
+    if (@sub) {
+      $rec{subgroups} = [ ['SubGroup'], map { [ undef, $_, 2 ] } @sub ];
+    }
+    dhcp_model_warn($model,"host $h->{name}: unknown client class " . join(', ',
+		    grep { !$classid{$_} } @{$h->{classes} || []}))
+      if (grep { !$classid{$_} } @{$h->{classes} || []});
+
+    print "host: $dbh->[1] ($dbh->[2]) <-- $h->{name}\n" if ($o->{verbose});
+    fatal("cannot update host $dbh->[1] " . db_errormsg())
+      if (keys(%rec) > 1 && update_host(\%rec) < 0);
+    _insert_entries($model,$et->{host},$dbh->[0],$h->{scope});
+    $count++;
+  }
+
+  # dynamic pool members
+  foreach my $p (@{$model->{pools}}) {
+    my @m;
+    my ($s,$e) = ($p->{start},$p->{end});
+    if ($s =~ m{/}) {
+      db_query("SELECT h.id FROM hosts h,zones z,a_entries a " .
+	       "WHERE z.server=$sid AND h.zone=z.id AND h.type=1 AND a.host=h.id " .
+	       " AND a.ip << inet '$s'",\@m);
+    } else {
+      db_query("SELECT h.id FROM hosts h,zones z,a_entries a " .
+	       "WHERE z.server=$sid AND h.zone=z.id AND h.type=1 AND a.host=h.id " .
+	       " AND a.ip >= inet '$s' AND a.ip <= inet '$e'",\@m);
+    }
+    print "pool $p->{name}: " . scalar(@m) . " host(s)\n" if ($o->{verbose});
+    foreach my $m (@m) {
+      fatal("cannot update pool member " . db_errormsg())
+	if (update_host({ id => $m->[0], grp => $p->{db_id} }) < 0);
+    }
+  }
+
+  # router interfaces
+  foreach my $ip (keys %routerip) {
+    my $r = $hostbyip{$ip};
+    unless ($r) {
+      dhcp_model_warn($model,"router $ip not found");
+      next;
+    }
+    print "router interface: $ip $r->[1]\n" if ($o->{verbose});
+    fatal("cannot update router info for: $r->[1] ($ip)")
+      if (update_host({ id => $r->[0], router => 1 }) < 0);
+  }
+
+  return $count;
 }
 
 1;

@@ -384,11 +384,15 @@
   <thead><row><entry>option</><entry>description</></row></thead>
   <tbody>
      <row><entry><option>--kea</></>
-                <entry>Import KEA JSON configuration (otherwise format is auto-detected).</>
+                <entry>Import KEA JSON configuration (otherwise format is auto-detected).
+                Statements without an ISC dhcpd equivalent (e.g. renew-timer,
+                subnet id, pd-pools, class test expressions) are stored as
+                KEA only entries; hosts are matched to existing hosts by address.</>
      </row>
   <row><entry><option>--dir=<replaceable>directory</></></>
-       <entry>Directory where included files are located (if not in 
-              the directory specified in dhcpd.conf).</>
+       <entry>Directory where files included by KEA
+              <literal>&lt;?include "file"?&gt;</> are located (default is
+              the directory of the including file).</>
   </row>
   <row><entry><option>--chaosnet=<replaceable>name</></></>
        <entry>Treat this shared-network as default VLAN 
