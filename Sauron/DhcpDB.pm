@@ -10,8 +10,10 @@
 # $stmt->{orig} and the entry comment in $stmt->{comment}; the ISC writer
 # uses them to reproduce the configuration verbatim.
 #
-# The behaviour reproduces the original generator in 'sauron', including
-# its known quirks, which are marked 'QUIRK' below.
+# The behaviour reproduces the original generator in 'sauron'. Its known
+# quirks (marked 'QUIRK' below) are applied only with the 'isc_compat'
+# option, used by the ISC writer to keep dhcpd.conf unchanged; without it
+# (KEA writer) the data is loaded as intended.
 #
 package Sauron::DhcpDB;
 require Exporter;
@@ -33,10 +35,8 @@ $VERSION = '$Id:$ ';
 # dhcp_entries.type per address family
 my %_ETYPE = (
   4 => { global => 1,  host => 3,  net => 4, group => 5,  vlan => 6,  local => 7 },
-  6 => { global => 11, host => 13, net => 4, group => 15, vlan => 16, local => 17 },
+  6 => { global => 11, host => 13, net => 14, group => 15, vlan => 16, local => 17 },
 );
-# QUIRK: DHCPv6 subnets use the IPv4 subnet entries (type 4), type 14 is
-# never read
 
 my $_EXPIRED_ZONE = " AND (coalesce(z.expiration, 0) <= 0 OR " .
   "coalesce(z.expiration, 0) > extract(epoch from now())) ";
@@ -76,6 +76,7 @@ sub _entries($$) {
 #   now              current time (epoch) for host expiration
 #   class            only load this class (sauron --dhcpclass)
 #   verbose          progress messages to STDERR
+#   isc_compat       reproduce quirks of the original dhcpd.conf generator
 # returns model
 sub dhcp_model_from_db($) {
   my ($o) = @_;
@@ -147,7 +148,7 @@ sub _load_classes($$) {
   my ($idcol,$idre,@dclasses);
 
   # QUIRK: historical site specific hack, no DHCPv4 classes for 'ns2'
-  return if (!$v6 && $o->{server}{name} eq 'ns2');
+  return if ($o->{isc_compat} && !$v6 && $o->{server}{name} eq 'ns2');
 
   db_query("SELECT id,name,type FROM groups " .
 	   "WHERE server=$sid AND (type=3 OR type=103) " .
@@ -207,7 +208,7 @@ sub _load_network_map($$) {
   my (@dpools,@dips,@nets,@subnets,@routers,%vlanhash,%vlan_names,@vlan_lst);
 
   # QUIRK: historical site specific hack, no DHCPv4 pools for 'ns2'
-  my $no_pools = (!$v6 && $o->{server}{name} eq 'ns2');
+  my $no_pools = ($o->{isc_compat} && !$v6 && $o->{server}{name} eq 'ns2');
 
   # dynamic pools and their member addresses
   db_query("SELECT id,name FROM groups WHERE server=$sid AND type=2 " .
@@ -229,6 +230,7 @@ sub _load_network_map($$) {
 	       " AND g.server=$sid AND family(a.ip) = 4 ORDER BY a.ip,g.id",\@dips);
     }
     print STDERR "Found " . scalar(@dips) . " dynamic pool IPs\n" if ($o->{verbose});
+    $_->[3] = _ipobj($v6,$_->[1]) foreach (@dips);
     foreach my $p (@dpools) {
       $p->[2] = _entries($et->{group},$p->[0]);
     }
@@ -257,6 +259,7 @@ sub _load_network_map($$) {
 	   "WHERE h.zone=z.id AND a.host=h.id " . $_EXPIRED_ZONE .
 	   "AND z.server=$sid AND router>0 AND family(ip) = $f " .
 	   "ORDER BY ip,router;",\@routers);
+  $_->[2] = _ipobj($v6,$_->[0]) foreach (@routers);
 
   # shared-networks (VLANs); QUIRK: VLAN ids are sorted as strings
   $vlanhash{$_->[3]}++ foreach (@subnets);
@@ -266,10 +269,7 @@ sub _load_network_map($$) {
     $name =~ s/\s//g;
     $name = 'CHAOS' if ($vlan < 1 || $name eq '');
     my $vl = dhcp_model_add($model,'vlans',{ name => $name, id => $vlan, nets => [] });
-    my $rows = _entries($et->{vlan},$vlan);
-    # QUIRK: comments of DHCPv6 shared-network entries are not generated
-    if ($v6) { $_->[1] = undef foreach (@$rows); }
-    _add_entries($model,$vl->{scope},$rows);
+    _add_entries($model,$vl->{scope},_entries($et->{vlan},$vlan));
 
     error("No router interfaces found for net $nets[-1][0]!")
       if (!$v6 && @routers < 1);
@@ -284,19 +284,17 @@ sub _load_network_map($$) {
 sub _load_subnet($$$$$$) {
   my ($model,$o,$s,$routers,$dpools,$dips) = @_;
   my $v6 = ($model->{family} == 6);
-  my ($ssnet,$router,$pri,$net);
+  my ($ssnet,$router,$pri,$net,$nettype);
 
   $net = dhcp_model_add($model,'nets',{ cidr => $s->[0], name => $s->[2],
 					 id => $s->[1], pools => [] });
 
   # router with the lowest priority value within the subnet
-  $ssnet = ($v6 ? new Net::IP($s->[0]) : new NetAddr::IP($s->[0]));
+  $ssnet = _ipobj($v6,$s->[0]);
   $pri = 999999;
   $router = '';
   foreach my $r (@$routers) {
-    my $in = ($v6 ? ($ssnet->overlaps(new Net::IP($r->[0])) == $IP_B_IN_A_OVERLAP)
-		  : $ssnet->contains(new NetAddr::IP($r->[0])));
-    if ($in && $pri > $r->[1]) {
+    if (_contains($v6,$ssnet,$r->[2]) && $pri > $r->[1]) {
       $pri = $r->[1];
       $router = $r->[0];
     }
@@ -308,14 +306,13 @@ sub _load_subnet($$$$$$) {
     my $nh = new NetAddr::IP($s->[0]);
     error("no router interface found for subnet: " . $nh->addr() . " " . $nh->mask());
   }
-  # QUIRK: the DHCPv6 router is found but not generated
-  $net->{router_hidden} = 1 if ($v6);
-
-  _add_entries($model,$net->{scope},_entries($_ETYPE{$model->{family}}{net},$s->[1]));
+  # QUIRK: DHCPv6 subnets use the IPv4 subnet entries (type 4)
+  $nettype = (($v6 && $o->{isc_compat}) ? 4 : $_ETYPE{$model->{family}}{net});
+  _add_entries($model,$net->{scope},_entries($nettype,$s->[1]));
 
   # dynamic pools: contiguous address runs of pool member hosts
   foreach my $p (@$dpools) {
-    my ($state,$b,$last) = (0,'','');
+    my ($state,$b,$last,$lastobj) = (0,'','',undef);
     my $emit = sub {
       my ($start,$end) = @_;
       my $pool = dhcp_model_add($model,'pools',{ name => $p->[1], net => $s->[0],
@@ -330,19 +327,18 @@ sub _load_subnet($$$$$$) {
     };
 
     foreach my $d (@$dips) {
-      my $in = ($d->[0] == $p->[0]) &&
-	($v6 ? ($ssnet->overlaps(new Net::IP($d->[1])) == $IP_B_IN_A_OVERLAP)
-	     : $ssnet->contains(new NetAddr::IP($d->[1])));
+      my $in = ($d->[0] == $p->[0]) && _contains($v6,$ssnet,$d->[3]);
       if ($in) {
 	if ($state == 0) {
 	  $state = 1;
 	  $b = $d->[1];
 	}
-	elsif ($last ne '' && _gap($v6,$last,$d->[1])) {
+	elsif ($last ne '' && _gap($v6,$lastobj,$d->[3])) {
 	  $emit->($b,$last);
 	  $b = $d->[1];
 	}
 	$last = $d->[1];
+	$lastobj = $d->[3];
       } else {
 	$emit->($b,$last) if ($state == 1);
 	$state = 0;
@@ -354,12 +350,23 @@ sub _load_subnet($$$$$$) {
   return $net;
 }
 
-# true if there is at least one address between $a and $b
+sub _ipobj($$) {
+  my ($v6,$ip) = @_;
+  return ($v6 ? new Net::IP($ip) : new NetAddr::IP($ip));
+}
+
+# true if address/net object $b is within net object $a
+sub _contains($$$) {
+  my ($v6,$a,$b) = @_;
+  return ($v6 ? ($a->overlaps($b) == $IP_B_IN_A_OVERLAP) : $a->contains($b));
+}
+
+# true if there is at least one address between address objects $a and $b
 sub _gap($$$) {
   my ($v6,$a,$b) = @_;
 
-  return ((new Net::IP($b))->intip() > (new Net::IP($a))->intip() + 1) if ($v6);
-  return ((new NetAddr::IP($b)) - (new NetAddr::IP($a)) > 1);
+  return ($b->intip() > $a->intip() + 1) if ($v6);
+  return ($b - $a > 1);
 }
 
 
@@ -373,7 +380,7 @@ sub _load_hosts($$) {
   my $et = $_ETYPE{$f};
   my $sid = $o->{serverid};
   my $idcol = ($v6 ? 'duid' : 'ether');
-  my (@q,%idhash,%hentries,%seen,@groups,@ghosts,@nets);
+  my (@q,%idhash,%hentries,%seen,@groups,@ghosts,@nets,%ipobj);
 
   # addresses per interface id (incl. ether aliases for DHCPv4)
   db_query("SELECT h.$idcol,a.ip FROM hosts h,zones z,a_entries a " .
@@ -409,15 +416,22 @@ sub _load_hosts($$) {
     }
   }
 
+  # sort address lists once, cache address objects
+  foreach my $ips (values %idhash) {
+    @$ips = sort(@$ips) if (@$ips > 1);
+    $ipobj{$_} = _ipobj($v6,$_) foreach (@$ips);
+  }
+  $model->{_ipobj} = \%ipobj;
+
   # host entries
   undef @q;
   db_query("SELECT h.id,d.dhcp,d.comment FROM hosts h,zones z,dhcp_entries d " .
 	   "WHERE z.server=$sid AND h.zone=z.id AND d.type=$et->{host} " .
 	   $_EXPIRED_ZONE . " AND d.ref=h.id ORDER BY h.id,d.id",\@q);
-  push @{$hentries{$_->[0]}}, [ $_->[1], $_->[2] ] foreach (@q);
+  push @{$hentries{$_->[0]}}, [ (defined $_->[1] ? $_->[1] : ''), $_->[2] ]
+    foreach (@q);
 
-  @nets = map { $v6 ? new Net::IP($_->{cidr}) : new NetAddr::IP($_->{cidr}) }
-    @{$model->{netblocks}};
+  @nets = map { _ipobj($v6,$_->{cidr}) } @{$model->{netblocks}};
 
   # grouped hosts
   db_query("SELECT id,name FROM groups WHERE server=$sid AND type=1 " .
@@ -443,7 +457,7 @@ sub _load_hosts($$) {
 	next unless ($cnt[0][0]);
 
 	$grp = dhcp_model_add($model,'groups',{ name => $gname, id => $gid,
-						macros => \@macros });
+						macros => \@macros, hosts => [] });
 	$rows = _entries($et->{group},$gid);
 	foreach my $r (@$rows) {
 	  (my $t = (defined $r->[0] ? $r->[0] : '')) =~ s/\\"/"/g;
@@ -463,6 +477,7 @@ sub _load_hosts($$) {
 	    my $host = _host_node($model,$o,$h,$nets[$j],$j,\%idhash,\%seen,1)
 	      or next;
 	    $host->{group} = $gname;
+	    push @{$grp->{hosts}}, $host;
 	    _host_entries_grouped($model,$o,$host,$hentries{$h->[5]},\@macros);
 	  }
 	}
@@ -481,13 +496,16 @@ sub _load_hosts($$) {
 	   "AND h.grp<0 AND family(a.ip) = $f " .
 	   "ORDER BY a.ip;",\@ghosts);
   $model->{ungrouped} = (@ghosts > 0 ? 1 : 0);
+  $model->{ungrouped_hosts} = [];
   for my $j (0..$#nets) {
     foreach my $h (@ghosts) {
       my $host = _host_node($model,$o,$h,$nets[$j],$j,\%idhash,\%seen,0)
 	or next;
+      push @{$model->{ungrouped_hosts}}, $host;
       _host_entries_ungrouped($model,$o,$host,$hentries{$h->[5]});
     }
   }
+  delete $model->{_ipobj};
 }
 
 # create host node for host row $h within net $net, undef when the host
@@ -500,11 +518,7 @@ sub _host_node($$$$$$$$) {
   return undef if ($h->[6] && $h->[6] > 0 && $h->[6] < $o->{now});
 
   $ips = $idhash->{$h->[1]} || [];
-  @$ips = sort(@$ips) if (@$ips > 1);
-  my @in = grep {
-    $v6 ? ($net->overlaps(new Net::IP($_)) == $IP_B_IN_A_OVERLAP)
-	: $net->contains(new NetAddr::IP($_))
-  } @$ips;
+  my @in = grep { _contains($v6,$net,$model->{_ipobj}{$_}) } @$ips;
   return undef unless (@in);
   $ip = join(', ',@in);
 
@@ -525,6 +539,17 @@ sub _host_node($$$$$$$$) {
   if ($v6) { $node->{duid} = $id; $node->{duid_text} = dhcpduid($id); }
   else     { $node->{hw_address} = dhcpether($id); }
   return dhcp_model_add($model,'hosts',$node);
+}
+
+# option (and regexp matching it) used for automatic domain names
+sub _auto_domain_option($$) {
+  my ($o,$v6) = @_;
+
+  return ('option domain-name',qr/option\s+domain-name\s+/) unless ($v6);
+  # QUIRK: DHCPv6 puts the domain into dhcp6.name-servers
+  return ('option dhcp6.name-servers',qr/option\s+dhcp6\.name-servers\s+/)
+    if ($o->{isc_compat});
+  return ('option dhcp6.domain-search',qr/option\s+dhcp6\.domain-search\s+/);
 }
 
 sub _expand_macros($$) {
@@ -558,16 +583,15 @@ sub _host_entries_grouped($$$$$) {
   ($adomain = $host->{name}) =~ s/^[^\.]+\.//;
   ($short = $host->{name}) =~ s/\..*//g;
 
-  # group macros, unless the host has its own filename/root-path
-  # QUIRK: then none of the group macros is used
-  unless (grep { $_->[0] =~ /(filename|option\s+root-path)\s+/ } @lst) {
-    push @lst, [ $_, undef ] foreach (@$macros);
+  # group macros are added while the list has no filename/root-path
+  # (a host's own filename/root-path, or the first such macro, stops it)
+  foreach my $m (@$macros) {
+    push @lst, [ $m, undef ]
+      unless (grep { $_->[0] =~ /(filename|option\s+root-path)\s+/ } @lst);
   }
 
   if ($o->{auto_domainnames}) {
-    # QUIRK: DHCPv6 puts the domain into dhcp6.name-servers
-    my $opt = ($v6 ? 'option dhcp6.name-servers' : 'option domain-name');
-    my $re = ($v6 ? qr/option\s+dhcp6\.name-servers\s+/ : qr/option\s+domain-name\s+/);
+    my ($opt,$re) = _auto_domain_option($o,$v6);
     push @lst, [ "$opt \"$adomain\"", undef ]
       unless ((grep { $_->[0] =~ $re } @lst) and $adomain);
   }
@@ -591,11 +615,12 @@ sub _host_entries_ungrouped($$$$) {
   my $adomain;
 
   if ($o->{auto_domainnames}) {
+    my ($opt,$re) = _auto_domain_option($o,$v6);
     ($adomain = $host->{name}) =~ s/^[^\.]+\.//;
     # QUIRK: added even if the host has its own domain-name entry
-    _add_host_stmt($model,$host,
-		   ($v6 ? 'option dhcp6.name-servers' : 'option domain-name') .
-		   " \"$adomain\";",undef,0) if ($adomain);
+    _add_host_stmt($model,$host,"$opt \"$adomain\";",undef,0)
+      if ($adomain && ($o->{isc_compat} ||
+		       !grep { $_->[0] =~ $re } @{$entries || []}));
   }
   foreach my $e (@{$entries || []}) {
     _add_host_stmt($model,$host,$e->[0],$e->[1],0);

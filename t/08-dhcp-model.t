@@ -382,10 +382,11 @@ subtest 'ISC writer' => sub {
     push @{$vl->{nets}}, $net;
     dhcp_scope_add_kea_options($m, $net->{scope},
         [ { name => 'domain-name', data => 'lab.example' } ]);
-    dhcp_model_add($m, 'hosts', { name => 'h1.lab.example', net => 0,
-                                  hw_address => 'aa:bb:cc:dd:ee:ff',
-                                  address_text => '10.1.2.10' });
+    my $h = dhcp_model_add($m, 'hosts', { name => 'h1.lab.example', net => 0,
+                                          hw_address => 'aa:bb:cc:dd:ee:ff',
+                                          address_text => '10.1.2.10' });
     $m->{ungrouped} = 1;
+    $m->{ungrouped_hosts} = [ $h ];
 
     my $out = '';
     open(my $fh, '>', \$out) or die;

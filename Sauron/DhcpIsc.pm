@@ -20,8 +20,9 @@ $VERSION = '$Id:$ ';
 @EXPORT = qw(dhcp_isc_write);
 
 # statement text with trailing ';', undef if not expressible in ISC
-sub _line($$) {
-  my ($model,$st) = @_;
+#   $force  always append ';' (QUIRK of pool entries)
+sub _line($$;$) {
+  my ($model,$st,$force) = @_;
   my $t = (defined $st->{orig} ? $st->{orig} : format_isc_statement($st));
 
   unless (defined $t) {
@@ -30,7 +31,7 @@ sub _line($$) {
 		     defined $st->{key} ? $st->{key} : $st->{kind}));
     return undef;
   }
-  $t .= ';' unless ($t =~ /[;\{\}]\s*$/);
+  $t .= ';' if ($force || $t !~ /[;\{\}]\s*$/);
   return $t;
 }
 
@@ -39,15 +40,20 @@ sub _has_comment($) {
 }
 
 # print scope statements: $prefix . line [ . $csep . comment ]
-sub _print_scope($$$$$) {
-  my ($fh,$model,$scope,$prefix,$csep) = @_;
+#   $csep   comment separator, undef = comments are not written
+#   %opt    always_comment => write $csep even without comment
+#           force_semicolon => always append ';'
+sub _print_scope($$$$$;%) {
+  my ($fh,$model,$scope,$prefix,$csep,%opt) = @_;
 
   foreach my $st (@{$scope->{stmts}}) {
-    my $t = _line($model,$st);
+    my $t = _line($model,$st,$opt{force_semicolon});
     next unless (defined $t);
     $t .= "\t# macro eval" if ($st->{macro});
     print $fh $prefix, $t;
-    print $fh $csep, $st->{comment} if (defined $csep && _has_comment($st->{comment}));
+    if (defined $csep && ($opt{always_comment} || _has_comment($st->{comment}))) {
+      print $fh $csep, (defined $st->{comment} ? $st->{comment} : '');
+    }
     print $fh "\n";
   }
 }
@@ -123,16 +129,8 @@ sub _write_classes($$) {
     print $fh "\nclass \"$cl->{name}\" {\n";
     print $fh "\tmatch pick-first-value (option dhcp-client-identifier, hardware);\n"
       if (!$v6 && $cl->{type} == 3);
-    if ($v6) {
-      _print_scope($fh,$model,$cl->{scope},"\t","\t #");
-    } else {
-      # QUIRK: DHCPv4 class entries always get the comment separator
-      foreach my $st (@{$cl->{scope}{stmts}}) {
-	my $t = _line($model,$st);
-	next unless (defined $t);
-	print $fh "\t$t\t #" . (defined $st->{comment} ? $st->{comment} : '') . "\n";
-      }
-    }
+    # QUIRK: DHCPv4 class entries always get the comment separator
+    _print_scope($fh,$model,$cl->{scope},"\t","\t #",always_comment => !$v6);
     print $fh "}\n\n";
 
     next unless ($cl->{type} == 3);
@@ -159,7 +157,8 @@ sub _write_network_map($$) {
   print $fh "\n# network map\n\n";
   foreach my $vl (@{$model->{vlans}}) {
     print $fh "shared-network \"$vl->{name}\" {\n";
-    _print_scope($fh,$model,$vl->{scope},"\t","\t # ");
+    # QUIRK: comments of DHCPv6 shared-network entries are not written
+    _print_scope($fh,$model,$vl->{scope},"\t",($v6 ? undef : "\t # "));
     foreach my $net (@{$vl->{nets}}) {
       print $fh "\t# $net->{name}\n";
       if ($v6) {
@@ -179,12 +178,8 @@ sub _write_network_map($$) {
 	foreach my $r (@{$pool->{ranges}}) {
 	  print $fh "\t\t\t" . format_isc_statement($r) . ";\n";
 	}
-	# pool entries are generated without comments, ';' always added
-	foreach my $st (@{$pool->{scope}{stmts}}) {
-	  my $t = (defined $st->{orig} ? $st->{orig} : format_isc_statement($st));
-	  next unless (defined $t);
-	  print $fh "\t\t\t$t;\n";
-	}
+	# QUIRK: pool entries are written without comments, ';' always added
+	_print_scope($fh,$model,$pool->{scope},"\t\t\t",undef,force_semicolon => 1);
 	print $fh "\t\t}\n";
       }
       print $fh "\t}\n";
@@ -229,10 +224,8 @@ sub _write_groups($$) {
     print $fh "\t\n";
     for my $j (0..$nnets-1) {
       print $fh "\t# net: " . _net_label($model,$j,1) . "\n";
-      foreach my $h (@{$model->{hosts}}) {
-	next unless (defined $h->{group} && $h->{group} eq $g->{name} &&
-		     $h->{net} == $j);
-	_write_host($fh,$model,$h,"\t");
+      foreach my $h (@{$g->{hosts}}) {
+	_write_host($fh,$model,$h,"\t") if ($h->{net} == $j);
       }
     }
     print $fh "}\n\n";
@@ -247,9 +240,8 @@ sub _write_ungrouped($$) {
   return unless ($model->{ungrouped});
   for my $j (0..$nnets-1) {
     print $fh "# net: " . _net_label($model,$j,0) . "\n";
-    foreach my $h (@{$model->{hosts}}) {
-      next if (defined $h->{group} || $h->{net} != $j);
-      _write_host($fh,$model,$h,'');
+    foreach my $h (@{$model->{ungrouped_hosts}}) {
+      _write_host($fh,$model,$h,'') if ($h->{net} == $j);
     }
   }
 }

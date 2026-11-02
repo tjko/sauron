@@ -4,8 +4,9 @@
 # Builds a server with DHCP data covering all parts of the dhcpd.conf /
 # dhcpd6.conf generator (global/local entries, shared-networks, subnets,
 # routers, dynamic pools, groups with %{macros}, classes, ether aliases,
-# auto domain names, expired hosts, DHCPv6 DUIDs) and compares the
-# generated files with test/golden/dhcpd*.conf.
+# auto domain names, expired hosts, DHCPv6 DUIDs, failover primary) and a
+# slave server 'ns2' (failover secondary, site specific 'ns2' handling),
+# and compares the generated files with references in test/golden/.
 #
 # The reference files are the output of the generator before the DHCP
 # model refactoring; any difference is a regression. To regenerate them
@@ -21,7 +22,6 @@ use FindBin;
 use lib "$FindBin::Bin/..";
 use Test::More;
 use File::Temp qw(tempdir);
-use File::Copy qw(copy);
 
 my $db_link = "$FindBin::Bin/../Sauron/DB.pm";
 unless (-e $db_link) {
@@ -40,12 +40,15 @@ unless ($DB_DSN && $install_dir && -d $install_dir) {
 }
 
 use Sauron::DB;
+use Sauron::BackEnd;
 
 db_connect2() or plan skip_all => 'Cannot connect to test database';
+set_muser('golden-test');
 
 my $testdata = "$FindBin::Bin/../test";
 my $golden   = "$testdata/golden";
 my $server   = 'dhcp-golden';
+my $slave    = 'ns2';
 my $tmp      = tempdir(CLEANUP => 1);
 
 sub sql {
@@ -74,18 +77,27 @@ sub run {
 # =========================================================================
 # setup
 # =========================================================================
-my $old = 0;
-{
-    my @r;
-    db_query("SELECT id FROM servers WHERE name='$server'", \@r);
-    $old = @r;
+# remove test servers left by a previous run (slave first)
+sub cleanup {
+    foreach my $name ($slave, $server) {
+        my @r;
+        db_query("SELECT id FROM servers WHERE name='$name'", \@r);
+        next unless (@r);
+        die("cannot delete server $name: " . db_errormsg() . "\n")
+            if (delete_server($r[0][0]) < 0);
+    }
 }
-plan skip_all => "server $server already exists (test DB not clean)" if ($old);
+cleanup();
 
+# dhcp_flags: 0x01 = auto domain names, 0x02 = failover
 sql("INSERT INTO servers (name,hostname,hostmaster,comment,dhcp_flags) " .
     "VALUES ('$server','ns1.middle.earth.','hostmaster.middle.earth.'," .
-    "'golden test',1)");
+    "'golden test',3)");
 my $sid = val("SELECT id FROM servers WHERE name='$server'");
+sql("INSERT INTO servers (name,hostname,hostmaster,comment,masterserver) " .
+    "VALUES ('$slave','ns2.middle.earth.','hostmaster.middle.earth.'," .
+    "'golden slave',$sid)");
+my $slave_id = val("SELECT id FROM servers WHERE name='$slave'");
 sql("INSERT INTO nets (server,net,netname,name,vlan,subnet) VALUES " .
     "($sid,'10.10.0.0/16','net','net',-1,false)," .
     "($sid,'2001:db8::/32','net6','net6',-1,false)");
@@ -125,7 +137,7 @@ sub hid {
                "WHERE z.server=$sid AND z.name='$zone' AND h.domain='$name'");
 }
 
-sub add_group {
+sub new_group {
     my ($name, $type) = @_;
     sql("INSERT INTO groups (server,name,type) VALUES ($sid,'$name',$type)");
     return val("SELECT id FROM groups WHERE server=$sid AND name='$name'");
@@ -145,6 +157,7 @@ subtest 'extra DHCP data' => sub {
     dhcp(1,  $sid, 'option domain-name "middle.earth"', 'global c');
     dhcp(17, $sid, 'log-facility local6');
     dhcp(11, $sid, 'default-lease-time 3600', 'global6 c');
+    dhcp(7,  $slave_id, 'log-facility local5', 'slave local c');
 
     # shared-network and subnet entries
     my $vlan = val("SELECT id FROM vlans WHERE server=$sid AND name='servers1'");
@@ -162,26 +175,26 @@ subtest 'extra DHCP data' => sub {
     sql("UPDATE hosts SET router=1 WHERE id=" . hid('gw6'));
 
     # dynamic pools (two ranges in v4 because of the gap)
-    my $pool = add_group('dynpool', 2);
+    my $pool = new_group('dynpool', 2);
     dhcp(5, $pool, 'max-lease-time 1800');
     dhcp(5, $pool, 'allow members of "vip"');
     sql("UPDATE hosts SET grp=$pool WHERE id=" . hid($_))
         foreach (qw(dyn1 dyn2 dyn3 dyn4 dyn5));
-    my $pool6 = add_group('dynpool6', 2);
+    my $pool6 = new_group('dynpool6', 2);
     dhcp(15, $pool6, 'preferred-lifetime 600');
     sql("UPDATE hosts SET grp=$pool6 WHERE id=" . hid($_))
         foreach (qw(dyn6a dyn6b));
 
     # classes: MAC based (3) with members via grp and group_entries,
     # custom (103)
-    my $vip = add_group('vip', 3);
+    my $vip = new_group('vip', 3);
     dhcp(5, $vip, 'option domain-name "vip.middle.earth"', 'vip c');
     dhcp(15, $vip, 'option dhcp6.domain-search "vip.middle.earth"');
     my $pxe1 = hid('pxe1');
     sql("UPDATE hosts SET grp=$vip, ether='0A0B0C0D0E01' WHERE id=$pxe1");
     sql("INSERT INTO group_entries (host,grp) VALUES (" .
         hid('ws1', 'middle.earth') . ",$vip)");
-    my $pxe = add_group('pxe', 103);
+    my $pxe = new_group('pxe', 103);
     dhcp(5, $pxe, 'match if substring(option vendor-class-identifier,0,9) = "PXEClient"');
     dhcp(5, $pxe, 'filename "pxelinux.0"');
 
@@ -189,6 +202,8 @@ subtest 'extra DHCP data' => sub {
     my $grp = val("SELECT grp FROM hosts WHERE id=" . hid('terminal1', 'middle.earth'));
     dhcp(5, $grp, 'option host-name "%{host}"');
     dhcp(5, $grp, 'filename "%{host}-%{ether}.cfg"', 'macro c');
+    # not used: added after a filename macro
+    dhcp(5, $grp, 'option merit-dump "%{fqdn}"');
 
     # host entries, ether alias, expired host
     my $ws2 = hid('ws2', 'middle.earth');
@@ -221,15 +236,20 @@ sub normalize {
 subtest 'generate and compare' => sub {
     my $gen = "$tmp/gen";
     mkdir($gen) or die $!;
+    mkdir("$gen/ns2") or die $!;
     run("$install_dir/sauron --dhcp $server $gen");
     run("$install_dir/sauron --dhcp6 $server $gen");
     run("$install_dir/sauron --dhcp --dhcpclass vip $server $gen");
+    run("$install_dir/sauron --dhcp $slave $gen/ns2");
+    run("$install_dir/sauron --dhcp6 $slave $gen/ns2");
 
-    foreach my $f ('dhcpd.conf', 'dhcpd6.conf', 'vip.class') {
+    foreach my $f ('dhcpd.conf', 'dhcpd6.conf', 'vip.class',
+                   'ns2/dhcpd.conf', 'ns2/dhcpd6.conf') {
         ok(-r "$gen/$f", "$f generated") or next;
         my $got = normalize("$gen/$f");
 
         if (my $dir = $ENV{SAURON_GOLDEN_UPDATE}) {
+            mkdir("$dir/ns2") unless (-d "$dir/ns2");
             open(my $out, '>', "$dir/$f") or die "$dir/$f: $!";
             print $out $got;
             close($out);
@@ -245,10 +265,11 @@ subtest 'generate and compare' => sub {
             pass("$f matches golden reference");
         } else {
             fail("$f differs from golden reference");
-            copy("$gen/$f", "$tmp/$f.got");
             diag(`diff -u $golden/$f $gen/$f`);
         }
     }
 };
+
+cleanup();
 
 done_testing();
