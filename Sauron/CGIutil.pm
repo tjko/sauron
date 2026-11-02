@@ -698,9 +698,17 @@ sub form_check_form($$$) {
 	  return 2
 	    if (form_check_field($rec,$tmp,$k) ne '');
 	}
-	# whole row check (fields depending on each other)
-	return 2 if ($rec->{rowcheck} &&
-		     (form_row_check($rec,form_row_values($rec,$p."_".$j)))[0] ne '');
+	# whole row check (fields depending on each other), for new or
+	# changed rows only: a stored row that fails it does not block saving
+	if ($rec->{rowcheck}) {
+	  my $v = form_row_values($rec,$p."_".$j);
+	  my $id = param($p."_".$j."_id");
+	  my ($old) = grep { defined $id && $id ne '' && $_->[0] eq $id }
+	    @{$data->{$tag}}[1..$#{$data->{$tag}}];
+	  my $changed = !$old ||
+	    grep { (defined $old->[$_+1] ? $old->[$_+1] : '') ne $v->[$_] } 0..$#$v;
+	  return 2 if ($changed && (form_row_check($rec,$v,$data))[0] ne '');
+	}
       }
 
       # if we get this far, check what records we need to add/update/delete
@@ -737,12 +745,12 @@ sub form_check_form($$$) {
 	    push @{$list}, $new;
 	  } else {
 	    for $k (1..$f) {
-	      if (param($p2."_".$k) ne $$list[$ind][$k]) {
+	      $tmp=param($p2."_".$k);
+	      if ($rec->{type}[$k-1] eq 'enum') {
+		$tmp=param($p2."_".$k."_enum") if ($tmp eq '');
+	      }
+	      if ($tmp ne $$list[$ind][$k]) {
 		$$list[$ind][$f+1]=1;
-		$tmp=param($p2."_".$k);
-                if ($rec->{type}[$k-1] eq 'enum') {
-                  $tmp=param($p2."_".$k."_enum") if ($tmp eq '');
-                }
 		$tmp=($tmp eq 'on' ? 't':'f') if ($type==5 && $k>1);
 		$$list[$ind][$k]=$tmp;
 		#print p,"$p2 modified record (field $k)";
@@ -847,7 +855,7 @@ sub form_check_form($$$) {
 
 # dhcp_field($tag,$name,$family,%extra) - form field (ftype 2) for a list
 # of DHCP entries (dhcp_entries rows [id, dhcp, comment, fmt]); $family 4,
-# 6 or 0 (by the entry: DHCPv6 if it uses dhcp6.* options); %extra adds
+# 6 or 0 (by the record's 'net' address, e.g. a net); %extra adds
 # or overrides keys (iff, no_empty, extrainfo, label, ...)
 sub dhcp_field($$$;%) {
   my ($tag,$name,$family,%extra) = @_;
@@ -857,7 +865,7 @@ sub dhcp_field($$$;%) {
 	   type => ['text','text','enum'], enum => [undef,undef,\%DHCP_FMT_NAMES],
 	   enum_only => [0,0,1],
 	   len => [50,20,2], maxlen => [1000,80,1], empty => [0,1,0],
-	   whitesp => ['N','P',''], elabels => [$label,'comment','format'],
+	   whitesp => ['LT','P',''], elabels => [$label,'comment','format'],
 	   family => $family, rowcheck => \&_dhcp_rowcheck,
 	   extrainfo => 'format: ISC + KEA = ISC statement used for both ' .
 	     '(where KEA has an equivalent), ISC only = ISC statement, ' .
@@ -866,10 +874,10 @@ sub dhcp_field($$$;%) {
 	   %extra };
 }
 
-sub _dhcp_rowcheck($$) {
-  my ($rec,$v) = @_;
+sub _dhcp_rowcheck($$;$) {
+  my ($rec,$v,$data) = @_;
   my $family = $rec->{family} ||
-    ((defined $v->[0] && $v->[0] =~ /\bdhcp6\./) ? 6 : 4);
+    ((ref($data) eq 'HASH' && defined $data->{net} && $data->{net} =~ /:/) ? 6 : 4);
 
   return ('','') if (!defined $v->[0] || $v->[0] eq '');
   return dhcp_entry_check($v->[0],$v->[2],$family);
@@ -890,20 +898,20 @@ sub form_row_values($$) {
   return \@v;
 }
 
-# form_row_check($rec,\@values) - ($error,$warning) of an ftype 2 row
-# from the field's rowcheck callback (empty strings when not set)
-sub form_row_check($$) {
-  my ($rec,$v) = @_;
+# form_row_check($rec,\@values,$data) - ($error,$warning) of an ftype 2
+# row from the field's rowcheck callback (empty strings when not set)
+sub form_row_check($$;$) {
+  my ($rec,$v,$data) = @_;
 
   return ('','') unless ($rec->{rowcheck});
-  my ($e,$w) = $rec->{rowcheck}->($rec,$v);
+  my ($e,$w) = $rec->{rowcheck}->($rec,$v,$data);
   return ((defined $e ? $e : ''),(defined $w ? $w : ''));
 }
 
 # print the row check result of an ftype 2 row as a table row
-sub form_row_check_print($$) {
-  my ($rec,$v) = @_;
-  my ($e,$w) = form_row_check($rec,$v);
+sub form_row_check_print($$;$) {
+  my ($rec,$v,$data) = @_;
+  my ($e,$w) = form_row_check($rec,$v,$data);
 
   return unless ($e ne '' || $w ne '');
   print '<TR><TD colspan="' . ($rec->{fields} + 1) . '">',
@@ -1270,7 +1278,7 @@ sub form_magic($$$) {
         print td(checkbox(-label=>'Delete',
 		     -name=>$p2."_del",-checked=>scalar(param($p2."_del")))),
 	       "</TR>";
-	form_row_check_print($rec,form_row_values($rec,$p2))
+	form_row_check_print($rec,form_row_values($rec,$p2),$data)
 	  if ($rec->{rowcheck} && param($p2."_del") ne 'on');
       }
       print "<TR>";
@@ -2011,8 +2019,6 @@ sub display_form($$) {
           }
 	}
 	print "</TR>";
-	form_row_check_print($rec,[ map { $$a[$j][$_] } (1..$rec->{fields}) ])
-	  if ($rec->{rowcheck});
       }
       if (@{$a} < 2) { print "<TR><TD>&nbsp;</TD></TR>"; }
       print "</TABLE></TD>";

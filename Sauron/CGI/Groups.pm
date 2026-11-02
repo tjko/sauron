@@ -166,7 +166,7 @@ sub menu_handler {
   get_vmps_list($serverid,\%vmps_list_hash,\@vmps_list_lst);
 
   if ($sub eq 'add') {
-    $data{type}=1; $data{alevel}=0; $data{dhcp}=[]; $data{printer}=[];
+    $data{type}=1; $data{alevel}=0; $data{dhcp}=[]; $data{dhcp6}=[]; $data{printer}=[];
     $data{server}=$serverid;
     $res=add_magic('add','Group','groups',\%group_form,
 		   \&restricted_add_group,\%data);

@@ -708,21 +708,43 @@ sub add_array_field($$$$$$) {
 # fmt: 0 = ISC and KEA, 1 = ISC only, 2 = KEA only (see Sauron::DhcpDefs)
 use constant DHCP_ENTRY_COLUMNS => 'id,dhcp,comment,COALESCE(fmt,0)';
 
+# fmt value of a DHCP entry row: 0..2, undef for an invalid value
+# (missing/empty = 0)
 sub _dhcp_fmt($) {
   my ($fmt) = @_;
-  return (defined $fmt && $fmt =~ /^\s*([012])\s*$/) ? $1 : 0;
+  return 0 if (!defined $fmt || $fmt =~ /^\s*$/);
+  return ($fmt =~ /^\s*([012])\s*$/) ? $1 : undef;
+}
+
+# normalize DHCP entry rows to [id, dhcp, comment, fmt, marker]: a row
+# of exactly 4 elements is the former layout [id, dhcp, comment, marker];
+# returns -30 on an invalid fmt
+sub _dhcp_rows($) {
+  my ($list) = @_;
+
+  for my $row (@$list) {
+    next unless (ref($row) eq 'ARRAY' && @$row > 1);
+    next if (defined $row->[0] && $row->[0] !~ /^\d*$/);   # header
+    splice(@$row,3,0,0) if (@$row == 4);
+    my $f = _dhcp_fmt($row->[3]);
+    return -30 unless (defined $f);
+    $row->[3] = $f;
+  }
+  return 0;
 }
 
 # add_dhcp_field($keyname,$rec,$vals) - insert DHCP entries of
-# $rec->{$keyname} with "type,ref" values $vals; rows may omit comment
-# and fmt (header rows are skipped)
+# $rec->{$keyname} with "type,ref" values $vals; rows are
+# [id, dhcp, comment?, fmt?, marker?] (4 element rows: former layout),
+# header rows are skipped; -30 = invalid fmt
 sub add_dhcp_field($$$) {
   my ($keyname,$rec,$vals) = @_;
   my %tmp;
 
   return 0 unless (ref($rec) eq 'HASH' && ref($rec->{$keyname}) eq 'ARRAY');
+  return -30 if (_dhcp_rows($rec->{$keyname}) < 0);
   $tmp{list} = [ map { [ $_->[0], $_->[1],
-			 (defined $_->[2] ? $_->[2] : ''), _dhcp_fmt($_->[3]) ] }
+			 (defined $_->[2] ? $_->[2] : ''), ($_->[3] || 0) ] }
 		 grep { ref($_) eq 'ARRAY' && @$_ > 1 &&
 			(!defined $_->[0] || $_->[0] =~ /^\d*$/) }
 		 @{$rec->{$keyname}} ];
@@ -738,12 +760,7 @@ sub update_dhcp_field($$$) {
   my $list = $rec->{$keyname};
 
   if (ref($list) eq 'ARRAY') {
-    for my $i (1..$#{$list}) {
-      my $row = $list->[$i];
-      next unless (ref($row) eq 'ARRAY');
-      splice(@$row,3,0,0) if (@$row == 4);
-      $row->[3] = _dhcp_fmt($row->[3]);
-    }
+    return -30 if (_dhcp_rows([ @{$list}[1..$#{$list}] ]) < 0);
   }
   return update_array_field("dhcp_entries",4,"dhcp,comment,fmt,type,ref",
 			    $keyname,$rec,$vals);
