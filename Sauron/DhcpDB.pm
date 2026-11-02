@@ -29,7 +29,8 @@ use vars qw($VERSION @ISA @EXPORT);
 $VERSION = '$Id:$ ';
 
 @ISA = qw(Exporter);
-@EXPORT = qw(dhcp_model_from_db dhcp_model_to_db dhcp_db_resolver);
+@EXPORT = qw(dhcp_model_from_db dhcp_model_to_db dhcp_db_resolver
+	     dhcp_ha_from_db);
 
 # dhcp_entries.type per address family
 my %_ETYPE = (
@@ -677,6 +678,66 @@ sub dhcp_db_resolver($$) {
     my ($e,$addr) = Socket::getnameinfo($res[0]{addr},Socket::NI_NUMERICHOST());
     return ($e ? undef : ($ip->{$n} = $addr));
   };
+}
+
+
+###########################################################################
+
+# dhcp_ha_from_db(\%opts) - KEA High Availability settings from the
+# failover settings of the server pair (master = primary, its slave =
+# secondary), undef when failover is off
+#   server, masterserver  server records (get_server)
+#   family                4 or 6 (DHCPv6 uses the *6 settings)
+#   warn                  coderef($msg) for problems
+# returns { this, mode, max_response_delay, peers => [ {name,url,role} ] }
+sub dhcp_ha_from_db($) {
+  my ($o) = @_;
+  my $v6 = ($o->{family} && $o->{family} == 6);
+  my $sfx = ($v6 ? '6' : '');
+  my $server = $o->{server};
+  my $warn = $o->{warn} || sub { };
+  my ($master,$primary,$secondary,@q);
+
+  $master = ($server->{masterserver} > 0 ? $o->{masterserver} : $server);
+  return undef unless ($master && $master->{"dhcp_flags_fo$sfx"});
+
+  if ($server->{masterserver} > 0) {
+    ($primary,$secondary) = ($master,$server);
+  } else {
+    db_query("SELECT name,hostaddr,hostname FROM servers WHERE masterserver=" .
+	     int($server->{id}) . " ORDER BY id",\@q);
+    unless (@q) {
+      $warn->("failover enabled but no secondary server (slave) found, " .
+	      "High Availability not generated");
+      return undef;
+    }
+    $primary = $server;
+    $secondary = { name => $q[0][0], hostaddr => $q[0][1], hostname => $q[0][2] };
+  }
+
+  my $port = $master->{"kea_ha_port$sfx"} || ($v6 ? 8002 : 8001);
+  my $split = $master->{"df_split$sfx"};
+  my $mode = ((defined $split && $split ne '' && ($split <= 0 || $split >= 255))
+	      ? 'hot-standby' : 'load-balancing');
+  my @peers;
+  foreach my $p ([$primary,'primary'],
+		 [$secondary,($mode eq 'hot-standby' ? 'standby' : 'secondary')]) {
+    my ($srv,$role) = @$p;
+    my $ip = $srv->{hostaddr};
+    $ip =~ s{/\d+$}{} if (defined $ip);
+    unless (defined $ip && $ip ne '') {
+      $warn->("server $srv->{name} has no IP address, High Availability " .
+	      "not generated");
+      return undef;
+    }
+    $ip = "[$ip]" if ($ip =~ /:/);
+    push @peers, { name => $srv->{name}, url => "http://$ip:$port/", role => $role };
+  }
+
+  my $delay = $master->{"df_max_delay$sfx"};
+  return { this => $server->{name}, mode => $mode, peers => \@peers,
+	   max_response_delay => ((defined $delay && $delay =~ /^\d+$/ && $delay > 0)
+				  ? $delay * 1000 : undef) };
 }
 
 

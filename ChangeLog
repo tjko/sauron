@@ -25,6 +25,16 @@
 	  entries (1000 characters) are allowed. add_net/add_vlan now keep
 	  comments and quote DHCP entries correctly [svamberg]
 
+	- KEA High Availability: --kea/--kea6 turn the DHCP failover
+	  settings of a master/slave pair into the HA hook configuration
+	  (libdhcp_ha + libdhcp_lease_cmds; load-balancing, hot-standby
+	  for split 0/255; DHCPv6 uses the DHCP6 failover settings). New
+	  server fields 'KEA HA listener port' (kea_ha_port, kea_ha_port6;
+	  sql/*.sql and dbconvert updated) and config SAURON_KEA_HOOKS_DIR.
+	  Fix: the DHCP6 'auto-domainnames' and 'Enable failover protocol'
+	  settings were never read (always shown as No and reset on save)
+	  [svamberg]
+
 	- sauron: new options --kea and --kea6 generate KEA DHCP
 	  configuration (kea-dhcp4.conf, kea-dhcp6.conf) from the same data
 	  as dhcpd.conf; validated with --check using the new config options

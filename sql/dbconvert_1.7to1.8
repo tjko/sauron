@@ -517,6 +517,11 @@ ALTER TABLE cidr_entries ADD COLUMN tls TEXT;
 ALTER TABLE dhcp_entries ADD COLUMN fmt INT4 DEFAULT 0;
 
 
+/* KEA High Availability listener ports */
+ALTER TABLE servers ADD COLUMN kea_ha_port INT DEFAULT 8001;
+ALTER TABLE servers ADD COLUMN kea_ha_port6 INT DEFAULT 8002;
+
+
 /* set DB version */
 
 UPDATE settings SET value='1.8' where setting='dbversion';

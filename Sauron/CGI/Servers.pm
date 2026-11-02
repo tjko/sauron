@@ -192,7 +192,7 @@ my %server_form = (
   dhcp_field('dhcp','Global DHCP Settings',4, label=>'dhcptab line',
 	     iff=>['masterserver','-1']),
   {ftype=>0,
-   name=>'DHCP Failover Settings &mdash; (considered obsolete - use Local DHCP feature instead)'},
+   name=>'DHCP Failover Settings (ISC failover, KEA High Availability)'},
   {ftype=>3, tag=>'dhcp_flags_fo', name=>'Enable failover protocol',
    type=>'enum', enum=>{0=>'No',1=>'Yes'}, iff=>['masterserver','-1']},
   {ftype=>1, tag=>'df_port', name=>'Port number', type=>'int', len=>5,
@@ -207,6 +207,10 @@ my %server_form = (
    iff=>['masterserver','-1']},
   {ftype=>1, tag=>'df_loadbalmax', name=>'Load balance max (seconds)',
    type=>'int', len=>5, iff=>['masterserver','-1']},
+  {ftype=>1, tag=>'kea_ha_port', name=>'KEA HA listener port', type=>'int',
+   len=>5, iff=>['masterserver','-1'],
+   extrainfo=>'KEA uses the High Availability hook: port of its HTTP listener; ' .
+     'split 0 or 255 = hot-standby, otherwise load-balancing'},
 
   {ftype=>0, name=>'DHCP6 Settings'},
   {ftype=>3, tag=>'dhcp_flags_ad6', name=>'auto-domainnames',
@@ -217,7 +221,7 @@ my %server_form = (
   dhcp_field('dhcp6','Global DHCP Settings',6, label=>'dhcptab line',
 	     iff=>['masterserver','-1']),
   {ftype=>0,
-   name=>'DHCP6 Failover Settings &mdash; (considered obsolete - use Local DHCP feature instead)'},
+   name=>'DHCP6 Failover Settings (KEA High Availability only, ISC DHCPv6 has no failover)'},
   {ftype=>3, tag=>'dhcp_flags_fo6', name=>'Enable failover protocol',
    type=>'enum', enum=>{0=>'No',1=>'Yes'}, iff=>['masterserver','-1']},
   {ftype=>1, tag=>'df_port6', name=>'Port number', type=>'int', len=>5,
@@ -232,6 +236,8 @@ my %server_form = (
    iff=>['masterserver','-1']},
   {ftype=>1, tag=>'df_loadbalmax6', name=>'Load balance max (seconds)',
    type=>'int', len=>5, iff=>['masterserver','-1']},
+  {ftype=>1, tag=>'kea_ha_port6', name=>'KEA HA listener port', type=>'int',
+   len=>5, iff=>['masterserver','-1']},
 
 
   {ftype=>0, name=>'Record info', no_edit=>1},

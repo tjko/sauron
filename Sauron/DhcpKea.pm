@@ -330,8 +330,8 @@ sub _host($$$) {
 #   hosts                   reservations in the subnet of their address;
 #                           group statements are merged into them, class
 #                           membership (MAC/DUID classes) -> client-classes
-# Failover (ISC failover protocol) has no KEA equivalent (KEA uses the HA
-# hook library) and is not generated.
+# Failover settings become the KEA High Availability hook ($model->{ha},
+# see Sauron::DhcpDB::dhcp_ha_from_db), with the lease_cmds hook it needs.
 
 # reservation parameters KEA accepts in a reservation (DHCPv4)
 my %_HOST_PARAMS = map { $_ => 1 } qw(next-server server-hostname
@@ -549,7 +549,45 @@ sub dhcp_model_to_kea($;$) {
   }
 
   $cfg{'option-def'} = $_ctx->{'option-def'} if (@{$_ctx->{'option-def'}});
+  _kea_ha($model,\%cfg) if ($model->{ha});
   return { ($v6 ? 'Dhcp6' : 'Dhcp4') => \%cfg };
+}
+
+# High Availability: hooks lease_cmds + ha (library names are found in
+# KEA's hooks directory unless $model->{hooks_dir} is set), the dedicated
+# HTTP listener when multi-threading is not disabled
+sub _kea_ha($$) {
+  my ($model,$cfg) = @_;
+  my $ha = $model->{ha};
+  my $dir = $model->{hooks_dir};
+  my $lib = sub { (defined $dir && $dir ne '') ? "$dir/$_[0]" : $_[0] };
+  my %rel = (this => 'this-server-name', mode => 'mode', peers => 'peers');
+
+  my %h = map { ($rel{$_} => $ha->{$_}) } keys %rel;
+  $h{'max-response-delay'} = $ha->{max_response_delay}
+    if (defined $ha->{max_response_delay});
+  my $mt = $cfg->{'multi-threading'};
+  unless (ref($mt) eq 'HASH' && defined $mt->{'enable-multi-threading'} &&
+	  !$mt->{'enable-multi-threading'}) {
+    $h{'multi-threading'} = { 'enable-multi-threading' => JSON::PP::true(),
+			      'http-dedicated-listener' => JSON::PP::true(),
+			      'http-listener-threads' => 0,
+			      'http-client-threads' => 0 };
+  }
+
+  my $hooks = (ref($cfg->{'hooks-libraries'}) eq 'ARRAY' ? $cfg->{'hooks-libraries'} : []);
+  my %have = map { ((defined $_->{library} ? $_->{library} : '') =~ m{([^/]+)$})[0] => $_ }
+    grep { ref($_) eq 'HASH' } @$hooks;
+  push @$hooks, { library => $lib->('libdhcp_lease_cmds.so') }
+    unless ($have{'libdhcp_lease_cmds.so'});
+  if ($have{'libdhcp_ha.so'}) {
+    dhcp_model_warn($model,"hooks-libraries already contain libdhcp_ha.so, " .
+		    "High Availability from failover settings not added");
+  } else {
+    push @$hooks, { library => $lib->('libdhcp_ha.so'),
+		    parameters => { 'high-availability' => [ \%h ] } };
+  }
+  $cfg->{'hooks-libraries'} = $hooks;
 }
 
 # stable unique subnet ids: a KEA only 'id' entry, else the Sauron net

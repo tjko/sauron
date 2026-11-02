@@ -1075,7 +1075,7 @@ sub get_server($$) {
 		    "df_loadbalmax,hostaddr,".
 		    "cdate,cuser,mdate,muser,lastrun," .
 		    "df_port6,df_max_delay6,df_max_uupdates6,df_mclt6,df_split6,".
-		    "df_loadbalmax6,dhcp_flags,".
+		    "df_loadbalmax6,dhcp_flags6,kea_ha_port,kea_ha_port6,".
             "listen_on_port_v6,transfer_source_v6,query_src_ip_v6,query_src_port_v6," .
             "tls_default_profile,tls_listen_profile,tls_listen_port," .
             "doh_profile,doh_port,doh_endpoint",

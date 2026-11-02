@@ -291,6 +291,47 @@ subtest 'KEA writer' => sub {
 };
 
 # =========================================================================
+subtest 'KEA High Availability' => sub {
+    my $mk = sub {
+        my $m = dhcp_model_new(4);
+        $m->{local} = dhcp_scope_new();
+        $m->{ha} = { this => 'a', mode => 'load-balancing', max_response_delay => 60000,
+                     peers => [ { name => 'a', url => 'http://192.0.2.1:8001/', role => 'primary' },
+                                { name => 'b', url => 'http://192.0.2.2:8001/', role => 'secondary' } ] };
+        return $m;
+    };
+    my $cfg = dhcp_model_to_kea($mk->())->{Dhcp4};
+    my $h = $cfg->{'hooks-libraries'};
+    is_deeply([ map { $_->{library} } @$h ], [ 'libdhcp_lease_cmds.so', 'libdhcp_ha.so' ],
+              'lease_cmds and ha hooks');
+    my $ha = $h->[1]{parameters}{'high-availability'}[0];
+    is($ha->{'this-server-name'}, 'a', 'this server');
+    is($ha->{mode}, 'load-balancing', 'mode');
+    is($ha->{'max-response-delay'}, 60000, 'max-response-delay in ms');
+    ok($ha->{'multi-threading'}{'http-dedicated-listener'}, 'dedicated listener');
+
+    my $m = $mk->();
+    $m->{hooks_dir} = '/opt/kea/hooks';
+    dhcp_scope_add_stmt($m, $m->{global}, kea_json_to_statement(
+        '{"hooks-libraries":[{"library":"/x/libdhcp_lease_cmds.so"}]}', 4));
+    dhcp_scope_add_stmt($m, $m->{global}, kea_json_to_statement(
+        '{"multi-threading":{"enable-multi-threading":false}}', 4));
+    $cfg = dhcp_model_to_kea($m)->{Dhcp4};
+    is_deeply([ map { $_->{library} } @{$cfg->{'hooks-libraries'}} ],
+              [ '/x/libdhcp_lease_cmds.so', '/opt/kea/hooks/libdhcp_ha.so' ],
+              'existing lease_cmds kept, hooks directory used');
+    ok(!exists $cfg->{'hooks-libraries'}[1]{parameters}{'high-availability'}[0]{'multi-threading'},
+       'no dedicated listener when multi-threading is disabled');
+
+    $m = $mk->();
+    dhcp_scope_add_stmt($m, $m->{global}, kea_json_to_statement(
+        '{"hooks-libraries":[{"library":"libdhcp_ha.so","parameters":{}}]}', 4));
+    $cfg = dhcp_model_to_kea($m)->{Dhcp4};
+    is(scalar @{$cfg->{'hooks-libraries'}}, 2, 'configured ha hook not duplicated');
+    ok((grep { /already contain libdhcp_ha/ } @{$m->{warnings}}), 'reported');
+};
+
+# =========================================================================
 subtest 'KEA only statements in the database' => sub {
     my @cases = (
         [ kea_param_to_statement('renew-timer', 900, 4), '{"renew-timer":900}' ],

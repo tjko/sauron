@@ -89,14 +89,16 @@ sub cleanup {
 }
 cleanup();
 
-# dhcp_flags: 0x01 = auto domain names, 0x02 = failover
-sql("INSERT INTO servers (name,hostname,hostmaster,comment,dhcp_flags) " .
+# dhcp_flags: 0x01 = auto domain names, 0x02 = failover; DHCPv6 failover
+# (KEA HA only) in hot-standby (split 255)
+sql("INSERT INTO servers (name,hostname,hostmaster,comment,dhcp_flags," .
+    "dhcp_flags6,df_split6,hostaddr) " .
     "VALUES ('$server','ns1.middle.earth.','hostmaster.middle.earth.'," .
-    "'golden test',3)");
+    "'golden test',3,2,255,'192.0.2.10')");
 my $sid = val("SELECT id FROM servers WHERE name='$server'");
-sql("INSERT INTO servers (name,hostname,hostmaster,comment,masterserver) " .
+sql("INSERT INTO servers (name,hostname,hostmaster,comment,masterserver,hostaddr) " .
     "VALUES ('$slave','ns2.middle.earth.','hostmaster.middle.earth.'," .
-    "'golden slave',$sid)");
+    "'golden slave',$sid,'192.0.2.11')");
 my $slave_id = val("SELECT id FROM servers WHERE name='$slave'");
 sql("INSERT INTO nets (server,net,netname,name,vlan,subnet) VALUES " .
     "($sid,'10.10.0.0/16','net','net',-1,false)," .

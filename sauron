@@ -20,6 +20,7 @@ use Sauron::UtilZone;
 use Sauron::DhcpDB;
 use Sauron::DhcpIsc;
 use Sauron::DhcpKea;
+use Sauron::DhcpModel;
 use Net::IP qw(:PROC);
 use open ':locale';
 
@@ -2054,13 +2055,15 @@ sub make_kea_conf($) {
 				auto_domainnames => $dhcp_auto_domainnames,
 				failover_mode => 0, now => $time_now_ticks,
 				verbose => $opt_verbose });
+  $model->{ha} = dhcp_ha_from_db({ server => \%server, masterserver => \%masterserver,
+				   family => $family,
+				   warn => sub { dhcp_model_warn($model,$_[0]) } });
+  $model->{hooks_dir} = $SAURON_KEA_HOOKS_DIR;
   dhcp_kea_write(\*KEAFILE,$model,{ filename => $file, version => $VER,
 				   user => $user, time => $time_now,
 				   resolve => dhcp_db_resolver($sid,$family) });
   close(KEAFILE);
   print STDERR "warning: $_\n" foreach (@{$model->{warnings}});
-  print STDERR "warning: failover is not generated for KEA (use the KEA HA " .
-    "hook library)\n" if ($failover_mode);
 
   $chk_prog = ($v6 ? $SAURON_KEA6_CHK_PROG : $SAURON_KEA4_CHK_PROG);
   if ($opt_check && $chk_prog) {

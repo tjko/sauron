@@ -905,8 +905,11 @@
               Dhcp4/Dhcp6 section (global parameters, client classes,
               shared networks, subnets, pools and reservations); entries
               marked KEA only are included, ISC only entries and ISC class
-              match expressions are left out with a warning. Failover is
-              not generated (use the KEA HA hook library). With
+              match expressions are left out with a warning. Failover
+              settings of a master/slave server pair generate the KEA High
+              Availability hook (load-balancing, or hot-standby for split 0
+              or 255; DHCPv6 too), listening on the server's KEA HA port.
+              With
               <option>--check</> the file is validated with
               <varname>SAURON_KEA4_CHK_PROG</> / <varname>SAURON_KEA6_CHK_PROG</>.</>
   </row>
