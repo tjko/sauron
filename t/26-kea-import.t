@@ -142,6 +142,24 @@ subtest 'stored data' => sub {
     ok((grep { /^\{"test":/ } @kea), 'class test stored');
     ok((grep { $_ eq q({"flex-id":"'ws3'"}) } @kea), 'flex-id stored');
     ok((grep { /^\{"pd-pools":/ } @kea), 'pd-pools stored');
+    ok((grep { /"always-send":true/ } @kea), 'option with always-send kept for KEA');
+    is(rows("SELECT count(*) FROM dhcp_entries WHERE type=1 AND ref=$sid AND fmt=1 " .
+            "AND dhcp='option domain-name-servers 10.30.0.2, 10.30.0.3'")->[0][0], 1,
+       'its ISC form stored as ISC only');
+    is(rows("SELECT count(*) FROM dhcp_entries WHERE type=15 AND ref=$vip")->[0][0], 1,
+       'DHCPv6 entries added to the class created by the DHCPv4 import');
+};
+
+subtest 're-import does not duplicate host data' => sub {
+    my $ws1 = host('ws1')->[0];
+    my $q = "SELECT (SELECT count(*) FROM dhcp_entries WHERE type=3 AND ref=$ws1)," .
+            " (SELECT count(*) FROM group_entries WHERE host=$ws1)";
+    my $before = rows($q)->[0];
+    run("$install_dir/import-dhcp --kea $server $testdata/kea-import.json");
+    is_deeply(rows($q)->[0], $before, 'host entries and class memberships unchanged');
+    my $pool = host('dyn1')->[3];
+    is(rows("SELECT name FROM groups WHERE id=$pool")->[0][0], 'pool-2',
+       'pool of the second import gets an unused name');
 };
 
 sub normalize {

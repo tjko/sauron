@@ -47,7 +47,7 @@
         "reservations": [
           {
             "hostname": "kea-host6.middle.earth",
-            "duid": "00030001001122334455",
+            "duid": "000100012a3b4c5d001122334455",
             "ip-addresses": [
               "2001:db8:250::10"
             ]

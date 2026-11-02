@@ -25,9 +25,9 @@ sub _line($$;$) {
   my ($model,$st,$force) = @_;
   my $t;
 
-  # KEA only statements are never written
-  $t = (defined $st->{orig} ? $st->{orig} : format_isc_statement($st))
-    unless ($st->{fmt} && $st->{fmt} == DHCP_FMT_KEA);
+  # KEA only statements are never written (silently, by design)
+  return undef if ($st->{fmt} && $st->{fmt} == DHCP_FMT_KEA);
+  $t = (defined $st->{orig} ? $st->{orig} : format_isc_statement($st));
 
   unless (defined $t) {
     dhcp_model_warn($model,"skipped in ISC output: " .

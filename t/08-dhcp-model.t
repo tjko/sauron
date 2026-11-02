@@ -398,7 +398,7 @@ subtest 'ISC writer' => sub {
     like($out, qr/^\t\toption routers 10\.1\.2\.1;\n\t\toption domain-name "lab\.example";\n/m,
          'router and quoted option in subnet');
     like($out, qr/^host h1\.lab\.example \{\n\tfixed-address 10\.1\.2\.10;\n/m, 'host');
-    ok((grep { /renew-timer/ } @{$m->{warnings}}), 'skipped statement reported');
+    ok(!(grep { /renew-timer/ } @{$m->{warnings}}), 'KEA only statement skipped silently');
 };
 
 # =========================================================================

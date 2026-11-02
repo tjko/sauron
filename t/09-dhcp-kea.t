@@ -63,7 +63,7 @@ subtest 'fixture test/kea-dhcp.json' => sub {
               'global option');
 
     my $m6 = dhcp_model_from_kea($root, 6);
-    is($m6->{hosts}[0]{duid}, '00030001001122334455', 'reservation DUID');
+    is($m6->{hosts}[0]{duid}, '000100012a3b4c5d001122334455', 'reservation DUID');
     is_deeply($m6->{hosts}[0]{addresses}, ['2001:db8:250::10'], 'v6 address');
     is(format_isc_statement($m6->{pools}[0]{ranges}[0]),
        'range6 2001:db8:250::100 2001:db8:250::1ff', 'v6 pool');
@@ -82,7 +82,7 @@ subtest 'comments and includes' => sub {
 {
   /* block comment */
   "Dhcp4": {
-    # hash comment
+    # hash comment with "quote, don't break // parsing
     "option-data": <?include "opts.json"?>,
     "subnet4": <?include "sub/nets.json"?>,
     "boot-file-name": "http://x/a//b"
@@ -130,7 +130,8 @@ subtest 'v4 conversion' => sub {
       "pools": [ { "pool": "10.1.0.100-10.1.0.150", "client-class": "vip" },
                  { "pool": "10.1.0.200 - 10.1.0.210", "client-class": "KNOWN" },
                  { "pool": "10.1.0.220 - 10.1.0.230", "client-class": "UNKNOWN" },
-                 { "pool": "bogus" } ],
+                 { "pool": "bogus" },
+                 { "pool": "10.1.0.10-10.1.0.x" } ],
       "reservations": [
         { "hostname": "cid", "client-id": "01:aa:bb:cc:dd:ee:02", "ip-address": "10.1.0.51" },
         { "hostname": "flex", "flex-id": "'abc'", "ip-address": "10.1.0.52" },
@@ -158,6 +159,8 @@ EOF
               [ 'allow members of "vip"', 'deny unknown-clients', 'deny known-clients' ],
               'pool client classes');
     ok((grep { /invalid range: bogus/ } @{$m->{warnings}}), 'invalid pool reported');
+    ok((grep { /invalid range: 10\.1\.0\.10-10\.1\.0\.x/ } @{$m->{warnings}}),
+       'pool with invalid address reported');
 
     my %h = map { ($_->{name} => $_) } @{$m->{hosts}};
     is($h{glob}{hw_address}, 'aa:bb:cc:dd:ee:01', 'global reservation, MAC normalised');
@@ -190,7 +193,8 @@ subtest 'v6 conversion' => sub {
         { "hostname": "a", "duid": "00:01:00:01:2A:3B:4C:5D:0A:0B:0C:0D:0E:10",
           "ip-addresses": [ "2001:db8:1::10", "2001:db8:1::11" ],
           "prefixes": [ "2001:db8:9::/64" ] },
-        { "hostname": "b", "hw-address": "aa:bb:cc:dd:ee:04", "ip-addresses": [ "2001:db8:1::12" ] } ] } ]
+        { "hostname": "b", "hw-address": "aa:bb:cc:dd:ee:04", "ip-addresses": [ "2001:db8:1::12" ] },
+        { "hostname": "c", "duid": "00:03:00:01:aa:bb:cc:dd:ee:05", "ip-addresses": [ "2001:db8:1::13" ] } ] } ]
 } }
 EOF
     is_deeply(stmts($m->{global}), [ 'option dhcp6.name-servers 2001:db8::1' ], 'v6 option renamed');
@@ -205,6 +209,11 @@ EOF
     ok(!$h{b}{duid}, 'hw-address is not a DUID');
     ok((grep { /reservation b: no supported identifier/ } @{$m->{warnings}}),
        'unsupported v6 identifier reported');
+    ok(!$h{c}{duid}, 'short DUID (DUID-LL) not used');
+    ok((grep { /reservation c: unsupported DUID length/ } @{$m->{warnings}}),
+       'short DUID reported');
+    is_deeply(stmts($h{c}{scope}), [ '[KEA] {"duid":"00:03:00:01:aa:bb:cc:dd:ee:05"}' ],
+              'short DUID kept for KEA');
 };
 
 # =========================================================================

@@ -1,4 +1,5 @@
 // KEA configuration for t/26-kea-import.t (hosts are in zone kea.test)
+# a hash comment with "quote must not confuse // comment handling
 {
   "Dhcp4": {
     "valid-lifetime": 3600,
@@ -6,7 +7,8 @@
     "authoritative": true,
     "option-def": [ { "name": "wpad", "code": 252, "type": "string" } ],
     "option-data": [
-      { "name": "domain-name-servers", "data": "10.30.0.2, 10.30.0.3" },
+      { "name": "domain-name-servers", "data": "10.30.0.2, 10.30.0.3",
+        "always-send": true },
       { "name": "wpad", "data": "http://wpad.kea.test/wpad.dat" }
     ],
     "client-classes": [
@@ -46,6 +48,9 @@
   },
   "Dhcp6": {
     "option-data": [ { "name": "dns-servers", "data": "2001:db8:30::2" } ],
+    "client-classes": [
+      { "name": "vip", "option-data": [ { "name": "domain-search", "data": "vip.kea.test" } ] }
+    ],
     "subnet6": [ {
       "id": 1,
       "subnet": "2001:db8:30:1::/64",

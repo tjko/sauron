@@ -2401,9 +2401,9 @@ sub copy_zone($$$$) {
   # dhcp_entries
   print "<BR>Copying DHCP records..." if ($verbose);
   $res=copy_records('dhcp_entries','dhcp_entries','id','ref',\@hids,
-     'type,dhcp,comment',
+     'type,dhcp,comment,fmt',
      "SELECT a.id FROM dhcp_entries a,hosts h " .
-     "WHERE a.type=3 AND a.ref=h.id AND h.zone=$id");
+     "WHERE a.type IN (3,13) AND a.ref=h.id AND h.zone=$id");
   if ($res < 0) { db_rollback(); return -13; }
 
   # mx_entires

@@ -19,6 +19,7 @@ package Sauron::DhcpKea;
 require Exporter;
 use IO::File;
 use JSON::PP;
+use Net::IP qw(ip_is_ipv4 ip_is_ipv6);
 use Sauron::DhcpDefs;
 use Sauron::DhcpModel;
 use strict;
@@ -58,15 +59,15 @@ sub is_kea_conf($) {
 
 sub _read_with_includes($$$);
 
-# remove // and /* */ comments outside of strings (# is handled by
-# JSON::PP relaxed mode)
+# remove #, // and /* */ comments outside of strings
 sub _strip_comments($) {
   my ($text) = @_;
   my $out = '';
 
-  while ($text =~ m{\G( "(?:[^"\\]|\\.)*" | //[^\n]* | /\*.*?\*/ | [^"/]+ | / )}gsx) {
+  while ($text =~ m{\G( "(?:[^"\\]|\\.)*" | //[^\n]* | \#[^\n]* | /\*.*?\*/ |
+			 [^"/\#]+ | / )}gsx) {
     my $t = $1;
-    if ($t =~ m{^//}) { next; }
+    next if ($t =~ m{^(//|\#)});
     if ($t =~ m{^/\*}) { $out .= ' '; next; }
     $out .= $t;
   }
@@ -214,13 +215,16 @@ sub _pool($$$) {
   my $v6 = ($model->{family} == 6);
   my ($start,$end,$range,$pool,@classes);
 
-  if (defined $p->{pool} && $p->{pool} =~ /^\s*(\S+)\s*-\s*(\S+)\s*$/) {
+  my $ipok = sub { $v6 ? ip_is_ipv6($_[0]) : ip_is_ipv4($_[0]) };
+  if (defined $p->{pool} && $p->{pool} =~ /^\s*(\S+)\s*-\s*(\S+)\s*$/ &&
+      $ipok->($1) && $ipok->($2)) {
     ($start,$end) = ($1,$2);
     $range = ($v6 ? 'range6' : 'range') . " $start $end";
   }
-  elsif ($v6 && defined $p->{pool} && $p->{pool} =~ m{^\s*(\S+/\d+)\s*$}) {
-    $range = "range6 $1";
-    $start = $end = $1;
+  elsif ($v6 && defined $p->{pool} && $p->{pool} =~ m{^\s*(\S+)/(\d+)\s*$} &&
+	 ip_is_ipv6($1) && $2 <= 128) {
+    $range = "range6 $1/$2";
+    $start = $end = "$1/$2";
   }
   else {
     dhcp_model_warn($model,"skipping pool with invalid range: " .
@@ -284,7 +288,14 @@ sub _host($$$) {
       if ($cid && length($cid) == 14 && substr($cid,0,2) eq '01');
   }
   elsif ($v6 && defined $r->{duid}) {
-    $host->{duid} = _hex_id($r->{duid});
+    # Sauron stores DUIDs of 12-20 bytes (hosts.duid, DHCPv6 export)
+    my $duid = _hex_id($r->{duid});
+    if ($duid && length($duid) >= 24 && length($duid) <= 40) {
+      $host->{duid} = $duid;
+    } else {
+      dhcp_model_warn($model,"reservation $name: unsupported DUID length " .
+		      "($r->{duid})");
+    }
   }
   unless ($host->{hw_address} || $host->{duid}) {
     dhcp_model_warn($model,"reservation $name: no supported identifier " .
