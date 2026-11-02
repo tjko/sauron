@@ -55,6 +55,7 @@ RUN apt-get update -qq \
 		libparse-recdescent-perl \
 		libhtml-parser-perl \
 		libdigest-hmac-perl \
+		libdate-manip-perl \
 		libencode-locale-perl \
 		libnet-ssleay-perl \
 		bind9-utils \

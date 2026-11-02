@@ -25,6 +25,12 @@
 	  entries (1000 characters) are allowed. add_net/add_vlan now keep
 	  comments and quote DHCP entries correctly [svamberg]
 
+	- update-dhcp-info reads KEA logs too (DHCP4/DHCP6_LEASE_ALLOC and
+	  _REUSE; KEA log file, classic or RFC 3339 syslog time stamps);
+	  DHCPv6 leases are matched by the host's DUID. dhcpd syslog lines
+	  with a PID (dhcpd[123]:) are recognised now. The Docker image
+	  installs Date::Manip, which update-dhcp-info needs [svamberg]
+
 	- KEA High Availability: --kea/--kea6 turn the DHCP failover
 	  settings of a master/slave pair into the HA hook configuration
 	  (libdhcp_ha + libdhcp_lease_cmds; load-balancing, hot-standby
