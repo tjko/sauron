@@ -30,7 +30,8 @@ $VERSION = '$Id:$ ';
 @ISA = qw(Exporter);
 @EXPORT = qw(dhcp_model_new dhcp_scope_new dhcp_model_add dhcp_model_find
 	     dhcp_model_warn dhcp_scope_add_isc dhcp_scope_add_stmt
-	     dhcp_scope_add_kea_options dhcp_scope_add_kea_params
+	     dhcp_scope_add_kea_options dhcp_scope_add_kea_option_defs
+	     dhcp_scope_add_kea_params
 	     dhcp_scope_to_isc dhcp_scope_to_kea);
 
 my %_COLLECTIONS = map { $_ => 1 } qw(vlans nets pools groups classes hosts);
@@ -91,13 +92,11 @@ sub dhcp_model_find($$$$) {
 sub dhcp_scope_add_stmt($$$) {
   my ($model,$scope,$st) = @_;
 
-  if ($st->{kind} eq 'option-def') {
+  if ($st->{kind} eq 'option-def' && $st->{fmt} != DHCP_FMT_KEA) {
     my $def = dhcp_option_def_from_isc($st);
     if ($def) {
       $def->{family} = $model->{family};
-      foreach my $by ('isc','kea','code') {
-	$model->{option_defs}{$by}{$def->{$by}} = $def;
-      }
+      dhcp_option_def_register($model->{option_defs},$def);
     }
   }
   push @{$scope->{stmts}}, $st;
@@ -129,12 +128,27 @@ sub dhcp_scope_add_kea_options($$$) {
   }
 }
 
+# dhcp_scope_add_kea_option_defs($model,$scope,\@option_def) - add KEA
+# option-def list (must be added before option-data that uses it)
+sub dhcp_scope_add_kea_option_defs($$$) {
+  my ($model,$scope,$list) = @_;
+
+  return unless ($list && ref($list) eq 'ARRAY');
+  foreach my $odef (@$list) {
+    next unless ($odef && ref($odef) eq 'HASH');
+    my $st = kea_option_def_to_statement($odef,$model->{family});
+    dhcp_model_warn($model,"KEA only option definition: $st->{name}")
+      if ($st->{fmt} == DHCP_FMT_KEA);
+    dhcp_scope_add_stmt($model,$scope,$st);
+  }
+}
+
 # dhcp_scope_add_kea_params($model,$scope,\%hash,\@skip) - add scalar
 # parameters of a KEA scope (subnet, shared-network, ...) except keys in
 # @skip (structural keys handled by the caller)
 sub dhcp_scope_add_kea_params($$$$) {
   my ($model,$scope,$hash,$skip) = @_;
-  my %skip = map { $_ => 1 } (@$skip, 'option-data');
+  my %skip = map { $_ => 1 } (@$skip, 'option-data', 'option-def');
 
   foreach my $key (sort keys %$hash) {
     next if ($skip{$key});
@@ -160,12 +174,15 @@ sub dhcp_scope_to_isc($$) {
   return @lines;
 }
 
-# dhcp_scope_to_kea($model,$scope,$resolve) - KEA representation of scope:
+# dhcp_scope_to_kea($model,$scope,$resolve,$level) - KEA representation of
+# scope:
 #   { 'option-data' => [..], 'option-def' => [..], params => { k => v },
 #     'client-class' => name, test => expr }
+#   $level  scope level ('global', 'shared-network', 'subnet', 'pool',
+#           'class', 'host'); ISC permit lists are used in pools only
 # statements without KEA equivalent are reported as warnings
-sub dhcp_scope_to_kea($$;$) {
-  my ($model,$scope,$resolve) = @_;
+sub dhcp_scope_to_kea($$;$$) {
+  my ($model,$scope,$resolve,$level) = @_;
   my %res = ('option-data' => [], 'option-def' => [], params => {});
 
   foreach my $st (@{$scope->{stmts}}) {
@@ -177,6 +194,11 @@ sub dhcp_scope_to_kea($$;$) {
     elsif ($r->{'option-data'}) { push @{$res{'option-data'}}, $r->{'option-data'}; }
     elsif ($r->{'option-def'}) { push @{$res{'option-def'}}, $r->{'option-def'}; }
     elsif ($r->{param}) { $res{params}{$r->{param}[0]} = $r->{param}[1]; }
+    elsif ($r->{'client-class'} && $r->{permit} &&
+	   (!defined $level || $level ne 'pool')) {
+      dhcp_model_warn($model,"skipped in KEA output: permit list outside " .
+		      "of a pool: " . _stmt_desc($st));
+    }
     elsif ($r->{'client-class'}) {
       dhcp_model_warn($model,"KEA allows only one client-class per pool, " .
 		      "ignoring $r->{'client-class'}")

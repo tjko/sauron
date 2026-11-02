@@ -7,8 +7,11 @@ use FindBin;
 use lib "$FindBin::Bin/..";
 use Test::More;
 
+use JSON::PP;
 use Sauron::DhcpDefs;
 use Sauron::DhcpModel;
+
+my $JSON = JSON::PP->new->canonical;
 
 sub isc  { parse_isc_statement($_[0], $_[1] // 4, $_[2]) }
 sub kea  { isc_statement_to_kea($_[0], $_[1]) }
@@ -151,8 +154,14 @@ subtest 'ISC statement to KEA' => sub {
              sub { $_[0] eq 'ns1.middle.earth' ? '10.0.0.1' : undef });
     is($r->{'option-data'}{data}, '10.0.0.1, 10.0.0.2', 'hostname resolved');
 
-    $r = kea(isc('option vendor-class-identifier "PXE"'));
-    is($r->{'option-data'}{data}, '505845', 'binary text to hex');
+    $r = kea(isc('option vendor-class-identifier "PXEClient"'));
+    is($r->{'option-data'}{data}, 'PXEClient', 'vendor-class-identifier is a KEA string');
+    $r = kea(isc('option vendor-class-identifier 50:58:45'));
+    is($r->{'option-data'}{data}, 'PXE', 'string given as hex decoded to text');
+    ok(kea(isc('option vendor-class-identifier 00:01'))->{error},
+       'non-printable string rejected');
+    $r = kea(isc('option dhcp-client-identifier "abc"'));
+    is($r->{'option-data'}{data}, '616263', 'binary text to hex');
     $r = kea(isc('option dhcp-client-identifier 1:0:11:22:33:44:55'));
     is($r->{'option-data'}{data}, '01001122334455', 'binary colon hex to hex');
 
@@ -160,8 +169,21 @@ subtest 'ISC statement to KEA' => sub {
               ['valid-lifetime', 600], 'lease time param');
     is_deeply(kea(isc('filename "pxe.0"'))->{param},
               ['boot-file-name', 'pxe.0'], 'filename param');
-    is_deeply(kea(isc('not authoritative'))->{param},
-              ['authoritative', 0], 'authoritative flag');
+    is($JSON->encode(kea(isc('not authoritative'))->{param}),
+       '["authoritative",false]', 'authoritative is a JSON boolean');
+    is($JSON->encode(kea(isc('authoritative'))->{param}),
+       '["authoritative",true]', 'authoritative true');
+
+    is(kea(isc('option ip-forwarding off'))->{'option-data'}{data}, 'false',
+       'ISC boolean off -> false');
+    is(kea(isc('option ip-forwarding on'))->{'option-data'}{data}, 'true',
+       'ISC boolean on -> true');
+    ok(kea(isc('option ip-forwarding maybe'))->{error}, 'invalid boolean rejected');
+
+    like(kea(isc('option routers 999.1.1.1'))->{error}, qr/cannot resolve/,
+         'invalid IPv4 address rejected');
+    like(kea(isc('option dhcp6.name-servers 1.2.3.4:', 6))->{error}, qr/cannot resolve/,
+         'invalid IPv6 address rejected');
     like(kea(isc('next-server tftp.example'))->{error}, qr/cannot resolve/,
          'next-server hostname needs resolver');
 
@@ -185,16 +207,55 @@ subtest 'option-def' => sub {
     is_deeply($st->{values}, ['http://x/wpad.dat'], 'custom option value');
 
     my $k = dhcp_scope_to_kea($m, $m->{global});
-    is_deeply($k->{'option-def'}, [ { name => 'wpad', code => 252, type => 'string',
-                                      array => 0, space => 'dhcp4' } ],
-              'KEA option-def');
-    is($k->{'option-data'}[0]{name}, 'wpad', 'KEA custom option-data');
+    is($JSON->encode($k->{'option-def'}),
+       '[{"array":false,"code":252,"name":"wpad","space":"dhcp4","type":"string"}]',
+       'KEA option-def with JSON boolean and numeric code');
+    is($JSON->encode($k->{'option-data'}),
+       '[{"code":252,"data":"http://x/wpad.dat","name":"wpad","space":"dhcp4"}]',
+       'KEA custom option-data with numeric code');
+
+    # vendor space definitions must not shadow standard options
+    dhcp_scope_add_isc($m, $m->{global}, 'option PXE.mtftp-ip code 1 = ip-address');
+    my $st2 = kea_option_to_statement({ code => 1, data => '255.255.255.0' }, 4,
+                                      $m->{option_defs});
+    is($st2->{name}, 'subnet-mask', 'code 1 in dhcp4 space is subnet-mask');
+    $st2 = kea_option_to_statement({ space => 'PXE', name => 'mtftp-ip',
+                                     data => '10.0.0.1' }, 4, $m->{option_defs});
+    is(format_isc_statement($st2), 'option PXE.mtftp-ip 10.0.0.1',
+       'vendor space option found by space and name');
+    $st2 = isc('option PXE.mtftp-ip 10.0.0.1', 4, $m->{option_defs});
+    is(kea($st2)->{'option-data'}{space}, 'PXE', 'vendor space kept for KEA');
 
     $st = parse_isc_statement('option foo code 200 = array of ip-address', 4);
     my $d = dhcp_option_def_from_isc($st);
     is_deeply([@$d{qw(type array)}], ['ip4', 1], 'array of ip-address');
     $st = parse_isc_statement('option bar code 201 = { ip-address, text }', 4);
     is($st->{fmt}, DHCP_FMT_ISC, 'record option-def is ISC only');
+};
+
+subtest 'KEA option-def' => sub {
+    my $m = dhcp_model_new(4);
+    dhcp_scope_add_kea_option_defs($m, $m->{global}, [
+        { name => 'wpad', code => 252, type => 'string' },
+        { name => 'srvs', code => 200, type => 'ipv4-address', array => JSON::PP::true() },
+        { name => 'rec', code => 201, type => 'record', 'record-types' => 'uint8, string' },
+    ]);
+    dhcp_scope_add_kea_params($m, $m->{global},
+        { 'option-def' => [ { name => 'x' } ], 'valid-lifetime' => 10 }, []);
+    dhcp_scope_add_kea_options($m, $m->{global},
+        [ { name => 'wpad', data => 'http://x/wpad.dat' } ]);
+
+    is_deeply([ dhcp_scope_to_isc($m, $m->{global}) ],
+              [ 'option wpad code 252 = text',
+                'option srvs code 200 = array of ip-address',
+                'default-lease-time 10',
+                'option wpad "http://x/wpad.dat"' ],
+              'KEA option-def imported, used for typing, not a param');
+    my $k = dhcp_scope_to_kea($m, $m->{global});
+    is(scalar @{$k->{'option-def'}}, 3, 'all option-defs in KEA output');
+    is($k->{'option-def'}[2]{'record-types'}, 'uint8, string',
+       'record option-def passed through verbatim');
+    ok(!exists $k->{params}{'option-def'}, 'option-def not duplicated as param');
 };
 
 # =========================================================================
@@ -222,6 +283,10 @@ subtest 'KEA option-data to statement' => sub {
     $st = kea_option_to_statement({ name => 'vendor-class-identifier',
                                     data => '505845', 'csv-format' => JSON::PP::false() }, 4);
     is(format_isc_statement($st), 'option vendor-class-identifier 50:58:45', 'hex payload');
+
+    $st = kea_option_to_statement({ name => 'vendor-class-identifier', data => 'PXEClient' }, 4);
+    is(format_isc_statement($st), 'option vendor-class-identifier "PXEClient"',
+       'KEA string option quoted in ISC');
 
     $st = kea_option_to_statement({ name => 'routers', data => '0A000001',
                                     'csv-format' => JSON::PP::false() }, 4);
@@ -278,11 +343,18 @@ subtest 'model and scopes' => sub {
     dhcp_scope_add_kea_options($m, $net->{scope},
         [ { name => 'unknown-x', data => '1' } ]);
 
-    my $k = dhcp_scope_to_kea($m, $net->{scope});
+    my $k = dhcp_scope_to_kea($m, $net->{scope}, undef, 'subnet');
     is_deeply($k->{params}, { 'valid-lifetime' => 600, 'renew-timer' => 100 },
               'KEA params collected');
     is(scalar @{$k->{'option-data'}}, 2, 'KEA options collected');
-    is($k->{'client-class'}, 'vip', 'client-class');
+    ok(!defined $k->{'client-class'}, 'permit list ignored outside pool');
+    ok((grep { /permit list outside of a pool/ } @{$m->{warnings}}),
+       'permit outside pool reported');
+
+    my $pool = dhcp_model_add($m, 'pools', { name => 'p1' });
+    dhcp_scope_add_isc($m, $pool->{scope}, 'deny unknown-clients');
+    is(dhcp_scope_to_kea($m, $pool->{scope}, undef, 'pool')->{'client-class'},
+       'KNOWN', 'permit list used in pool');
 
     $m->{warnings} = [];
     is_deeply([ dhcp_scope_to_isc($m, $net->{scope}) ],
