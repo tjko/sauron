@@ -19,6 +19,10 @@ services:
     restart: "no"
 
   sauron:
+    build:
+      args:
+        # validate generated dhcpd.conf / KEA configurations
+        EXTRA_PACKAGES: isc-dhcp-server kea-dhcp4-server kea-dhcp6-server
     image: sauron:e2e
     ports: !reset []
     environment:

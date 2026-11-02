@@ -13,6 +13,8 @@
 	    'option domain-name' when they have their own
 	  * a server named 'ns2' no longer silently loses its DHCPv4
 	    classes and dynamic pools (removed site specific hack)
+	  * no failover peer in dhcpd6.conf: ISC DHCPv6 has no failover and
+	    dhcpd -6 refused such a configuration
 	  [svamberg]
 
 	- import-dhcp: KEA import rewritten on the DHCP model. Options are

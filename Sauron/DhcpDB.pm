@@ -129,6 +129,9 @@ sub _load_failover($$) {
   my $sfx = ($model->{family} == 6 ? '6' : '');
 
   return unless ($mode);
+  # ISC DHCPv6 has no failover protocol (a declared peer without pools
+  # referring to it makes dhcpd -6 refuse the configuration)
+  return if ($model->{family} == 6);
   $srv = ($mode == 1 ? $o->{server} : $o->{masterserver});
   if ($mode == 1) {
     db_query("SELECT hostname FROM servers " .

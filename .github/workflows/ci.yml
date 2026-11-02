@@ -117,7 +117,8 @@ jobs:
             libtest-simple-perl \
             libpath-tiny-perl libpg-perl libparse-recdescent-perl \
             libdate-manip-perl libencode-locale-perl \
-            libnet-ssleay-perl bind9-utils
+            libnet-ssleay-perl bind9-utils \
+            isc-dhcp-server kea-dhcp4-server kea-dhcp6-server
         shell: bash
 
       - name: Verify core Perl test modules

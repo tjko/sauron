@@ -224,6 +224,17 @@ subtest 'extra DHCP data' => sub {
 # =========================================================================
 # generate and compare
 # =========================================================================
+# validate a generated dhcpd.conf with ISC dhcpd, when installed
+sub validate_isc {
+    my ($file, $family) = @_;
+    my ($dhcpd) = grep { -x $_ } ('/usr/sbin/dhcpd', '/usr/local/sbin/dhcpd');
+  SKIP: {
+        skip('ISC dhcpd not installed', 1) unless ($dhcpd);
+        my $out = `$dhcpd -$family -t -cf $file 2>&1`;
+        is($? >> 8, 0, "dhcpd -$family -t accepts $file") or diag($out);
+    }
+}
+
 sub normalize {
     my ($file) = @_;
     open(my $fh, '<', $file) or die "$file: $!";
@@ -246,6 +257,7 @@ subtest 'generate and compare' => sub {
     foreach my $f ('dhcpd.conf', 'dhcpd6.conf', 'vip.class',
                    'ns2/dhcpd.conf', 'ns2/dhcpd6.conf') {
         ok(-r "$gen/$f", "$f generated") or next;
+        validate_isc("$gen/$f", ($f =~ /6/ ? 6 : 4)) unless ($f =~ /\.class$/);
         my $got = normalize("$gen/$f");
 
         if (my $dir = $ENV{SAURON_GOLDEN_UPDATE}) {
