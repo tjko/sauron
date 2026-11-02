@@ -913,6 +913,18 @@
               <option>--check</> the file is validated with
               <varname>SAURON_KEA4_CHK_PROG</> / <varname>SAURON_KEA6_CHK_PROG</>.</>
   </row>
+  <row><entry><option>--kea-ddns</></>
+       <entry>Generate KEA DHCP-DDNS configuration
+              (<filename>kea-dhcp-ddns.conf</>, mode 0640: it contains TSIG
+              secrets). Forward and reverse domains are the server's master
+              zones that have allow-update entries; updates go to the IP
+              address of the server holding the zones, signed with the first
+              TSIG key in the zone's allow-update (needs the Sauron master
+              key). Enable updates in kea-dhcp4/6 with
+              <literal>ddns-update-style interim</> (or a KEA only
+              <literal>dhcp-ddns</> entry). With <option>--check</> the
+              file is validated with <varname>SAURON_KEA_D2_CHK_PROG</>.</>
+  </row>
   <row><entry><option>--printer</></>
        <entry>Generate PRINTER (lpd) configuration files 
               (not yet implemented).</>

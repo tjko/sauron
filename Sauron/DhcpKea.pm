@@ -30,7 +30,7 @@ $VERSION = '$Id:$ ';
 
 @ISA = qw(Exporter);
 @EXPORT = qw(dhcp_kea_read_file dhcp_model_from_kea is_kea_conf
-	     dhcp_model_to_kea dhcp_kea_write);
+	     dhcp_model_to_kea dhcp_kea_write dhcp_kea_d2_config);
 
 # keys handled structurally (not stored as scope parameters)
 my @_GLOBAL_KEYS = qw(subnet4 subnet6 shared-networks reservations
@@ -671,6 +671,51 @@ sub _kea_subnet($$$) {
     }
   }
   return \%s;
+}
+
+# dhcp_kea_d2_config($d2,\%opts) - kea-dhcp-ddns (D2) configuration
+#   $d2   dynamic DNS domains (Sauron::DhcpDB::dhcp_d2_from_db)
+#   opts  dns_ip     address of the DNS server receiving the updates
+#         dns_port   its port (53)
+#         secret     coderef($key) -> base64 secret, undef if unavailable
+#         algorithm  coderef($key) -> TSIG algorithm name, undef if unknown
+#         warn       coderef($msg)
+# returns { DhcpDdns => {...} }; domains whose key cannot be used are left
+# out (a DNS server would refuse their updates)
+sub dhcp_kea_d2_config($$) {
+  my ($d2,$o) = @_;
+  my $warn = $o->{warn} || sub { };
+  my (%cfg,%usedkeys,@fwd,@rev);
+
+  %cfg = ('ip-address' => '127.0.0.1', port => 53001);
+  foreach my $d (@{$d2->{domains}}) {
+    my %e = (name => $d->{name},
+	     'dns-servers' => [ { 'ip-address' => $o->{dns_ip},
+				  port => int($o->{dns_port} || 53) } ]);
+    if (defined $d->{key_id}) {
+      my $k = $d2->{keys}{$d->{key_id}};
+      unless ($usedkeys{$k->{id}}) {
+	my $alg = $o->{algorithm}->($k);
+	my $sec = $o->{secret}->($k);
+	unless ($alg && $sec) {
+	  $warn->("key $k->{name}: " . ($alg ? 'secret not available' :
+					'unsupported algorithm') .
+		  ", dynamic DNS for $d->{name} not generated");
+	  $usedkeys{$k->{id}} = -1;
+	} else {
+	  push @{$cfg{'tsig-keys'}}, { name => $k->{name}, algorithm => $alg,
+				       secret => $sec };
+	  $usedkeys{$k->{id}} = 1;
+	}
+      }
+      next if ($usedkeys{$k->{id}} < 0);
+      $e{'key-name'} = $k->{name};
+    }
+    push @{$d->{reverse} ? \@rev : \@fwd}, \%e;
+  }
+  $cfg{'forward-ddns'} = { 'ddns-domains' => \@fwd };
+  $cfg{'reverse-ddns'} = { 'ddns-domains' => \@rev };
+  return { DhcpDdns => \%cfg };
 }
 
 # dhcp_kea_write($fh,$model,\%meta) - write KEA configuration

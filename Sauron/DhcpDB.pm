@@ -30,7 +30,7 @@ $VERSION = '$Id:$ ';
 
 @ISA = qw(Exporter);
 @EXPORT = qw(dhcp_model_from_db dhcp_model_to_db dhcp_db_resolver
-	     dhcp_ha_from_db);
+	     dhcp_ha_from_db dhcp_d2_from_db);
 
 # dhcp_entries.type per address family
 my %_ETYPE = (
@@ -752,6 +752,43 @@ sub dhcp_ha_from_db($) {
   return { this => $server->{name}, mode => $mode, peers => \@peers,
 	   max_response_delay => ((defined $delay && $delay =~ /^\d+$/ && $delay > 0)
 				  ? $delay * 1000 : undef) };
+}
+
+
+###########################################################################
+
+# dhcp_d2_from_db($serverid) - dynamic DNS domains for kea-dhcp-ddns: the
+# server's master zones that accept updates (allow-update entries), with
+# the TSIG key used there (the first key in allow-update)
+# returns { domains => [ { name, reverse, key } ], keys => { id => key } }
+#   key = { id, name, algorithm (number), keysize, secretkey (encrypted) }
+sub dhcp_d2_from_db($) {
+  my ($sid) = @_;
+  my (@z,%keys,@domains);
+
+  $sid = int($sid);
+  db_query("SELECT z.id,z.name,z.reverse FROM zones z WHERE z.server=$sid " .
+	   "AND z.type='M' AND (coalesce(z.expiration, 0) <= 0 OR " .
+	   "coalesce(z.expiration, 0) > extract(epoch from now())) " .
+	   "AND EXISTS (SELECT 1 FROM cidr_entries c WHERE c.type=2 AND c.ref=z.id) " .
+	   "ORDER BY z.reverse,z.name",\@z);
+  foreach my $r (@z) {
+    my (@k);
+    db_query("SELECT k.id,k.name,k.algorithm,k.keysize,k.secretkey " .
+	     "FROM cidr_entries c JOIN keys k ON c.tkey=k.id " .
+	     "WHERE c.type=2 AND c.ref=$r->[0] AND c.mode=2 ORDER BY c.id LIMIT 1",\@k);
+    my $key;
+    if (@k) {
+      $key = $k[0][1];
+      $keys{$k[0][0]} = { id => $k[0][0], name => $k[0][1], algorithm => $k[0][2],
+			  keysize => $k[0][3], secretkey => $k[0][4] };
+    }
+    (my $name = $r->[1]) =~ s/\.*$/./;
+    push @domains, { name => $name,
+		     reverse => (($r->[2] && $r->[2] ne 'f') || $name =~ /\.(in-addr|ip6)\.arpa\.$/i) ? 1 : 0,
+		     key => $key, key_id => (@k ? $k[0][0] : undef) };
+  }
+  return { domains => \@domains, keys => \%keys };
 }
 
 

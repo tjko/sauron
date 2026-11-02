@@ -118,7 +118,7 @@ jobs:
             libpath-tiny-perl libpg-perl libparse-recdescent-perl \
             libdate-manip-perl libencode-locale-perl \
             libnet-ssleay-perl bind9-utils \
-            isc-dhcp-server kea-dhcp4-server kea-dhcp6-server
+            isc-dhcp-server kea-dhcp4-server kea-dhcp6-server kea-dhcp-ddns-server
         shell: bash
 
       - name: Verify core Perl test modules
@@ -224,7 +224,7 @@ jobs:
           SAURON_TEST_USER: ${{ env.POSTGRES_USER }}
           SAURON_TEST_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
           SAURON_INSTALL_DIR: /usr/local/sauron
-        run: prove -lv t/11-import-generate.t t/25-dhcp-export-golden.t t/26-kea-import.t t/28-update-dhcp-info.t
+        run: prove -lv t/11-import-generate.t t/25-dhcp-export-golden.t t/26-kea-import.t t/28-update-dhcp-info.t t/30-kea-ddns.t
         shell: bash
 
       - name: Seed roundtrip-test server

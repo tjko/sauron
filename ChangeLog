@@ -25,6 +25,12 @@
 	  entries (1000 characters) are allowed. add_net/add_vlan now keep
 	  comments and quote DHCP entries correctly [svamberg]
 
+	- sauron --kea-ddns generates kea-dhcp-ddns.conf: master zones with
+	  allow-update entries become forward/reverse DDNS domains, sent to
+	  the server's IP address and signed with the zone's TSIG key from
+	  allow-update; validated with --check and SAURON_KEA_D2_CHK_PROG
+	  [svamberg]
+
 	- KEA: dynamic DNS statements are converted between ISC and KEA:
 	  ddns-update-style (none = KEA default, interim/standard enable
 	  dhcp-ddns updates), ddns-updates <-> ddns-send-updates,

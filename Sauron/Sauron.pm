@@ -77,6 +77,8 @@ sub set_defaults() {
   $main::SAURON_KEA6_CHK_PROG = '';
   $main::SAURON_KEA6_CHK_ARGS = '-t';
   $main::SAURON_KEA_HOOKS_DIR = '';
+  $main::SAURON_KEA_D2_CHK_PROG = '';
+  $main::SAURON_KEA_D2_CHK_ARGS = '-t';
   $main::SAURON_NAMED_CHK_PROG = '';
   $main::SAURON_NAMED_CHK_ARGS = '';
   $main::SAURON_ZONE_CHK_PROG = '';
@@ -171,6 +173,8 @@ sub print_config() {
   print "SAURON_KEA6_CHK_PROG=",$main::SAURON_KEA6_CHK_PROG,"\n";
   print "SAURON_KEA6_CHK_ARGS=",$main::SAURON_KEA6_CHK_ARGS,"\n";
   print "SAURON_KEA_HOOKS_DIR=",$main::SAURON_KEA_HOOKS_DIR,"\n";
+  print "SAURON_KEA_D2_CHK_PROG=",$main::SAURON_KEA_D2_CHK_PROG,"\n";
+  print "SAURON_KEA_D2_CHK_ARGS=",$main::SAURON_KEA_D2_CHK_ARGS,"\n";
   print "SAURON_NAMED_CHK_PROG=",$main::SAURON_NAMED_CHK_PROG,"\n";
   print "SAURON_NAMED_CHK_ARGS=",$main::SAURON_NAMED_CHK_ARGS,"\n";
   print "SAURON_ZONE_CHK_PROG=",$main::SAURON_ZONE_CHK_PROG,"\n";

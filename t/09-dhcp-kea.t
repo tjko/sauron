@@ -346,6 +346,29 @@ subtest 'KEA High Availability' => sub {
 };
 
 # =========================================================================
+subtest 'KEA DHCP-DDNS (D2) configuration' => sub {
+    my $d2 = { domains => [ { name => 'a.example.', reverse => 0, key_id => 1 },
+                            { name => 'b.example.', reverse => 0, key_id => 2 },
+                            { name => '10.in-addr.arpa.', reverse => 1, key_id => 1 },
+                            { name => 'c.example.', reverse => 0 } ],
+               keys => { 1 => { id => 1, name => 'k1', algorithm => 157 },
+                         2 => { id => 2, name => 'k2', algorithm => 999 } } };
+    my @w;
+    my $cfg = dhcp_kea_d2_config($d2, { dns_ip => '192.0.2.53',
+        algorithm => sub { $_[0]{algorithm} == 157 ? 'HMAC-MD5' : undef },
+        secret => sub { 'c2VjcmV0' }, warn => sub { push @w, $_[0] } })->{DhcpDdns};
+    is_deeply($cfg->{'tsig-keys'}, [ { name => 'k1', algorithm => 'HMAC-MD5', secret => 'c2VjcmV0' } ],
+              'used key listed once');
+    is_deeply([ map { $_->{name} . ':' . ($_->{'key-name'} // '-') } @{$cfg->{'forward-ddns'}{'ddns-domains'}} ],
+              [ 'a.example.:k1', 'c.example.:-' ], 'forward domains, unusable key left out');
+    is($cfg->{'reverse-ddns'}{'ddns-domains'}[0]{name}, '10.in-addr.arpa.', 'reverse domain');
+    is_deeply($cfg->{'forward-ddns'}{'ddns-domains'}[0]{'dns-servers'},
+              [ { 'ip-address' => '192.0.2.53', port => 53 } ], 'DNS server');
+    like($w[0], qr/key k2: unsupported algorithm, dynamic DNS for b\.example\. not generated/,
+         'unusable key reported');
+};
+
+# =========================================================================
 subtest 'KEA only statements in the database' => sub {
     my @cases = (
         [ kea_param_to_statement('renew-timer', 900, 4), '{"renew-timer":900}' ],
