@@ -215,7 +215,10 @@ sub dhcp_scope_to_kea($$;$$) {
     }
     elsif ($r->{'option-data'}) { push @{$res{'option-data'}}, $r->{'option-data'}; }
     elsif ($r->{'option-def'}) { push @{$res{'option-def'}}, $r->{'option-def'}; }
-    elsif ($r->{param}) { $res{params}{$r->{param}[0]} = $r->{param}[1]; }
+    elsif ($r->{param}) {
+      my ($k,$v) = @{$r->{param}};
+      $res{params}{$k} = kea_param_merge($k,$res{params}{$k},$v);
+    }
     elsif ($r->{'client-class'} && $r->{permit} &&
 	   (!defined $level || $level ne 'pool')) {
       dhcp_model_warn($model,"skipped in KEA output: permit list outside " .

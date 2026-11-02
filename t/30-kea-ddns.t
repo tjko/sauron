@@ -83,14 +83,29 @@ db_exec("INSERT INTO keys (type,ref,name,algorithm,keysize,secretkey,protocol,mo
 my $kid = rows("SELECT id FROM keys WHERE ref=$sid AND name='ddns-key'")->[0][0];
 
 my %zid;
+db_exec("INSERT INTO keys (type,ref,name,algorithm,keysize,secretkey,protocol,mode) " .
+        "VALUES (1,$sid,'old-key',157," . (length($secret) * 8) . ",'$enc',3,0)");
+my $oldkid = rows("SELECT id FROM keys WHERE ref=$sid AND name='old-key'")->[0][0];
+db_exec("INSERT INTO acls (server,name) VALUES ($sid,'ddns-updaters')");
+my $aclid = rows("SELECT id FROM acls WHERE server=$sid AND name='ddns-updaters'")->[0][0];
+db_exec("INSERT INTO cidr_entries (type,ref,mode,tkey) VALUES (0,$aclid,2,$kid)");
+
 foreach my $z ([ 'ddns.test', 'M', 'f' ], [ 'static.test', 'M', 'f' ],
-               [ '40.10.in-addr.arpa', 'M', 't' ], [ 'slave.test', 'S', 'f' ]) {
+               [ '40.10.in-addr.arpa', 'M', 't' ], [ 'slave.test', 'S', 'f' ],
+               [ 'acl.test', 'M', 'f' ], [ 'catalog.test', 'M', 'f' ]) {
     db_exec("INSERT INTO zones (server,name,type,reverse) VALUES ($sid,'$z->[0]','$z->[1]','$z->[2]')");
     $zid{$z->[0]} = rows("SELECT id FROM zones WHERE server=$sid AND name='$z->[0]'")->[0][0];
 }
 # allow-update: key for the forward zone, address for the reverse zone,
 # none for static.test; a slave zone is never updated by this server
+# a negated key first: never used to sign updates
+db_exec("INSERT INTO cidr_entries (type,ref,mode,tkey,op) VALUES (2,$zid{'ddns.test'},2,$oldkid,1)");
 db_exec("INSERT INTO cidr_entries (type,ref,mode,tkey) VALUES (2,$zid{'ddns.test'},2,$kid)");
+# key through an ACL
+db_exec("INSERT INTO cidr_entries (type,ref,mode,acl) VALUES (2,$zid{'acl.test'},1,$aclid)");
+# catalog only zone is not served by BIND
+db_exec("UPDATE zones SET catalog_only=true WHERE id=$zid{'catalog.test'}");
+db_exec("INSERT INTO cidr_entries (type,ref,mode,tkey) VALUES (2,$zid{'catalog.test'},2,$kid)");
 db_exec("INSERT INTO cidr_entries (type,ref,mode,ip) VALUES (2,$zid{'40.10.in-addr.arpa'},0,'127.0.0.1')");
 db_exec("INSERT INTO cidr_entries (type,ref,mode,ip) VALUES (2,$zid{'slave.test'},0,'127.0.0.1')");
 
@@ -116,9 +131,11 @@ is_deeply($cfg->{'tsig-keys'}, [ { name => 'ddns-key', algorithm => 'HMAC-MD5',
                                     secret => encode_base64($secret, '') } ],
           'TSIG key decrypted');
 is_deeply($cfg->{'forward-ddns'}{'ddns-domains'},
-          [ { name => 'ddns.test.', 'key-name' => 'ddns-key',
+          [ { name => 'acl.test.', 'key-name' => 'ddns-key',
+              'dns-servers' => [ { 'ip-address' => '192.0.2.53', port => 53 } ] },
+            { name => 'ddns.test.', 'key-name' => 'ddns-key',
               'dns-servers' => [ { 'ip-address' => '192.0.2.53', port => 53 } ] } ],
-          'forward domain with key, only zones accepting updates');
+          'forward domains: negated key skipped, key from ACL, catalog only zone left out');
 is_deeply([ map { $_->{name} } @{$cfg->{'reverse-ddns'}{'ddns-domains'}} ],
           [ '40.10.in-addr.arpa.' ], 'reverse domain');
 ok(!exists $cfg->{'reverse-ddns'}{'ddns-domains'}[0]{'key-name'}, 'address based: no key');

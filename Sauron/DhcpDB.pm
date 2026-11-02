@@ -758,36 +758,61 @@ sub dhcp_ha_from_db($) {
 ###########################################################################
 
 # dhcp_d2_from_db($serverid) - dynamic DNS domains for kea-dhcp-ddns: the
-# server's master zones that accept updates (allow-update entries), with
-# the TSIG key used there (the first key in allow-update)
-# returns { domains => [ { name, reverse, key } ], keys => { id => key } }
+# server's master zones served by its BIND (not expired, not catalog only,
+# not dummy) that accept updates (allow-update entries), with the TSIG key
+# used there: the first key allowed (not negated) in allow-update,
+# directly or through an ACL
+# returns { domains => [ { name, reverse, key, key_id } ],
+#           keys => { id => key } }
 #   key = { id, name, algorithm (number), keysize, secretkey (encrypted) }
 sub dhcp_d2_from_db($) {
   my ($sid) = @_;
-  my (@z,%keys,@domains);
+  my (@z,@e,@a,@k,%upd,%acl,%keys,@domains);
 
   $sid = int($sid);
   db_query("SELECT z.id,z.name,z.reverse FROM zones z WHERE z.server=$sid " .
-	   "AND z.type='M' AND (coalesce(z.expiration, 0) <= 0 OR " .
+	   "AND z.type='M' AND coalesce(z.catalog_only,false)=false " .
+	   "AND coalesce(z.dummy,false)=false AND (coalesce(z.expiration, 0) <= 0 OR " .
 	   "coalesce(z.expiration, 0) > extract(epoch from now())) " .
-	   "AND EXISTS (SELECT 1 FROM cidr_entries c WHERE c.type=2 AND c.ref=z.id) " .
 	   "ORDER BY z.reverse,z.name",\@z);
-  foreach my $r (@z) {
-    my (@k);
-    db_query("SELECT k.id,k.name,k.algorithm,k.keysize,k.secretkey " .
-	     "FROM cidr_entries c JOIN keys k ON c.tkey=k.id " .
-	     "WHERE c.type=2 AND c.ref=$r->[0] AND c.mode=2 ORDER BY c.id LIMIT 1",\@k);
-    my $key;
-    if (@k) {
-      $key = $k[0][1];
-      $keys{$k[0][0]} = { id => $k[0][0], name => $k[0][1], algorithm => $k[0][2],
-			  keysize => $k[0][3], secretkey => $k[0][4] };
+  # allow-update entries of the server's zones and all ACL entries
+  db_query("SELECT c.ref,c.mode,c.acl,c.tkey,coalesce(c.op,0) FROM cidr_entries c " .
+	   "JOIN zones z ON c.ref=z.id WHERE c.type=2 AND z.server=$sid " .
+	   "ORDER BY c.ref,c.id",\@e);
+  push @{$upd{$_->[0]}}, $_ foreach (@e);
+  db_query("SELECT c.ref,c.mode,c.acl,c.tkey,coalesce(c.op,0) FROM cidr_entries c " .
+	   "WHERE c.type=0 ORDER BY c.ref,c.id",\@a);
+  push @{$acl{$_->[0]}}, $_ foreach (@a);
+  db_query("SELECT id,name,algorithm,keysize,secretkey FROM keys",\@k);
+  my %allkeys = map { ($_->[0] => { id => $_->[0], name => $_->[1], algorithm => $_->[2],
+				   keysize => $_->[3], secretkey => $_->[4] }) } @k;
+
+  # first allowed key of a list of entries (ACLs followed, no loops)
+  my $find;
+  $find = sub {
+    my ($list,$seen) = @_;
+    foreach my $c (@$list) {
+      my (undef,$mode,$aclid,$tkey,$op) = @$c;
+      next if ($op);			# negated entry
+      return $tkey if ($mode == 2 && $tkey && $allkeys{$tkey});
+      if ($mode == 1 && $aclid && $aclid > 0 && !$seen->{$aclid}++) {
+	my $t = $find->($acl{$aclid} || [],$seen);
+	return $t if ($t);
+      }
     }
+    return undef;
+  };
+
+  foreach my $r (@z) {
+    next unless ($upd{$r->[0]});
+    my $kid = $find->($upd{$r->[0]},{});
+    $keys{$kid} = $allkeys{$kid} if ($kid);
     (my $name = $r->[1]) =~ s/\.*$/./;
     push @domains, { name => $name,
 		     reverse => (($r->[2] && $r->[2] ne 'f') || $name =~ /\.(in-addr|ip6)\.arpa\.$/i) ? 1 : 0,
-		     key => $key, key_id => (@k ? $k[0][0] : undef) };
+		     key => ($kid ? $allkeys{$kid}{name} : undef), key_id => $kid };
   }
+  undef $find;
   return { domains => \@domains, keys => \%keys };
 }
 

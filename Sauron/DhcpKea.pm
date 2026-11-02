@@ -403,7 +403,7 @@ sub _merge($$$$$) {
 		      "pool, ignored");
       next;
     }
-    $e->{$p} = $k->{params}{$p};
+    $e->{$p} = kea_param_merge($p,$e->{$p},$k->{params}{$p});
   }
   if (defined $k->{'client-class'}) {
     if ($level eq 'pool') { $e->{'client-class'} = $k->{'client-class'}; }
@@ -698,17 +698,19 @@ sub dhcp_kea_d2_config($$) {
 	my $alg = $o->{algorithm}->($k);
 	my $sec = $o->{secret}->($k);
 	unless ($alg && $sec) {
-	  $warn->("key $k->{name}: " . ($alg ? 'secret not available' :
-					'unsupported algorithm') .
-		  ", dynamic DNS for $d->{name} not generated");
-	  $usedkeys{$k->{id}} = -1;
+	  $usedkeys{$k->{id}} = ($alg ? -1 : -2);
 	} else {
 	  push @{$cfg{'tsig-keys'}}, { name => $k->{name}, algorithm => $alg,
 				       secret => $sec };
 	  $usedkeys{$k->{id}} = 1;
 	}
       }
-      next if ($usedkeys{$k->{id}} < 0);
+      if ($usedkeys{$k->{id}} < 0) {
+	$warn->("key $k->{name}: " . ($usedkeys{$k->{id}} == -1 ?
+				      'secret not available' : 'unsupported algorithm') .
+		", dynamic DNS for $d->{name} not generated");
+	next;
+      }
       $e{'key-name'} = $k->{name};
     }
     push @{$d->{reverse} ? \@rev : \@fwd}, \%e;

@@ -32,7 +32,7 @@ $VERSION = '$Id:$ ';
 	     parse_isc_statement format_isc_statement
 	     isc_statement_to_kea kea_option_to_statement
 	     kea_option_def_to_statement kea_param_to_statement
-	     kea_statement_to_json kea_json_to_statement);
+	     kea_statement_to_json kea_json_to_statement kea_param_merge);
 
 use constant DHCP_FMT_BOTH => 0;
 use constant DHCP_FMT_ISC  => 1;
@@ -305,10 +305,8 @@ sub _onoff($) {
 
 # ISC boolean literal -> KEA 'true'/'false', undef if invalid
 sub _bool_to_kea($) {
-  my ($v) = @_;
-  return 'true' if ($v =~ /^(true|on|1)$/i);
-  return 'false' if ($v =~ /^(false|off|0)$/i);
-  return undef;
+  my $b = _onoff($_[0]);
+  return (defined $b ? ($b ? 'true' : 'false') : undef);
 }
 
 # ISC string literal ("text" or colon hex) -> plain text, undef if the
@@ -690,14 +688,17 @@ sub isc_statement_to_kea($;$) {
     }
     elsif ($def->{type} eq 'clientupd') {
       # allow = honour the client's FQDN flags, deny/ignore = override them
-      $val = ($val eq 'allow' ? JSON::PP::false() : JSON::PP::true());
+      return { error => "invalid client-updates statement: $st->{text}" }
+	unless (lc($val) =~ /^(allow|deny|ignore)$/);
+      $val = (lc($val) eq 'allow' ? JSON::PP::false() : JSON::PP::true());
     }
     elsif ($def->{type} eq 'ddnsstyle') {
       # no updates is KEA's default; interim/standard enable updates through
-      # kea-dhcp-ddns (connection settings: KEA only 'dhcp-ddns' entry)
-      return { none => 1 } if ($val eq 'none');
+      # kea-dhcp-ddns (connection settings: KEA only 'dhcp-ddns' entry,
+      # merged with this one, see kea_param_merge)
+      return { none => 1 } if (lc($val) eq 'none');
       return { error => "ddns-update-style $val has no KEA equivalent" }
-	unless ($val =~ /^(interim|standard)$/);
+	unless ($val =~ /^(interim|standard)$/i);
       $val = { 'enable-updates' => JSON::PP::true() };
     }
     elsif ($def->{type} eq 'ip4' && !_is_ip4($val)) {
@@ -801,6 +802,18 @@ sub kea_option_to_statement($$;$) {
   }
   $st->{values} = \@items;
   return $st;
+}
+
+# kea_param_merge($key,$old,$new) - value of KEA parameter $key set again
+# in the same or an inner scope: 'dhcp-ddns' objects are merged member by
+# member (enable-updates from ddns-update-style next to the connection
+# settings of a KEA only entry), anything else is replaced
+sub kea_param_merge($$$) {
+  my ($key,$old,$new) = @_;
+
+  return { %$old, %$new }
+    if ($key eq 'dhcp-ddns' && ref($old) eq 'HASH' && ref($new) eq 'HASH');
+  return $new;
 }
 
 # kea_option_def_to_statement($odef,$family) - convert KEA option-def

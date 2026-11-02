@@ -350,7 +350,8 @@ subtest 'KEA DHCP-DDNS (D2) configuration' => sub {
     my $d2 = { domains => [ { name => 'a.example.', reverse => 0, key_id => 1 },
                             { name => 'b.example.', reverse => 0, key_id => 2 },
                             { name => '10.in-addr.arpa.', reverse => 1, key_id => 1 },
-                            { name => 'c.example.', reverse => 0 } ],
+                            { name => 'c.example.', reverse => 0 },
+                            { name => 'd.example.', reverse => 0, key_id => 2 } ],
                keys => { 1 => { id => 1, name => 'k1', algorithm => 157 },
                          2 => { id => 2, name => 'k2', algorithm => 999 } } };
     my @w;
@@ -366,6 +367,7 @@ subtest 'KEA DHCP-DDNS (D2) configuration' => sub {
               [ { 'ip-address' => '192.0.2.53', port => 53 } ], 'DNS server');
     like($w[0], qr/key k2: unsupported algorithm, dynamic DNS for b\.example\. not generated/,
          'unusable key reported');
+    like($w[1], qr/dynamic DNS for d\.example\. not generated/, 'each dropped domain reported');
 };
 
 # =========================================================================

@@ -385,6 +385,19 @@ subtest 'DDNS statements' => sub {
         is(reformat($st), $c->[0], "$c->[0] re-formatted");
     }
     ok(kea(isc('ddns-update-style ad-hoc'))->{error}, 'ad-hoc has no KEA equivalent');
+    is($J->encode(kea(isc('ddns-update-style Interim'))),
+       '{"param":["dhcp-ddns",{"enable-updates":true}]}', 'style is case-insensitive');
+    is($J->encode(kea(isc('ddns-update-style NONE'))), '{"none":1}', 'NONE = none');
+    like(kea(isc('client-updates bogus'))->{error}, qr/invalid client-updates/,
+         'invalid client-updates rejected');
+
+    # ddns-update-style next to a KEA only dhcp-ddns with connection settings
+    my $m = dhcp_model_new(4);
+    dhcp_scope_add_stmt($m, $m->{global}, kea_json_to_statement(
+        '{"dhcp-ddns":{"server-ip":"10.0.0.5","enable-updates":false}}', 4));
+    dhcp_scope_add_isc($m, $m->{global}, 'ddns-update-style interim');
+    is($J->encode(dhcp_scope_to_kea($m, $m->{global})->{params}{'dhcp-ddns'}),
+       '{"enable-updates":true,"server-ip":"10.0.0.5"}', 'dhcp-ddns members merged');
     my ($e, $w) = dhcp_entry_check('ddns-update-style none', 0, 4);
     is($w, '', 'ddns-update-style none needs no hint (KEA default)');
 
