@@ -1,0 +1,698 @@
+# Sauron::DhcpDefs.pm - DHCP option/parameter definitions shared by the
+#                       ISC dhcpd and KEA readers/writers
+#
+# Statements are stored in the database as ISC dhcpd syntax (one statement
+# per dhcp_entries row, without the trailing ';'). This module parses such a
+# statement into a neutral structure and formats it back either as ISC syntax
+# or as a KEA JSON fragment, using a single table of option/parameter
+# definitions so that both outputs stay consistent.
+#
+# Statement structure (hashref):
+#   kind    'option' | 'option-def' | 'param' | 'permit' | 'range' |
+#           'host-id' | 'fixed-address' | 'match' | 'raw' | 'kea'
+#   text    original ISC text (when parsed from ISC); the ISC writer prefers
+#           it so that existing configurations are reproduced verbatim
+#   fmt     target format: 0 = both, 1 = ISC only, 2 = KEA only
+#   ...     kind specific fields (see parse_isc_statement)
+#
+package Sauron::DhcpDefs;
+require Exporter;
+use JSON::PP;
+use strict;
+use vars qw($VERSION @ISA @EXPORT);
+
+$VERSION = '$Id:$ ';
+
+@ISA = qw(Exporter);
+@EXPORT = qw(DHCP_FMT_BOTH DHCP_FMT_ISC DHCP_FMT_KEA
+	     dhcp_option_def dhcp_param_def dhcp_option_def_from_isc
+	     parse_isc_statement format_isc_statement
+	     isc_statement_to_kea kea_option_to_statement
+	     kea_param_to_statement);
+
+use constant DHCP_FMT_BOTH => 0;
+use constant DHCP_FMT_ISC  => 1;
+use constant DHCP_FMT_KEA  => 2;
+
+# Value types:
+#   ip4, ip6     address (ISC also accepts a hostname for ip4)
+#   text         string, quoted in ISC
+#   fqdn         domain name, quoted in ISC
+#   uint8/16/32, int8/16/32, bool
+#   binary       ISC "quoted text" or colon separated hex; KEA hex
+#
+# Option table: [ code, ISC name, KEA name, type, array ]
+# ISC names of DHCPv6 options carry the 'dhcp6.' space prefix.
+my @_OPTIONS4 = (
+  [  1, 'subnet-mask',              undef, 'ip4',    0 ],
+  [  2, 'time-offset',              undef, 'int32',  0 ],
+  [  3, 'routers',                  undef, 'ip4',    1 ],
+  [  4, 'time-servers',             undef, 'ip4',    1 ],
+  [  5, 'name-servers',             undef, 'ip4',    1 ],
+  [  6, 'domain-name-servers',      undef, 'ip4',    1 ],
+  [  7, 'log-servers',              undef, 'ip4',    1 ],
+  [  9, 'lpr-servers',              undef, 'ip4',    1 ],
+  [ 12, 'host-name',                undef, 'text',   0 ],
+  [ 13, 'boot-size',                undef, 'uint16', 0 ],
+  [ 14, 'merit-dump',               undef, 'text',   0 ],
+  [ 15, 'domain-name',              undef, 'fqdn',   0 ],
+  [ 16, 'swap-server',              undef, 'ip4',    0 ],
+  [ 17, 'root-path',                undef, 'text',   0 ],
+  [ 19, 'ip-forwarding',            undef, 'bool',   0 ],
+  [ 23, 'default-ip-ttl',           undef, 'uint8',  0 ],
+  [ 26, 'interface-mtu',            undef, 'uint16', 0 ],
+  [ 28, 'broadcast-address',        undef, 'ip4',    0 ],
+  [ 33, 'static-routes',            undef, 'ip4',    1 ],
+  [ 35, 'arp-cache-timeout',        undef, 'uint32', 0 ],
+  [ 40, 'nis-domain',               undef, 'text',   0 ],
+  [ 41, 'nis-servers',              undef, 'ip4',    1 ],
+  [ 42, 'ntp-servers',              undef, 'ip4',    1 ],
+  [ 44, 'netbios-name-servers',     undef, 'ip4',    1 ],
+  [ 46, 'netbios-node-type',        undef, 'uint8',  0 ],
+  [ 47, 'netbios-scope',            undef, 'text',   0 ],
+  [ 51, 'dhcp-lease-time',          undef, 'uint32', 0 ],
+  [ 58, 'dhcp-renewal-time',        undef, 'uint32', 0 ],
+  [ 59, 'dhcp-rebinding-time',      undef, 'uint32', 0 ],
+  [ 60, 'vendor-class-identifier',  undef, 'binary', 0 ],
+  [ 61, 'dhcp-client-identifier',   undef, 'binary', 0 ],
+  [ 64, 'nisplus-domain-name',      undef, 'text',   0 ],
+  [ 65, 'nisplus-servers',          undef, 'ip4',    1 ],
+  [ 66, 'tftp-server-name',         undef, 'text',   0 ],
+  [ 67, 'bootfile-name',            undef, 'text',   0 ],
+  [ 69, 'smtp-server',              undef, 'ip4',    1 ],
+  [ 70, 'pop-server',               undef, 'ip4',    1 ],
+  [ 72, 'www-server',               undef, 'ip4',    1 ],
+  [119, 'domain-search',            undef, 'fqdn',   1 ],
+);
+
+my @_OPTIONS6 = (
+  [  7, 'dhcp6.preference',            'preference',               'uint8',  0 ],
+  [ 12, 'dhcp6.unicast',               'unicast',                  'ip6',    0 ],
+  [ 21, 'dhcp6.sip-servers-names',     'sip-server-dns',           'fqdn',   1 ],
+  [ 22, 'dhcp6.sip-servers-addresses', 'sip-server-addr',          'ip6',    1 ],
+  [ 23, 'dhcp6.name-servers',          'dns-servers',              'ip6',    1 ],
+  [ 24, 'dhcp6.domain-search',         'domain-search',            'fqdn',   1 ],
+  [ 27, 'dhcp6.nis-servers',           'nis-servers',              'ip6',    1 ],
+  [ 28, 'dhcp6.nisp-servers',          'nisp-servers',             'ip6',    1 ],
+  [ 29, 'dhcp6.nis-domain-name',       'nis-domain-name',          'fqdn',   1 ],
+  [ 30, 'dhcp6.nisp-domain-name',      'nisp-domain-name',         'fqdn',   1 ],
+  [ 31, 'dhcp6.sntp-servers',          'sntp-servers',             'ip6',    1 ],
+  [ 32, 'dhcp6.info-refresh-time',     'information-refresh-time', 'uint32', 0 ],
+  [ 59, 'dhcp6.bootfile-url',          'bootfile-url',             'text',   0 ],
+);
+
+# Parameter table: [ ISC name, KEA name, type, family (4, 6 or 0 = both) ]
+my @_PARAMS = (
+  [ 'default-lease-time', 'valid-lifetime',     'uint32', 0 ],
+  [ 'max-lease-time',     'max-valid-lifetime', 'uint32', 0 ],
+  [ 'min-lease-time',     'min-valid-lifetime', 'uint32', 0 ],
+  [ 'preferred-lifetime', 'preferred-lifetime', 'uint32', 6 ],
+  [ 'next-server',        'next-server',        'ip4',    4 ],
+  [ 'filename',           'boot-file-name',     'text',   4 ],
+  [ 'server-name',        'server-hostname',    'text',   4 ],
+  [ 'authoritative',      'authoritative',      'flag',   4 ],
+);
+
+# ISC option-def type <-> KEA option-def type
+my %_ISC2KEA_TYPE = (
+  'ip-address'                => 'ip4',
+  'ip6-address'               => 'ip6',
+  'text'                      => 'text',
+  'domain-name'               => 'fqdn',
+  'domain-list'               => 'fqdn+',
+  'string'                    => 'binary',
+  'boolean'                   => 'bool',
+  'unsigned integer 8'        => 'uint8',
+  'unsigned integer 16'       => 'uint16',
+  'unsigned integer 32'       => 'uint32',
+  'signed integer 8'          => 'int8',
+  'signed integer 16'         => 'int16',
+  'signed integer 32'         => 'int32',
+  'integer 8'                 => 'int8',
+  'integer 16'                => 'int16',
+  'integer 32'                => 'int32',
+);
+
+my %_TYPE2KEA = (
+  ip4 => 'ipv4-address', ip6 => 'ipv6-address', text => 'string',
+  fqdn => 'fqdn', binary => 'binary', bool => 'boolean',
+  uint8 => 'uint8', uint16 => 'uint16', uint32 => 'uint32',
+  int8 => 'int8', int16 => 'int16', int32 => 'int32',
+);
+my %_KEA2TYPE = reverse %_TYPE2KEA;
+
+my %_TYPE2ISC = (
+  ip4 => 'ip-address', ip6 => 'ip6-address', text => 'text',
+  fqdn => 'domain-name', binary => 'string', bool => 'boolean',
+  uint8 => 'unsigned integer 8', uint16 => 'unsigned integer 16',
+  uint32 => 'unsigned integer 32', int8 => 'signed integer 8',
+  int16 => 'signed integer 16', int32 => 'signed integer 32',
+);
+
+# lookup indexes: $_IDX{$family}{isc|kea|code}{$key} = def
+my %_IDX;
+
+sub _mkdef($$) {
+  my ($family,$r) = @_;
+  my ($code,$isc,$kea,$type,$array) = @$r;
+
+  $kea = $isc unless (defined $kea);
+  return { code => $code, isc => $isc, kea => $kea, type => $type,
+	   array => $array, family => $family,
+	   space => ($family == 6 ? 'dhcp6' : 'dhcp4') };
+}
+
+foreach my $r (@_OPTIONS4) {
+  my $d = _mkdef(4,$r);
+  $_IDX{4}{isc}{$d->{isc}} = $_IDX{4}{kea}{$d->{kea}} = $d;
+  $_IDX{4}{code}{$d->{code}} = $d;
+}
+foreach my $r (@_OPTIONS6) {
+  my $d = _mkdef(6,$r);
+  $_IDX{6}{isc}{$d->{isc}} = $_IDX{6}{kea}{$d->{kea}} = $d;
+  $_IDX{6}{code}{$d->{code}} = $d;
+}
+
+my (%_PARAM_ISC,%_PARAM_KEA);
+foreach my $r (@_PARAMS) {
+  my $d = { isc => $r->[0], kea => $r->[1], type => $r->[2],
+	    family => $r->[3] };
+  $_PARAM_ISC{$d->{isc}} = $_PARAM_KEA{$d->{kea}} = $d;
+}
+
+sub _family($) { return ($_[0] && $_[0] == 6 ? 6 : 4); }
+
+# dhcp_option_def($family,$by,$key,$custom) - look up an option definition
+#   $by     'isc' (ISC name), 'kea' (KEA name) or 'code'
+#   $custom optional hashref of user defined options with the same layout
+#           as the internal index ({isc|kea|code}{$key} = def)
+# returns def hashref or undef
+sub dhcp_option_def($$$;$) {
+  my ($family,$by,$key,$custom) = @_;
+
+  return undef unless (defined $key);
+  $family = _family($family);
+  return $custom->{$by}{$key}
+    if ($custom && $custom->{$by} && $custom->{$by}{$key});
+  return $_IDX{$family}{$by}{$key};
+}
+
+# dhcp_param_def($by,$key,$family) - look up parameter definition
+#   $by 'isc' or 'kea'; returns def hashref or undef when unknown or not
+#   valid for given address family
+sub dhcp_param_def($$$) {
+  my ($by,$key,$family) = @_;
+  my $d = ($by eq 'kea' ? $_PARAM_KEA{$key} : $_PARAM_ISC{$key});
+
+  return undef unless ($d);
+  return undef if ($d->{family} && $d->{family} != _family($family));
+  return $d;
+}
+
+# dhcp_option_def_from_isc($stmt) - turn parsed 'option-def' statement into
+# an option definition usable as $custom entry; undef if type unsupported
+sub dhcp_option_def_from_isc($) {
+  my ($stmt) = @_;
+  my ($type,$array,$name,$space);
+
+  return undef unless ($stmt && $stmt->{kind} eq 'option-def');
+  ($type = $stmt->{isc_type}) =~ s/\s+/ /g;
+  $array = ($type =~ s/^array of //) ? 1 : 0;
+  $type = $_ISC2KEA_TYPE{$type};
+  return undef unless ($type);
+  if ($type eq 'fqdn+') { $type = 'fqdn'; $array = 1; }
+
+  $name = $stmt->{name};
+  $space = $stmt->{space};
+  return { code => $stmt->{code}, isc => $name,
+	   kea => ($name =~ /\.([^.]+)$/ ? $1 : $name),
+	   type => $type, array => $array, custom => 1,
+	   family => $stmt->{family}, space => $space };
+}
+
+
+###########################################################################
+# value helpers
+
+sub _is_ip4($) {
+  return ($_[0] =~ /^\d{1,3}(?:\.\d{1,3}){3}$/) ? 1 : 0;
+}
+
+sub _is_ip6($) {
+  return ($_[0] =~ /^[0-9A-Fa-f:.]+$/ && $_[0] =~ /:/) ? 1 : 0;
+}
+
+sub _unquote($) {
+  my ($s) = @_;
+
+  return $s unless ($s =~ /^"(.*)"$/s);
+  $s = $1;
+  $s =~ s/\\(["\\])/$1/g;
+  return $s;
+}
+
+sub _quote($) {
+  my ($s) = @_;
+
+  $s =~ s/(["\\])/\\$1/g;
+  return "\"$s\"";
+}
+
+# split string on commas that are not inside double quotes
+sub _split_list($) {
+  my ($s) = @_;
+  my (@items,$cur,$quote,$prev);
+
+  $cur = ''; $quote = 0; $prev = '';
+  foreach my $c (split(//,$s)) {
+    $quote = !$quote if ($c eq '"' && $prev ne '\\');
+    if ($c eq ',' && !$quote) {
+      push @items, $cur;
+      $cur = '';
+    } else {
+      $cur .= $c;
+    }
+    $prev = $c;
+  }
+  push @items, $cur;
+  s/^\s+|\s+$//g foreach (@items);
+  return grep { $_ ne '' } @items;
+}
+
+# split KEA csv data (commas escaped with backslash)
+sub _split_kea_list($) {
+  my ($s) = @_;
+  my @items = split(/(?<!\\),/,$s);
+
+  foreach (@items) { s/^\s+|\s+$//g; s/\\,/,/g; }
+  return grep { $_ ne '' } @items;
+}
+
+sub _kea_escape($) {
+  my ($s) = @_;
+  $s =~ s/,/\\,/g;
+  return $s;
+}
+
+# decode ISC value text into list of plain values
+sub _isc_values($$) {
+  my ($def,$text) = @_;
+  my @items = ($def->{array} ? _split_list($text) : ($text));
+
+  # binary values keep their ISC form ("text" or colon separated hex)
+  return @items if ($def->{type} eq 'binary');
+  return map { _unquote($_) } @items;
+}
+
+sub _isc_value_text($$) {
+  my ($type,$v) = @_;
+
+  return _quote($v) if ($type eq 'text' || $type eq 'fqdn');
+  return $v;
+}
+
+# binary value: ISC "text" or aa:bb:cc  ->  KEA hex
+sub _binary_to_kea($) {
+  my ($v) = @_;
+
+  if ($v =~ /^"(.*)"$/s) {
+    return uc(unpack('H*',_unquote($v)));
+  }
+  if ($v =~ /^[0-9A-Fa-f]{1,2}(?::[0-9A-Fa-f]{1,2})*$/) {
+    return uc(join('',map { sprintf('%02s',$_) } split(/:/,$v)));
+  }
+  return undef;
+}
+
+# KEA hex (optionally 0x prefixed / colon separated) or 'text' -> ISC
+sub _binary_to_isc($) {
+  my ($v) = @_;
+
+  return _quote($1) if ($v =~ /^'(.*)'$/s);
+  $v =~ s/^0x//i;
+  $v =~ s/[:\s]//g;
+  return undef unless ($v =~ /^[0-9A-Fa-f]+$/ && length($v) % 2 == 0);
+  return lc(join(':',($v =~ /(..)/g)));
+}
+
+
+###########################################################################
+# ISC statement parser
+
+# parse_isc_statement($text,$family,$custom) - parse one ISC statement
+#   $text   statement without the trailing ';' (a trailing ';' is ignored)
+#   $family 4 or 6
+#   $custom optional user defined options index (see dhcp_option_def)
+# returns statement hashref; unknown statements have kind 'raw' and are
+# kept for ISC output only (fmt = DHCP_FMT_ISC)
+sub parse_isc_statement($$;$) {
+  my ($text,$family,$custom) = @_;
+  my ($s,$st,$name,$rest,$def);
+
+  $family = _family($family);
+  ($s = $text) =~ s/^\s+|\s*;?\s*$//g;
+  $st = { text => $s, fmt => DHCP_FMT_BOTH, family => $family };
+
+  # option definition: option [space.]name code N = type
+  if ($s =~ /^option\s+(\S+)\s+code\s+(\d+)\s*=\s*(.+)$/i) {
+    my ($n,$code,$type) = ($1,$2,$3);
+    my $space = ($n =~ /^([^.]+)\.[^.]+$/ ? $1 : ($family == 6 ? 'dhcp6' : 'dhcp4'));
+    @$st{qw(kind name code isc_type space)} = ('option-def',$n,$code,$type,$space);
+    $st->{fmt} = DHCP_FMT_ISC unless (dhcp_option_def_from_isc($st));
+    return $st;
+  }
+
+  # option value
+  if ($s =~ /^option\s+(\S+)(?:\s+(.*))?$/i) {
+    ($name,$rest) = ($1,(defined $2 ? $2 : ''));
+    $st->{kind} = 'option';
+    $st->{name} = $name;
+    $def = dhcp_option_def($family,'isc',$name,$custom);
+    if ($def) {
+      $st->{def} = $def;
+      $st->{values} = [ _isc_values($def,$rest) ];
+    } else {
+      $st->{raw} = $rest;
+      $st->{fmt} = DHCP_FMT_ISC;
+    }
+    return $st;
+  }
+
+  # pool permit lists: allow/deny members of "class", unknown-clients, ...
+  if ($s =~ /^(allow|deny|ignore)\s+members\s+of\s+(.+)$/i) {
+    @$st{qw(kind action what class)} =
+      ('permit',lc($1),'members',_unquote($2));
+    return $st;
+  }
+  if ($s =~ /^(allow|deny)\s+(known-clients|unknown-clients)$/i) {
+    @$st{qw(kind action what)} = ('permit',lc($1),lc($2));
+    return $st;
+  }
+
+  # address ranges
+  if ($s =~ /^range\s+(?:(dynamic-bootp)\s+)?(\S+)(?:\s+(\S+))?$/i) {
+    @$st{qw(kind start end)} = ('range',$2,(defined $3 ? $3 : $2));
+    $st->{fmt} = DHCP_FMT_ISC if ($1);
+    return $st;
+  }
+  if ($s =~ /^range6\s+(\S+)\s+(\S+)$/i) {
+    @$st{qw(kind start end)} = ('range',$1,$2);
+    return $st;
+  }
+  if ($s =~ /^range6\s+(\S+\/\d+)$/i) {
+    @$st{qw(kind prefix)} = ('range',$1);
+    return $st;
+  }
+
+  # host identification
+  if ($s =~ /^fixed-address6?\s+(.+)$/i) {
+    @$st{qw(kind addresses)} = ('fixed-address',[ _split_list($1) ]);
+    return $st;
+  }
+  if ($s =~ /^hardware\s+ethernet\s+(\S+)$/i) {
+    @$st{qw(kind type value)} = ('host-id','hw-address',lc($1));
+    return $st;
+  }
+  if ($s =~ /^host-identifier\s+option\s+dhcp6\.client-id\s+(\S+)$/i) {
+    @$st{qw(kind type value)} = ('host-id','duid',lc($1));
+    return $st;
+  }
+
+  # class matching
+  if ($s =~ /^match\s+if\s+(.+)$/i) {
+    @$st{qw(kind expr)} = ('match',$1);
+    return $st;
+  }
+
+  # parameters
+  if ($s =~ /^(not\s+)?authoritative$/i) {
+    @$st{qw(kind name value)} = ('param','authoritative',($1 ? 0 : 1));
+    $st->{def} = dhcp_param_def('isc','authoritative',$family);
+    $st->{fmt} = DHCP_FMT_ISC unless ($st->{def});
+    return $st;
+  }
+  if ($s =~ /^(\S+)\s+(.+)$/ && ($def = dhcp_param_def('isc',lc($1),$family))) {
+    @$st{qw(kind name value def)} = ('param',$def->{isc},_unquote($2),$def);
+    return $st;
+  }
+
+  $st->{kind} = 'raw';
+  $st->{fmt} = DHCP_FMT_ISC;
+  return $st;
+}
+
+# format_isc_statement($stmt) - ISC text (without ';') for statement,
+# undef if the statement cannot be expressed in ISC syntax
+sub format_isc_statement($) {
+  my ($st) = @_;
+  my ($def,@v);
+
+  return undef unless ($st);
+  return undef if ($st->{fmt} && $st->{fmt} == DHCP_FMT_KEA);
+  return $st->{text} if (defined $st->{text} && $st->{text} ne '');
+
+  my $k = $st->{kind};
+  if ($k eq 'option') {
+    $def = $st->{def};
+    return "option $st->{name} $st->{raw}" unless ($def);
+    @v = map { _isc_value_text($def->{type},$_) } @{$st->{values}};
+    return "option $def->{isc} " . join(', ',@v);
+  }
+  if ($k eq 'option-def') {
+    return "option $st->{name} code $st->{code} = $st->{isc_type}";
+  }
+  if ($k eq 'param') {
+    $def = $st->{def};
+    if ($def->{type} eq 'flag') {
+      return ($st->{value} ? '' : 'not ') . $def->{isc};
+    }
+    return "$def->{isc} " . _isc_value_text($def->{type},$st->{value});
+  }
+  if ($k eq 'permit') {
+    return "$st->{action} members of " . _quote($st->{class})
+      if ($st->{what} eq 'members');
+    return "$st->{action} $st->{what}";
+  }
+  if ($k eq 'range') {
+    my $kw = ($st->{family} == 6 ? 'range6' : 'range');
+    return "$kw $st->{prefix}" if ($st->{prefix});
+    return "$kw $st->{start} $st->{end}";
+  }
+  if ($k eq 'fixed-address') {
+    return ($st->{family} == 6 ? 'fixed-address6 ' : 'fixed-address ') .
+      join(', ',@{$st->{addresses}});
+  }
+  if ($k eq 'host-id') {
+    return "hardware ethernet $st->{value}" if ($st->{type} eq 'hw-address');
+    return "host-identifier option dhcp6.client-id $st->{value}"
+      if ($st->{type} eq 'duid');
+    return undef;
+  }
+  if ($k eq 'match') {
+    return undef unless (defined $st->{expr});
+    return "match if $st->{expr}";
+  }
+  return undef;
+}
+
+
+###########################################################################
+# KEA conversion
+
+# isc_statement_to_kea($stmt,$resolve) - convert statement to KEA form
+#   $resolve optional coderef($name) returning IP address for a hostname
+#            (ISC accepts hostnames where KEA requires addresses)
+# returns hashref with one of:
+#   { 'option-data' => {...} }      option-data element
+#   { 'option-def'  => {...} }      option-def element
+#   { param => [ key, value ] }     scope parameter
+#   { 'client-class' => name }      pool client class (from permit)
+#   { test => expr }                class test expression (KEA syntax)
+#   { error => msg }                not representable in KEA
+sub isc_statement_to_kea($;$) {
+  my ($st,$resolve) = @_;
+  my ($k,$def,@v,$data);
+
+  return { error => 'undefined statement' } unless ($st);
+  $k = $st->{kind};
+
+  if ($k eq 'kea') {
+    return { param => [ $st->{key}, $st->{value} ] };
+  }
+  if ($st->{fmt} && $st->{fmt} == DHCP_FMT_ISC) {
+    return { error => "ISC only statement: $st->{text}" };
+  }
+
+  if ($k eq 'option') {
+    $def = $st->{def};
+    # KEA only option kept verbatim from KEA configuration
+    return { 'option-data' => { %{$st->{kea}} } } if (!$def && $st->{kea});
+    return { error => "unknown option: $st->{name}" } unless ($def);
+    return { 'option-data' => { %{$st->{kea}} } }
+      if ($st->{fmt} && $st->{fmt} == DHCP_FMT_KEA && $st->{kea});
+    foreach my $val (@{$st->{values}}) {
+      my $x = $val;
+      if ($def->{type} eq 'ip4' && !_is_ip4($x)) {
+	$x = ($resolve ? $resolve->($val) : undef);
+	return { error => "cannot resolve '$val' to an IPv4 address " .
+		   "(option $def->{isc})" } unless ($x && _is_ip4($x));
+      }
+      elsif ($def->{type} eq 'ip6' && !_is_ip6($x)) {
+	$x = ($resolve ? $resolve->($val) : undef);
+	return { error => "cannot resolve '$val' to an IPv6 address " .
+		   "(option $def->{isc})" } unless ($x && _is_ip6($x));
+      }
+      elsif ($def->{type} eq 'binary') {
+	$x = _binary_to_kea($val);
+	return { error => "invalid binary value '$val' (option $def->{isc})" }
+	  unless (defined $x);
+      }
+      elsif ($def->{type} eq 'text' || $def->{type} eq 'fqdn') {
+	$x = _kea_escape($x);
+      }
+      push @v, $x;
+    }
+    $data = { name => $def->{kea}, data => join(', ',@v) };
+    $data->{code} = $def->{code};
+    $data->{space} = $def->{space} if ($def->{custom});
+    $data->{'always-send'} = JSON::PP::true() if ($st->{'always-send'});
+    return { 'option-data' => $data };
+  }
+
+  if ($k eq 'option-def') {
+    $def = dhcp_option_def_from_isc($st);
+    return { error => "unsupported option type: $st->{isc_type}" }
+      unless ($def);
+    return { 'option-def' => { name => $def->{kea}, code => int($def->{code}),
+			       type => $_TYPE2KEA{$def->{type}},
+			       array => ($def->{array} ? 1 : 0),
+			       space => $def->{space} } };
+  }
+
+  if ($k eq 'param') {
+    $def = $st->{def};
+    my $val = $st->{value};
+    if ($def->{type} =~ /^u?int/) {
+      return { error => "invalid number '$val' ($def->{isc})" }
+	unless ($val =~ /^-?\d+$/);
+      $val = int($val);
+    }
+    elsif ($def->{type} eq 'flag') {
+      $val = ($val ? 1 : 0);
+    }
+    elsif ($def->{type} eq 'ip4' && !_is_ip4($val)) {
+      my $ip = ($resolve ? $resolve->($val) : undef);
+      return { error => "cannot resolve '$val' to an IPv4 address " .
+		 "($def->{isc})" } unless ($ip && _is_ip4($ip));
+      $val = $ip;
+    }
+    return { param => [ $def->{kea}, $val ] };
+  }
+
+  if ($k eq 'permit') {
+    return { error => "deny members of is not supported by KEA" }
+      if ($st->{what} eq 'members' && $st->{action} ne 'allow');
+    return { 'client-class' => $st->{class} } if ($st->{what} eq 'members');
+    # KEA built-in classes KNOWN/UNKNOWN (host reservation exists or not)
+    my $known = ($st->{what} eq 'known-clients');
+    $known = !$known if ($st->{action} eq 'deny');
+    return { 'client-class' => ($known ? 'KNOWN' : 'UNKNOWN') };
+  }
+
+  if ($k eq 'match') {
+    # expressions use different syntax in ISC and KEA; only an expression
+    # given in KEA syntax can be used
+    return { test => $st->{kea_test} } if (defined $st->{kea_test});
+    return { error => "class expression needs translation: $st->{expr}" };
+  }
+
+  return { error => "no KEA equivalent: " .
+	     (defined $st->{text} ? $st->{text} : $k) };
+}
+
+# kea_option_to_statement($opt,$family,$custom) - convert KEA option-data
+# element into an option statement; options that cannot be expressed in
+# ISC syntax are marked fmt = DHCP_FMT_KEA (KEA only)
+sub kea_option_to_statement($$;$) {
+  my ($opt,$family,$custom) = @_;
+  my ($def,$st,$data,@items);
+
+  $family = _family($family);
+  $st = { kind => 'option', fmt => DHCP_FMT_BOTH, family => $family,
+	  kea => { %$opt } };
+  $st->{'always-send'} = 1 if ($opt->{'always-send'});
+
+  if (defined $opt->{space} && $opt->{space} !~ /^dhcp[46]$/) {
+    $def = dhcp_option_def($family,'kea',"$opt->{space}.$opt->{name}",$custom)
+      if (defined $opt->{name});
+  }
+  else {
+    $def = dhcp_option_def($family,'kea',$opt->{name},$custom)
+      if (defined $opt->{name});
+    $def = dhcp_option_def($family,'code',$opt->{code},$custom)
+      if (!$def && defined $opt->{code});
+  }
+
+  unless ($def) {
+    $st->{name} = (defined $opt->{name} ? $opt->{name} : "code-$opt->{code}");
+    $st->{raw} = (defined $opt->{data} ? $opt->{data} : '');
+    $st->{fmt} = DHCP_FMT_KEA;
+    return $st;
+  }
+
+  $st->{def} = $def;
+  $st->{name} = $def->{isc};
+  $data = (defined $opt->{data} ? $opt->{data} : '');
+
+  if (defined $opt->{'csv-format'} && !$opt->{'csv-format'}) {
+    # raw hex payload; only binary options can be expressed in ISC
+    if ($def->{type} eq 'binary') {
+      @items = ($data);
+    } else {
+      $st->{raw} = $data;
+      $st->{fmt} = DHCP_FMT_KEA;
+      return $st;
+    }
+  }
+  else {
+    if ($def->{array}) {
+      @items = _split_kea_list($data);
+    } else {
+      (my $tmp = $data) =~ s/\\,/,/g;
+      @items = ($tmp);
+    }
+  }
+
+  if ($def->{type} eq 'binary') {
+    @items = map { _binary_to_isc($_) } @items;
+    if (grep { !defined $_ } @items) {
+      $st->{raw} = $data;
+      $st->{fmt} = DHCP_FMT_KEA;
+      return $st;
+    }
+  }
+  $st->{values} = \@items;
+  return $st;
+}
+
+# kea_param_to_statement($key,$value,$family) - convert KEA scope
+# parameter; parameters without ISC equivalent become kind 'kea'
+# (fmt = DHCP_FMT_KEA) so that they survive the import
+sub kea_param_to_statement($$$) {
+  my ($key,$value,$family) = @_;
+  my $def = dhcp_param_def('kea',$key,$family);
+  my $st = { family => _family($family) };
+
+  if ($def && (!ref($value) || ref($value) eq 'JSON::PP::Boolean')) {
+    @$st{qw(kind name value def fmt)} =
+      ('param',$def->{isc},
+       ($def->{type} eq 'flag' ? ($value ? 1 : 0) : $value),$def,DHCP_FMT_BOTH);
+    return $st;
+  }
+
+  @$st{qw(kind key value fmt)} = ('kea',$key,$value,DHCP_FMT_KEA);
+  return $st;
+}
+
+1;
+# eof
