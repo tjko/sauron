@@ -178,6 +178,9 @@ sub _write_network_map($$) {
 	foreach my $r (@{$pool->{ranges}}) {
 	  print $fh "\t\t\t" . format_isc_statement($r) . ";\n";
 	}
+	# DHCPv4 failover: pools are shared with the peer
+	print $fh "\t\t\tfailover peer \"$model->{failover}{name}\";\n",
+	  "\t\t\tdeny dynamic bootp clients;\n" if ($model->{failover} && !$v6);
 	# QUIRK: pool entries are written without comments, ';' always added
 	_print_scope($fh,$model,$pool->{scope},"\t\t\t",undef,force_semicolon => 1);
 	print $fh "\t\t}\n";

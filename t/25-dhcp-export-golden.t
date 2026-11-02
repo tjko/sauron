@@ -171,7 +171,7 @@ subtest 'extra DHCP data' => sub {
     sql("INSERT INTO nets (server,net,netname,name,vlan,subnet) VALUES " .
         "($sid,'2001:db8:250::/64','net6-250','net6-250',$vlan,true)");
     my $net6 = val("SELECT id FROM nets WHERE server=$sid AND net='2001:db8:250::/64'");
-    dhcp(14, $net6, 'option dhcp6.name-servers 2001:db8::1', 'subnet6 c');
+    dhcp(4, $net6, 'option dhcp6.name-servers 2001:db8::1', 'subnet6 c');
     sql("UPDATE hosts SET router=1 WHERE id=" . hid('gw6'));
 
     # dynamic pools (two ranges in v4 because of the gap)

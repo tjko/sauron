@@ -1,5 +1,20 @@
 0.9.0 (beta)
 
+	- DHCP: dhcpd.conf/dhcpd6.conf are generated through a new shared
+	  DHCP model (Sauron::DhcpDB, Sauron::DhcpIsc), preparing KEA
+	  export. Fixes in the generated configuration:
+	  * dynamic pools of a failover server contain 'failover peer' and
+	    'deny dynamic bootp clients' (the failover peer was declared
+	    but no pool used it)
+	  * automatic domain names in dhcpd6.conf use
+	    'option dhcp6.domain-search' instead of
+	    'option dhcp6.name-servers' (an invalid name server value)
+	  * hosts not in any group no longer get a second
+	    'option domain-name' when they have their own
+	  * a server named 'ns2' no longer silently loses its DHCPv4
+	    classes and dynamic pools (removed site specific hack)
+	  [svamberg]
+
 	- Fix the web UI dying on Add host and other forms ("Can't use an
 	  undefined value as an ARRAY reference" in CGIutil.pm) for users
 	  who are not a member of any user group, e.g. accounts provisioned

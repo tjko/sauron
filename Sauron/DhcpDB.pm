@@ -10,10 +10,8 @@
 # $stmt->{orig} and the entry comment in $stmt->{comment}; the ISC writer
 # uses them to reproduce the configuration verbatim.
 #
-# The behaviour reproduces the original generator in 'sauron'. Its known
-# quirks (marked 'QUIRK' below) are applied only with the 'isc_compat'
-# option, used by the ISC writer to keep dhcpd.conf unchanged; without it
-# (KEA writer) the data is loaded as intended.
+# The behaviour follows the original generator in 'sauron'; its remaining
+# peculiarities are marked 'QUIRK' below.
 #
 package Sauron::DhcpDB;
 require Exporter;
@@ -35,8 +33,10 @@ $VERSION = '$Id:$ ';
 # dhcp_entries.type per address family
 my %_ETYPE = (
   4 => { global => 1,  host => 3,  net => 4, group => 5,  vlan => 6,  local => 7 },
-  6 => { global => 11, host => 13, net => 14, group => 15, vlan => 16, local => 17 },
+  6 => { global => 11, host => 13, net => 4,  group => 15, vlan => 16, local => 17 },
 );
+# nets have a single DHCP entry list (type 4) for both families, a net is
+# either IPv4 or IPv6
 
 my $_EXPIRED_ZONE = " AND (coalesce(z.expiration, 0) <= 0 OR " .
   "coalesce(z.expiration, 0) > extract(epoch from now())) ";
@@ -76,7 +76,6 @@ sub _entries($$) {
 #   now              current time (epoch) for host expiration
 #   class            only load this class (sauron --dhcpclass)
 #   verbose          progress messages to STDERR
-#   isc_compat       reproduce quirks of the original dhcpd.conf generator
 # returns model
 sub dhcp_model_from_db($) {
   my ($o) = @_;
@@ -147,9 +146,6 @@ sub _load_classes($$) {
   my $sid = $o->{serverid};
   my ($idcol,$idre,@dclasses);
 
-  # QUIRK: historical site specific hack, no DHCPv4 classes for 'ns2'
-  return if ($o->{isc_compat} && !$v6 && $o->{server}{name} eq 'ns2');
-
   db_query("SELECT id,name,type FROM groups " .
 	   "WHERE server=$sid AND (type=3 OR type=103) " .
 	   ($o->{class} ? " AND name=".db_encode_str($o->{class})." " : "") .
@@ -206,9 +202,6 @@ sub _load_network_map($$) {
   my $et = $_ETYPE{$f};
   my $sid = $o->{serverid};
   my (@dpools,@dips,@nets,@subnets,@routers,%vlanhash,%vlan_names,@vlan_lst);
-
-  # QUIRK: historical site specific hack, no DHCPv4 pools for 'ns2'
-  my $no_pools = ($o->{isc_compat} && !$v6 && $o->{server}{name} eq 'ns2');
 
   # dynamic pools and their member addresses
   db_query("SELECT id,name FROM groups WHERE server=$sid AND type=2 " .
@@ -274,7 +267,7 @@ sub _load_network_map($$) {
     error("No router interfaces found for net $nets[-1][0]!")
       if (!$v6 && @routers < 1);
     foreach my $s (grep { $_->[3] eq $vlan } @subnets) {
-      my $net = _load_subnet($model,$o,$s,\@routers,($no_pools ? [] : \@dpools),\@dips);
+      my $net = _load_subnet($model,$o,$s,\@routers,\@dpools,\@dips);
       $net->{vlan} = $vl->{name};
       push @{$vl->{nets}}, $net;
     }
@@ -284,7 +277,7 @@ sub _load_network_map($$) {
 sub _load_subnet($$$$$$) {
   my ($model,$o,$s,$routers,$dpools,$dips) = @_;
   my $v6 = ($model->{family} == 6);
-  my ($ssnet,$router,$pri,$net,$nettype);
+  my ($ssnet,$router,$pri,$net);
 
   $net = dhcp_model_add($model,'nets',{ cidr => $s->[0], name => $s->[2],
 					 id => $s->[1], pools => [] });
@@ -306,9 +299,7 @@ sub _load_subnet($$$$$$) {
     my $nh = new NetAddr::IP($s->[0]);
     error("no router interface found for subnet: " . $nh->addr() . " " . $nh->mask());
   }
-  # QUIRK: DHCPv6 subnets use the IPv4 subnet entries (type 4)
-  $nettype = (($v6 && $o->{isc_compat}) ? 4 : $_ETYPE{$model->{family}}{net});
-  _add_entries($model,$net->{scope},_entries($nettype,$s->[1]));
+  _add_entries($model,$net->{scope},_entries($_ETYPE{$model->{family}}{net},$s->[1]));
 
   # dynamic pools: contiguous address runs of pool member hosts
   foreach my $p (@$dpools) {
@@ -546,9 +537,6 @@ sub _auto_domain_option($$) {
   my ($o,$v6) = @_;
 
   return ('option domain-name',qr/option\s+domain-name\s+/) unless ($v6);
-  # QUIRK: DHCPv6 puts the domain into dhcp6.name-servers
-  return ('option dhcp6.name-servers',qr/option\s+dhcp6\.name-servers\s+/)
-    if ($o->{isc_compat});
   return ('option dhcp6.domain-search',qr/option\s+dhcp6\.domain-search\s+/);
 }
 
@@ -617,10 +605,9 @@ sub _host_entries_ungrouped($$$$) {
   if ($o->{auto_domainnames}) {
     my ($opt,$re) = _auto_domain_option($o,$v6);
     ($adomain = $host->{name}) =~ s/^[^\.]+\.//;
-    # QUIRK: added even if the host has its own domain-name entry
+    # unless the host has its own domain-name entry
     _add_host_stmt($model,$host,"$opt \"$adomain\";",undef,0)
-      if ($adomain && ($o->{isc_compat} ||
-		       !grep { $_->[0] =~ $re } @{$entries || []}));
+      if ($adomain && !grep { $_->[0] =~ $re } @{$entries || []});
   }
   foreach my $e (@{$entries || []}) {
     _add_host_stmt($model,$host,$e->[0],$e->[1],0);

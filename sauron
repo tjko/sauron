@@ -2059,7 +2059,7 @@ sub make_dhcp_conf($) {
 				failover_mode => $failover_mode,
 				failover_peer => $failover_peer_name,
 				now => $time_now_ticks,
-				class => $opt_dhcpclass, isc_compat => 1,
+				class => $opt_dhcpclass,
 				verbose => $opt_verbose });
   dhcp_isc_write(\*DHCPFILE,$model,{ filename => $dhcpd_conf_filename,
 				     version => $VER, user => $user,
