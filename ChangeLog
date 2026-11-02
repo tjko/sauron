@@ -17,6 +17,11 @@
 	    dhcpd -6 refused such a configuration
 	  [svamberg]
 
+	- sauron: new options --kea and --kea6 generate KEA DHCP
+	  configuration (kea-dhcp4.conf, kea-dhcp6.conf) from the same data
+	  as dhcpd.conf; validated with --check using the new config options
+	  SAURON_KEA4_CHK_PROG/SAURON_KEA6_CHK_PROG [svamberg]
+
 	- import-dhcp: KEA import rewritten on the DHCP model. Options are
 	  converted to valid ISC syntax (quoting, DHCPv6 option names,
 	  options given by code, option-def), parameters are mapped

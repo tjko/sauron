@@ -19,6 +19,7 @@ use Sauron::SetupIO;
 use Sauron::UtilZone;
 use Sauron::DhcpDB;
 use Sauron::DhcpIsc;
+use Sauron::DhcpKea;
 use Net::IP qw(:PROC);
 use open ':locale';
 
@@ -28,6 +29,8 @@ load_config();
 $bind_conf=0;
 $dhcp_conf=0;
 $dhcp6_conf=0;
+$kea4_conf=0;
+$kea6_conf=0;
 $printer_conf=0;
 
 %yes_no_enum = (D=>'',Y=>'yes',N=>'no');
@@ -2030,6 +2033,53 @@ sub print_cidr_list($$$$$) {
 # DHCP
 
 
+# make_kea_conf($family) - generate kea-dhcp4.conf (4) or kea-dhcp6.conf (6)
+sub make_kea_conf($) {
+  my ($family) = @_;
+  my $v6 = ($family == 6);
+  my ($model,$file,$sid,$chk_prog,@args,$res);
+
+  print ($v6 ? "KEA DHCPv6 configuration\n" : "KEA DHCPv4 configuration\n");
+  $time_now = localtime;
+  $file = ($v6 ? 'kea-dhcp6.conf' : 'kea-dhcp4.conf');
+  print "Generating $file...\n";
+
+  open(KEAFILE,">$file$tmp_extension")
+    || fatal("Cannot create $file$tmp_extension!");
+  $open_tmpfiles{"$file$tmp_extension"} = $file;
+
+  $sid = ($server{masterserver} > 0 ? $server{masterserver} : $server{id});
+  $model = dhcp_model_from_db({ family => $family, server => \%server,
+				serverid => $sid, masterserver => \%masterserver,
+				auto_domainnames => $dhcp_auto_domainnames,
+				failover_mode => 0, now => $time_now_ticks,
+				verbose => $opt_verbose });
+  dhcp_kea_write(\*KEAFILE,$model,{ filename => $file, version => $VER,
+				   user => $user, time => $time_now,
+				   resolve => dhcp_db_resolver($sid,$family) });
+  close(KEAFILE);
+  print STDERR "warning: $_\n" foreach (@{$model->{warnings}});
+  print STDERR "warning: failover is not generated for KEA (use the KEA HA " .
+    "hook library)\n" if ($failover_mode);
+
+  $chk_prog = ($v6 ? $SAURON_KEA6_CHK_PROG : $SAURON_KEA4_CHK_PROG);
+  if ($opt_check && $chk_prog) {
+    print "Validating $file...\n" if ($opt_verbose);
+    @args = split(/\s+/,($v6 ? $SAURON_KEA6_CHK_ARGS : $SAURON_KEA4_CHK_ARGS));
+    push @args, "$file$tmp_extension";
+    print "run: $chk_prog " . join(' ',@args) . "\n" if ($opt_verbose);
+    $res = system($chk_prog,@args);
+    fatal("$file validity check failed ($res)") if ($res);
+  }
+
+  foreach $tmpfile (keys %open_tmpfiles) {
+    print "rename: $tmpfile --> $open_tmpfiles{$tmpfile}\n" if ($opt_verbose);
+    fatal("failed to rename tmpfile: $tmpfile")
+      unless(rename($tmpfile,$open_tmpfiles{$tmpfile})==1);
+    delete $open_tmpfiles{$tmpfile};
+  }
+}
+
 # make_dhcp_conf($family) - generate dhcpd.conf (4) or dhcpd6.conf (6)
 # (or a class file with --dhcpclass) through the DHCP model
 sub make_dhcp_conf($) {
@@ -2347,7 +2397,8 @@ sub make_printcap() {
 
 $VER = sauron_version();
 
-$result=GetOptions("help|h","all|a","bind|b","dhcp|d","dhcp6","printer|p","mail",
+$result=GetOptions("help|h","all|a","bind|b","dhcp|d","dhcp6","kea","kea6",
+		   "printer|p","mail",
                    "updateserial","noupdateserial","keep-pending","verbose","clean",
                    "check","dhcpclass=s","tinydns|t", "ignorelocal|i");
 
@@ -2359,6 +2410,8 @@ if ($opt_help || @ARGV < 1 || $result < 1) {
       "\t--tinydns            generate DJBDNS (tinydns) configuration files\n",
       "\t--dhcp               generate DHCP (dhcpd) configuration files\n",
       "\t--dhcp6              generate DHCPv6 (dhcpd) configuration files\n",
+      "\t--kea                generate KEA DHCPv4 configuration (kea-dhcp4.conf)\n",
+      "\t--kea6               generate KEA DHCPv6 configuration (kea-dhcp6.conf)\n",
       "\t--clean              cleanup expired records and vacuum database\n",
       "\t--printer            generate PRINTER (lpd) configuration files\n\n",
       "\t--updateserial       force serial update on master zones\n",
@@ -2387,6 +2440,8 @@ $opt_check=($opt_check ? 1 : 0);
 $opt_ignorelocal = ($opt_ignorelocal ? 1 : 0);
 $dhcp6_conf=1 if ($opt_dhcp6 || $opt_all);
 $dhcp_conf=1 if ($opt_dhcp || $opt_all);
+$kea4_conf=1 if ($opt_kea);
+$kea6_conf=1 if ($opt_kea6);
 $bind_conf=1 if ($opt_bind || $opt_all);
 $tiny_conf=1 if ($opt_tinydns || $opt_all);
 $printer_conf=1 if ($opt_printer || $opt_all);
@@ -2423,6 +2478,14 @@ fatal("cannot find/execute SAURON_DHCP_CHK_PROG: $SAURON_DHCP_CHK_PROG")
   if ($opt_check && $dhcp_conf && ! -x $SAURON_DHCP_CHK_PROG);
 fatal("cannot find/execute SAURON_DHCP6_CHK_PROG: $SAURON_DHCP6_CHK_PROG")
   if ($opt_check && $dhcp6_conf && ! -x $SAURON_DHCP6_CHK_PROG);
+foreach $x (['kea4',$kea4_conf,$SAURON_KEA4_CHK_PROG],
+	   ['kea6',$kea6_conf,$SAURON_KEA6_CHK_PROG]) {
+  next unless ($opt_check && $x->[1]);
+  fatal("--check option used but SAURON_\U$x->[0]\E_CHK_PROG not configured!")
+    unless ($x->[2]);
+  fatal("cannot find/execute SAURON_\U$x->[0]\E_CHK_PROG: $x->[2]")
+    unless (-x $x->[2]);
+}
 fatal("--dhcpclass can only be used with --dhcp option")
   if ($opt_dhcpclass && not $opt_dhcp);
 
@@ -2516,6 +2579,8 @@ make_dns() if ($bind_conf || $tiny_conf);
 make_printcap() if ($printer_conf);
 make_dhcp_conf(4) if ($dhcp_conf);
 make_dhcp_conf(6) if ($dhcp6_conf);
+make_kea_conf(4) if ($kea4_conf);
+make_kea_conf(6) if ($kea6_conf);
 
 # Pause script for test purposes.
 #$| = 1;

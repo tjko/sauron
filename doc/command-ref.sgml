@@ -896,6 +896,20 @@
   <row><entry><option>--dhcp</></>
        <entry>Generate DHCP (dhcpd) configuration files.</>
   </row>
+  <row><entry><option>--dhcp6</></>
+       <entry>Generate DHCPv6 (dhcpd) configuration files.</>
+  </row>
+  <row><entry><option>--kea</></>, <option>--kea6</></>
+       <entry>Generate KEA DHCPv4 (<filename>kea-dhcp4.conf</>) or DHCPv6
+              (<filename>kea-dhcp6.conf</>) configuration. It contains the
+              Dhcp4/Dhcp6 section (global parameters, client classes,
+              shared networks, subnets, pools and reservations); entries
+              marked KEA only are included, ISC only entries and ISC class
+              match expressions are left out with a warning. Failover is
+              not generated (use the KEA HA hook library). With
+              <option>--check</> the file is validated with
+              <varname>SAURON_KEA4_CHK_PROG</> / <varname>SAURON_KEA6_CHK_PROG</>.</>
+  </row>
   <row><entry><option>--printer</></>
        <entry>Generate PRINTER (lpd) configuration files 
               (not yet implemented).</>

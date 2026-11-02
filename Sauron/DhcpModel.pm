@@ -52,9 +52,10 @@ sub dhcp_scope_new() {
   return { stmts => [] };
 }
 
-# dhcp_model_warn($model,$msg) - record a warning
+# dhcp_model_warn($model,$msg) - record a warning (each message once)
 sub dhcp_model_warn($$) {
   my ($model,$msg) = @_;
+  return if ($model->{_warned}{$msg}++);
   push @{$model->{warnings}}, $msg;
 }
 

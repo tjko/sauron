@@ -235,12 +235,23 @@ sub validate_isc {
     }
 }
 
+# validate a generated KEA configuration, when KEA is installed
+sub validate_kea {
+    my ($file, $family) = @_;
+    my ($kea) = grep { -x $_ } ("/usr/sbin/kea-dhcp$family", "/usr/local/sbin/kea-dhcp$family");
+  SKIP: {
+        skip("kea-dhcp$family not installed", 1) unless ($kea);
+        my $out = `$kea -t $file 2>&1`;
+        is($? >> 8, 0, "kea-dhcp$family -t accepts $file") or diag($out);
+    }
+}
+
 sub normalize {
     my ($file) = @_;
     open(my $fh, '<', $file) or die "$file: $!";
     my @l = <$fh>;
     close($fh);
-    s/^(#\s+created by ).*$/${1}USER at TIME/ foreach (@l);
+    s/^((?:#|\/\/)\s+created by ).*$/${1}USER at TIME/ foreach (@l);
     return join('', @l);
 }
 
@@ -253,11 +264,17 @@ subtest 'generate and compare' => sub {
     run("$install_dir/sauron --dhcp --dhcpclass vip $server $gen");
     run("$install_dir/sauron --dhcp $slave $gen/ns2");
     run("$install_dir/sauron --dhcp6 $slave $gen/ns2");
+    run("$install_dir/sauron --kea --kea6 $server $gen");
+    run("$install_dir/sauron --kea --kea6 $slave $gen/ns2");
 
     foreach my $f ('dhcpd.conf', 'dhcpd6.conf', 'vip.class',
-                   'ns2/dhcpd.conf', 'ns2/dhcpd6.conf') {
+                   'ns2/dhcpd.conf', 'ns2/dhcpd6.conf',
+                   'kea-dhcp4.conf', 'kea-dhcp6.conf',
+                   'ns2/kea-dhcp4.conf', 'ns2/kea-dhcp6.conf') {
         ok(-r "$gen/$f", "$f generated") or next;
-        validate_isc("$gen/$f", ($f =~ /6/ ? 6 : 4)) unless ($f =~ /\.class$/);
+        my $fam = ($f =~ /6\.conf$/ ? 6 : 4);
+        if ($f =~ /kea-/) { validate_kea("$gen/$f", $fam); }
+        elsif ($f !~ /\.class$/) { validate_isc("$gen/$f", $fam); }
         my $got = normalize("$gen/$f");
 
         if (my $dir = $ENV{SAURON_GOLDEN_UPDATE}) {

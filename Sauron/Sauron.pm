@@ -72,6 +72,10 @@ sub set_defaults() {
   $main::SAURON_DHCP_CHK_PROG = '';
   $main::SAURON_DHCP_CHK_ARGS  = '-4 -q -t -cf';
   $main::SAURON_DHCP6_CHK_ARGS = '-6 -q -t -cf';
+  $main::SAURON_KEA4_CHK_PROG = '';
+  $main::SAURON_KEA4_CHK_ARGS = '-t';
+  $main::SAURON_KEA6_CHK_PROG = '';
+  $main::SAURON_KEA6_CHK_ARGS = '-t';
   $main::SAURON_NAMED_CHK_PROG = '';
   $main::SAURON_NAMED_CHK_ARGS = '';
   $main::SAURON_ZONE_CHK_PROG = '';
@@ -161,6 +165,10 @@ sub print_config() {
   print "SAURON_DHCP_CHK_ARGS=",$main::SAURON_DHCP_CHK_ARGS,"\n";
   print "SAURON_DHCP6_CHK_PROG=",$main::SAURON_DHCP6_CHK_PROG,"\n";
   print "SAURON_DHCP6_CHK_ARGS=",$main::SAURON_DHCP6_CHK_ARGS,"\n";
+  print "SAURON_KEA4_CHK_PROG=",$main::SAURON_KEA4_CHK_PROG,"\n";
+  print "SAURON_KEA4_CHK_ARGS=",$main::SAURON_KEA4_CHK_ARGS,"\n";
+  print "SAURON_KEA6_CHK_PROG=",$main::SAURON_KEA6_CHK_PROG,"\n";
+  print "SAURON_KEA6_CHK_ARGS=",$main::SAURON_KEA6_CHK_ARGS,"\n";
   print "SAURON_NAMED_CHK_PROG=",$main::SAURON_NAMED_CHK_PROG,"\n";
   print "SAURON_NAMED_CHK_ARGS=",$main::SAURON_NAMED_CHK_ARGS,"\n";
   print "SAURON_ZONE_CHK_PROG=",$main::SAURON_ZONE_CHK_PROG,"\n";

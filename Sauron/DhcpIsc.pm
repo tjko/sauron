@@ -130,6 +130,7 @@ sub _write_classes($$) {
 
   print $fh "\n# (dynamic) classes\n\n";
   foreach my $cl (@{$model->{classes}}) {
+    next if ($cl->{empty});
     print $fh "\nclass \"$cl->{name}\" {\n";
     print $fh "\tmatch pick-first-value (option dhcp-client-identifier, hardware);\n"
       if (!$v6 && $cl->{type} == 3);

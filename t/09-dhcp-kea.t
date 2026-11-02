@@ -217,6 +217,59 @@ EOF
 };
 
 # =========================================================================
+subtest 'KEA writer' => sub {
+    my $m = dhcp_model_new(4);
+    $m->{server} = { name => 's', comment => 'c' };
+    $m->{local} = dhcp_scope_new();
+    dhcp_scope_add_isc($m, $m->{global}, $_) foreach (
+        'default-lease-time 600', 'ddns-update-style none',
+        'option domain-name-servers ns1.example');
+    dhcp_scope_add_stmt($m, $m->{global}, kea_json_to_statement('{"renew-timer":100}', 4));
+    my $cl = dhcp_model_add($m, 'classes', { name => 'vip', type => 3,
+        members => [ { id => 'aa:bb:cc:dd:ee:01', name => 'h1' } ] });
+    my $pxe = dhcp_model_add($m, 'classes', { name => 'pxe', type => 103, members => [] });
+    dhcp_scope_add_stmt($m, $pxe->{scope}, kea_json_to_statement('{"test":"member(\'x\')"}', 4));
+    my $vl = dhcp_model_add($m, 'vlans', { name => 'lab', id => 5, nets => [] });
+    my $net = dhcp_model_add($m, 'nets', { cidr => '10.1.0.0/24', id => 42,
+                                           router => '10.1.0.1', pools => [] });
+    push @{$vl->{nets}}, $net;
+    my $pool = dhcp_model_add($m, 'pools', { name => 'p' });
+    push @{$pool->{ranges}}, parse_isc_statement('range 10.1.0.100 10.1.0.110', 4);
+    dhcp_scope_add_isc($m, $pool->{scope}, $_)
+        foreach ('allow members of "vip"', 'max-lease-time 900');
+    push @{$net->{pools}}, $pool;
+    my $grp = dhcp_model_add($m, 'groups', { name => 'g' });
+    dhcp_scope_add_isc($m, $grp->{scope}, 'option root-path "/r"');
+    my $h = dhcp_model_add($m, 'hosts', { name => 'h1.example', group => 'g',
+        hw_address => 'aa:bb:cc:dd:ee:01', addresses => [ '10.1.0.10', '10.2.0.1' ] });
+    dhcp_scope_add_isc($m, $h->{scope}, 'option host-name "h1"');
+
+    my $cfg = dhcp_model_to_kea($m, sub { $_[0] eq 'ns1.example' ? '10.0.0.53' : undef })->{Dhcp4};
+    is($cfg->{'valid-lifetime'}, 600, 'global parameter');
+    is($cfg->{'renew-timer'}, 100, 'KEA only global parameter');
+    is($cfg->{'option-data'}[0]{data}, '10.0.0.53', 'hostname resolved');
+    is_deeply([ map { $_->{name} } @{$cfg->{'client-classes'}} ], [ 'vip', 'pxe' ], 'classes');
+    is($cfg->{'client-classes'}[1]{test}, "member('x')", 'class test');
+    my $sn = $cfg->{'shared-networks'}[0];
+    is($sn->{name}, 'lab', 'shared network');
+    my $s = $sn->{subnet4}[0];
+    is($s->{id}, 42, 'subnet id from Sauron net id');
+    is($s->{'option-data'}[0]{data}, '10.1.0.1', 'router');
+    is_deeply($s->{pools}, [ { pool => '10.1.0.100 - 10.1.0.110', 'client-class' => 'vip' } ],
+              'pool with class, lifetime left out');
+    my $r = $s->{reservations}[0];
+    is($r->{'ip-address'}, '10.1.0.10', 'reservation in its subnet');
+    is_deeply($r->{'client-classes'}, ['vip'], 'reservation class');
+    is_deeply([ sort map { $_->{name} } @{$r->{'option-data'}} ], [ 'host-name', 'root-path' ],
+              'host and group options merged');
+    my %w = map { $_ => 1 } @{$m->{warnings}};
+    ok($w{'skipped in KEA output: ISC only statement: ddns-update-style none'}, 'ISC only reported');
+    ok($w{'pool p: parameter max-valid-lifetime is not allowed in a KEA pool, ignored'},
+       'pool lifetime reported');
+    ok($w{'host h1.example: address 10.2.0.1 is not in any subnet'}, 'address outside subnets');
+};
+
+# =========================================================================
 subtest 'KEA only statements in the database' => sub {
     my @cases = (
         [ kea_param_to_statement('renew-timer', 900, 4), '{"renew-timer":900}' ],

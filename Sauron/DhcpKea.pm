@@ -1,5 +1,6 @@
 # Sauron::DhcpKea.pm - read KEA DHCP (kea-dhcp4/kea-dhcp6) JSON
-#                      configuration into the DHCP model
+#                      configuration into the DHCP model, and write the
+#                      model as KEA configuration
 #
 # Everything that has an ISC dhcpd equivalent is converted to ISC syntax
 # statements (Sauron::DhcpDefs); the rest is kept as KEA only statements
@@ -19,7 +20,8 @@ package Sauron::DhcpKea;
 require Exporter;
 use IO::File;
 use JSON::PP;
-use Net::IP qw(ip_is_ipv4 ip_is_ipv6);
+use Net::IP qw(:PROC);
+use NetAddr::IP;
 use Sauron::DhcpDefs;
 use Sauron::DhcpModel;
 use strict;
@@ -28,7 +30,8 @@ use vars qw($VERSION @ISA @EXPORT);
 $VERSION = '$Id:$ ';
 
 @ISA = qw(Exporter);
-@EXPORT = qw(dhcp_kea_read_file dhcp_model_from_kea is_kea_conf);
+@EXPORT = qw(dhcp_kea_read_file dhcp_model_from_kea is_kea_conf
+	     dhcp_model_to_kea dhcp_kea_write);
 
 # keys handled structurally (not stored as scope parameters)
 my @_GLOBAL_KEYS = qw(subnet4 subnet6 shared-networks reservations
@@ -312,6 +315,237 @@ sub _host($$$) {
   $host->{classes} = [ grep { defined $_ && !ref($_) } @{$r->{'client-classes'}} ]
     if (ref($r->{'client-classes'}) eq 'ARRAY');
   _scope($model,$host->{scope},$r,\@_HOST_KEYS);
+}
+
+
+###########################################################################
+# KEA writer
+#
+# Mapping of the model (as loaded by Sauron::DhcpDB):
+#   local + global scopes   global parameters, option-def, option-data
+#   classes                 client-classes (test from KEA only entries;
+#                           ISC 'match' expressions are not converted)
+#   vlans                   shared-networks (VLAN 'CHAOS' = no network)
+#   nets                    subnets (id: KEA only 'id' entry or Sauron id)
+#   pools                   pools of the subnet
+#   hosts                   reservations in the subnet of their address;
+#                           group statements are merged into them, class
+#                           membership (MAC/DUID classes) -> client-classes
+# Failover (ISC failover protocol) has no KEA equivalent (KEA uses the HA
+# hook library) and is not generated.
+
+# reservation parameters KEA accepts in a reservation
+my %_HOST_PARAMS = map { $_ => 1 } qw(next-server server-hostname
+				       boot-file-name);
+
+# parameters KEA accepts in a pool (lifetimes etc. are subnet level)
+my %_POOL_PARAMS = map { $_ => 1 } qw(client-class require-client-classes
+				       evaluate-additional-classes pool-id
+				       user-context comment);
+
+# merge scope conversion $k (dhcp_scope_to_kea) into KEA element $e of
+# level $level (global, shared-network, subnet, pool, class, host);
+# options of the same name/code are replaced (later wins)
+sub _merge($$$$$) {
+  my ($model,$e,$k,$level,$what) = @_;
+
+  foreach my $o (@{$k->{'option-def'}}) {
+    push @{$e->{'option-def'}}, $o;
+  }
+  foreach my $o (@{$k->{'option-data'}}) {
+    my $key = (defined $o->{space} ? "$o->{space}." : '') .
+      (defined $o->{name} ? $o->{name} : "code-$o->{code}");
+    my $list = ($e->{'option-data'} ||= []);
+    my ($i) = grep { my $x = $list->[$_];
+		     ((defined $x->{space} ? "$x->{space}." : '') .
+		      (defined $x->{name} ? $x->{name} : "code-$x->{code}")) eq $key }
+      0..$#$list;
+    if (defined $i) { $list->[$i] = $o; } else { push @$list, $o; }
+  }
+  foreach my $p (sort keys %{$k->{params}}) {
+    if ($level eq 'pool' && !$_POOL_PARAMS{$p}) {
+      dhcp_model_warn($model,"$what: parameter $p is not allowed in a KEA " .
+		      "pool, ignored");
+      next;
+    }
+    $e->{$p} = $k->{params}{$p};
+  }
+  if (defined $k->{'client-class'}) {
+    if ($level eq 'pool') { $e->{'client-class'} = $k->{'client-class'}; }
+  }
+  if (defined $k->{test}) {
+    if ($level eq 'class') { $e->{test} = $k->{test}; }
+    else { dhcp_model_warn($model,"$what: class test expression ignored"); }
+  }
+}
+
+sub _addr_obj($$) {
+  my ($v6,$ip) = @_;
+  return ($v6 ? new Net::IP($ip) : new NetAddr::IP($ip));
+}
+
+sub _in_net($$$) {
+  my ($v6,$net,$ip) = @_;
+  my $a = _addr_obj($v6,$ip);
+  return 0 unless ($a);
+  return ($v6 ? ($net->overlaps($a) == $IP_B_IN_A_OVERLAP) : $net->contains($a));
+}
+
+# dhcp_model_to_kea($model,$resolve) - KEA configuration (hashref with
+# Dhcp4 or Dhcp6 root) for the model; problems are added to the model
+# warnings
+sub dhcp_model_to_kea($;$) {
+  my ($model,$resolve) = @_;
+  my $v6 = ($model->{family} == 6);
+  my $skey = ($v6 ? 'subnet6' : 'subnet4');
+  my (%cfg,%memberof,%groups,%ids,@subnets,%isc_only);
+
+  # global entries: local entries first, global entries override
+  foreach my $scope ($model->{local},$model->{global}) {
+    next unless ($scope);
+    _merge($model,\%cfg,dhcp_scope_to_kea($model,$scope,$resolve,'global'),'global','global');
+  }
+
+  # client classes
+  foreach my $cl (@{$model->{classes}}) {
+    my %c = (name => $cl->{name});
+    _merge($model,\%c,dhcp_scope_to_kea($model,$cl->{scope},$resolve,'class'),'class',
+	   "class $cl->{name}");
+    if ($cl->{type} == 103 && !defined $c{test}) {
+      dhcp_model_warn($model,"class $cl->{name}: no KEA test expression, " .
+		      "only reservations can assign it");
+    }
+    push @{$cfg{'client-classes'}}, \%c;
+    if ($cl->{type} == 3) {
+      push @{$memberof{$_->{id}}}, $cl->{name} foreach (@{$cl->{members} || []});
+    }
+  }
+
+  $groups{$_->{name}} = $_ foreach (@{$model->{groups}});
+
+  # subnets (in VLAN order as in dhcpd.conf)
+  my @vlans = @{$model->{vlans}};
+  my %netused;
+  foreach my $vl (@vlans) {
+    my $sn;
+    unless (!defined $vl->{id} || $vl->{id} < 1 || $vl->{name} eq 'CHAOS') {
+      $sn = { name => $vl->{name} };
+      _merge($model,$sn,dhcp_scope_to_kea($model,$vl->{scope},$resolve,
+					   'shared-network'),'shared-network',
+	     "shared-network $vl->{name}");
+      push @{$cfg{'shared-networks'}}, $sn;
+    }
+    foreach my $net (@{$vl->{nets}}) {
+      $netused{$net} = 1;
+      my $s = _kea_subnet($model,$net,$resolve);
+      push @subnets, [ $net, $s ];
+      if ($sn) { push @{$sn->{$skey}}, $s; } else { push @{$cfg{$skey}}, $s; }
+    }
+  }
+  foreach my $net (@{$model->{nets}}) {
+    next if ($netused{$net});
+    my $s = _kea_subnet($model,$net,$resolve);
+    push @subnets, [ $net, $s ];
+    push @{$cfg{$skey}}, $s;
+  }
+
+  # unique subnet ids: KEA only 'id' entry, else the Sauron net id
+  foreach my $x (@subnets) {
+    my ($net,$s) = @$x;
+    my $id = (defined $s->{id} ? $s->{id} : $net->{id});
+    if (!defined $id || $ids{$id}) {
+      my $n = 1;
+      $n++ while ($ids{$n} || grep { defined $_->[1]{id} && $_->[1]{id} == $n } @subnets);
+      dhcp_model_warn($model,"subnet $net->{cidr}: duplicate subnet id " .
+		      (defined $id ? $id : '') . ", using $n") if (defined $id);
+      $id = $n;
+    }
+    $s->{id} = int($id);
+    $ids{$id} = 1;
+  }
+
+  # reservations
+  my @nobj = map { [ _addr_obj($v6,$_->[0]{cidr}), $_->[1] ] } @subnets;
+  foreach my $h (@{$model->{hosts}}) {
+    my (%by,@order);
+    foreach my $ip (@{$h->{addresses} || []}) {
+      my ($x) = grep { _in_net($v6,$_->[0],$ip) } @nobj;
+      unless ($x) {
+	dhcp_model_warn($model,"host $h->{name}: address $ip is not in any subnet");
+	next;
+      }
+      push @order, $x unless ($by{$x->[1]});
+      push @{$by{$x->[1]}}, $ip;
+    }
+    foreach my $x (@order) {
+      my $ips = $by{$x->[1]};
+      my %r = (hostname => $h->{name});
+      if ($v6) {
+	$r{duid} = $h->{duid_text};
+	$r{'ip-addresses'} = [ @$ips ];
+      } else {
+	$r{'hw-address'} = $h->{hw_address};
+	$r{'ip-address'} = $ips->[0];
+	dhcp_model_warn($model,"host $h->{name}: KEA allows one address per " .
+			"subnet, using $ips->[0]") if (@$ips > 1);
+      }
+      my $g = (defined $h->{group} ? $groups{$h->{group}} : undef);
+      foreach my $scope (($g ? ($g->{scope}) : ()), $h->{scope}) {
+	_merge($model,\%r,dhcp_scope_to_kea($model,$scope,$resolve,'host'),'host',
+	       "host $h->{name}");
+      }
+      foreach my $p (keys %r) {
+	next if ($p =~ /^(hostname|duid|hw-address|ip-address|ip-addresses|option-data|client-classes)$/);
+	next if ($_HOST_PARAMS{$p} && !$v6);
+	next if ($p =~ /^(prefixes|flex-id|circuit-id|client-id)$/);
+	dhcp_model_warn($model,"host $h->{name}: parameter $p is not allowed " .
+			"in a reservation, ignored");
+	delete $r{$p};
+      }
+      delete $r{'option-def'};
+      my $id = ($v6 ? $h->{duid_text} : $h->{hw_address});
+      $r{'client-classes'} = [ @{$memberof{$id}} ] if ($id && $memberof{$id});
+      push @{$x->[1]{reservations}}, \%r;
+    }
+  }
+
+  return { ($v6 ? 'Dhcp6' : 'Dhcp4') => \%cfg };
+}
+
+sub _kea_subnet($$$) {
+  my ($model,$net,$resolve) = @_;
+  my $v6 = ($model->{family} == 6);
+  my %s = (subnet => $net->{cidr});
+
+  if (!$v6 && defined $net->{router}) {
+    $s{'option-data'} = [ { name => 'routers', code => 3, data => $net->{router} } ];
+  }
+  _merge($model,\%s,dhcp_scope_to_kea($model,$net->{scope},$resolve,'subnet'),'subnet',
+	 "subnet $net->{cidr}");
+
+  foreach my $pool (@{$net->{pools} || []}) {
+    my $r = $pool->{ranges}[0];
+    next unless ($r);
+    my %p = (pool => (defined $r->{prefix} ? $r->{prefix} : "$r->{start} - $r->{end}"));
+    _merge($model,\%p,dhcp_scope_to_kea($model,$pool->{scope},$resolve,'pool'),'pool',
+	   "pool $pool->{name}");
+    push @{$s{pools}}, \%p;
+  }
+  return \%s;
+}
+
+# dhcp_kea_write($fh,$model,\%meta) - write KEA configuration
+#   meta: filename, version, user, time, resolve (see dhcp_model_to_kea)
+sub dhcp_kea_write($$$) {
+  my ($fh,$model,$meta) = @_;
+  my $cfg = dhcp_model_to_kea($model,$meta->{resolve});
+
+  print $fh "// $meta->{filename} -- automagically generated by Sauron v$meta->{version}\n",
+    "//               created by $meta->{user} at $meta->{time}\n//\n",
+    "// server: $model->{server}{name} -- " .
+    (defined $model->{server}{comment} ? $model->{server}{comment} : '') . "\n//\n";
+  print $fh JSON::PP->new->pretty(1)->canonical(1)->encode($cfg);
+  return 0;
 }
 
 1;

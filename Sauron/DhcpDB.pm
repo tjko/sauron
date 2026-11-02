@@ -28,7 +28,7 @@ use vars qw($VERSION @ISA @EXPORT);
 $VERSION = '$Id:$ ';
 
 @ISA = qw(Exporter);
-@EXPORT = qw(dhcp_model_from_db dhcp_model_to_db);
+@EXPORT = qw(dhcp_model_from_db dhcp_model_to_db dhcp_db_resolver);
 
 # dhcp_entries.type per address family
 my %_ETYPE = (
@@ -182,8 +182,8 @@ sub _load_classes($$) {
 	     " AND (h.expiration > EXTRACT(epoch FROM current_timestamp) " .
 	     "  OR h.expiration = 0 OR h.expiration ISNULL) " .
 	     " ORDER BY h.$idcol",\@qq);
-    # QUIRK: classes without member hosts are not generated (incl. 103)
-    next unless (@qq);
+    # QUIRK: classes without member hosts are not generated in dhcpd.conf
+    # (incl. 103), see DhcpIsc
 
     if ($type == 3) {
       $last = '';
@@ -204,7 +204,8 @@ sub _load_classes($$) {
     }
 
     my $cl = dhcp_model_add($model,'classes',
-			    { name => $name, type => $type, members => \@members });
+			    { name => $name, type => $type, members => \@members,
+			      empty => (@qq ? 0 : 1) });
     _add_entries($model,$cl->{scope},_entries($_ETYPE{$model->{family}}{group},$cid));
   }
 }
@@ -640,6 +641,34 @@ sub _host_entries_ungrouped($$$$) {
   foreach my $e (@{$entries || []}) {
     _add_host_stmt($model,$host,$e->[0],$e->[1],0,$e->[2]);
   }
+}
+
+
+###########################################################################
+
+# dhcp_db_resolver($serverid,$family) - returns coderef($name) giving the
+# first address of host $name (FQDN, trailing dot optional) of the server,
+# undef if unknown; used where KEA needs an address and ISC accepted a name
+sub dhcp_db_resolver($$) {
+  my ($sid,$family) = @_;
+  my (@q,%ip);
+
+  db_query("SELECT h.domain,z.name,a.ip FROM hosts h,zones z,a_entries a " .
+	   "WHERE z.server=$sid AND h.zone=z.id AND a.host=h.id " .
+	   $_EXPIRED_ZONE . " AND family(a.ip) = " . ($family == 6 ? 6 : 4) .
+	   " ORDER BY h.id,a.ip",\@q);
+  foreach my $r (@q) {
+    my $fqdn = $r->[0];
+    $fqdn .= ".$r->[1]" unless ($fqdn =~ /\.$/);
+    $fqdn =~ s/\.+$//;
+    $ip{lc($fqdn)} = $r->[2] unless (exists $ip{lc($fqdn)});
+  }
+  return sub {
+    my ($name) = @_;
+    return undef unless (defined $name);
+    (my $n = lc($name)) =~ s/\.+$//;
+    return $ip{$n};
+  };
 }
 
 

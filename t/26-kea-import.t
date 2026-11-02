@@ -16,6 +16,7 @@ use FindBin;
 use lib "$FindBin::Bin/..";
 use Test::More;
 use File::Temp qw(tempdir);
+use JSON::PP;
 
 my $db_link = "$FindBin::Bin/../Sauron/DB.pm";
 unless (-e $db_link) {
@@ -173,12 +174,23 @@ sub validate_isc {
     }
 }
 
+# validate a generated KEA configuration, when KEA is installed
+sub validate_kea {
+    my ($file, $family) = @_;
+    my ($kea) = grep { -x $_ } ("/usr/sbin/kea-dhcp$family", "/usr/local/sbin/kea-dhcp$family");
+  SKIP: {
+        skip("kea-dhcp$family not installed", 1) unless ($kea);
+        my $out = `$kea -t $file 2>&1`;
+        is($? >> 8, 0, "kea-dhcp$family -t accepts $file") or diag($out);
+    }
+}
+
 sub normalize {
     my ($file) = @_;
     open(my $fh, '<', $file) or die "$file: $!";
     my @l = <$fh>;
     close($fh);
-    s/^(#\s+created by ).*$/${1}USER at TIME/ foreach (@l);
+    s/^((?:#|\/\/)\s+created by ).*$/${1}USER at TIME/ foreach (@l);
     return join('', @l);
 }
 
@@ -211,6 +223,39 @@ subtest 'generated configuration' => sub {
         unlike($got, qr/renew-timer|pd-pools|flex-id|option\[60\]/,
                "$f: no KEA only statements");
     }
+};
+
+subtest 'KEA export of the imported data' => sub {
+    my $gen = "$tmp/kea";
+    mkdir($gen) or die $!;
+    run("$install_dir/sauron --kea --kea6 $server $gen");
+    validate_kea("$gen/kea-dhcp4.conf", 4);
+    validate_kea("$gen/kea-dhcp6.conf", 6);
+
+    my $json = sub {
+        open(my $fh, '<', $_[0]) or die $!;
+        local $/;
+        my $t = <$fh>;
+        $t =~ s{^//[^\n]*\n}{}mg;
+        return JSON::PP->new->decode($t);
+    };
+    my $d4 = $json->("$gen/kea-dhcp4.conf")->{Dhcp4};
+    is($d4->{'renew-timer'}, 900, 'KEA only global parameter exported');
+    is($d4->{'valid-lifetime'}, 3600, 'ISC parameter converted back');
+    my ($dns) = grep { $_->{name} eq 'domain-name-servers' } @{$d4->{'option-data'}};
+    ok($dns && $dns->{'always-send'}, 'always-send kept');
+    my ($pxe) = grep { $_->{name} eq 'pxe' } @{$d4->{'client-classes'}};
+    is($pxe->{test}, "substring(option[60].hex,0,9) == 'PXEClient'", 'class test kept');
+    my ($lab) = grep { $_->{name} eq 'lab' } @{$d4->{'shared-networks'}};
+    my $s1 = $lab->{subnet4}[0];
+    is($s1->{id}, 1, 'KEA subnet id kept');
+    my ($ws1) = grep { $_->{hostname} eq 'ws1.kea.test' } @{$s1->{reservations}};
+    is($ws1->{'hw-address'}, '0a:00:00:00:00:01', 'reservation exported');
+    is_deeply($ws1->{'client-classes'}, ['vip'], 'reservation class');
+    is($s1->{pools}[0]{'client-class'}, 'vip', 'pool class');
+
+    my $d6 = $json->("$gen/kea-dhcp6.conf")->{Dhcp6};
+    ok($d6->{subnet6}[0]{'pd-pools'}, 'pd-pools kept');
 };
 
 cleanup();
