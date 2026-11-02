@@ -701,24 +701,38 @@ sub dhcp_ha_from_db($) {
   $master = ($server->{masterserver} > 0 ? $o->{masterserver} : $server);
   return undef unless ($master && $master->{"dhcp_flags_fo$sfx"});
 
+  # the HA partner of the master is its first slave (by id)
+  db_query("SELECT id,name,hostaddr,hostname FROM servers WHERE masterserver=" .
+	   int($master->{id}) . " ORDER BY id",\@q);
+  unless (@q) {
+    $warn->("failover enabled but no secondary server (slave) found, " .
+	    "High Availability not generated");
+    return undef;
+  }
   if ($server->{masterserver} > 0) {
-    ($primary,$secondary) = ($master,$server);
-  } else {
-    db_query("SELECT name,hostaddr,hostname FROM servers WHERE masterserver=" .
-	     int($server->{id}) . " ORDER BY id",\@q);
-    unless (@q) {
-      $warn->("failover enabled but no secondary server (slave) found, " .
-	      "High Availability not generated");
+    if ($q[0][0] != $server->{id}) {
+      $warn->("server $server->{name} is not the High Availability partner " .
+	      "of $master->{name} (that is $q[0][1]), HA not generated");
       return undef;
     }
+    ($primary,$secondary) = ($master,$server);
+  } else {
+    $warn->("several slaves of $server->{name}: High Availability partner is " .
+	    "$q[0][1], not " . join(', ',map { $_->[1] } @q[1..$#q])) if (@q > 1);
     $primary = $server;
-    $secondary = { name => $q[0][0], hostaddr => $q[0][1], hostname => $q[0][2] };
+    $secondary = { name => $q[0][1], hostaddr => $q[0][2], hostname => $q[0][3] };
   }
 
   my $port = $master->{"kea_ha_port$sfx"} || ($v6 ? 8002 : 8001);
   my $split = $master->{"df_split$sfx"};
-  my $mode = ((defined $split && $split ne '' && ($split <= 0 || $split >= 255))
-	      ? 'hot-standby' : 'load-balancing');
+  $split = 128 unless (defined $split && $split =~ /^\d+$/);
+  my $mode = (($split == 0 || $split >= 255) ? 'hot-standby' : 'load-balancing');
+  $warn->("failover split $split: KEA load-balancing always splits clients " .
+	  "evenly (use 0 or 255 for hot-standby)")
+    if ($mode eq 'load-balancing' && $split != 128);
+  # ISC split 0 = the secondary serves all clients: it is the active server
+  ($primary,$secondary) = ($secondary,$primary) if ($split == 0);
+
   my @peers;
   foreach my $p ([$primary,'primary'],
 		 [$secondary,($mode eq 'hot-standby' ? 'standby' : 'secondary')]) {

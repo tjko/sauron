@@ -325,10 +325,24 @@ subtest 'KEA High Availability' => sub {
 
     $m = $mk->();
     dhcp_scope_add_stmt($m, $m->{global}, kea_json_to_statement(
-        '{"hooks-libraries":[{"library":"libdhcp_ha.so","parameters":{}}]}', 4));
+        '{"hooks-libraries":[{"library":"/usr/lib/kea/hooks/libdhcp_ha.so.70","parameters":{}}]}', 4));
     $cfg = dhcp_model_to_kea($m)->{Dhcp4};
-    is(scalar @{$cfg->{'hooks-libraries'}}, 2, 'configured ha hook not duplicated');
+    is(scalar @{$cfg->{'hooks-libraries'}}, 2, 'configured (versioned) ha hook not duplicated');
     ok((grep { /already contain libdhcp_ha/ } @{$m->{warnings}}), 'reported');
+
+    # the model is not changed by the conversion
+    $m = $mk->();
+    dhcp_scope_add_stmt($m, $m->{global}, kea_json_to_statement(
+        '{"hooks-libraries":[{"library":"libdhcp_lease_cmds.so"}]}', 4));
+    my $c1 = JSON::PP->new->canonical->encode(dhcp_model_to_kea($m));
+    my $c2 = JSON::PP->new->canonical->encode(dhcp_model_to_kea($m));
+    is($c1, $c2, 'converting twice gives the same configuration');
+    ok(!(grep { /already contain/ } @{$m->{warnings}}), 'no false warning');
+
+    $m = $mk->();
+    $m->{ha}{max_response_delay} = 5000;
+    $ha = dhcp_model_to_kea($m)->{Dhcp4}{'hooks-libraries'}[1]{parameters}{'high-availability'}[0];
+    is($ha->{'heartbeat-delay'}, 2500, 'heartbeat below a short max-response-delay');
 };
 
 # =========================================================================

@@ -32,8 +32,10 @@
 	  server fields 'KEA HA listener port' (kea_ha_port, kea_ha_port6;
 	  sql/*.sql and dbconvert updated) and config SAURON_KEA_HOOKS_DIR.
 	  Fix: the DHCP6 'auto-domainnames' and 'Enable failover protocol'
-	  settings were never read (always shown as No and reset on save)
-	  [svamberg]
+	  settings were never read (always shown as No and reset on save);
+	  they are now kept. DHCP6 failover turns on KEA HA for DHCPv6, so
+	  check that setting after the upgrade; DHCP6 auto-domainnames is
+	  still not used (DHCPv6 follows the DHCP setting) [svamberg]
 
 	- sauron: new options --kea and --kea6 generate KEA DHCP
 	  configuration (kea-dhcp4.conf, kea-dhcp6.conf) from the same data

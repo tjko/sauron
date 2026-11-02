@@ -564,20 +564,34 @@ sub _kea_ha($$) {
   my %rel = (this => 'this-server-name', mode => 'mode', peers => 'peers');
 
   my %h = map { ($rel{$_} => $ha->{$_}) } keys %rel;
-  $h{'max-response-delay'} = $ha->{max_response_delay}
-    if (defined $ha->{max_response_delay});
+  if (defined $ha->{max_response_delay}) {
+    # heartbeats must come more often than the partner is declared dead
+    $h{'max-response-delay'} = $ha->{max_response_delay};
+    $h{'heartbeat-delay'} = int($ha->{max_response_delay} / 2)
+      if ($ha->{max_response_delay} <= 10000);
+  }
   my $mt = $cfg->{'multi-threading'};
-  unless (ref($mt) eq 'HASH' && defined $mt->{'enable-multi-threading'} &&
-	  !$mt->{'enable-multi-threading'}) {
+  if (ref($mt) eq 'HASH' && defined $mt->{'enable-multi-threading'} &&
+      !$mt->{'enable-multi-threading'}) {
+    dhcp_model_warn($model,"multi-threading is disabled: High Availability " .
+		    "goes through kea-ctrl-agent, the peer URLs must use its port " .
+		    "(KEA HA listener port setting)");
+  } else {
     $h{'multi-threading'} = { 'enable-multi-threading' => JSON::PP::true(),
 			      'http-dedicated-listener' => JSON::PP::true(),
 			      'http-listener-threads' => 0,
 			      'http-client-threads' => 0 };
   }
 
-  my $hooks = (ref($cfg->{'hooks-libraries'}) eq 'ARRAY' ? $cfg->{'hooks-libraries'} : []);
-  my %have = map { ((defined $_->{library} ? $_->{library} : '') =~ m{([^/]+)$})[0] => $_ }
-    grep { ref($_) eq 'HASH' } @$hooks;
+  # a copy: the list may be the value of a model statement
+  my $hooks = [ ref($cfg->{'hooks-libraries'}) eq 'ARRAY' ? @{$cfg->{'hooks-libraries'}} : () ];
+  my %have;
+  foreach my $e (grep { ref($_) eq 'HASH' && defined $_->{library} } @$hooks) {
+    my ($b) = ($e->{library} =~ m{([^/]+)$});
+    next unless (defined $b);
+    $b =~ s/\.so(?:\.[\d.]+)?$/.so/;
+    $have{$b} = $e;
+  }
   push @$hooks, { library => $lib->('libdhcp_lease_cmds.so') }
     unless ($have{'libdhcp_lease_cmds.so'});
   if ($have{'libdhcp_ha.so'}) {

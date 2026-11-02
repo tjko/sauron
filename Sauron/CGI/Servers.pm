@@ -214,7 +214,8 @@ my %server_form = (
 
   {ftype=>0, name=>'DHCP6 Settings'},
   {ftype=>3, tag=>'dhcp_flags_ad6', name=>'auto-domainnames',
-   type=>'enum', enum=>{0=>'No',1=>'Yes'}, iff=>['masterserver','-1']},
+   type=>'enum', enum=>{0=>'No',1=>'Yes'}, iff=>['masterserver','-1'],
+   extrainfo=>'not used yet: DHCPv6 output follows the DHCP auto-domainnames setting'},
 # Local DHCP settings 2020-07-20 TVu
   dhcp_field('dhcp6_l','Local DHCP Settings',6, label=>'dhcptab line',
 	     extrainfo=>'Private configuration for this DHCP server only'),
