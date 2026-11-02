@@ -44,7 +44,7 @@ $VERSION = '$Id:$ ';
 	     update_record
 	     add_record_sql
 	     add_record
-	     copy_records
+	     copy_records add_dhcp_field update_dhcp_field
 
 	     get_server_id
 	     get_server_list
@@ -704,6 +704,51 @@ sub add_array_field($$$$$$) {
   return 0;
 }
 
+# DHCP entry lists (dhcp_entries): rows [id, dhcp, comment, fmt, marker],
+# fmt: 0 = ISC and KEA, 1 = ISC only, 2 = KEA only (see Sauron::DhcpDefs)
+use constant DHCP_ENTRY_COLUMNS => 'id,dhcp,comment,COALESCE(fmt,0)';
+
+sub _dhcp_fmt($) {
+  my ($fmt) = @_;
+  return (defined $fmt && $fmt =~ /^\s*([012])\s*$/) ? $1 : 0;
+}
+
+# add_dhcp_field($keyname,$rec,$vals) - insert DHCP entries of
+# $rec->{$keyname} with "type,ref" values $vals; rows may omit comment
+# and fmt (header rows are skipped)
+sub add_dhcp_field($$$) {
+  my ($keyname,$rec,$vals) = @_;
+  my %tmp;
+
+  return 0 unless (ref($rec) eq 'HASH' && ref($rec->{$keyname}) eq 'ARRAY');
+  $tmp{list} = [ map { [ $_->[0], $_->[1],
+			 (defined $_->[2] ? $_->[2] : ''), _dhcp_fmt($_->[3]) ] }
+		 grep { ref($_) eq 'ARRAY' && @$_ > 1 &&
+			(!defined $_->[0] || $_->[0] =~ /^\d*$/) }
+		 @{$rec->{$keyname}} ];
+  return add_array_field('dhcp_entries','dhcp,comment,fmt','list',\%tmp,
+			 'type,ref',$vals);
+}
+
+# update_dhcp_field($keyname,$rec,$vals) - update_array_field for DHCP
+# entries (rows [id, dhcp, comment, fmt, marker]); rows in the former
+# layout [id, dhcp, comment, marker] (4 elements) get fmt 0
+sub update_dhcp_field($$$) {
+  my ($keyname,$rec,$vals) = @_;
+  my $list = $rec->{$keyname};
+
+  if (ref($list) eq 'ARRAY') {
+    for my $i (1..$#{$list}) {
+      my $row = $list->[$i];
+      next unless (ref($row) eq 'ARRAY');
+      splice(@$row,3,0,0) if (@$row == 4);
+      $row->[3] = _dhcp_fmt($row->[3]);
+    }
+  }
+  return update_array_field("dhcp_entries",4,"dhcp,comment,fmt,type,ref",
+			    $keyname,$rec,$vals);
+}
+
 sub update_record($$) {
   my ($table,$rec) = @_;
   my ($key,$sqlstr,$id,$flag,$r);
@@ -1033,9 +1078,9 @@ sub get_server($$) {
   get_array_field("cidr_entries",3,"id,ip,comment","IP,Comments",
 		  "type=11 AND ref=$id ORDER BY ip",$rec,'forwarders');
 # Local DHCP settings 2020-07-20 TVu
-  get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comments",
+  get_array_field("dhcp_entries",4,DHCP_ENTRY_COLUMNS,"DHCP,Comments,Format",
 		  "type=7 AND ref=$id ORDER BY id",$rec,'dhcp_l');
-  get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comments",
+  get_array_field("dhcp_entries",4,DHCP_ENTRY_COLUMNS,"DHCP,Comments,Format",
 		  "type=1 AND ref=$id ORDER BY id",$rec,'dhcp');
   get_array_field("txt_entries",3,"id,txt,comment","TXT,Comments",
 		  "type=3 AND ref=$id ORDER BY id",$rec,'txt');
@@ -1046,9 +1091,9 @@ sub get_server($$) {
   get_array_field("txt_entries",3,"id,txt,comment","TXT,Comments",
 		  "type=13 AND ref=$id ORDER BY id",$rec,'bind_globals');
 # Local DHCP settings 2020-07-20 TVu
-  get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP6,Comments",
+  get_array_field("dhcp_entries",4,DHCP_ENTRY_COLUMNS,"DHCP6,Comments,Format",
 		  "type=17 AND ref=$id ORDER BY id",$rec,'dhcp6_l');
-  get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP6,Comments",
+  get_array_field("dhcp_entries",4,DHCP_ENTRY_COLUMNS,"DHCP6,Comments,Format",
 		  "type=11 AND ref=$id ORDER BY id",$rec,'dhcp6');
 
   get_aml_field($id,14,$id,$rec,'allow_query_cache');
@@ -1127,18 +1172,18 @@ sub update_server($) {
   if ($r < 0) { db_rollback(); return -12; }
   # dhcp
 # Local DHCP settings 2020-07-20 TVu
-  $r=update_array_field("dhcp_entries",3,"dhcp,comment,type,ref",'dhcp_l',$rec,
+  $r=update_dhcp_field('dhcp_l',$rec,
 		        "7,$id");
   if ($r < 0) { db_rollback(); return -13; }
-  $r=update_array_field("dhcp_entries",3,"dhcp,comment,type,ref",'dhcp',$rec,
+  $r=update_dhcp_field('dhcp',$rec,
 		        "1,$id");
   if ($r < 0) { db_rollback(); return -13; }
   # dhcp6
 # Local DHCP settings 2020-07-20 TVu
-  $r=update_array_field("dhcp_entries",3,"dhcp,comment,type,ref",'dhcp6_l',$rec,
+  $r=update_dhcp_field('dhcp6_l',$rec,
 		        "17,$id");
   if ($r < 0) { db_rollback(); return -132; }
-  $r=update_array_field("dhcp_entries",3,"dhcp,comment,type,ref",'dhcp6',$rec,
+  $r=update_dhcp_field('dhcp6',$rec,
 		        "11,$id");
   if ($r < 0) { db_rollback(); return -132; }
   # txt
@@ -1216,19 +1261,15 @@ sub add_server($) {
   if ($res < 0) { db_rollback(); return -10; }
   # dhcp
 # Local DHCP settings 2020-07-20 TVu
-  $res = add_array_field('dhcp_entries','dhcp,comment','dhcp_l',$rec,
-			 'type,ref',"7,$id");
+  $res = add_dhcp_field('dhcp_l',$rec,"7,$id");
   if ($res < 0) { db_rollback(); return -11; }
-  $res = add_array_field('dhcp_entries','dhcp,comment','dhcp',$rec,
-			 'type,ref',"1,$id");
+  $res = add_dhcp_field('dhcp',$rec,"1,$id");
   if ($res < 0) { db_rollback(); return -11; }
   # dhcp6
 # Local DHCP settings 2020-07-20 TVu
-  $res = add_array_field('dhcp_entries','dhcp,comment','dhcp6_l',$rec,
-			 'type,ref',"17,$id");
+  $res = add_dhcp_field('dhcp6_l',$rec,"17,$id");
   if ($res < 0) { db_rollback(); return -11; }
-  $res = add_array_field('dhcp_entries','dhcp,comment','dhcp6',$rec,
-			 'type,ref',"11,$id");
+  $res = add_dhcp_field('dhcp6',$rec,"11,$id");
   if ($res < 0) { db_rollback(); return -11; }
   # txt
   $res = add_array_field('txt_entries','txt,comment','txt',$rec,
@@ -1630,7 +1671,7 @@ sub get_zone($$) {
     }
   }
 
-  get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comments",
+  get_array_field("dhcp_entries",4,DHCP_ENTRY_COLUMNS,"DHCP,Comments,Format",
 		  "type=2 AND ref=$id ORDER BY id",$rec,'dhcp');
   get_aml_field($sid,2,$id,$rec,'allow_update');
   get_array_field("cidr_entries",5,"id,ip,port,tls,comment",
@@ -1889,7 +1930,7 @@ sub update_zone($) {
   }
 
   # dhcp
-  $r=update_array_field("dhcp_entries",3,"dhcp,comment,type,ref",
+  $r=update_dhcp_field(
 			'dhcp',$rec,"2,$id");
   if ($r < 0) { db_rollback(); return -15; }
 
@@ -2257,8 +2298,7 @@ sub add_zone($) {
   }
 
   # dhcp
-  $res = add_array_field('dhcp_entries','dhcp,comment','dhcp',$rec,
-			 'type,ref',"2,$id");
+  $res = add_dhcp_field('dhcp',$rec,"2,$id");
   if ($res < 0) { db_rollback(); return -111; }
 
   # allow_update
@@ -2566,9 +2606,9 @@ sub get_host($$) {
 		  "type=1 AND ref=$id ORDER BY proto,services",$rec,'wks_l');
   get_array_field("mx_entries",4,"id,pri,mx,comment","Priority,MX,Comments",
 		  "type=2 AND ref=$id ORDER BY pri,mx",$rec,'mx_l');
-  get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comments",
+  get_array_field("dhcp_entries",4,DHCP_ENTRY_COLUMNS,"DHCP,Comments,Format",
 		  "type=3 AND ref=$id ORDER BY id",$rec,'dhcp_l');
-  get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comments",
+  get_array_field("dhcp_entries",4,DHCP_ENTRY_COLUMNS,"DHCP,Comments,Format",
 		  "type=13 AND ref=$id ORDER BY id",$rec,'dhcp_l6');
   get_array_field("printer_entries",3,"id,printer,comment","PRINTER,Comments",
 		  "type=2 AND ref=$id ORDER BY printer",$rec,'printer_l');
@@ -2954,7 +2994,7 @@ sub update_host($) {
   $r=update_array_field("mx_entries",4,"pri,mx,comment,type,ref",
 			'mx_l',$rec,"2,$id");
   if ($r < 0) { db_rollback(); return -14; }
-  $r=update_array_field("dhcp_entries",3,"dhcp,comment,type,ref",
+  $r=update_dhcp_field(
 			'dhcp_l',$rec,"3,$id");
   if ($r < 0) { db_rollback(); return -16; }
   $r=update_array_field("printer_entries",3,"printer,comment,type,ref",
@@ -3004,7 +3044,7 @@ sub update_host($) {
 			'subgroups',$rec,"$id");
   if ($r < 0) { db_rollback(); return -25; }
 
-  $r=update_array_field("dhcp_entries",3,"dhcp,comment,type,ref",
+  $r=update_dhcp_field(
 			'dhcp_l6',$rec,"13,$id");
   if ($r < 0) { db_rollback(); return -26; }
 
@@ -3614,12 +3654,12 @@ sub get_group($$) {
 			     "type,alevel,vmps",
 			     $id,$rec,"id"));
 
-  get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comments",
+  get_array_field("dhcp_entries",4,DHCP_ENTRY_COLUMNS,"DHCP,Comments,Format",
 		  "type=5 AND ref=$id ORDER BY id",$rec,'dhcp');
   get_array_field("printer_entries",3,"id,printer,comment","PRINTER,Comments",
 		  "type=1 AND ref=$id ORDER BY printer",$rec,'printer');
 
-  get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comments",
+  get_array_field("dhcp_entries",4,DHCP_ENTRY_COLUMNS,"DHCP,Comments,Format",
 		  "type=15 AND ref=$id ORDER BY id",$rec,'dhcp6');
 
   add_std_fields($rec);
@@ -3637,14 +3677,14 @@ sub update_group($) {
   if ($r < 0) { db_rollback(); return $r; }
   $id=$rec->{id};
 
-  $r=update_array_field("dhcp_entries",3,"dhcp,comment,type,ref",
+  $r=update_dhcp_field(
 			'dhcp',$rec,"5,$id");
   if ($r < 0) { db_rollback(); return -16; }
   $r=update_array_field("printer_entries",3,"printer,comment,type,ref",
 			'printer',$rec,"1,$id");
   if ($r < 0) { db_rollback(); return -17; }
 
-  $r=update_array_field("dhcp_entries",3,"dhcp,comment,type,ref",
+  $r=update_dhcp_field(
 			'dhcp6',$rec,"15,$id");
   if ($r < 0) { db_rollback(); return -16; }
 
@@ -3663,13 +3703,11 @@ sub add_group($) {
   $id=$res;
 
   # dhcp_entries
-  $res = add_array_field('dhcp_entries','dhcp,comment','dhcp',$rec,
-			 'type,ref',"5,$id");
+  $res = add_dhcp_field('dhcp',$rec,"5,$id");
   if ($res < 0) { db_rollback(); return -3; }
 
   # dhcp_entries
-  $res = add_array_field('dhcp_entries','dhcp,comment','dhcp6',$rec,
-			 'type,ref',"15,$id");
+  $res = add_dhcp_field('dhcp6',$rec,"15,$id");
   if ($res < 0) { db_rollback(); return -3; }
 
   # printer_entries
@@ -4025,7 +4063,7 @@ sub get_net($$) {
                       "netname,alevel,type,dummy,ip_policy", $id,$rec,"id"));
 
   fix_bools($rec,"subnet,no_dhcp,dummy");
-  get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comment",
+  get_array_field("dhcp_entries",4,DHCP_ENTRY_COLUMNS,"DHCP,Comments,Format",
 		  "type=4 AND ref=$id ORDER BY id",$rec,'dhcp_l');
 
   $rec->{private_flag} = ($rec->{type} & 0x01 ? 1 : 0);
@@ -4067,7 +4105,7 @@ sub update_net($) {
   if ($r < 0) { db_rollback(); return $r; }
   $id=$rec->{id};
 
-  $r=update_array_field("dhcp_entries",3,"dhcp,comment,type,ref",
+  $r=update_dhcp_field(
 			'dhcp_l',$rec,"4,$id");
   if ($r < 0) { db_rollback(); return -10; }
 
@@ -4120,18 +4158,11 @@ sub add_net($) {
   if ($res < 0) { db_rollback(); return -1; }
   $id=$res;
 
-  # dhcp_entries
-  for $i (0..$#{$rec->{dhcp_l}}) {
-    $res=db_exec("INSERT INTO dhcp_entries (type,ref,dhcp) " .
-		 "VALUES(4,$id,'$rec->{dhcp_l}[$i][1]')");
-    if ($res < 0) { db_rollback(); return -3; }
-  }
-
-  for $i (0..$#{$rec->{dhcp_l6}}) {
-    $res=db_exec("INSERT INTO dhcp_entries (type,ref,dhcp) " .
-		 "VALUES(4,$id,'$rec->{dhcp_l6}[$i][1]')");
-    if ($res < 0) { db_rollback(); return -4; }
-  }
+  # dhcp_entries (a net has one list for both families, type 4)
+  $res = add_dhcp_field('dhcp_l',$rec,"4,$id");
+  if ($res < 0) { db_rollback(); return -3; }
+  $res = add_dhcp_field('dhcp_l6',$rec,"4,$id");
+  if ($res < 0) { db_rollback(); return -4; }
 
   return -10 if (db_commit() < 0);
   return $id;
@@ -4170,9 +4201,9 @@ sub get_vlan($$) {
                       "server,name,description,comment,vlanno,".
 		      "cdate,cuser,mdate,muser", $id,$rec,"id"));
 
-  get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comment",
+  get_array_field("dhcp_entries",4,DHCP_ENTRY_COLUMNS,"DHCP,Comments,Format",
 		  "type=6 AND ref=$id ORDER BY id",$rec,'dhcp_l');
-  get_array_field("dhcp_entries",3,"id,dhcp,comment","DHCP,Comment",
+  get_array_field("dhcp_entries",4,DHCP_ENTRY_COLUMNS,"DHCP,Comments,Format",
 		  "type=16 AND ref=$id ORDER BY id",$rec,'dhcp_l6');
 
   add_std_fields($rec);
@@ -4191,11 +4222,11 @@ sub update_vlan($) {
   if ($r < 0) { db_rollback(); return $r; }
   $id=$rec->{id};
 
-  $r=update_array_field("dhcp_entries",3,"dhcp,comment,type,ref",
+  $r=update_dhcp_field(
 			'dhcp_l',$rec,"6,$id");
   if ($r < 0) { db_rollback(); return -10; }
 
-  $r=update_array_field("dhcp_entries",3,"dhcp,comment,type,ref",
+  $r=update_dhcp_field(
 			'dhcp_l6',$rec,"16,$id");
   if ($r < 0) { db_rollback(); return -10; }
 
@@ -4214,18 +4245,10 @@ sub add_vlan($) {
   $id=$res;
 
   # dhcp_entries
-  for $i (0..$#{$rec->{dhcp_l}}) {
-    $res=db_exec("INSERT INTO dhcp_entries (type,ref,dhcp) " .
-		 "VALUES(6,$id,'$rec->{dhcp_l}[$i][1]')");
-    if ($res < 0) { db_rollback(); return -3; }
-  }
-
-# dhcp_entries6
-  for $i (0..$#{$rec->{dhcp_l6}}) {
-    $res=db_exec("INSERT INTO dhcp_entries (type,ref,dhcp) " .
-		 "VALUES(16,$id,'$rec->{dhcp_l6}[$i][1]')");
-    if ($res < 0) { db_rollback(); return -4; }
-  }
+  $res = add_dhcp_field('dhcp_l',$rec,"6,$id");
+  if ($res < 0) { db_rollback(); return -3; }
+  $res = add_dhcp_field('dhcp_l6',$rec,"16,$id");
+  if ($res < 0) { db_rollback(); return -4; }
 
   return -10 if (db_commit() < 0);
   return $id;

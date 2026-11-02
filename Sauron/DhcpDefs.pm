@@ -25,7 +25,8 @@ use vars qw($VERSION @ISA @EXPORT);
 $VERSION = '$Id:$ ';
 
 @ISA = qw(Exporter);
-@EXPORT = qw(DHCP_FMT_BOTH DHCP_FMT_ISC DHCP_FMT_KEA
+@EXPORT = qw(DHCP_FMT_BOTH DHCP_FMT_ISC DHCP_FMT_KEA %DHCP_FMT_NAMES
+	     dhcp_entry_check
 	     dhcp_option_def dhcp_param_def dhcp_option_def_from_isc
 	     dhcp_option_def_register
 	     parse_isc_statement format_isc_statement
@@ -36,6 +37,10 @@ $VERSION = '$Id:$ ';
 use constant DHCP_FMT_BOTH => 0;
 use constant DHCP_FMT_ISC  => 1;
 use constant DHCP_FMT_KEA  => 2;
+
+# user visible names of dhcp_entries.fmt values
+use vars qw(%DHCP_FMT_NAMES);
+%DHCP_FMT_NAMES = (0 => 'ISC + KEA', 1 => 'ISC only', 2 => 'KEA only');
 
 # Value types:
 #   ip4, ip6     address (ISC also accepts a hostname for ip4)
@@ -864,6 +869,40 @@ sub kea_json_to_statement($$) {
     @$st{qw(kind key value)} = ('kea',$key,$val);
   }
   return $st;
+}
+
+
+# dhcp_entry_check($text,$fmt,$family) - validate a DHCP entry as stored
+# in dhcp_entries (ISC statement or KEA JSON, see fmt)
+# returns ($error,$warning): an error rejects the entry, a warning only
+# informs (e.g. an ISC statement that has no KEA equivalent)
+sub dhcp_entry_check($$$) {
+  my ($text,$fmt,$family) = @_;
+  my ($st,$r);
+
+  $text = '' unless (defined $text);
+  $fmt = 0 unless (defined $fmt && $fmt ne '');
+  return ("invalid format '$fmt'",'') unless ($fmt =~ /^[012]$/);
+
+  if ($fmt == DHCP_FMT_KEA) {
+    $st = kea_json_to_statement($text,$family);
+    return ($st->{error},'') if ($st->{error});
+    return ('','');
+  }
+  return ("looks like a KEA entry (JSON), set the format to KEA only",'')
+    if ($text =~ /^\s*\{.*\}\s*$/s);
+  return ('','') if ($fmt == DHCP_FMT_ISC);
+
+  # ISC + KEA: report what the KEA export cannot use; names in address
+  # options are resolved at export time
+  $st = parse_isc_statement($text,$family);
+  $r = isc_statement_to_kea($st,sub { $family && $family == 6 ? '2001:db8::1'
+						    : '192.0.2.1' });
+  return ('','') unless ($r->{error});
+  return ('',"no KEA equivalent, used for ISC only " .
+	  "(set the format to ISC only to confirm)")
+    if ($st->{fmt} && $st->{fmt} == DHCP_FMT_ISC);
+  return ('',"not converted to KEA: $r->{error}");
 }
 
 1;

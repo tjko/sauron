@@ -365,6 +365,30 @@ subtest 'model and scopes' => sub {
 };
 
 # =========================================================================
+# entry validation (web UI / API)
+# =========================================================================
+subtest 'dhcp_entry_check' => sub {
+    my @c = (
+        [ 'default-lease-time 600', 0, 4, '', '' ],
+        [ 'option routers gw.example', 0, 4, '', '' ],
+        [ 'ddns-update-style none', 0, 4, '', qr/no KEA equivalent/ ],
+        [ 'ddns-update-style none', 1, 4, '', '' ],
+        [ 'match if option user-class = "x"', 0, 4, '', qr/not converted to KEA/ ],
+        [ '{"renew-timer":900}', 2, 4, '', '' ],
+        [ '{"renew-timer":900}', 0, 4, qr/set the format to KEA only/, '' ],
+        [ '{"renew-timer":900', 2, 4, qr/invalid KEA entry/, '' ],
+        [ 'x', 5, 4, qr/invalid format/, '' ],
+        [ 'option dhcp6.name-servers 2001:db8::1', 0, 6, '', '' ],
+    );
+    foreach my $c (@c) {
+        my ($t, $f, $fam, $e, $w) = @$c;
+        my ($ge, $gw) = dhcp_entry_check($t, $f, $fam);
+        ref $e ? like($ge, $e, "error: $t [$f]") : is($ge, $e, "no error: $t [$f]");
+        ref $w ? like($gw, $w, "warning: $t [$f]") : is($gw, $w, "no warning: $t [$f]");
+    }
+};
+
+# =========================================================================
 # ISC writer with statements that have no database text (KEA import)
 # =========================================================================
 subtest 'ISC writer' => sub {

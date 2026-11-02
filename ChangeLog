@@ -17,6 +17,14 @@
 	    dhcpd -6 refused such a configuration
 	  [svamberg]
 
+	- Web UI: DHCP entry lists (server, zone, host, net, VLAN, group)
+	  have a 'format' column: ISC + KEA (ISC statement, converted for
+	  KEA where possible), ISC only, or KEA only (KEA JSON object with
+	  one member, e.g. {"renew-timer": 900}). Entries are validated on
+	  save; ISC statements without a KEA equivalent show a hint. Longer
+	  entries (1000 characters) are allowed. add_net/add_vlan now keep
+	  comments and quote DHCP entries correctly [svamberg]
+
 	- sauron: new options --kea and --kea6 generate KEA DHCP
 	  configuration (kea-dhcp4.conf, kea-dhcp6.conf) from the same data
 	  as dhcpd.conf; validated with --check using the new config options

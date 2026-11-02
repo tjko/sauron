@@ -118,8 +118,8 @@ if ($opt_global) {
     $line =~ s/;\s*//;
     print "GLOBAL: $line\n" if ($opt_verbose && !$opt_dhcp6);
     print "GLOBAL6: $line\n" if ($opt_verbose && $opt_dhcp6);
-    push @{$server{dhcp}}, [0,$line,'',2] if !$opt_dhcp6;
-    push @{$server{dhcp6}}, [0,$line,'',2] if $opt_dhcp6;
+    push @{$server{dhcp}}, [0,$line,'',0,2] if !$opt_dhcp6;
+    push @{$server{dhcp6}}, [0,$line,'',0,2] if $opt_dhcp6;
   }
 
   fatal("cannot update server record") if (update_server(\%server) < 0);
@@ -381,7 +381,7 @@ foreach $key (keys %{$data{host}}) {
       foreach $byte (@tmp){ $mac .= sprintf ("%02s", $byte); }
       $ether=uc($mac);
     } else {
-      push @q, [undef, $line, '', 2];
+      push @q, [undef, $line, '', 0, 2];
     }
 
   }
@@ -395,7 +395,7 @@ foreach $key (keys %{$data{host}}) {
     #@sclasess = [];
   }
 
-  unshift @q, ['DHCP', 'Comments'] if @q > 0;
+  unshift @q, ['DHCP', 'Comments', 'Format'] if @q > 0;
 
   print "host: $key ip=$ip,ether=$ether,groupid=$id\n" if ($opt_verbose && !$opt_dhcp6);
   print "host: $key ip=$ip,duid=$ether,groupid=$id\n" if ($opt_verbose && $opt_dhcp6);
