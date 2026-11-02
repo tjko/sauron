@@ -52,6 +52,7 @@ sub cleanup {
     delete_server($r->[0][0]) if (@$r);
 }
 cleanup();
+END { cleanup() if (defined &Sauron::DB::db_query && $DB_DSN); }
 db_exec("INSERT INTO servers (name,hostname,hostmaster) VALUES " .
         "('$server','ns1.info.test.','hostmaster.info.test.')");
 
@@ -66,6 +67,9 @@ k4sys	IN	A	10.40.0.11
 k4ip	IN	A	10.40.0.12
 k6	IN	AAAA	2001:db8:40::10
 old	IN	A	10.40.0.13
+ds	IN	A	10.40.0.15
+ds	IN	AAAA	2001:db8:40::15
+pri	IN	A	10.40.0.14
 EOF
 close($zf);
 my $out = `$install_dir/import-zone $server info.test $tmp/info.test.zone 2>&1`;
@@ -81,6 +85,8 @@ db_exec("UPDATE hosts SET ether='0A0000000011' WHERE id=" . hid('k4sys'));
 db_exec("UPDATE hosts SET ether='0A00000000FF' WHERE id=" . hid('k4ip'));  # other MAC
 db_exec("UPDATE hosts SET duid='000100012A3B4C5D0A0000000010' WHERE id=" . hid('k6'));
 db_exec("UPDATE hosts SET ether='0A0000000013' WHERE id=" . hid('old'));
+db_exec("UPDATE hosts SET ether='0A0000000015', duid='000100012A3B4C5D0A0000000015' WHERE id=" . hid('ds'));
+db_exec("UPDATE hosts SET ether='0A0000000014' WHERE id=" . hid('pri'));
 
 my $year = (localtime)[5] + 1900 - 1;   # log of the last year: always in the past
 my $newer = timelocal(0, 0, 9, 30, 9, (localtime)[5] + 1900 - 1);
@@ -91,9 +97,12 @@ my %exp = (
     k4sys  => timelocal(1, 20, 8, 30, 9, $year),
     k4ip   => timelocal(1, 22, 8, 30, 9, $year),
     k6     => timegm(1, 25, 7, 30, 9, $year),       # 08:25:01+01:00
+    ds     => timelocal(1, 40, 8, 30, 9, $year),
+    pri    => timelocal(1, 35, 8, 30, 9, $year),
 );
 open(my $lf, '>', "$tmp/dhcp.log") or die $!;
 print $lf <<"EOF";
+Feb 29 07:00:01 dhcp1 kea-dhcp4[2345]: INFO  [kea-dhcp4.leases/2345.1] DHCP4_LEASE_ALLOC [hwtype=1 0a:00:00:00:00:99], cid=[no info], tid=0x9: lease 10.40.0.99 has been allocated for 3600 seconds
 Oct 30 07:05:01 dhcp1 dhcpd[123]: DHCPACK on 10.40.0.5 to 0a:00:00:00:00:05 via eth0
 $year-10-30 08:10:01.123 INFO  [kea-dhcp4.leases/2345.1] DHCP4_LEASE_ALLOC [hwtype=1 0a:00:00:00:00:10], cid=[no info], tid=0x1: lease 10.40.0.99 has been allocated for 3600 seconds
 $year-10-30 08:15:01.123 INFO  [kea-dhcp4.leases/2345.1] DHCP4_LEASE_ALLOC [hwtype=1 0a:00:00:00:00:10], cid=[01:0a:00:00:00:00:10], tid=0x2: lease 10.40.0.10 has been allocated for 3600 seconds
@@ -101,6 +110,9 @@ Oct 30 08:20:01 dhcp1 kea-dhcp4[2345]: INFO  [kea-dhcp4.leases/2345.1] DHCP4_LEA
 Oct 30 08:22:01 dhcp1 kea-dhcp4[2345]: INFO  [kea-dhcp4.leases/2345.1] DHCP4_LEASE_ALLOC [hwtype=1 0a:00:00:00:00:12], cid=[no info], tid=0x4: lease 10.40.0.12 has been allocated for 3600 seconds
 $year-10-30T08:25:01.123456+01:00 dhcp1 kea-dhcp6[2346]: INFO  [kea-dhcp6.leases/2346.1] DHCP6_LEASE_ALLOC duid=[00:01:00:01:2a:3b:4c:5d:0a:00:00:00:00:10], [no hwaddr info], tid=0x5: lease for address 2001:DB8:40:0::10 and iaid=1 has been allocated for 4000 seconds
 $year-10-30 08:30:01.000 INFO  [kea-dhcp4.leases/2345.1] DHCP4_LEASE_ALLOC [hwtype=1 0a:00:00:00:00:13], cid=[no info], tid=0x6: lease 10.40.0.13 has been allocated for 3600 seconds
+$year-10-30 08:20:01.000 INFO  [kea-dhcp4.leases/2345.1] DHCP4_LEASE_ALLOC [hwtype=1 0a:00:00:00:00:15], cid=[no info], tid=0xa: lease 10.40.0.15 has been allocated for 3600 seconds
+<30>Oct 30 08:35:01 dhcp1 kea-dhcp4[2345]: INFO  [kea-dhcp4.leases/2345.1] DHCP4_LEASE_ALLOC [hwtype=1 0a:00:00:00:00:14], cid=[no info], tid=0xb: lease 10.40.0.14 has been allocated for 3600 seconds
+$year-10-30 08:40:01.000 INFO  [kea-dhcp6.leases/2346.1] DHCP6_LEASE_ALLOC duid=[00:01:00:01:2a:3b:4c:5d:0a:00:00:00:00:15], [hwtype=1 0a:00:00:00:00:15], tid=0xc: lease for address 2001:db8:40::15 and iaid=1 has been allocated for 4000 seconds
 $year-10-30 08:31:01.000 INFO  [kea-dhcp4.dhcp4/2345.1] DHCP4_LEASE_ADVERT [hwtype=1 0a:00:00:00:00:05], cid=[no info], tid=0x7: lease 10.40.0.5 will be advertised
 EOF
 close($lf);
@@ -120,6 +132,8 @@ is($got{k6}[0], $exp{k6}, 'KEA DHCPv6 RFC 3339 time, matched by DUID');
 like($got{k6}[1], qr/^2001:db8:40::10 for DUID 00:01:00:01:2a:3b:4c:5d:0a:00:00:00:00:10 via dhcp1 kea-dhcp6$/,
      'DHCPv6 info');
 is($got{old}[0], $newer, 'newer dhcp_date not overwritten');
+is($got{ds}[0], $exp{ds}, 'dual-stack host: the newer DHCPv6 lease wins over DHCPv4');
+like($got{ds}[1], qr/^2001:db8:40::15 for DUID /, 'dual-stack info from DHCPv6');
+is($got{pri}[0], $exp{pri}, 'syslog line with <pri> prefix');
 
-cleanup();
 done_testing();
