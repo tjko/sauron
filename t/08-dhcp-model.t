@@ -365,6 +365,42 @@ subtest 'model and scopes' => sub {
 };
 
 # =========================================================================
+# ISC writer with statements that have no database text (KEA import)
+# =========================================================================
+subtest 'ISC writer' => sub {
+    require Sauron::DhcpIsc;
+    Sauron::DhcpIsc->import();
+    my $m = dhcp_model_new(4);
+    $m->{server} = { name => 'srv', comment => 'c' };
+    $m->{local} = dhcp_scope_new();
+    $m->{netblocks} = [ { cidr => '10.1.0.0/16' } ];
+    dhcp_scope_add_kea_params($m, $m->{global},
+        { 'valid-lifetime' => 600, 'renew-timer' => 100 }, []);
+    my $vl = dhcp_model_add($m, 'vlans', { name => 'lab', nets => [] });
+    my $net = dhcp_model_add($m, 'nets', { cidr => '10.1.2.0/24', name => 'n1',
+                                           router => '10.1.2.1', pools => [] });
+    push @{$vl->{nets}}, $net;
+    dhcp_scope_add_kea_options($m, $net->{scope},
+        [ { name => 'domain-name', data => 'lab.example' } ]);
+    dhcp_model_add($m, 'hosts', { name => 'h1.lab.example', net => 0,
+                                  hw_address => 'aa:bb:cc:dd:ee:ff',
+                                  address_text => '10.1.2.10' });
+    $m->{ungrouped} = 1;
+
+    my $out = '';
+    open(my $fh, '>', \$out) or die;
+    dhcp_isc_write($fh, $m, { filename => 'dhcpd.conf', version => 'x',
+                              user => 'u', time => 't' });
+    close($fh);
+    like($out, qr/^default-lease-time 600;\n/m, 'param formatted from structure');
+    unlike($out, qr/renew-timer/, 'KEA only param not written');
+    like($out, qr/^\t\toption routers 10\.1\.2\.1;\n\t\toption domain-name "lab\.example";\n/m,
+         'router and quoted option in subnet');
+    like($out, qr/^host h1\.lab\.example \{\n\tfixed-address 10\.1\.2\.10;\n/m, 'host');
+    ok((grep { /renew-timer/ } @{$m->{warnings}}), 'skipped statement reported');
+};
+
+# =========================================================================
 # real data: every DHCP statement of the fixtures parses and re-formats
 # =========================================================================
 subtest 'fixture statements' => sub {

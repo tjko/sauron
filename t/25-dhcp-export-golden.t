@@ -223,8 +223,9 @@ subtest 'generate and compare' => sub {
     mkdir($gen) or die $!;
     run("$install_dir/sauron --dhcp $server $gen");
     run("$install_dir/sauron --dhcp6 $server $gen");
+    run("$install_dir/sauron --dhcp --dhcpclass vip $server $gen");
 
-    foreach my $f ('dhcpd.conf', 'dhcpd6.conf') {
+    foreach my $f ('dhcpd.conf', 'dhcpd6.conf', 'vip.class') {
         ok(-r "$gen/$f", "$f generated") or next;
         my $got = normalize("$gen/$f");
 
