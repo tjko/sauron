@@ -114,8 +114,8 @@ if ($verbose and -t STDOUT) {
 }
 
 # syslog_time($month,$day,$hour,$min,$sec) - time of a classic syslog
-# line (no year: --year, decremented when the month grows while reading
-# the log backwards); undef for an impossible date (e.g. Feb 29)
+# line (no year: --year or the year of a newer line with an explicit date,
+# decremented when the month grows while reading the log backwards); undef for an impossible date (e.g. Feb 29)
 sub syslog_time($$$$$) {
   my ($mo,$dd,$hh,$mi,$ss) = @_;
 
@@ -149,12 +149,23 @@ sub kea_log_time($) {
   $line =~ s/^<\d+>(?:1\s+)?//;
   if ($line =~ /^(\d{4})-(\d\d)-(\d\d)[ T](\d\d):(\d\d):(\d\d)(?:[.,]\d+)?(Z|[+-]\d\d:?\d\d)?\s/) {
     my ($Y,$M,$D,$h,$mi,$s,$tz) = ($1,$2,$3,$4,$5,$6,$7);
-    return eval { timelocal($s,$mi,$h,$D,$M-1,$Y) } unless (defined $tz);
-    my $tt = eval { timegm($s,$mi,$h,$D,$M-1,$Y) };
-    return undef unless (defined $tt);
-    return $tt if ($tz eq 'Z');
-    my ($sign,$oh,$om) = ($tz =~ /^([+-])(\d\d):?(\d\d)$/);
-    return $tt - ($oh * 3600 + $om * 60) * ($sign eq '+' ? 1 : -1);
+    my $tt;
+    if (!defined $tz) {
+      $tt = eval { timelocal($s,$mi,$h,$D,$M-1,$Y) };
+    } else {
+      $tt = eval { timegm($s,$mi,$h,$D,$M-1,$Y) };
+      if (defined $tt && $tz ne 'Z') {
+	my ($sign,$oh,$om) = ($tz =~ /^([+-])(\d\d):?(\d\d)$/);
+	$tt -= ($oh * 3600 + $om * 60) * ($sign eq '+' ? 1 : -1);
+      }
+    }
+    # the explicit date sets the year and month for older classic
+    # syslog lines (read backwards)
+    if (defined $tt) {
+      my @lt = localtime($tt);
+      ($pm,$year) = ($lt[4],$lt[5] + 1900);
+    }
+    return $tt;
   }
   if ($line =~ /^(\S{3})\s+(\d+)\s+(\d+):(\d+):(\d+)\s/ && defined $months{$1}) {
     return syslog_time($months{$1},$2,$3,$4,$5);

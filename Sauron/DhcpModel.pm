@@ -46,12 +46,13 @@ sub dhcp_ip_obj($$) {
 }
 
 # dhcp_ip_in($v6,$net,$addr) - true if address/net object $addr is within
-# net object $net (objects from dhcp_ip_obj)
+# net object $net, or equal to it (objects from dhcp_ip_obj)
 sub dhcp_ip_in($$$) {
   my ($v6,$net,$addr) = @_;
   return 0 unless ($net && $addr);
-  return ($v6 ? ($net->overlaps($addr) == $IP_B_IN_A_OVERLAP)
-	      : $net->contains($addr));
+  return $net->contains($addr) unless ($v6);
+  my $o = $net->overlaps($addr);
+  return (defined $o && ($o == $IP_B_IN_A_OVERLAP || $o == $IP_IDENTICAL));
 }
 
 # dhcp_model_new($family) - create empty model for address family 4 or 6

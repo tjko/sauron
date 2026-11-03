@@ -52,7 +52,7 @@ sub cleanup {
     delete_server($r->[0][0]) if (@$r);
 }
 cleanup();
-END { cleanup() if (defined &Sauron::DB::db_query && $DB_DSN); }
+END { cleanup() if (defined $server); }   # set only after db_connect2()
 db_exec("INSERT INTO servers (name,hostname,hostmaster) VALUES " .
         "('$server','ns1.info.test.','hostmaster.info.test.')");
 
@@ -70,6 +70,7 @@ old	IN	A	10.40.0.13
 ds	IN	A	10.40.0.15
 ds	IN	AAAA	2001:db8:40::15
 pri	IN	A	10.40.0.14
+roll	IN	A	10.40.0.16
 EOF
 close($zf);
 my $out = `$install_dir/import-zone $server info.test $tmp/info.test.zone 2>&1`;
@@ -87,6 +88,7 @@ db_exec("UPDATE hosts SET duid='000100012A3B4C5D0A0000000010' WHERE id=" . hid('
 db_exec("UPDATE hosts SET ether='0A0000000013' WHERE id=" . hid('old'));
 db_exec("UPDATE hosts SET ether='0A0000000015', duid='000100012A3B4C5D0A0000000015' WHERE id=" . hid('ds'));
 db_exec("UPDATE hosts SET ether='0A0000000014' WHERE id=" . hid('pri'));
+db_exec("UPDATE hosts SET ether='0A0000000016' WHERE id=" . hid('roll'));
 
 my $year = (localtime)[5] + 1900 - 1;   # log of the last year: always in the past
 my $newer = timelocal(0, 0, 9, 30, 9, (localtime)[5] + 1900 - 1);
@@ -135,5 +137,21 @@ is($got{old}[0], $newer, 'newer dhcp_date not overwritten');
 is($got{ds}[0], $exp{ds}, 'dual-stack host: the newer DHCPv6 lease wins over DHCPv4');
 like($got{ds}[1], qr/^2001:db8:40::15 for DUID /, 'dual-stack info from DHCPv6');
 is($got{pri}[0], $exp{pri}, 'syslog line with <pri> prefix');
+
+# year rollover: a classic December syslog line older than a KEA line
+# with an explicit January date belongs to the year before that date
+# (not to --year)
+open($lf, '>', "$tmp/roll.log") or die $!;
+my $ny = $year + 1;
+print $lf <<"EOF";
+Dec 30 10:00:01 dhcp1 kea-dhcp4[2345]: INFO  [kea-dhcp4.leases/2345.1] DHCP4_LEASE_ALLOC [hwtype=1 0a:00:00:00:00:16], cid=[no info], tid=0xd: lease 10.40.0.16 has been allocated for 3600 seconds
+$year-01-02 10:00:01.000 INFO  [kea-dhcp4.leases/2345.1] DHCP4_LEASE_ALLOC [hwtype=1 0a:00:00:00:00:98], cid=[no info], tid=0xe: lease 10.40.0.98 has been allocated for 3600 seconds
+EOF
+close($lf);
+$out = `$install_dir/update-dhcp-info --verbose --commit --year=$ny $server $tmp/roll.log 2>&1`;
+is($? >> 8, 0, 'update-dhcp-info (year rollover) exits 0') or diag($out);
+is(rows("SELECT dhcp_date FROM hosts WHERE id=" . hid('roll'))->[0][0],
+   timelocal(1, 0, 10, 30, 11, $year - 1),
+   'classic syslog line before an explicit January date: previous year');
 
 done_testing();

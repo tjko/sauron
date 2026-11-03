@@ -220,6 +220,14 @@ subtest 'extra DHCP data' => sub {
     sql("UPDATE hosts SET duid='000100012a3b4c5d0a0b0c0d0e11', grp=$grp WHERE id=" . hid('h6b'));
     sql("UPDATE hosts SET duid='000100012a3b4c5d0a0b0c0d0e12', grp=$vip WHERE id=" . hid('h6c'));
     dhcp(13, hid('h6a'), 'option dhcp6.sntp-servers 2001:db8::123', 'host6 c');
+
+    # explicit KEA subnet ids (KEA only entries): the default, nets.id,
+    # depends on the state of the database sequence
+    my @nets;
+    db_query("SELECT id FROM nets WHERE server=$sid AND subnet ORDER BY id", \@nets);
+    my $kid = 15;
+    sql("INSERT INTO dhcp_entries (type,ref,dhcp,fmt) " .
+        "VALUES (4,$_->[0],'{\"id\":" . $kid++ . "}',2)") foreach (@nets);
     pass('extra data inserted');
 };
 

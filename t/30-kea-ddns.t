@@ -68,7 +68,7 @@ sub cleanup {
 }
 cleanup();
 END {
-    cleanup() if ($DB_DSN && defined &Sauron::DB::db_query);
+    cleanup() if (defined $server);   # set only after db_connect2()
     unlink("$config.key") if ($created_keyfile);
 }
 

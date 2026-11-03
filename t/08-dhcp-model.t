@@ -498,4 +498,14 @@ subtest 'fixture statements' => sub {
     ok($n > 0, "checked $n entries");
 };
 
+subtest 'dhcp_ip_in' => sub {
+    my $a6 = dhcp_ip_obj(1, '2001:db8::5');
+    ok(dhcp_ip_in(1, dhcp_ip_obj(1, '2001:db8::/64'), $a6), 'v6 address in /64');
+    ok(dhcp_ip_in(1, dhcp_ip_obj(1, '2001:db8::5/128'), $a6), 'v6 address in its own /128');
+    ok(!dhcp_ip_in(1, dhcp_ip_obj(1, '2001:db9::/64'), $a6), 'v6 address outside');
+    my $a4 = dhcp_ip_obj(0, '10.0.0.5');
+    ok(dhcp_ip_in(0, dhcp_ip_obj(0, '10.0.0.5/32'), $a4), 'v4 address in its own /32');
+    ok(!dhcp_ip_in(0, dhcp_ip_obj(0, '10.0.1.0/24'), $a4), 'v4 address outside');
+};
+
 done_testing();
