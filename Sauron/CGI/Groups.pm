@@ -41,12 +41,8 @@ my %group_form=(
    len=>3, empty=>0},
   {ftype=>1, tag=>'comment', name=>'Comment', type=>'text', len=>60,
    empty=>1, whitesp=>'P'},
-  {ftype=>2, tag=>'dhcp', name=>'DHCP entries', whitesp=>['N','P'],
-   type=>['text','text'], fields=>2, maxlen=>[200,20],
-   len=>[50,20], empty=>[0,1], elabels=>['DHCP','comment']},
-  {ftype=>2, tag=>'dhcp6', name=>'DHCPv6 entries', whitesp=>['N','P'],
-   type=>['text','text'], fields=>2, maxlen=>[200,20],
-   len=>[50,20], empty=>[0,1], elabels=>['DHCP','comment']},
+  dhcp_field('dhcp','DHCP entries',4),
+  dhcp_field('dhcp6','DHCPv6 entries',6),
   {ftype=>2, tag=>'printer', name=>'PRINTER entries',
    type=>['text','text'], fields=>2, len=>[40,20], empty=>[0,1],
    elabels=>['PRINTER','comment'], iff=>['type','[1]']},
@@ -170,7 +166,7 @@ sub menu_handler {
   get_vmps_list($serverid,\%vmps_list_hash,\@vmps_list_lst);
 
   if ($sub eq 'add') {
-    $data{type}=1; $data{alevel}=0; $data{dhcp}=[]; $data{printer}=[];
+    $data{type}=1; $data{alevel}=0; $data{dhcp}=[]; $data{dhcp6}=[]; $data{printer}=[];
     $data{server}=$serverid;
     $res=add_magic('add','Group','groups',\%group_form,
 		   \&restricted_add_group,\%data);

@@ -1,0 +1,65 @@
+// KEA configuration for t/26-kea-import.t (hosts are in zone kea.test)
+# a hash comment with "quote must not confuse // comment handling
+{
+  "Dhcp4": {
+    "valid-lifetime": 3600,
+    "renew-timer": 900,
+    "authoritative": true,
+    "option-def": [ { "name": "wpad", "code": 252, "type": "string" } ],
+    "option-data": [
+      { "name": "domain-name-servers", "data": "10.30.0.2, 10.30.0.3",
+        "always-send": true },
+      { "name": "wpad", "data": "http://wpad.kea.test/wpad.dat" }
+    ],
+    "client-classes": [
+      { "name": "pxe", "test": "substring(option[60].hex,0,9) == 'PXEClient'",
+        "boot-file-name": "pxelinux.0" },
+      { "name": "vip" }
+    ],
+    "reservations": [
+      { "hostname": "printer.kea.test", "hw-address": "0a:00:00:00:00:09",
+        "ip-address": "10.30.2.9" }
+    ],
+    "shared-networks": [ {
+      "name": "lab",
+      "option-data": [ { "name": "domain-name", "data": "lab.kea.test" } ],
+      "subnet4": [ {
+        "id": 1,
+        "subnet": "10.30.1.0/24",
+        "option-data": [ { "name": "routers", "data": "10.30.1.1" } ],
+        "pools": [ { "pool": "10.30.1.100 - 10.30.1.101", "client-class": "vip" } ],
+        "reservations": [
+          { "hostname": "ws1.kea.test", "hw-address": "0a:00:00:00:00:01",
+            "ip-address": "10.30.1.10", "client-classes": [ "vip" ],
+            "option-data": [ { "name": "host-name", "data": "ws1" } ] },
+          { "hostname": "ws2.kea.test", "client-id": "01:0a:00:00:00:00:02",
+            "ip-address": "10.30.1.11" },
+          { "hostname": "ws3.kea.test", "flex-id": "'ws3'",
+            "ip-address": "10.30.1.12" }
+        ]
+      } ]
+    } ],
+    "subnet4": [ {
+      "id": 2,
+      "subnet": "10.30.2.0/24",
+      "valid-lifetime": 600,
+      "option-data": [ { "name": "routers", "data": "10.30.2.1" } ]
+    } ]
+  },
+  "Dhcp6": {
+    "option-data": [ { "name": "dns-servers", "data": "2001:db8:30::2" } ],
+    "client-classes": [
+      { "name": "vip", "option-data": [ { "name": "domain-search", "data": "vip.kea.test" } ] }
+    ],
+    "subnet6": [ {
+      "id": 1,
+      "subnet": "2001:db8:30:1::/64",
+      "pools": [ { "pool": "2001:db8:30:1::100 - 2001:db8:30:1::101" } ],
+      "pd-pools": [ { "prefix": "2001:db8:31::", "prefix-len": 48, "delegated-len": 56 } ],
+      "reservations": [
+        { "hostname": "ws1.kea.test", "duid": "00:01:00:01:2a:3b:4c:5d:0a:00:00:00:00:01",
+          "ip-addresses": [ "2001:DB8:30:1:0::10" ] }
+      ]
+    } ]
+  }
+}

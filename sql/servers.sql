@@ -93,6 +93,11 @@ CREATE TABLE servers (
 	df_split6	INT DEFAULT 128,      /* split */
 	df_loadbalmax6	INT DEFAULT 3,	      /* load balance max seconds */
 
+	/* KEA High Availability (the failover settings above are used,
+	   split 0 or 255 = hot-standby, otherwise load-balancing) */
+	kea_ha_port	INT DEFAULT 8001,     /* HA listener port, DHCPv4 */
+	kea_ha_port6	INT DEFAULT 8002,     /* HA listener port, DHCPv6 */
+
     dhcp_flags6     integer DEFAULT 0,  /* DHCP option flags:
                                         0x01 = auto-generate domainnames
                                         0x02 = enable failover protocol */

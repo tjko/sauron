@@ -237,9 +237,7 @@ my %zone_form = (
    name=>'Source catalog zones (with priority)', iff=>['type','A']},
 
   {ftype=>0, name=>'DHCP', iff=>['type','M']},
-  {ftype=>2, tag=>'dhcp', name=>'Zone specific DHCP entries',
-   type=>['text','text'], fields=>2, maxlen=>[200,20], whitesp=>['N','P'],
-   len=>[50,20], empty=>[0,1], elabels=>['DHCP','comment'], iff=>['type','M']},
+  dhcp_field('dhcp','Zone specific DHCP entries',4, iff=>['type','M']),
 
   {ftype=>0, name=>'Record info', no_edit=>1},
   {ftype=>4, name=>'Record created', tag=>'cdate_str', no_edit=>1},

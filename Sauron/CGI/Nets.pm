@@ -89,10 +89,7 @@ my %net_form=(
   {ftype=>0, name=>'DHCP',iff=>['dummy','f']},
   {ftype=>3, tag=>'no_dhcp', name=>'DHCP', type=>'enum', conv=>'L',
    enum=>{f=>'Enabled',t=>'Disabled'},iff=>['dummy','f',1]},
-  {ftype=>2, tag=>'dhcp_l', name=>'Net specific DHCP entries',
-   type=>['text','text'], fields=>2, maxlen=>[200,20], whitesp=>['N','P'],
-   len=>[50,20], empty=>[0,1], elabels=>['DHCP','comment'],
-   iff=>['dummy','f',1]},
+  dhcp_field('dhcp_l','Net specific DHCP entries',0, iff=>['dummy','f',1]),
 
   {ftype=>0, name=>'Record info', no_edit=>1},
   {ftype=>4, name=>'Record created', tag=>'cdate_str', no_edit=>1},
@@ -141,12 +138,8 @@ my %vlan_form=(
    maxlen=>200, whitesp=>'P', len=>60, empty=>1},
 
   {ftype=>0, name=>'DHCP'},
-  {ftype=>2, tag=>'dhcp_l', name=>'VLAN specific DHCP entries',
-   type=>['text','text'], fields=>2, maxlen=>[200,20], whitesp=>['N','P'],
-   len=>[50,20], empty=>[0,1], elabels=>['DHCP','comment']},
-  {ftype=>2, tag=>'dhcp_l6', name=>'VLAN specific DHCPv6 entries',
-   type=>['text','text'], fields=>2, maxlen=>[200,20], whitesp=>['N','P'],
-   len=>[50,20], empty=>[0,1], elabels=>['DHCP','comment']},
+  dhcp_field('dhcp_l','VLAN specific DHCP entries',4),
+  dhcp_field('dhcp_l6','VLAN specific DHCPv6 entries',6),
 
 
   {ftype=>0, name=>'Record info', no_edit=>1},
