@@ -185,6 +185,7 @@ CREATE TABLE servers (
 **Existing documents (`docs/`):**
 - `docs/import-blocklist.txt` — import-blocklist utility
 - `docs/tsig-key-management.txt` — TSIG keys via `keygen`
+- `docs/acme-txt.txt` — acme-txt, ACME DNS-01 TXT records for certbot over SSH
 - `docs/dns-over-tls.txt` — DNS over TLS: XoT (RFC 9103), DoT and DoH
   (RFC 8484), TLS profiles, `ephemeral` certificates, certificate handling
   (BIND 9.18.11+; DoQ/RFC 9250 is not supported by BIND)
