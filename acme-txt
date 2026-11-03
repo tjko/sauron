@@ -14,6 +14,9 @@
 # (e.g. certificate for example.cz + *.example.cz) are kept in txt_entries
 # (type=2) of the same host. Both are written to the zone by 'sauron'.
 #
+# Only TXT hosts created by acme-txt (hosts.cuser 'acme-txt:<user>') are
+# changed or deleted; a name used by any other host is refused.
+#
 # Exit codes: 0 ok, 1 usage error, 2 request refused, 3 database error.
 #
 require 5;
@@ -34,6 +37,7 @@ use constant {
 };
 
 my $PREFIX = '_acme-challenge';
+my $MAX_VALUES = 10;   # values per name
 
 # Validation value from certbot: base64url of a SHA-256 digest (43 chars).
 sub valid_acme_value($) {
@@ -116,11 +120,19 @@ sub host_touch($$) {
 		 " WHERE id=$hostid");
 }
 
+# Refuse hosts not created by acme-txt (other types or managed by hand).
+sub check_own_host($$$) {
+  my($fqdn, $type, $cuser) = @_;
+  refuse("$fqdn exists and is not a TXT record") unless ($type == 13);
+  refuse("$fqdn is managed outside acme-txt")
+    unless (defined($cuser) && $cuser =~ /^acme-txt:/);
+}
+
 sub do_add($$$$$$$) {
   my($zoneid, $domain, $fqdn, $value, $user, $ttl, $expire) = @_;
   my(@q, $hostid);
 
-  db_query("SELECT id,type,cname_txt,expiration FROM hosts " .
+  db_query("SELECT id,type,cname_txt,expiration,cuser FROM hosts " .
 	   "WHERE zone=$zoneid AND domain=" . db_encode_str($domain), \@q);
   db_fail("host lookup") if (db_errormsg());
 
@@ -138,23 +150,29 @@ sub do_add($$$$$$$) {
       exit(EXIT_DB);
     }
   } else {
-    my($id, $type, $cname_txt, $expiration) = @{$q[0]};
-    refuse("$fqdn exists and is not a TXT record") unless ($type == 13);
+    my($id, $type, $cname_txt, $expiration, $cuser) = @{$q[0]};
+    check_own_host($fqdn, $type, $cuser);
     $hostid = $id;
-    # a temporary record (ours) must not expire before the new value is used
+    # a temporary record must not expire before the new value is used
     my $new_exp = ($expiration && $expiration > 0 && $expire > 0 ?
 		   time + $expire : 0);
-    if (defined($cname_txt) && $cname_txt eq $value) {
-      print "acme-txt: $fqdn already has this value\n";
-      return EXIT_OK;
-    }
-    db_query("SELECT id FROM txt_entries WHERE type=2 AND ref=$id AND txt=" .
-	     db_encode_str($value), \@q);
+
+    my @t;
+    db_query("SELECT txt FROM txt_entries WHERE type=2 AND ref=$id", \@t);
     db_fail("txt lookup") if (db_errormsg());
-    if (@q > 0) {
+    my @values = map { $$_[0] } @t;
+    unshift(@values, $cname_txt) if (defined($cname_txt) && $cname_txt ne '');
+
+    if (grep { $_ eq $value } @values) {
+      if ($new_exp > 0) {
+	db_exec("UPDATE hosts SET expiration=$new_exp WHERE id=$id") >= 0
+	  or db_fail("update host");
+      }
       print "acme-txt: $fqdn already has this value\n";
       return EXIT_OK;
     }
+    refuse("$fqdn already has $MAX_VALUES values")
+      if (@values >= $MAX_VALUES);
 
     db_begin();
     if (!defined($cname_txt) || $cname_txt eq '') {
@@ -181,15 +199,15 @@ sub do_del($$$$$) {
   my($zoneid, $domain, $fqdn, $value, $user) = @_;
   my(@q, @t);
 
-  db_query("SELECT id,type,cname_txt FROM hosts WHERE zone=$zoneid " .
+  db_query("SELECT id,type,cname_txt,cuser FROM hosts WHERE zone=$zoneid " .
 	   "AND domain=" . db_encode_str($domain), \@q);
   db_fail("host lookup") if (db_errormsg());
   if (@q < 1) {
     print "acme-txt: $fqdn not found, nothing to delete\n";
     return EXIT_OK;
   }
-  my($id, $type, $cname_txt) = @{$q[0]};
-  refuse("$fqdn is not a TXT record") unless ($type == 13);
+  my($id, $type, $cname_txt, $cuser) = @{$q[0]};
+  check_own_host($fqdn, $type, $cuser);
 
   db_query("SELECT id,txt FROM txt_entries WHERE type=2 AND ref=$id " .
 	   "ORDER BY id", \@t);
@@ -264,7 +282,10 @@ sub main() {
 
   set_encoding();
   load_config();
-  db_connect();
+  unless (db_connect2()) {
+    print STDERR "acme-txt: database error: cannot connect\n";
+    exit(EXIT_DB);
+  }
   set_muser("acme-txt:$user");
 
   my $serverid = get_server_id($opt_server);

@@ -161,6 +161,38 @@ subtest 'refused requests' => sub {
     ($rc, $out) = acme('del', "_acme-challenge.cn.$zonename", $v1);
     is($rc, 2, 'CNAME is not deleted') or diag($out);
     is((host_state('_acme-challenge.cn'))[0], 4, 'CNAME still there');
+
+    setup_ok("INSERT INTO hosts (zone,type,domain,alias,cname_txt,cuser) " .
+             "VALUES ($zoneid,13,'_acme-challenge.manual',-1,'$v1','admin')");
+    ($rc, $out) = acme('add', "_acme-challenge.manual.$zonename", $v2);
+    is($rc, 2, 'add to a TXT host not created by acme-txt') or diag($out);
+    like($out, qr/managed outside acme-txt/, 'message');
+    ($rc, $out) = acme('del', "_acme-challenge.manual.$zonename", $v1);
+    is($rc, 2, 'del of a TXT host not created by acme-txt') or diag($out);
+    my ($type, $txt, undef, undef, $extra) = host_state('_acme-challenge.manual');
+    is($txt, $v1, 'manual host unchanged');
+    is_deeply($extra, [], 'manual host has no new values');
+};
+
+subtest 'limits and expiration' => sub {
+    my $name = "_acme-challenge.lim.$zonename";
+    for my $i (1..10) {
+        my ($rc, $out) = acme('add', $name, sprintf('%043d', $i));
+        is($rc, 0, "value $i") or diag($out);
+    }
+    my ($rc, $out) = acme('add', $name, sprintf('%043d', 11));
+    is($rc, 2, '11th value refused') or diag($out);
+    is(scalar(@{(host_state('_acme-challenge.lim'))[4]}), 9,
+       '1 value in cname_txt + 9 in txt_entries');
+    ($rc, $out) = acme('add', $name, sprintf('%043d', 10));
+    is($rc, 0, 'existing value is still accepted at the limit') or diag($out);
+
+    setup_ok("UPDATE hosts SET expiration=" . (time - 10) .
+             " WHERE zone=$zoneid AND domain='_acme-challenge.www'");
+    ($rc, $out) = acme('add', "_acme-challenge.www.$zonename", $v3);
+    is($rc, 0, 'add an existing value again') or diag($out);
+    cmp_ok((host_state('_acme-challenge.www'))[3], '>', time,
+           'expiration moved forward');
 };
 
 subtest 'delete' => sub {

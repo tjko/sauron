@@ -23,11 +23,15 @@ Rules:
   * <fqdn> must be _acme-challenge or _acme-challenge.<name> inside one of
     the zones given with --zone (the longest matching zone is used).
   * <value> must look like CERTBOT_VALIDATION (43 characters, base64url).
-  * Only TXT hosts (type 13) are created, changed or deleted. A name used
-    by another host type (e.g. a CNAME delegating _acme-challenge
-    elsewhere) is refused.
+  * Only TXT hosts (type 13) created by acme-txt (hosts.cuser
+    'acme-txt:<user>') are changed or deleted. A name used by another
+    host type (e.g. a CNAME delegating _acme-challenge elsewhere) or by a
+    TXT host created in the web UI is refused.
+  * At most 10 values per name.
   * 'add' of a value that already exists and 'del' of a value or name that
     does not exist succeed and change nothing, so certbot can retry.
+    Two clients adding a new name at the very same moment may get exit
+    status 3 for one of them; running the hook again fixes it.
 
 Several values for one name are supported. A certificate for example.cz
 and *.example.cz needs two different values of _acme-challenge.example.cz
@@ -74,21 +78,71 @@ EXIT STATUS
 
 SETUP
 -----
-1. On the Sauron host create an account for the requests, able to read
-   the Sauron configuration (it contains the database password), e.g.:
+On the Sauron host (as root):
 
-     useradd -m -s /bin/sh sauron-acme
-     # give it read access to /usr/local/etc/sauron/config, e.g. by group
+1. Install Sauron with acme-txt (make install -> /usr/local/sauron/acme-txt).
 
-2. Add one line per client key to ~sauron-acme/.ssh/authorized_keys. The
-   server and zone(s) come only from the forced command, the client cannot
+2. Create an account for the requests. It needs a real shell (sshd runs
+   the forced command with "$SHELL -c"), no password, and read access to
+   the Sauron configuration (it contains the database password; the file
+   must not be group or world writable):
+
+     useradd --system --create-home --home-dir /var/lib/sauron-acme \
+             --shell /bin/sh sauron-acme
+     passwd -l sauron-acme
+
+   A locked password does not prevent key login with UsePAM yes (Debian
+   default). Without PAM OpenSSH refuses locked accounts; then set the
+   password field to '*' instead (usermod -p '*' sauron-acme).
+
+3. Make ~/.ssh and authorized_keys owned by root, so the account cannot
    change them:
 
-     restrict,command="/usr/local/sauron/acme-txt --server=cesnet --zone=example.cz --user=www-example --ssh" ssh-ed25519 AAAA... certbot@www.example.cz
+     install -d -o root -g root -m 755 /var/lib/sauron-acme/.ssh
+     install -o root -g root -m 644 /dev/null \
+             /var/lib/sauron-acme/.ssh/authorized_keys
 
-3. On the client install contrib/certbot-sauron-hook.sh and set
-   SAURON_SSH=sauron-acme@sauron.example.net (in the environment or in
-   /etc/default/certbot-sauron-hook).
+4. Add one line per client key. The server and zone(s) come only from
+   the forced command; the client's command line is only read from
+   SSH_ORIGINAL_COMMAND as "add|del <fqdn> <value>". 'restrict' disables
+   PTY, port/agent/X11 forwarding and ~/.ssh/rc; from= limits the source
+   address; use several --zone options for more zones:
+
+     restrict,from="192.0.2.10,2001:db8::10",command="/usr/local/sauron/acme-txt --server=cesnet --zone=example.cz --user=www-example --ssh" ssh-ed25519 AAAA... certbot@www.example.cz
+
+   Keep PermitUserEnvironment no and do not accept PERL* variables with
+   AcceptEnv in sshd_config, otherwise the client could change how perl
+   runs acme-txt (check with: sshd -T | grep -i -e acceptenv -e userenv).
+
+On the client (as root, certbot runs hooks as root):
+
+5. Create a key and send the public part to the Sauron admin:
+
+     ssh-keygen -t ed25519 -N '' -C certbot@www.example.cz \
+                -f /etc/letsencrypt/sauron-acme
+
+6. Add the Sauron host key to known_hosts (the hook uses BatchMode and
+   fails on an unknown host key); check the fingerprint:
+
+     ssh-keyscan sauron.example.net >> /root/.ssh/known_hosts
+
+7. Install contrib/certbot-sauron-hook.sh as
+   /usr/local/bin/certbot-sauron-hook.sh and create
+   /etc/default/certbot-sauron-hook:
+
+     SAURON_SSH=sauron-acme@sauron.example.net
+     SAURON_SSH_KEY=/etc/letsencrypt/sauron-acme
+     SAURON_WAIT=1800     # longer than the interval of the export job
+
+8. Test it (each command prints the exit status):
+
+     K="-i /etc/letsencrypt/sauron-acme sauron-acme@sauron.example.net"
+     V=$(head -c32 /dev/urandom | base64 | tr '+/' '-_' | tr -d =)
+     ssh $K "add _acme-challenge.example.cz $V"; echo $?      # 0
+     ssh $K "del _acme-challenge.example.cz $V"; echo $?      # 0
+     ssh $K "add _acme-challenge.example.com $V"; echo $?     # 2
+     ssh $K "add _acme-challenge.example.cz $V; id"; echo $?  # 1
+     ssh -t $K; sftp $K; ssh -N -L 5432:localhost:5432 $K     # all fail
 
 EXAMPLES
 --------

@@ -12,6 +12,9 @@
 # The SSH key must be restricted on the Sauron host to a forced command, e.g.
 #   restrict,command="/usr/local/sauron/acme-txt --server=S --zone=example.cz --ssh" ssh-ed25519 ...
 #
+# The Sauron host key must be in root's known_hosts (BatchMode is used):
+#   ssh-keyscan sauron.example.net >> /root/.ssh/known_hosts
+#
 # Settings (environment or /etc/default/certbot-sauron-hook):
 #   SAURON_SSH       user@host of the Sauron account          (required)
 #   SAURON_SSH_KEY   private key                              (default ~/.ssh/id_ed25519)
