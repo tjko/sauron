@@ -25,10 +25,14 @@ Rules:
     the zones given with --zone (the longest matching zone is used),
     with labels of at most 63 and a name of at most 253 characters.
   * <value> must look like CERTBOT_VALIDATION (43 characters, base64url).
-  * Only TXT hosts (type 13) created by acme-txt (hosts.cuser
-    'acme-txt:<user>') are changed or deleted. A name used by another
-    host type (e.g. a CNAME delegating _acme-challenge elsewhere) or by a
-    TXT host created in the web UI is refused.
+  * Only TXT hosts (type 13) created by acme-txt with the same --user
+    (hosts.cuser 'acme-txt:<user>') are changed or deleted, so give each
+    client key its own --user. A name used by another host type (e.g. a
+    CNAME delegating _acme-challenge elsewhere), by a TXT host created in
+    the web UI or by another --user is refused (names are compared
+    without regard to case).
+  * A name at or below a delegation (NS) in the zone is refused: 'sauron'
+    leaves such records out of the zone.
   * At most 10 values per name.
   * 'add' of a value that already exists and 'del' of a value or name that
     does not exist succeed and change nothing, so certbot can retry.
@@ -36,7 +40,8 @@ Rules:
     so concurrent hooks cannot exceed the limit or lose a value.
   * Deleting the last value deletes only the TXT record; aliases that
     point to the name (e.g. a CNAME delegating another name's challenge
-    here) are kept.
+    here) are kept. Aliases that reference the host itself are turned into
+    static aliases of the name, so they work again after the next 'add'.
 
 Several values for one name are supported. A certificate for example.cz
 and *.example.cz needs two different values of _acme-challenge.example.cz
@@ -52,9 +57,10 @@ record that certbot failed to clean up does not stay in DNS. 'sauron' does
 not notice an expiration by itself (the zone is not marked as changed), so
 run 'acme-txt --server=<server> --cleanup' from cron before check-pending:
 it deletes expired records created by acme-txt in all zones of the server
-and the next export publishes the zone without them. Adding an existing
-value again moves the expiration forward and marks the zone as changed, so
-a record left out of the zone after it expired is published again.
+and the next export publishes the zone without them. Every 'add' sets the
+expiration again from now (--expire=0 removes it) and marks the zone as
+changed, so a record left out of the zone after it expired is published
+again.
 
 Changes are recorded in the host history (action 'ACME: add TXT' /
 'ACME: delete TXT') with the user name, in the same transaction as the
@@ -76,8 +82,8 @@ OPTIONS
                     zones of --server (from cron; not with --zone/--ssh).
   --ttl=<sec>       TTL of a new record (default 60, 0 = zone default).
   --expire=<sec>    Expiration of a new record in seconds from now
-                    (default 86400, 0 = never). Adding a value to a record
-                    that has an expiration moves it forward.
+                    (default 86400, 0 = never). Every 'add' sets the
+                    expiration of the record again.
   --user=<name>     User name for the history (default: login name).
   --verbose         Print the zone and the relative name used, or the
                     records deleted by --cleanup.
@@ -87,7 +93,8 @@ EXIT STATUS
 -----------
   0  done (or nothing to do)
   1  usage error
-  2  request refused (name, value, zone, server or host type)
+  2  request refused (name, value, zone, server, host type, owner or
+     delegation)
   3  database error
 
 SETUP

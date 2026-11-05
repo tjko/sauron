@@ -64,8 +64,10 @@ sub setup_ok {
 
 sub acme {
     my (@args) = @_;
+    my $user = 't25';
+    $user = shift(@args) =~ s/^user=//r if (@args && $args[0] =~ /^user=/);
     my $cmd = join(' ', "$install_dir/acme-txt", "--server=$srvname",
-                   "--zone=$zonename", "--user=t25", @args) . ' 2>&1';
+                   "--zone=$zonename", "--user=$user", @args) . ' 2>&1';
     my $out = `$cmd`;
     return ($? >> 8, $out);
 }
@@ -173,6 +175,29 @@ subtest 'refused requests' => sub {
     my ($type, $txt, undef, undef, $extra) = host_state('_acme-challenge.manual');
     is($txt, $v1, 'manual host unchanged');
     is_deeply($extra, [], 'manual host has no new values');
+
+    ($rc, $out) = acme('user=t25other', 'add', "_acme-challenge.www.$zonename", $v1);
+    is($rc, 2, 'add to a record of another acme-txt user') or diag($out);
+    like($out, qr/another acme-txt user/, 'message');
+    ($rc, $out) = acme('user=t25other', 'del', "_acme-challenge.www.$zonename", $v3);
+    is($rc, 2, 'del of a record of another acme-txt user') or diag($out);
+    is((host_state('_acme-challenge.www'))[1], $v3, 'record unchanged');
+
+    setup_ok("INSERT INTO hosts (zone,type,domain,alias,cname_txt,cuser) " .
+             "VALUES ($zoneid,13,'_ACME-challenge.Mixed',-1,'$v1','admin')");
+    ($rc, $out) = acme('add', "_acme-challenge.mixed.$zonename", $v2);
+    is($rc, 2, 'name of a host stored in another case') or diag($out);
+
+    setup_ok("INSERT INTO hosts (zone,type,domain) VALUES ($zoneid,2,'sub')");
+    ($rc, $out) = acme('add', "_acme-challenge.sub.$zonename", $v1);
+    is($rc, 2, 'name in a delegated zone') or diag($out);
+    like($out, qr/delegated zone sub/, 'message');
+    ($rc, $out) = acme('add', "_acme-challenge.x.sub.$zonename", $v1);
+    is($rc, 2, 'name below a delegated zone') or diag($out);
+    ($rc, $out) = acme('add', "_acme-challenge.xsub.$zonename", $v1);
+    is($rc, 0, 'name only ending like a delegation is allowed') or diag($out);
+    ($rc, $out) = acme('del', "_acme-challenge.xsub.$zonename", $v1);
+    is($rc, 0, 'and deleted') or diag($out);
 };
 
 subtest 'limits and expiration' => sub {
@@ -198,6 +223,12 @@ subtest 'limits and expiration' => sub {
     db_query("SELECT mdate FROM hosts WHERE zone=$zoneid " .
              "AND domain='_acme-challenge.www'", \@q);
     cmp_ok($q[0][0], '>', time - 60, 'mdate updated, so the zone is pending');
+
+    setup_ok("UPDATE hosts SET expiration=" . (time - 10) .
+             " WHERE zone=$zoneid AND domain='_acme-challenge.lim'");
+    ($rc, $out) = acme('--expire=0', 'add', $name, sprintf('%043d', 1));
+    is($rc, 0, 'add with --expire=0 to an expired record') or diag($out);
+    is((host_state('_acme-challenge.lim'))[3] || 0, 0, 'expiration cleared');
 };
 
 subtest 'name length' => sub {
@@ -222,6 +253,21 @@ subtest 'concurrent requests are serialized' => sub {
 };
 
 subtest 'aliases to a deleted record are kept' => sub {
+    setup_ok("INSERT INTO hosts (zone,type,domain,alias) " .
+             "SELECT $zoneid,4,'_acme-challenge.dyn',id FROM hosts " .
+             "WHERE zone=$zoneid AND domain='_acme-challenge.lim'");
+    for my $i (1..10) {
+        my ($rc, $out) = acme('del', "_acme-challenge.lim.$zonename",
+                              sprintf('%043d', $i));
+        is($rc, 0, "delete value $i") or diag($out);
+    }
+    is_deeply([host_state('_acme-challenge.lim')], [], 'host removed');
+    my @a;
+    db_query("SELECT alias,cname_txt FROM hosts WHERE zone=$zoneid " .
+             "AND domain='_acme-challenge.dyn'", \@a);
+    is_deeply(\@a, [[-1, "_acme-challenge.lim.$zonename."]],
+              'alias of the host id turned into a static alias');
+
     setup_ok("INSERT INTO zones (id,server,name,type,reverse) " .
              "VALUES ($zoneid2,$srvid,'other.example','M',false)");
     setup_ok("INSERT INTO hosts (zone,type,domain,alias,cname_txt,cuser) " .
