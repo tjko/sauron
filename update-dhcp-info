@@ -1,7 +1,8 @@
 #!/usr/bin/perl -I/opt/sauron
 #
-# update-dhcp-info  reads dhcpd syslog entries and updates host dhcp_date
-#                   field in hosts table (for given server)
+# update-dhcp-info  reads dhcpd or KEA (kea-dhcp4/kea-dhcp6) log entries
+#                   and updates host dhcp_date field in hosts table (for
+#                   given server)
 #
 # Copyright (c) Timo Kokkonen <tjko@iki.fi>  2001-2005.
 # $Id:$
@@ -14,7 +15,8 @@ use strict;
 use warnings;
 require 5;
 use Getopt::Long;
-use Time::Local;
+use Time::Local qw(timelocal timegm);
+use Net::IP qw(ip_expand_address ip_compress_address);
 use POSIX qw(strftime);
 use Date::Manip;
 use Sauron::DB;
@@ -35,7 +37,7 @@ my ($servername, $file, $timenow, $serverid, $c, $cmd, $d, $date,
     $hour, $i, $id, $info, $ip, %iphash, %iptime, $latest,
     $latest_str, $m, $mac, @match, $matchbyip, %matchhash,
     $matchtype, $mcount, $min, $notfounds, $notupdated, $pm,
-    @q, $res, $rest, $sec, $t, $type, $via, $linecount);
+    @q, $res, $rest, $sec, $t, $type, $via, $linecount, %duidhash, $hduid);
 
 ###################################################################
 my ($help,$commit,$year,$verbose,$debug);
@@ -111,6 +113,66 @@ if ($verbose and -t STDOUT) {
     $progress = 1;
 }
 
+# syslog_time($month,$day,$hour,$min,$sec) - time of a classic syslog
+# line (no year: --year or the year of a newer line with an explicit date,
+# decremented when the month grows while reading the log backwards); undef for an impossible date (e.g. Feb 29)
+sub syslog_time($$$$$) {
+  my ($mo,$dd,$hh,$mi,$ss) = @_;
+
+  if (defined $pm && $mo > $pm) {
+    $year--;
+    print "Year changed to ($year)\n" if ($verbose);
+  }
+  $pm = $mo;
+  my $tt = eval { timelocal($ss,$mi,$hh,$dd,$mo,$year) };
+  print "skipping line with invalid date ($dd.".($mo+1).".$year)\n"
+    if (!defined $tt && $verbose);
+  return $tt;
+}
+
+# normip($ip) - address as stored in the database (IPv6 compressed,
+# lower case)
+sub normip($) {
+  my ($a) = @_;
+
+  return $a unless (defined $a && $a =~ /:/);
+  my $x = ip_expand_address(lc($a),6);
+  return (defined $x ? ip_compress_address($x,6) : lc($a));
+}
+
+# kea_log_time($line) - time of a KEA log line: KEA's own log file
+# (2026-11-02 12:00:00.123), RFC 3339 / RFC 5424 syslog (with time zone)
+# or classic syslog (Nov  2 12:00:00, optionally with a <pri> prefix)
+sub kea_log_time($) {
+  my ($line) = @_;
+
+  $line =~ s/^<\d+>(?:1\s+)?//;
+  if ($line =~ /^(\d{4})-(\d\d)-(\d\d)[ T](\d\d):(\d\d):(\d\d)(?:[.,]\d+)?(Z|[+-]\d\d:?\d\d)?\s/) {
+    my ($Y,$M,$D,$h,$mi,$s,$tz) = ($1,$2,$3,$4,$5,$6,$7);
+    my $tt;
+    if (!defined $tz) {
+      $tt = eval { timelocal($s,$mi,$h,$D,$M-1,$Y) };
+    } else {
+      $tt = eval { timegm($s,$mi,$h,$D,$M-1,$Y) };
+      if (defined $tt && $tz ne 'Z') {
+	my ($sign,$oh,$om) = ($tz =~ /^([+-])(\d\d):?(\d\d)$/);
+	$tt -= ($oh * 3600 + $om * 60) * ($sign eq '+' ? 1 : -1);
+      }
+    }
+    # the explicit date sets the year and month for older classic
+    # syslog lines (read backwards)
+    if (defined $tt) {
+      my @lt = localtime($tt);
+      ($pm,$year) = ($lt[4],$lt[5] + 1900);
+    }
+    return $tt;
+  }
+  if ($line =~ /^(\S{3})\s+(\d+)\s+(\d+):(\d+):(\d+)\s/ && defined $months{$1}) {
+    return syslog_time($months{$1},$2,$3,$4,$5);
+  }
+  return undef;
+}
+
 # while (<FILE>) {
 foreach (@reverse_lines) { # Process array instead of file. ****
 
@@ -123,15 +185,50 @@ foreach (@reverse_lines) { # Process array instead of file. ****
 	}
     }
 
-    if (/^(\S+)\s+(\d+)\s+(\d+):(\d+):(\d+)\s+((\S+)\s+dhcpd:(\s+\[.+?\])?|\[dhcpd\])\s(.*)$/) {
+    # KEA: DHCP4_LEASE_ALLOC/REUSE "<client>: lease <ip> has been ...",
+    #      DHCP6_LEASE_ALLOC/REUSE "<client>: lease for address <ip> and
+    #      iaid=<n> has been ..." (client = [hwtype=1 <mac>], duid=[<duid>])
+    if (/\b(DHCP[46])_LEASE_(?:ALLOC|REUSE)\s+(.*)$/) {
+	my ($kfam,$msg) = ($1,$2);
+	my ($kip,$kmac,$kduid);
+	if ($kfam eq 'DHCP4' &&
+	    $msg =~ /:\s+lease\s+(\S+)\s+has been (?:allocated|reused)/) {
+	    $kip = $1;
+	} elsif ($kfam eq 'DHCP6' &&
+		 $msg =~ /:\s+lease for address\s+(\S+)\s+and iaid=\S+\s+has been (?:allocated|reused)/) {
+	    $kip = $1;
+	} else {
+	    next;
+	}
+	$kmac = $1 if ($msg =~ /\[hwtype=\d+\s+([0-9a-fA-F:]+)\]/);
+	$kduid = $1 if ($msg =~ /\bduid=\[([0-9a-fA-F:]+)\]/);
+	$t = kea_log_time($_);
+	next unless (defined $t);
+	$first_date = $t unless (defined $first_date);
+	($host) = (/^(?:<\d+>(?:1\s+)?)?\S+\s+(?:\d+\s+\d+:\d+:\d+\s+)?(\S+)\s+kea-dhcp[46]/);
+	$via = (defined $host ? "$host " : '') . ($kfam eq 'DHCP4' ? 'kea-dhcp4' : 'kea-dhcp6');
+	$ip = normip($kip);
+	$iptime{$ip} = [$t, (defined $kmac ? $kmac : ''), $via] if ($ip && !$iptime{$ip});
+	if ($kduid) {
+	    (my $du = uc($kduid)) =~ s/[^0-9A-F]//g;
+	    $duidhash{$du} = { DHCPACK => $t, 'DHCPACK-via' => $via, 'DHCPACK-ip' => $ip }
+	      unless ($duidhash{$du});
+	}
+	if ($kmac) {
+	    ($mac = uc($kmac)) =~ s/[^A-F0-9]//g;
+	    if (length($mac) == 12 && !defined $hash{$mac}) {
+		$hash{$mac} = { DHCPACK => $t, 'DHCPACK-via' => $via, 'DHCPACK-ip' => $ip };
+		$iphash{$ip} = $mac if ($ip);
+	    }
+	}
+	next;
+    }
+
+    if (/^(\S+)\s+(\d+)\s+(\d+):(\d+):(\d+)\s+((\S+)\s+dhcpd(?:\[\d+\])?:(\s+\[.+?\])?|\[dhcpd\])\s(.*)$/) {
 	$m=$months{$1}; $d=$2; $hour=$3; $min=$4; $sec=$5; $host=$7; $rest=$9;
  	print "[$1] [$2] [$3]\n" if ($debug > 1);
-	if (defined $pm && $m > $pm) { # ****
-	    $year--;
-	    print "Year changed to ($year)\n" if ($verbose);
-	} # ****
-	$pm = $m;
-	$t=timelocal($sec,$min,$hour,$d,$m,$year);
+	$t = syslog_time($m,$d,$hour,$min,$sec);
+	next unless (defined $t);
     } elsif (/^<\d{2}>1\s+(\S+)\s+(\S+)\s+dhcpd\s+(?:\W+)(.*)$/) { # systemd log format
 	print "[$1] [$2] [$3]\n" if ($debug > 1);
 	$t = UnixDate(ParseDate("$1"),"%s");
@@ -186,7 +283,7 @@ foreach (@reverse_lines) { # Process array instead of file. ****
 # **** Don't let older data overwrite newest data.
 # **** Store newest occurrence of each ip.
 # **** IPv6s in db are compressed; compress IPv6s from log, too.
-    $ip = ipv6compress($ip);
+    $ip = normip($ip);
     if ($ip && !$iptime{$ip}) { $iptime{$ip} = [$t, $mac, $via]; }
 
     if ($mac) {
@@ -222,7 +319,7 @@ print "Done. (found $hashcount different MACs)\n" if ($verbose);
 
 print "Fetching host info from database ...\n" if ($verbose);
 undef @q;
-db_query("SELECT h.id,h.ether,h.dhcp_date,h.domain,a.ip,h.type " .
+db_query("SELECT h.id,h.ether,h.dhcp_date,h.domain,a.ip,h.type,h.duid " .
 	 "FROM hosts h JOIN zones z ON h.zone=z.id " .
 	 " LEFT JOIN a_entries a ON a.host=h.id " .
 #	 "WHERE z.server=$serverid AND h.type=1",\@q);
@@ -243,36 +340,55 @@ if ($debug == 9) {
 
 print "Matching hosts ...\n" if ($verbose);
 
+# lease record of a MAC: the newest of DHCPACK and BOOTREPLY
+sub mac_record($) {
+  my ($m) = @_;
+  my $h = $hash{$m};
+  my ($t,$v,$a) = (0,undef,undef);
+
+  return undef unless ($h);
+  if (defined $h->{DHCPACK} && $h->{DHCPACK} > 0) {
+    ($t,$v,$a) = ($h->{DHCPACK},$h->{'DHCPACK-via'},$h->{'DHCPACK-ip'});
+  }
+  if (defined $h->{BOOTREPLY} && $h->{BOOTREPLY} > $t) {
+    ($t,$v,$a) = ($h->{BOOTREPLY},$h->{'BOOTREPLY-via'},$h->{'BOOTREPLY-ip'});
+  }
+  return { t => $t, via => $v, ip => $a, ident => dhcpether($m) };
+}
+
 for $i (0..$#q) {
-    #$mac  = uc($q[$i][1]);
+    my ($rec,@cand);
     $mac  = defined($q[$i][1]) ? uc($q[$i][1]) : "";
     $ip   = $q[$i][4];
     $type = $q[$i][5]; # ****
+    ($hduid = uc(defined $q[$i][6] ? $q[$i][6] : '')) =~ s/[^0-9A-F]//g;
 
-    if ($type == 1) { # ****
-	$matchtype='MAC';
-	unless (defined $hash{$mac}) {
-# try to lookup host record by IP when MAC lookup fails ...
-	    if (defined($ip) and $iphash{$ip}) {
-		$mac=$iphash{$ip};
-		unless (defined $hash{$mac}) {
-		    $notfounds++;
-		    next;
-		}
-		$matchtype='IP';
-		$matchbyip++;
-	    } else {
-		$notfounds++;
-		next;
-	    }
+    if ($type == 1) {
+	# the host's MAC (DHCPv4) and DUID (KEA DHCPv6) leases, the newest wins
+	push @cand, [ 'MAC', mac_record($mac) ] if ($mac ne '' && defined $hash{$mac});
+	if ($hduid ne '' && $duidhash{$hduid}) {
+	    my $d = $duidhash{$hduid};
+	    push @cand, [ 'DUID', { t => $d->{DHCPACK}, via => $d->{'DHCPACK-via'},
+				    ip => $d->{'DHCPACK-ip'},
+				    ident => 'DUID ' . dhcpduid($hduid) } ];
 	}
+	# try to lookup host record by IP when MAC/DUID lookup fails ...
+	if (!@cand && defined($ip) && $iphash{$ip} && defined $hash{$iphash{$ip}}) {
+	    push @cand, [ 'IP', mac_record($iphash{$ip}) ];
+	}
+	unless (@cand) {
+	    $notfounds++;
+	    next;
+	}
+	# same lease seen by MAC and DUID (KEA DHCPv6): report the DUID
+	($matchtype,$rec) = @{(sort { $b->[1]{t} <=> $a->[1]{t} ||
+				     ($b->[0] eq 'DUID') <=> ($a->[0] eq 'DUID') } @cand)[0]};
+	$matchbyip++ if ($matchtype eq 'IP');
     } elsif (defined($ip) and $iptime{$ip}) { # DHCP only. ****
-	$t   = $iptime{$ip}[0];
-	$mac = $iptime{$ip}[1];
-	$via = $iptime{$ip}[2];
+	$rec = { t => $iptime{$ip}[0], via => $iptime{$ip}[2], ip => $ip,
+		 ident => dhcpether('') };
 	$matchtype = 'IP';
 	$matchbyip++;
-	$mac = '';
     } else { # ****
 	$notfounds++;
 	next;
@@ -281,23 +397,7 @@ for $i (0..$#q) {
     $id     = $q[$i][0];
     $date   = (defined($q[$i][2]) and $q[$i][2] > 0) ? $q[$i][2] : 0;
     $domain = $q[$i][3];
-
-    if ($type == 1) { # ****
-	#$t = $hash{$mac}->{DHCPACK} > 0  ?  $hash{$mac}->{DHCPACK}  :  0;
-	if (defined($hash{$mac}->{DHCPACK})) {
-	    $t = $hash{$mac}->{DHCPACK} > 0  ?  $hash{$mac}->{DHCPACK}  :  0;
-	} else {
-	    $t = 0;
-	}
-	$via = $hash{$mac}->{'DHCPACK-via'};
-	$ip = $hash{$mac}->{'DHCPACK-ip'};
-	if (defined($hash{$mac}->{BOOTREPLY}) and $hash{$mac}->{BOOTREPLY} > $t) {
-	    $t = $hash{$mac}->{BOOTREPLY};
-	    $via = $hash{$mac}->{'BOOTREPLY-via'};
-	    $ip = $hash{$mac}->{'BOOTREPLY-ip'};
-	}
-
-    } # ****
+    ($t,$via,$ip) = ($rec->{t},$rec->{via},$rec->{ip});
 
 # This test is no longer very meaningful. ****
   next unless ($t > 0); # skip unless time from DHCPACK/BOOTREPLY
@@ -305,7 +405,7 @@ for $i (0..$#q) {
   if ( ($t <= $date) &&
        ($date < ($timenow + 30*86400)) # handle bogus host dhcp_dates
      ) {
-    print "notupdating: $domain (".dhcpether($mac).") : $t : $date\n"
+    print "notupdating: $domain ($rec->{ident}) : $t : $date\n"
       if ($debug);
     $notupdated++;
     next;
@@ -313,7 +413,7 @@ for $i (0..$#q) {
 
   print "match by IP: $domain $id $date : $t ($via,$ip)\n"
     if ($debug && $matchtype eq 'IP');
-  push @match, [$id,$t,"$ip for " . dhcpether($mac) . " via $via"];
+  push @match, [$id,$t,"$ip for $rec->{ident} via $via"];
   $matchhash{$id}=$matchtype;
 }
 

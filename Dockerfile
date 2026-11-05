@@ -27,6 +27,10 @@ RUN set -eux; \
 
 FROM debian:trixie-slim AS runtime
 
+# extra packages, e.g. DHCP servers used by E2E tests to validate generated
+# configurations (see docker-compose.e2e.yml)
+ARG EXTRA_PACKAGES=""
+
 ENV DEBIAN_FRONTEND=noninteractive \
 	LANG=C.UTF-8 \
 	LC_ALL=C.UTF-8 \
@@ -51,9 +55,11 @@ RUN apt-get update -qq \
 		libparse-recdescent-perl \
 		libhtml-parser-perl \
 		libdigest-hmac-perl \
+		libdate-manip-perl \
 		libencode-locale-perl \
 		libnet-ssleay-perl \
 		bind9-utils \
+		$EXTRA_PACKAGES \
 	&& a2enmod cgid alias \
 	&& a2disconf other-vhosts-access-log \
 	# Stock Debian maps /cgi-bin/ → /usr/lib/cgi-bin; Sauron replaces that.

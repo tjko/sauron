@@ -70,6 +70,17 @@ $DB_PASSWORD = "bar";
 # $SAURON_DHCP_CHK_PROG = '/usr/sbin/dhcpd';
 # $SAURON_DHCP_CHK_ARGS = '-q -t -cf';
 
+# set to enable KEA configuration validation from sauron (--kea/--kea6)
+# $SAURON_KEA4_CHK_PROG = '/usr/sbin/kea-dhcp4';
+# $SAURON_KEA4_CHK_ARGS = '-t';
+# $SAURON_KEA6_CHK_PROG = '/usr/sbin/kea-dhcp6';
+# $SAURON_KEA6_CHK_ARGS = '-t';
+# $SAURON_KEA_D2_CHK_PROG = '/usr/sbin/kea-dhcp-ddns';
+# $SAURON_KEA_D2_CHK_ARGS = '-t';
+# directory of KEA hook libraries used in generated KEA configuration
+# (High Availability); empty = library names only, found by KEA itself
+# $SAURON_KEA_HOOKS_DIR = '';
+
 # set to enable named.conf validation from sauron
 # $SAURON_NAMED_CHK_PROG = '/usr/sbin/named-checkconf';
 # $SAURON_NAMED_CHK_ARGS = '';

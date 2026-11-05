@@ -14,6 +14,8 @@ use Socket qw(inet_aton);
 use Sauron::DB;
 use Sauron::Util;
 use Sauron::UtilDhcp;
+use Sauron::DhcpKea;
+use Sauron::DhcpDB;
 use Sauron::BackEnd;
 use Sauron::Sauron;
 use Sauron::SetupIO;
@@ -34,7 +36,7 @@ if ($opt_help || @ARGV < 2) {
           "\t--dhcp6\t\t\timport DHCPv6 configuration\t\n",
           "\t--kea\t\t\timport KEA JSON configuration\n",
           "\t--dir=<directory>\tdirectory where included files are located\n",
-	  "\t\t\t\t(if not in directory specified in dhcpd.conf)\n",
+	  "\t\t\t\t(KEA <?include?>, default: directory of the file)\n",
 	  "\t--chaosnet=<name>\ttreat this shared-network as default VLAN\n",
 	  "\t\t\t\t(default is \"CHAOS\")\n",
 	  "\t--global\t\timport 'global' entries into server settings\n",
@@ -68,15 +70,39 @@ if ($dhcpdf =~ /(^.*\/)/) {
     $dir="./";
 }
 
-# parse named.conf
-undef %data;
-if ($opt_kea || is_kea_dhcpconf($dhcpdf)) {
+# KEA configuration: read into the DHCP model and store it
+if ($opt_kea || is_kea_conf($dhcpdf)) {
   print "Detected KEA DHCP configuration\n" if ($opt_verbose);
-  process_kea_dhcpconf($dhcpdf,\%data,$opt_dhcp6);
+  my $root = eval { dhcp_kea_read_file($dhcpdf,$opt_dir) };
+  fatal($@) if ($@);
+  my $model = eval { dhcp_model_from_kea($root,($opt_dhcp6 ? 6 : 4)) };
+  fatal($@) if ($@);
+
+  printf "Found %d shared-networks, %d subnets, %d pools, %d classes, " .
+    "%d reservations\n", scalar(@{$model->{vlans}}), scalar(@{$model->{nets}}),
+    scalar(@{$model->{pools}}), scalar(@{$model->{classes}}),
+    scalar(@{$model->{hosts}});
+
+  unless ($opt_notransaction) {
+    db_begin();
+    db_ignore_begin_and_commit(1);
+  }
+  my $count = dhcp_model_to_db($model,$serverid,
+			       { global => $opt_global, chaosnet => $chaosnet,
+				 verbose => $opt_verbose });
+  print "warning: $_\n" foreach (@{$model->{warnings}});
+  print "Updated $count hosts\n";
+  unless ($opt_notransaction) {
+    db_ignore_begin_and_commit(0);
+    fatal("Cannot commit import to database!") if (db_commit() < 0);
+  }
+  print "All done.\n";
+  exit(0);
 }
-else {
-  process_dhcpdconf($dhcpdf,\%data,$opt_dhcp6);
-}
+
+# parse dhcpd.conf
+undef %data;
+process_dhcpdconf($dhcpdf,\%data,$opt_dhcp6);
 
 unless ($opt_notransaction) {
   db_begin();
@@ -92,8 +118,8 @@ if ($opt_global) {
     $line =~ s/;\s*//;
     print "GLOBAL: $line\n" if ($opt_verbose && !$opt_dhcp6);
     print "GLOBAL6: $line\n" if ($opt_verbose && $opt_dhcp6);
-    push @{$server{dhcp}}, [0,$line,'',2] if !$opt_dhcp6;
-    push @{$server{dhcp6}}, [0,$line,'',2] if $opt_dhcp6;
+    push @{$server{dhcp}}, [0,$line,'',0,2] if !$opt_dhcp6;
+    push @{$server{dhcp6}}, [0,$line,'',0,2] if $opt_dhcp6;
   }
 
   fatal("cannot update server record") if (update_server(\%server) < 0);
@@ -355,7 +381,7 @@ foreach $key (keys %{$data{host}}) {
       foreach $byte (@tmp){ $mac .= sprintf ("%02s", $byte); }
       $ether=uc($mac);
     } else {
-      push @q, [undef, $line, '', 2];
+      push @q, [undef, $line, '', 0, 2];
     }
 
   }
@@ -369,7 +395,7 @@ foreach $key (keys %{$data{host}}) {
     #@sclasess = [];
   }
 
-  unshift @q, ['DHCP', 'Comments'] if @q > 0;
+  unshift @q, ['DHCP', 'Comments', 'Format'] if @q > 0;
 
   print "host: $key ip=$ip,ether=$ether,groupid=$id\n" if ($opt_verbose && !$opt_dhcp6);
   print "host: $key ip=$ip,duid=$ether,groupid=$id\n" if ($opt_verbose && $opt_dhcp6);

@@ -7,6 +7,76 @@
 	  certbot hook in contrib/certbot-sauron-hook.sh, documentation in
 	  docs/acme-txt.txt [svamberg]
 
+	- DHCP: dhcpd.conf/dhcpd6.conf are generated through a new shared
+	  DHCP model (Sauron::DhcpDB, Sauron::DhcpIsc), preparing KEA
+	  export. Fixes in the generated configuration:
+	  * dynamic pools of a failover server contain 'failover peer' and
+	    'deny dynamic bootp clients' (the failover peer was declared
+	    but no pool used it)
+	  * automatic domain names in dhcpd6.conf use
+	    'option dhcp6.domain-search' instead of
+	    'option dhcp6.name-servers' (an invalid name server value)
+	  * hosts not in any group no longer get a second
+	    'option domain-name' when they have their own
+	  * a server named 'ns2' no longer silently loses its DHCPv4
+	    classes and dynamic pools (removed site specific hack)
+	  * no failover peer in dhcpd6.conf: ISC DHCPv6 has no failover and
+	    dhcpd -6 refused such a configuration
+	  [svamberg]
+
+	- Web UI: DHCP entry lists (server, zone, host, net, VLAN, group)
+	  have a 'format' column: ISC + KEA (ISC statement, converted for
+	  KEA where possible), ISC only, or KEA only (KEA JSON object with
+	  one member, e.g. {"renew-timer": 900}). Entries are validated on
+	  save; ISC statements without a KEA equivalent show a hint. Longer
+	  entries (1000 characters) are allowed. add_net/add_vlan now keep
+	  comments and quote DHCP entries correctly [svamberg]
+
+	- sauron --kea-ddns generates kea-dhcp-ddns.conf: master zones with
+	  allow-update entries become forward/reverse DDNS domains, sent to
+	  the server's IP address and signed with the zone's TSIG key from
+	  allow-update; validated with --check and SAURON_KEA_D2_CHK_PROG
+	  [svamberg]
+
+	- KEA: dynamic DNS statements are converted between ISC and KEA:
+	  ddns-update-style (none = KEA default, interim/standard enable
+	  dhcp-ddns updates), ddns-updates <-> ddns-send-updates,
+	  ddns-domainname <-> ddns-qualifying-suffix, allow/deny/ignore
+	  client-updates <-> ddns-override-client-update [svamberg]
+
+	- update-dhcp-info reads KEA logs too (DHCP4/DHCP6_LEASE_ALLOC and
+	  _REUSE; KEA log file, classic or RFC 3339 syslog time stamps);
+	  DHCPv6 leases are matched by the host's DUID. dhcpd syslog lines
+	  with a PID (dhcpd[123]:) are recognised now. The Docker image
+	  installs Date::Manip, which update-dhcp-info needs [svamberg]
+
+	- KEA High Availability: --kea/--kea6 turn the DHCP failover
+	  settings of a master/slave pair into the HA hook configuration
+	  (libdhcp_ha + libdhcp_lease_cmds; load-balancing, hot-standby
+	  for split 0/255; DHCPv6 uses the DHCP6 failover settings). New
+	  server fields 'KEA HA listener port' (kea_ha_port, kea_ha_port6;
+	  sql/*.sql and dbconvert updated) and config SAURON_KEA_HOOKS_DIR.
+	  Fix: the DHCP6 'auto-domainnames' and 'Enable failover protocol'
+	  settings were never read (always shown as No and reset on save);
+	  they are now kept. DHCP6 failover turns on KEA HA for DHCPv6, so
+	  check that setting after the upgrade; DHCP6 auto-domainnames is
+	  still not used (DHCPv6 follows the DHCP setting) [svamberg]
+
+	- sauron: new options --kea and --kea6 generate KEA DHCP
+	  configuration (kea-dhcp4.conf, kea-dhcp6.conf) from the same data
+	  as dhcpd.conf; validated with --check using the new config options
+	  SAURON_KEA4_CHK_PROG/SAURON_KEA6_CHK_PROG [svamberg]
+
+	- import-dhcp: KEA import rewritten on the DHCP model. Options are
+	  converted to valid ISC syntax (quoting, DHCPv6 option names,
+	  options given by code, option-def), parameters are mapped
+	  (valid-lifetime, boot-file-name, ...), global reservations,
+	  client-id based reservations, reservation client-classes and
+	  pool client-class are imported, <?include?> is supported (--dir).
+	  KEA settings without an ISC equivalent are no longer dropped but
+	  stored as KEA only DHCP entries (new dhcp_entries.fmt column,
+	  sql/*.sql and sql/dbconvert_1.7to1.8 updated) [svamberg]
+
 	- Fix the web UI dying on Add host and other forms ("Can't use an
 	  undefined value as an ARRAY reference" in CGIutil.pm) for users
 	  who are not a member of any user group, e.g. accounts provisioned

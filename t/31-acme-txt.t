@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-# t/25-acme-txt.t - acme-txt: add/delete ACME DNS-01 TXT records
+# t/31-acme-txt.t - acme-txt: add/delete ACME DNS-01 TXT records
 #
 # Runs the installed acme-txt against the test database: first value goes
 # to hosts.cname_txt of a TXT host (type 13), a second concurrent value for
@@ -9,7 +9,7 @@
 # _acme-challenge prefix, or used by another host type are refused.
 #
 # Requires an installed Sauron whose config points to the test database:
-#   SAURON_TEST_DSN=... SAURON_INSTALL_DIR=/usr/local/sauron prove -lv t/25-acme-txt.t
+#   SAURON_TEST_DSN=... SAURON_INSTALL_DIR=/usr/local/sauron prove -lv t/31-acme-txt.t
 #
 use strict;
 use warnings;
