@@ -47,7 +47,11 @@ sauron() {
 auth_servers() {
 	d="$CERTBOT_DOMAIN"
 	while [ -n "$d" ]; do
-		ns=$(dig +short NS "$d" | grep -v '^;' || true)
+		# only NS records owned by $d itself (+short would also print
+		# the target of a CNAME at $d and stop the search too early)
+		ns=$(dig +noall +answer NS "$d" |
+			awk -v n="$d." 'tolower($1) == tolower(n) && $4 == "NS" { print $5 }' ||
+			true)
 		if [ -n "$ns" ]; then
 			echo "$ns"
 			return

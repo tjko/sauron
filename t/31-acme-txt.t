@@ -40,6 +40,7 @@ db_connect2() or plan skip_all => 'Cannot connect to test database';
 my $srvid    = 960001;
 my $zoneid   = 960002;
 my $wwwid    = 960003;
+my $zoneid2  = 960004;   # other zone with an alias to our record
 my $srvname  = 'acmetxt-test';
 my $zonename = 'acmetxt.example';
 my $v1 = 'a' x 43;
@@ -51,8 +52,8 @@ sub cleanup {
             "(SELECT id FROM hosts WHERE zone=$zoneid)");
     db_exec("DELETE FROM a_entries WHERE host IN " .
             "(SELECT id FROM hosts WHERE zone=$zoneid)");
-    db_exec("DELETE FROM hosts WHERE zone=$zoneid");
-    db_exec("DELETE FROM zones WHERE id=$zoneid");
+    db_exec("DELETE FROM hosts WHERE zone IN ($zoneid,$zoneid2)");
+    db_exec("DELETE FROM zones WHERE id IN ($zoneid,$zoneid2)");
     db_exec("DELETE FROM servers WHERE id=$srvid");
 }
 
@@ -187,12 +188,82 @@ subtest 'limits and expiration' => sub {
     ($rc, $out) = acme('add', $name, sprintf('%043d', 10));
     is($rc, 0, 'existing value is still accepted at the limit') or diag($out);
 
-    setup_ok("UPDATE hosts SET expiration=" . (time - 10) .
+    setup_ok("UPDATE hosts SET expiration=" . (time - 10) . ",mdate=0" .
              " WHERE zone=$zoneid AND domain='_acme-challenge.www'");
     ($rc, $out) = acme('add', "_acme-challenge.www.$zonename", $v3);
     is($rc, 0, 'add an existing value again') or diag($out);
     cmp_ok((host_state('_acme-challenge.www'))[3], '>', time,
            'expiration moved forward');
+    my @q;
+    db_query("SELECT mdate FROM hosts WHERE zone=$zoneid " .
+             "AND domain='_acme-challenge.www'", \@q);
+    cmp_ok($q[0][0], '>', time - 60, 'mdate updated, so the zone is pending');
+};
+
+subtest 'name length' => sub {
+    my ($rc, $out) = acme('add', '_acme-challenge.' . ('a' x 64) . ".$zonename",
+                          $v1);
+    is($rc, 2, 'label over 63 characters') or diag($out);
+};
+
+subtest 'concurrent requests are serialized' => sub {
+    my $name = "_acme-challenge.par.$zonename";
+    my $base = join(' ', "$install_dir/acme-txt", "--server=$srvname",
+                    "--zone=$zonename", "--user=t25", 'add', $name);
+    my $cmd = join(' ', map { "$base " . sprintf('%043d', $_) . ' >/dev/null 2>&1 &' }
+                   1..12) . ' wait';
+    system('sh', '-c', $cmd);
+    my ($type, $txt, undef, undef, $extra) = host_state('_acme-challenge.par');
+    is($type, 13, 'one TXT host');
+    is(1 + scalar(@$extra), 10, 'exactly 10 values despite 12 parallel adds');
+    my %seen;
+    $seen{$_}++ for ($txt, @$extra);
+    is(scalar(keys %seen), 10, 'no duplicate values');
+};
+
+subtest 'aliases to a deleted record are kept' => sub {
+    setup_ok("INSERT INTO zones (id,server,name,type,reverse) " .
+             "VALUES ($zoneid2,$srvid,'other.example','M',false)");
+    setup_ok("INSERT INTO hosts (zone,type,domain,alias,cname_txt,cuser) " .
+             "VALUES ($zoneid2,4,'_acme-challenge',-1," .
+             "'_acme-challenge.del.$zonename.','admin')");
+    my ($rc, $out) = acme('add', "_acme-challenge.del.$zonename", $v1);
+    is($rc, 0, 'add') or diag($out);
+    my @q;
+    db_query("SELECT rdate FROM zones WHERE id=$zoneid", \@q);
+    my $rdate = $q[0][0] || 0;
+    sleep(1);
+    ($rc, $out) = acme('del', "_acme-challenge.del.$zonename", $v1);
+    is($rc, 0, 'delete last value') or diag($out);
+    is_deeply([host_state('_acme-challenge.del')], [], 'host removed');
+    db_query("SELECT COUNT(*) FROM hosts WHERE zone=$zoneid2 AND type=4", \@q);
+    is($q[0][0], 1, 'static alias in the other zone kept');
+    db_query("SELECT rdate FROM zones WHERE id=$zoneid", \@q);
+    cmp_ok($q[0][0], '>', $rdate, 'zone rdate updated');
+};
+
+subtest 'cleanup of expired records' => sub {
+    my ($rc, $out) = acme('add', "_acme-challenge.old.$zonename", $v1);
+    is($rc, 0, 'add') or diag($out);
+    setup_ok("UPDATE hosts SET expiration=" . (time - 10) .
+             " WHERE zone=$zoneid AND domain='_acme-challenge.old'");
+    setup_ok("UPDATE hosts SET expiration=" . (time - 10) .
+             " WHERE zone=$zoneid AND domain='_acme-challenge.manual'");
+
+    ($rc, $out) = acme('--cleanup');
+    is($rc, 1, '--cleanup with --zone is a usage error') or diag($out);
+    local $ENV{SSH_ORIGINAL_COMMAND} = '';
+    $out = `$install_dir/acme-txt --server=$srvname --cleanup --ssh 2>&1`;
+    is($? >> 8, 1, '--cleanup with --ssh is a usage error') or diag($out);
+
+    $out = `$install_dir/acme-txt --server=$srvname --cleanup --verbose 2>&1`;
+    is($? >> 8, 0, '--cleanup exits 0') or diag($out);
+    like($out, qr/deleted expired TXT _acme-challenge\.old\.\Q$zonename\E/,
+         'reported');
+    is_deeply([host_state('_acme-challenge.old')], [], 'expired record deleted');
+    ok(scalar(host_state('_acme-challenge.manual')),
+       'expired host not created by acme-txt kept');
+    ok(scalar(host_state('_acme-challenge.www')), 'valid record kept');
 };
 
 subtest 'delete' => sub {
@@ -228,6 +299,6 @@ subtest 'delete' => sub {
 };
 
 db_exec("DELETE FROM history WHERE type=1 AND action LIKE 'ACME:%' " .
-        "AND info LIKE '%(user: t25)'");
+        "AND (info LIKE '%(user: t25)' OR info LIKE '%$zonename (expired)')");
 cleanup();
 done_testing();

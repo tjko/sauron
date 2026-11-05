@@ -67,6 +67,14 @@ subtest 'match_acme_name' => sub {
     is_deeply([match_acme_name("_acme-challenge.a';.example.cz", @z)], [],
               'quote');
     is_deeply([match_acme_name(undef, @z)], [], 'undef');
+    my $l63 = 'a' x 63;
+    is_deeply([match_acme_name("_acme-challenge.$l63.example.cz", @z)],
+              ['example.cz', "_acme-challenge.$l63"], '63-character label');
+    is_deeply([match_acme_name("_acme-challenge.${l63}a.example.cz", @z)], [],
+              '64-character label');
+    my $long = '_acme-challenge.' . join('.', ('a' x 60) x 4) . '.example.cz';
+    cmp_ok(length($long), '>', 253, 'long name over 253');
+    is_deeply([match_acme_name($long, @z)], [], 'name over 253 characters');
 };
 
 done_testing();

@@ -3,7 +3,8 @@
 	- Add acme-txt, a tool to add and delete ACME DNS-01 challenge
 	  TXT records (_acme-challenge) from certbot hooks, run as an SSH
 	  forced command limited to given zones. Supports several values
-	  per name (certificate for a domain and its wildcard). Example
+	  per name (certificate for a domain and its wildcard); records
+	  expire and 'acme-txt --cleanup' from cron removes them. Example
 	  certbot hook in contrib/certbot-sauron-hook.sh, documentation in
 	  docs/acme-txt.txt [svamberg]
 
