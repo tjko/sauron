@@ -157,16 +157,13 @@ sub process_zonefile($$$$) {
 	      TXT => [],
 	      HINFO => ['',''],
 	      WKS => [],
-              CAA => [],
-              DS => [],
-              SSHFP => [],
-              TLSA => [],
-
+	      CAA => [],
+	      DS => [],
+	      SSHFP => [],
+	      TLSA => [],
 	      RP => [],
 	      SRV => [],
-
-          NAPTR => [],
-
+	      NAPTR => [],
 	      SERIAL => '',
 	      TYPE => '',
 	      MUUTA => [],
@@ -179,7 +176,6 @@ sub process_zonefile($$$$) {
 	      INFO => '',
 	      ALIAS => [],
 	      AREC=> [],
-
 	      ID => -1
 	    };
 
@@ -249,7 +245,8 @@ sub process_zonefile($$$$) {
     }
     elsif ($type eq 'CAA') {
       fatal("$filename($.): invalid CAA record: $fline")
-        unless ($line[0]=~/^[01]$/ && $line[1]=~/^[a-zA-Z0-9]+$/ && $line[2] ne '');
+        unless ($line[0]=~/^\d+$/ && $line[0] >= 0 && $line[0] <= 255 &&
+		$line[1]=~/^[a-zA-Z0-9]+$/ && $line[2] ne '');
       push @{$rec->{CAA}}, "$line[0] $line[1] $line[2]";
     }
     elsif ($type eq 'DS') {
@@ -269,6 +266,36 @@ sub process_zonefile($$$$) {
         unless ($line[0]=~/^\d+$/ && $line[1]=~/^\d+$/ && $line[2]=~/^\d+$/ && $line[3]=~/^[0-9A-Fa-f]+$/);
       push @{$rec->{TLSA}}, "$line[0] $line[1] $line[2] $line[3]";
     }
+    elsif ($type eq 'NAPTR') {
+      # NAPTR: order preference flags service regexp replacement
+      # RFC 2915 Section 5: NAPTR RR Format
+      # Flags can be empty (non-terminal) or one of {A,U,S,P} (terminal, case-insensitive)
+      # Service and Regexp are both optional, but at least one must be non-empty
+      fatal("$filename($.): invalid NAPTR record: $fline")
+      unless (
+        $line[0]=~/^\d+$/ &&                # order (unsigned 16-bit)
+        $line[1]=~/^\d+$/ &&                # preference (unsigned 16-bit)
+        $line[2]=~/^"[AUSP]?"$/i &&         # flags (empty or one of AUSP, quoted, case-insensitive)
+        $line[3]=~/^".*"$/ &&               # service (quoted string, can be empty)
+        $line[4]=~/^".*"$/ &&               # regexp (quoted string, can be empty)
+        $line[5]=~/^.+$/                    # replacement (non-empty domain name)
+      );
+      # Extract content for validation
+      $line[3] =~ s/^"(.*)"$/$1/; # extract service content
+      $line[4] =~ s/^"(.*)"$/$1/; # extract regexp content
+      
+      # RFC 2915: At least one of service or regexp must be non-empty (but not both empty)
+      fatal("$filename($.): NAPTR must have non-empty service or regexp (or both): $fline")
+        if ($line[3] eq '' && $line[4] eq '');
+      # RFC 2915: Replacement must be non-empty domain
+      fatal("$filename($.): NAPTR replacement cannot be empty: $fline")
+        if ($line[5] eq '');
+      
+      $line[2] =~ tr/a-z/A-Z/; # flags are case-insensitive, convert to uppercase
+      $line[2] =~ s/^"(.*)"$/$1/; # remove quotes from flag (can be empty string)
+      # service and regexp already have quotes removed above
+      push @{$rec->{NAPTR}}, join(" ", @line[0..5]);
+    }
     elsif ($type eq 'WKS') {
       shift @line; # get rid of IP
       fatal ("$filename($.): invalid protocol in WKS '$line[0]': $fline")
@@ -287,10 +314,6 @@ sub process_zonefile($$$$) {
       s/(^\s*"|"\s*$)//g;
       s/\\\"/\"/g;
       push @{$rec->{TXT}}, $_;
-    }
-    elsif ($type eq 'NAPTR') {
-      #print "NAPTR '$_'\n";
-      push @{$rec->{NAPTR}}, $_;
     }
 
     #
@@ -386,7 +409,7 @@ sub process_zonedns($$$$) {
 	$ttl = $rr->ttl;
 
 	next unless ($class eq 'IN');
-	unless ($type =~ /^(SOA|A|PTR|CNAME|MX|NS|TXT|HINFO|SRV|WKS|CAA|DS|SSHFP|TLSA)$/) {
+	unless ($type =~ /^(SOA|A|PTR|CNAME|MX|NS|TXT|HINFO|SRV|WKS|CAA|DS|SSHFP|TLSA|NAPTR)$/) {
 	    $ucount++;
 	    print "Skipping: " . $rr->string . "\n" if ($verbose);
 	    next;
@@ -404,10 +427,11 @@ sub process_zonedns($$$$) {
 		NS => [],
 		TXT => [],
 		HINFO => ['',''],
-                CAA => [],
-                DS => [],
-                SSHFP => [],
-                TLSA => [],
+		CAA => [],
+		DS => [],
+		SSHFP => [],
+		TLSA => [],
+		NAPTR => [],
 		WKS => [],
 		SRV => []
 	      };
@@ -450,17 +474,20 @@ sub process_zonedns($$$$) {
 	    $rec->{HINFO}[0] = $rr->cpu;
 	    $rec->{HINFO}[1] = $rr->os;
 	}
-        elsif ($type eq 'CAA') {
-            push @{$rec->{CAA}}, join(" ",($rr->flags,$rr->tag,$rr->value));
-        }
-        elsif ($type eq 'DS') {
-            push @{$rec->{DS}}, join(" ",($rr->keytag,$rr->algorithm,$rr->digtype,$rr->digest));
+	elsif ($type eq 'CAA') {
+	    push @{$rec->{CAA}}, join(" ",($rr->flags,$rr->tag,$rr->value));
 	}
-        elsif ($type eq 'SSHFP') {
-            push @{$rec->{SSHFP}}, join(" ",($rr->flags,$rr->tag,$rr->value));
+	elsif ($type eq 'DS') {
+	    push @{$rec->{DS}}, join(" ",($rr->keytag,$rr->algorithm,$rr->digtype,$rr->digest));
 	}
-        elsif ($type eq 'TLSA') {
-            push @{$rec->{TLSA}}, join(" ",($rr->usage,$rr->selector,$rr->matchingtype,$rr->cert));
+	elsif ($type eq 'SSHFP') {
+	    push @{$rec->{SSHFP}}, join(" ",($rr->flags,$rr->tag,$rr->value));
+	}
+	elsif ($type eq 'TLSA') {
+	    push @{$rec->{TLSA}}, join(" ",($rr->usage,$rr->selector,$rr->matchingtype,$rr->cert));
+	}
+	elsif ($type eq 'NAPTR') {
+	    push @{$rec->{NAPTR}}, join(" ",($rr->order,$rr->preference,uc($rr->flags),$rr->service,$rr->regexp,$rr->replacement));
 	}
 	elsif ($type eq 'SRV') {
 	    push @{$rec->{SRV}}, join(" ",($rr->priority,$rr->weight,
@@ -513,8 +540,12 @@ sub bind_fmt_long_data($$) {
   my $spaces = shift @_;
   my $indentation = ' ' x ($spaces - 1);
 
+  # Empty data would otherwise fall through to the multi-line branch below
+  # and emit an invalid empty "( )" record. Return a valid empty TXT string.
+  return "\"\"\n" unless (defined($data) && $data ne '');
+
   # Converting text to a sequence of bytes (DNS operates with bytes)
-  my $bytes = encode('UTF-8', $data); 
+  my $bytes = encode('UTF-8', $data);
   #print "$data\n";
   my @chunks;
   while (length $bytes) {

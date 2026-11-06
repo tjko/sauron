@@ -1,0 +1,1992 @@
+/*
+ * Sauron stylesheet. Loaded from $SAURON_ICON_PATH/sauron.css by every
+ * start_html() call in cgi/sauron.cgi and cgi/browser.cgi.
+ *
+ * Class-scoped throughout (.s-*). Legacy <TABLE bgcolor=> markup outside
+ * managed regions paints itself with its inline attributes and is not
+ * touched here.
+ *
+ * --s-env-color / --s-env-fg / --s-env-name are overridden by an inline
+ * <style> block written by theme_style_block() in Sauron::Sauron from
+ * $SAURON_TOPMENU_BGCOLOR / $SAURON_TOPMENU_FONTCOLOR / $SAURON_ENV_NAME.
+ */
+
+:root {
+    /* identity */
+    --s-primary:        #002d5f;
+    --s-primary-light:  #1a4d8a;
+
+    /* surfaces */
+    --s-bg:             #eef1f5;
+    --s-surface:        #ffffff;
+    --s-border:         #c5ced7;
+    --s-border-subtle:  #e2e8ee;
+
+    /* text */
+    --s-text:           #1a2332;
+    --s-muted:          #556270;
+    --s-link:           #1a4d8a;
+
+    /* semantic state */
+    --s-success:        #198754;
+    --s-warning:        #b45309;
+    --s-danger:         #c0392b;
+    --s-info:           #0284c7;
+
+    /* per-environment overrides (set inline from config) */
+    --s-env-color:      var(--s-primary);
+    --s-env-fg:         #ffffff;
+    --s-env-name:       "";
+
+    /* spacing scale (4 / 8 / 16 / 24 / 32) */
+    --s-space-1:        4px;
+    --s-space-2:        8px;
+    --s-space-3:        16px;
+    --s-space-4:        24px;
+    --s-space-5:        32px;
+
+    /* font sizes */
+    --s-fs-sm:          12px;
+    --s-fs-base:        14px;
+    --s-fs-lg:          16px;
+    --s-fs-xl:          18px;
+    --s-fs-label:       11px;
+
+    /* radius — 0 for the angular look the operator prefers */
+    --s-radius:         0px;
+    --s-radius-lg:      0px;
+
+    /* topbar height — shared by shell min-height calc */
+    --s-topbar-h:       44px;
+
+    --s-shadow-sm:      none;
+    --s-shadow:         none;
+
+    /* monospace stack for technical data (IPs, MACs, domain names, CIDRs) */
+    --s-font-data:      ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+}
+
+/* Minimal reset. The legacy HTML still uses <TABLE bgcolor=> for layout
+ * so element defaults are left alone; .s-* components below assume
+ * border-box and zero body margin. */
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: var(--s-fs-base);
+    font-weight: 400;
+    line-height: 1.5;
+    color: var(--s-text);
+    min-width: 1024px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    background: var(--s-bg);
+}
+
+/* Brand-tinted text selection */
+::selection {
+    background: color-mix(in srgb, var(--s-primary) 22%, transparent);
+    color: var(--s-text);
+}
+
+/* Slim branded scrollbar (webkit only; does not affect Firefox) */
+::-webkit-scrollbar               { width: 7px; height: 7px; }
+::-webkit-scrollbar-track         { background: transparent; }
+::-webkit-scrollbar-thumb         { background: var(--s-border); }
+::-webkit-scrollbar-thumb:hover   { background: var(--s-muted); }
+::-webkit-scrollbar-corner        { background: transparent; }
+
+/* Keyboard-only focus indicator. :focus-visible never fires on mouse
+ * clicks so the legacy UI keeps its current click behaviour. */
+:focus-visible {
+    outline: 2px solid var(--s-link);
+    outline-offset: 2px;
+}
+
+/* Focus ring on navy background (topbar, active list headers): use
+ * white outline so it contrasts against dark surfaces. */
+.s-topbar :focus-visible,
+.s-topbar__nav :focus-visible,
+.s-sidebar__link:focus-visible,
+.s-list__head :focus-visible {
+    outline-color: #ffffff;
+    outline-offset: 1px;
+}
+
+/* Forms (.s-form) -- two-column key/value tables emitted by
+ * display_form() and form_magic() in Sauron::CGIutil. */
+
+/* display_form() outer wrapper: flex column so section tables get gap. */
+.s-form-outer {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s-space-2);
+    margin: var(--s-space-2) 0;
+}
+
+/* form_magic() sections wrapper: same gap treatment. */
+.s-form-sections {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s-space-2);
+    margin-bottom: var(--s-space-2);
+}
+
+.s-form {
+    width: 100%;
+    background: var(--s-surface);
+    border: 1px solid var(--s-border);
+    border-collapse: separate;
+    border-spacing: 0;
+    box-shadow: var(--s-shadow-sm);
+    /* overflow: visible -- inputs/menus must not be clipped */
+}
+
+/* Form section heading: first row of each per-section <TABLE>.
+ * Full-width navy bar mirrors .s-list__head — consistent visual language
+ * across forms and lists. */
+.s-form__section > .s-form__heading {
+    padding: 4px var(--s-space-3);
+    background: var(--s-primary);
+    color: var(--s-surface);
+    font-weight: 600;
+    font-size: var(--s-fs-label);
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    text-align: left;
+}
+
+/* Padding/border on every cell of a data row. Vertical padding is tight
+ * to keep forms dense; horizontal padding gives labels room to breathe. */
+.s-form__row > td,
+.s-form__row > th {
+    padding: 5px var(--s-space-3);
+    vertical-align: top;
+    border-bottom: 1px solid var(--s-border-subtle);
+}
+
+/* Label cell: all-caps micro-label — the standard enterprise field label
+ * pattern (Salesforce, GitHub, AWS). Recedes behind the 14px value text
+ * while signalling "this is a form field" unambiguously. */
+.s-form__row > .s-form__label,
+.s-form__row > td:first-child {
+    width: 28%;
+    padding-right: var(--s-space-3);
+    padding-top: 5px;
+    color: var(--s-muted);
+    font-weight: 600;
+    font-size: var(--s-fs-label);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    text-align: left;
+    vertical-align: top;
+    white-space: nowrap;
+}
+
+.s-form__row > .s-form__value {
+    color: var(--s-text);
+}
+
+/* No bottom border on the last row -- keeps the rounded container
+ * corner clean. */
+.s-form > tbody > .s-form__row:last-child > .s-form__label,
+.s-form > tbody > .s-form__row:last-child > .s-form__value,
+.s-form > .s-form__row:last-child > .s-form__label,
+.s-form > .s-form__row:last-child > .s-form__value {
+    border-bottom: 0;
+}
+
+/* Row hover — same visual language as .s-list__row:hover but lighter
+ * since form rows are edited, not just scanned. */
+.s-form__row:hover > td,
+.s-form__row:hover > th {
+    background: color-mix(in srgb, var(--s-primary) 3%, var(--s-surface));
+}
+
+/* Read-only modifier: mute color and add a subtle background so the row
+ * is visually distinct from editable rows without a loud grey block. */
+.s-form__row.is-readonly > .s-form__value,
+.s-form__row.is-readonly > td:last-child {
+    color: var(--s-muted);
+    background: color-mix(in srgb, var(--s-primary) 2%, var(--s-surface));
+}
+
+/* Empty read-only value cells show a dash so the row doesn't look broken. */
+.s-form__row.is-readonly > .s-form__value:empty::after,
+.s-form__row.is-readonly > td:last-child:empty::after {
+    content: '\2014';
+    color: var(--s-border);
+}
+
+/* Input styling is scoped to .s-form so <input>s in the legacy
+ * (un-classed) markup retain browser defaults. */
+.s-form input[type="text"],
+.s-form input[type="password"],
+.s-form input[type="email"],
+.s-form input[type="number"],
+.s-form input[type="search"],
+.s-form input[type="url"],
+.s-form input[type="tel"],
+.s-form select,
+.s-form textarea {
+    font: inherit;
+    font-size: var(--s-fs-sm);
+    color: var(--s-text);
+    background: var(--s-surface);
+    border: 1px solid var(--s-border);
+    padding: 2px 6px;
+    vertical-align: middle;
+    line-height: 1.3;
+    box-sizing: border-box;
+    transition: border-color 0.12s ease;
+}
+
+/* select height is controlled by browser UA; pin it explicitly so
+ * it matches the height of adjacent text inputs. */
+.s-form select {
+    height: 22px;
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+.s-form textarea {
+    font-size: var(--s-fs-sm);
+    line-height: 1.4;
+    resize: vertical;
+    vertical-align: top;
+}
+
+.s-form input:focus,
+.s-form select:focus,
+.s-form textarea:focus {
+    border-color: var(--s-link);
+    outline: 0;
+    background: color-mix(in srgb, var(--s-link) 2%, var(--s-surface));
+}
+
+.s-form input:disabled,
+.s-form select:disabled,
+.s-form textarea:disabled {
+    background: var(--s-bg);
+    color: var(--s-muted);
+    cursor: not-allowed;
+}
+
+/* form_magic() adds this modifier; hook for edit-only overrides. */
+.s-form.s-form--edit { /* no-op */ }
+
+
+/* Lists (.s-list) -- result tables emitted by display_list().
+ * Zebra stripe stays subtle: these views often render thousands of
+ * rows and any louder pattern fatigues the eye. */
+
+.s-list {
+    width: 100%;
+    margin: var(--s-space-3) 0;
+    background: var(--s-surface);
+    border: 1px solid var(--s-border);
+    border-collapse: separate;
+    border-spacing: 0;
+    box-shadow: var(--s-shadow-sm);
+}
+
+.s-list__head > th,
+.s-list__head > td {
+    padding: 4px var(--s-space-2);
+    background: var(--s-primary);
+    color: var(--s-surface);
+    font-weight: 600;
+    font-size: var(--s-fs-sm);
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    text-align: left;
+    white-space: nowrap;
+    border-bottom: 1px solid color-mix(in srgb, var(--s-primary) 70%, black);
+}
+
+/* Per-column center override for individual header cells (e.g. bool columns).
+ * width:1% tells the browser to shrink these columns to their minimum needed
+ * width so they don't steal space from adjacent text columns. */
+.s-list__head > th.s-th--center {
+    text-align: center;
+    width: 1%;
+}
+
+/* Short-value columns (OR/AND, status codes) — centered without the
+ * width:1% shrink applied to bool-icon columns. */
+.s-list__head > th.s-th--mid {
+    text-align: center;
+}
+.s-list__row > td.s-td--mid {
+    text-align: center;
+    white-space: nowrap;
+}
+
+/* Text/action columns that should shrink to their content. */
+.s-list__head > th.s-th--share {
+    white-space: nowrap;
+}
+.s-list__row > td.s-td--share {
+    white-space: nowrap;
+}
+
+/* Name column: minimum width prevents it from collapsing on short values,
+ * no upper bound — it expands to fill whatever space the other columns leave. */
+.s-list__head > th.s-th--name {
+    min-width: 140px;
+}
+
+/* Bool icon columns must not wrap their short header labels. */
+.s-list__head > th.s-th--center {
+    white-space: nowrap;
+}
+
+/* Sortable column headers are <a> links — force them to inherit the white
+ * cell colour so they don't show the global link blue on navy background. */
+.s-list__head > th a,
+.s-list__head > td a {
+    color: inherit;
+    text-decoration: none;
+}
+.s-list__head > th a:hover,
+.s-list__head > td a:hover {
+    text-decoration: underline;
+    opacity: 0.85;
+}
+
+.s-list__row > td {
+    padding: 5px var(--s-space-2);
+    color: var(--s-text);
+    border-bottom: 1px solid var(--s-border-subtle);
+    vertical-align: top;
+    font-family: var(--s-font-data);
+    font-size: var(--s-fs-sm);
+    font-variant-numeric: tabular-nums;
+}
+
+/* Links inside data rows: subdued navy, not bright link-blue.
+ * Enterprise data tables treat row content as data, not navigation. */
+.s-list__row > td a {
+    color: var(--s-primary);
+    text-decoration: none;
+    font-weight: 500;
+}
+.s-list__row > td a:hover {
+    text-decoration: underline;
+    color: var(--s-primary-light);
+}
+
+.s-list__row:nth-child(odd) > td {
+    background: color-mix(in srgb, var(--s-primary) 4%, var(--s-surface));
+}
+
+.s-list__row:hover > td {
+    background: color-mix(in srgb, var(--s-primary) 8%, var(--s-surface));
+    transition: background 60ms ease;
+}
+
+.s-list > tbody > .s-list__row:last-child > td,
+.s-list > .s-list__row:last-child > td {
+    border-bottom: 0;
+}
+
+
+/* Dialog (.s-dialog) -- confirm card for destructive actions
+ * (delete, disable, move host, ...) emitted by display_dialog(). */
+
+.s-dialog {
+    max-width: 720px;
+}
+
+.s-dialog__title {
+    margin: 0 0 var(--s-space-3) 0;
+    color: var(--s-primary);
+    font-size: var(--s-fs-xl);
+    font-weight: 600;
+    line-height: 1.3;
+}
+
+.s-dialog__form {
+    margin: 0;
+}
+
+
+.s-dialog__actions {
+    display: flex;
+    gap: var(--s-space-2);
+    justify-content: flex-end;
+    margin-top: var(--s-space-3);
+}
+
+
+/* Buttons (.s-btn) -- base + primary/secondary intents. */
+
+.s-btn {
+    display: inline-block;
+    padding: var(--s-space-2) var(--s-space-3);
+    font: inherit;
+    font-weight: 500;
+    line-height: 1.2;
+    color: var(--s-text);
+    background: var(--s-surface);
+    border: 1px solid var(--s-border);
+    border-radius: var(--s-radius);
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.s-btn:hover {
+    background: var(--s-bg);
+    border-color: color-mix(in srgb, var(--s-primary) 40%, var(--s-border));
+    color: var(--s-primary);
+}
+
+.s-btn:active {
+    opacity: 0.85;
+}
+
+.s-btn--primary {
+    background: var(--s-primary);
+    border-color: var(--s-primary);
+    color: var(--s-surface);
+}
+
+.s-btn--primary:hover {
+    background: var(--s-primary-light);
+    border-color: var(--s-primary-light);
+}
+
+.s-btn--secondary {
+    background: var(--s-surface);
+    color: var(--s-text);
+    border-color: var(--s-border);
+}
+
+.s-btn--secondary:hover {
+    background: var(--s-bg);
+}
+
+
+
+/* ---- Alerts -----------------------------------------------------------
+ * Emitted by alert1 / alert2 / warning1 / html_error in Sauron::CGIutil
+ * and a handful of inline sites that warned the user with red headings.
+ * Carry a role="alert" attribute; the visual cue is colour + an icon so
+ * the meaning survives the colour being filtered or unstyled. */
+.s-alert {
+    display: flex;
+    align-items: center;
+    gap: var(--s-space-2);
+    padding: var(--s-space-2) var(--s-space-3);
+    margin: var(--s-space-3) 0;
+    border: 1px solid transparent;
+    border-radius: var(--s-radius);
+    font-size: var(--s-fs-base);
+    line-height: 1.4;
+}
+
+.s-alert::before {
+    content: '';
+    display: block;
+    flex-shrink: 0;
+    width: 14px;
+    height: 14px;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: contain;
+    flex-shrink: 0;
+}
+
+.s-alert--inline {
+    padding: var(--s-space-1) var(--s-space-2);
+    margin: var(--s-space-2) 0;
+    font-size: var(--s-fs-sm);
+}
+
+.s-alert--error {
+    background: color-mix(in srgb, var(--s-danger) 10%, var(--s-surface));
+    border-color: color-mix(in srgb, var(--s-danger) 40%, var(--s-surface));
+    color: color-mix(in srgb, var(--s-danger) 80%, black);
+}
+
+.s-alert--error::before {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cline x1='2' y1='2' x2='10' y2='10' stroke='%23dc3545' stroke-width='2' stroke-linecap='round'/%3E%3Cline x1='10' y1='2' x2='2' y2='10' stroke='%23dc3545' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+
+.s-alert--warning {
+    background: color-mix(in srgb, var(--s-warning) 20%, var(--s-surface));
+    border-color: color-mix(in srgb, var(--s-warning) 60%, var(--s-surface));
+    color: color-mix(in srgb, var(--s-warning) 30%, black);
+}
+
+.s-alert--warning::before {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M6 1L11 11H1Z' stroke='%23856404' stroke-width='1.5' fill='none' stroke-linejoin='round'/%3E%3Cline x1='6' y1='4.5' x2='6' y2='7' stroke='%23856404' stroke-width='1.5' stroke-linecap='round'/%3E%3Ccircle cx='6' cy='9' r='0.8' fill='%23856404'/%3E%3C/svg%3E");
+}
+
+.s-alert--success {
+    background: color-mix(in srgb, var(--s-success) 12%, var(--s-surface));
+    border-color: color-mix(in srgb, var(--s-success) 40%, var(--s-surface));
+    color: color-mix(in srgb, var(--s-success) 75%, black);
+}
+
+.s-alert--success::before {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpolyline points='1,6.5 4.5,10.5 11,1.5' stroke='%23198754' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+.s-alert--info {
+    background: color-mix(in srgb, var(--s-info) 12%, var(--s-surface));
+    border-color: color-mix(in srgb, var(--s-info) 40%, var(--s-surface));
+    color: color-mix(in srgb, var(--s-info) 80%, black);
+}
+
+.s-alert--info::before {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Ccircle cx='6' cy='6' r='5' stroke='%230dcaf0' stroke-width='1.5' fill='none'/%3E%3Cline x1='6' y1='5' x2='6' y2='9' stroke='%230dcaf0' stroke-width='1.5' stroke-linecap='round'/%3E%3Ccircle cx='6' cy='3' r='0.8' fill='%230dcaf0'/%3E%3C/svg%3E");
+}
+
+
+/* ---- Page shell -------------------------------------------------------
+ * Two-column desktop layout with a sticky-ish top bar. Sized for the
+ * 1024px lower bound declared on body. The legacy <TABLE bgcolor=black>
+ * scaffolding is gone; grid + named regions take its place. */
+.s-shell {
+    display: grid;
+    grid-template-columns: 190px minmax(0, 1fr);
+    align-items: start;
+    gap: 0;
+    min-height: calc(100vh - var(--s-topbar-h) - 32px);
+    background: var(--s-bg);
+}
+
+.s-main {
+    padding: var(--s-space-3) var(--s-space-4);
+    background: var(--s-bg);
+    min-width: 0;
+    animation: s-page-in 0.12s ease both;
+}
+
+@keyframes s-page-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+/* ---- Top bar ----------------------------------------------------------
+ * Background defaults to the deployment colour fed by theme_style_block;
+ * when an operator overrides $SAURON_TOPMENU_BGCOLOR the var carries the
+ * new value. Foreground colour follows the same channel. */
+.s-topbar {
+    display: flex;
+    align-items: center;
+    gap: var(--s-space-3);
+    padding: 0 var(--s-space-3);
+    background: var(--s-env-color, var(--s-primary));
+    color: var(--s-env-fg, #fff);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.15);
+    height: var(--s-topbar-h);
+}
+
+.s-topbar__logo img {
+    display: block;
+    height: 32px;
+    width: auto;
+    border: 0;
+}
+
+.s-topbar__title {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+}
+
+.s-topbar__env {
+    padding: 2px 8px;
+    border-radius: var(--s-radius);
+    background: rgba(255, 255, 255, 0.18);
+    color: inherit;
+    font-size: var(--s-fs-sm);
+    font-weight: 700;
+    letter-spacing: 0.5px;
+}
+
+.s-topbar__nav {
+    flex: 1 1 auto;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s-space-1);
+    margin-left: var(--s-space-2);
+}
+
+.s-topbar__link {
+    display: inline-flex;
+    align-items: center;
+    height: var(--s-topbar-h);
+    padding: 0 10px;
+    color: inherit;
+    text-decoration: none;
+    font-size: var(--s-fs-sm);
+    font-weight: 500;
+    opacity: 0.85;
+    border-radius: var(--s-radius);
+    transition: background 100ms ease, opacity 100ms ease;
+}
+
+.s-topbar__link:hover,
+.s-topbar__link:focus-visible {
+    background: rgba(255, 255, 255, 0.15);
+    text-decoration: none;
+}
+
+.s-topbar__server {
+    margin-left: auto;
+    font-size: var(--s-fs-sm);
+    opacity: 0.9;
+    white-space: nowrap;
+}
+
+.s-topbar__logout {
+    display: inline-flex;
+    align-items: center;
+    height: 26px;
+    padding: 0 var(--s-space-2);
+    margin-left: var(--s-space-2);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: var(--s-radius);
+    color: inherit;
+    text-decoration: none;
+    font-size: var(--s-fs-sm);
+    white-space: nowrap;
+    opacity: 0.75;
+    transition: opacity 80ms ease, background 80ms ease;
+}
+.s-topbar__logout:hover {
+    opacity: 1;
+    background: rgba(255, 255, 255, 0.15);
+    text-decoration: none;
+}
+.s-topbar :focus-visible.s-topbar__logout {
+    outline-color: #ffffff;
+}
+
+/* ---- Sidebar ----------------------------------------------------------
+ * Per-section menu + the "Current selections" panel that summarizes the
+ * server/zone/SID the user is operating on. */
+.s-sidebar {
+    width: 190px;
+    padding: var(--s-space-2) var(--s-space-2);
+    background: #f5f7fa;
+    border-right: 1px solid var(--s-border);
+    min-height: 100%;
+}
+
+.s-sidebar__menu {
+    margin-bottom: var(--s-space-2);
+}
+
+.s-sidebar__heading {
+    margin: var(--s-space-2) 0 2px 0;
+    padding: 2px var(--s-space-2);
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--s-muted);
+    border-bottom: none;
+}
+
+.s-sidebar__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.s-sidebar__item {
+    margin: 0;
+}
+
+.s-sidebar__link {
+    display: block;
+    padding: 4px var(--s-space-2);
+    color: var(--s-muted);
+    text-decoration: none;
+    font-size: 13px;
+    border-radius: var(--s-radius);
+    transition: background 100ms ease, color 100ms ease;
+}
+
+.s-sidebar__link:hover,
+.s-sidebar__link:focus-visible {
+    background: rgba(0, 45, 95, 0.06);
+    color: var(--s-primary);
+}
+
+.s-sidebar__sep {
+    list-style: none;
+    height: 1px;
+    margin: var(--s-space-1) var(--s-space-2);
+    background: var(--s-border-subtle);
+}
+
+.s-sidebar__empty {
+    padding: var(--s-space-2);
+    color: var(--s-muted);
+    font-style: italic;
+}
+
+.s-sidebar__deflist {
+    margin: 0;
+    padding: 0 var(--s-space-2);
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 3px var(--s-space-2);
+    font-size: var(--s-fs-sm);
+}
+
+.s-sidebar__deflist dt {
+    color: var(--s-muted);
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding-top: 1px;
+}
+
+.s-sidebar__deflist dd {
+    margin: 0;
+    font-weight: 600;
+    color: var(--s-text);
+    font-family: var(--s-font-data);
+    word-break: break-word;
+}
+
+/* ---- Footer -----------------------------------------------------------
+ * Minimal coloured strip; matches the topbar so the page reads as one
+ * framed surface even without the legacy black borders. */
+.s-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding: 0 var(--s-space-3);
+    background: var(--s-bg);
+    border-top: 1px solid var(--s-border);
+    color: var(--s-muted);
+    font-size: 11px;
+    letter-spacing: 0.02em;
+    height: 24px;
+}
+
+
+/* ---- Browser variant --------------------------------------------------
+ * cgi/browser.cgi is a separate CGI without the admin shell. It picks up
+ * the topbar and list styles from the shared file and adds a slimmer
+ * single-column main region and zebra striping for the dense host list. */
+.s-topbar--browser {
+    min-height: 48px;
+    background: var(--s-primary);
+    color: #fff;
+}
+
+.s-topbar--browser .s-topbar__title {
+    font-size: var(--s-fs-xl);
+}
+
+.s-browser__form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s-space-2);
+    align-items: center;
+    margin: var(--s-space-3) 0;
+}
+
+.s-browser__form label {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--s-space-1);
+    color: var(--s-muted);
+    font-size: var(--s-fs-sm);
+}
+
+.s-browser__form select,
+.s-browser__form input[type="text"] {
+    padding: 2px 6px;
+    font-size: var(--s-fs-sm);
+    border: 1px solid var(--s-border);
+    font: inherit;
+}
+
+.s-browser__help {
+    margin: var(--s-space-2) 0;
+    text-align: right;
+    font-size: var(--s-fs-sm);
+}
+
+.s-list--browser td {
+    font-size: var(--s-fs-sm);
+}
+
+.s-list--browser td small {
+    font-size: var(--s-fs-sm);
+    color: var(--s-muted);
+}
+
+
+/* ---- Host-form modifiers ----------------------------------------------
+ * Sauron::CGI::Hosts switches $host_form->{cssclass} so a host that is
+ * past its expiration date or a reservation/alias type renders with a
+ * subtle tint instead of the legacy inline bgcolor. */
+.s-form--expired {
+    background: color-mix(in srgb, var(--s-danger) 8%, var(--s-surface));
+    border-color: color-mix(in srgb, var(--s-danger) 30%, var(--s-border));
+}
+
+.s-form--alias {
+    background: color-mix(in srgb, var(--s-info) 8%, var(--s-surface));
+    border-color: color-mix(in srgb, var(--s-info) 30%, var(--s-border));
+}
+
+
+/* Nets: parent network rows are bold so they stand out in the hierarchy. */
+.s-list__row[data-net-state="net"] > td { font-weight: 600; }
+
+
+/* ---- Approval workflow detail -----------------------------------------
+ * Approvals.pm rendered hand-rolled tables with #ccccff / #ccffcc /
+ * #ffcccc inline tints to signal status, decision and audit-log severity.
+ * The outer <section> carries data-status, individual rows carry
+ * data-decision / data-event, and the tints + icon prefixes come from
+ * the stylesheet so colour-blind users still pick up the cue. */
+.s-approval {
+    display: block;
+    margin-bottom: var(--s-space-4);
+    padding: var(--s-space-3);
+    border-radius: var(--s-radius-lg);
+    border: 1px solid var(--s-border);
+    background: var(--s-surface);
+}
+
+.s-approval[data-status="pending"] {
+    border-left: 4px solid var(--s-warning);
+}
+
+.s-approval[data-status="approved"] {
+    border-left: 4px solid var(--s-success);
+}
+
+.s-approval[data-status="rejected"] {
+    border-left: 4px solid var(--s-danger);
+}
+
+.s-approval__badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: var(--s-radius);
+    font-size: var(--s-fs-sm);
+    font-weight: 600;
+}
+
+.s-approval[data-status="pending"]   .s-approval__badge {
+    background: color-mix(in srgb, var(--s-warning) 20%, var(--s-surface));
+    color: color-mix(in srgb, var(--s-warning) 30%, black);
+}
+.s-approval[data-status="approved"]  .s-approval__badge {
+    background: color-mix(in srgb, var(--s-success) 16%, var(--s-surface));
+    color: color-mix(in srgb, var(--s-success) 70%, black);
+}
+.s-approval[data-status="rejected"]  .s-approval__badge {
+    background: color-mix(in srgb, var(--s-danger) 14%, var(--s-surface));
+    color: color-mix(in srgb, var(--s-danger) 70%, black);
+}
+
+.s-approval[data-status="approved"] .s-approval__badge::before  { content: "\2713 "; }
+.s-approval[data-status="rejected"] .s-approval__badge::before  { content: "\2717 "; }
+
+.s-approval table {
+    margin-top: var(--s-space-2);
+}
+
+
+
+/* ---- MOTD + document blocks -------------------------------------------
+ * The login splash renders a list of operator messages of the day, and
+ * the About menu shows COPYING / COPYRIGHT in fixed-width type.
+ * Replaces the legacy <TABLE bgcolor="#eaeaff"> and bare <PRE> blocks. */
+.s-motd {
+    margin: var(--s-space-3) 0;
+    padding: var(--s-space-3);
+    border-radius: var(--s-radius);
+    border: 1px solid var(--s-border-subtle);
+    background: color-mix(in srgb, var(--s-info) 6%, var(--s-surface));
+}
+
+.s-motd__heading {
+    margin: 0 0 var(--s-space-2) 0;
+    font-size: var(--s-fs-lg);
+    color: var(--s-primary);
+}
+
+.s-motd__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.s-motd__item + .s-motd__item {
+    margin-top: var(--s-space-2);
+    padding-top: var(--s-space-2);
+    border-top: 1px solid var(--s-border-subtle);
+}
+
+.s-motd__byline {
+    margin-top: var(--s-space-1);
+    color: var(--s-muted);
+    font-size: var(--s-fs-sm);
+    font-style: italic;
+}
+
+/* COPYRIGHT — shrinks to longest line, monospace pre block */
+.s-document {
+    width: fit-content;
+    margin: var(--s-space-4) auto;
+    padding: var(--s-space-4);
+    border: 1px solid var(--s-border);
+    background: var(--s-surface);
+    overflow-x: auto;
+}
+
+.s-document pre {
+    margin: 0;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: var(--s-fs-sm);
+    line-height: 1.45;
+    color: var(--s-text);
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+/* LICENSE (COPYING) — reflowed paragraphs, justified */
+.s-document--license {
+    max-width: 540px;
+    margin: var(--s-space-4) auto;
+    padding: var(--s-space-4);
+    border: 1px solid var(--s-border);
+    background: var(--s-surface);
+    font-size: var(--s-fs-sm);
+    line-height: 1.55;
+    color: var(--s-text);
+    hyphens: auto;
+    -webkit-hyphens: auto;
+}
+
+.s-document--license p {
+    margin: 0 0 0.6em;
+    text-align: justify;
+    text-justify: inter-word;
+}
+
+.s-document--license p:last-child {
+    margin-bottom: 0;
+}
+
+.s-document--license p.center {
+    text-align: center;
+    font-weight: 600;
+    margin: 1em 0 0.3em;
+}
+
+.s-document--license p.subitem {
+    padding-left: 2em;
+}
+
+
+/* ---- Sortable column header indicator --------------------------------
+ * icons/sauron.js sets aria-sort=ascending|descending on the active
+ * <th>. Show a small caret so the operator knows which column drives
+ * the current order. Plain (unsorted) headers stay quiet. */
+.s-list__th--sortable {
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+    transition: background 80ms;
+}
+
+.s-list__th--sortable:hover {
+    background: color-mix(in srgb, var(--s-primary) 75%, black);
+}
+
+.s-list__th--sortable[aria-sort="ascending"]::after  { content: " \25B2"; opacity: 0.8; }
+.s-list__th--sortable[aria-sort="descending"]::after { content: " \25BC"; opacity: 0.8; }
+
+
+/* ---- Skip link --------------------------------------------------------
+ * Visually hidden until focused. Keyboard users land on it first and
+ * can jump past the topbar+sidebar directly into <main id="main">. */
+.s-skip-link {
+    position: absolute;
+    left: -9999px;
+    top: 0;
+    z-index: 1000;
+    padding: var(--s-space-2) var(--s-space-3);
+    background: var(--s-primary);
+    color: #fff;
+    text-decoration: none;
+    border-radius: 0 0 var(--s-radius) 0;
+    font-weight: 600;
+}
+
+.s-skip-link:focus,
+.s-skip-link:focus-visible {
+    left: 0;
+    outline: 2px solid #fff;
+    outline-offset: -4px;
+}
+
+
+/* Zone expiry: only expiry state warrants a row colour since it signals
+ * imminent data loss. Zone type (master/slave/forward) is conveyed by
+ * the TYPE column text and does not need a background cue. */
+.s-list .s-list__row[data-zone-expiry="expired"]  > td { background: color-mix(in srgb, var(--s-danger)  14%, var(--s-surface)); }
+.s-list .s-list__row[data-zone-expiry="expiring"] > td { background: color-mix(in srgb, var(--s-warning) 14%, var(--s-surface)); }
+
+
+/* ---- ACL editor and multi-value field sub-tables ----------------------
+ * CGIutil emits nested tables for ftype 2 (NS/DS/MX entries),
+ * ftype 12 (ACL editor), etc. No outer border — the sub-table lives
+ * inside a form cell that already has border context. */
+.s-form__multi {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+/* Column header row: just a bottom rule and muted label text.
+ * The old navy/tinted header was too heavy inside a form cell. */
+.s-form__multi .s-list__head td,
+.s-form__multi .s-list__head th {
+    padding: 2px var(--s-space-2) 2px 0;
+    font-size: var(--s-fs-sm);
+    font-weight: 600;
+    color: var(--s-muted);
+    border-bottom: 1px solid var(--s-border);
+    background: transparent;
+    text-align: left;
+}
+
+.s-form__multi td {
+    padding: 2px var(--s-space-2) 2px 0;
+    font-size: var(--s-fs-sm);
+    border-bottom: 1px solid var(--s-border-subtle);
+    white-space: nowrap;
+    vertical-align: top;
+    vertical-align: middle;
+}
+
+/* All inputs/selects inside multi-value sub-tables share the same 22px
+ * height so the row never has mismatched inline elements. */
+.s-form__multi input[type="text"],
+.s-form__multi input[type="number"],
+.s-form__multi select {
+    height: 22px;
+    padding: 0 4px;
+    font-size: var(--s-fs-sm);
+    vertical-align: middle;
+    box-sizing: border-box;
+}
+
+/* Override the size= attribute CGI.pm emits: fill the cell's computed width.
+ * Scoped to cells that hold only a text/number input (not enum cells, which
+ * contain a select + input pair and need their natural inline layout). */
+.s-form__multi tr:not(.s-list__head) > td:not(:has(select)) > input[type="text"],
+.s-form__multi tr:not(.s-list__head) > td:not(:has(select)) > input[type="number"] {
+    width: 100%;
+    min-width: 0;
+}
+
+/* Add/Delete buttons inside multi-value sub-tables: fixed height to match
+ * adjacent inputs, and always secondary (white) so they never compete with
+ * the main form submit. Their values are not in the primary [value=] list
+ * promoteFirstSubmit() may have assigned when this button happened to be
+ * first in the form. */
+/* Sub-table buttons (Add CIDR, Add ACL, Add KEY, etc.) are secondary by
+ * default because their values are not in the primary [value=] list above.
+ * Height is pinned to match adjacent inputs. */
+.s-form__multi input[type="submit"],
+.s-form__multi input[type="button"],
+.s-form__multi button {
+    padding: 0 var(--s-space-2);
+    height: 22px;
+    font-size: var(--s-fs-sm);
+    vertical-align: middle;
+    box-sizing: border-box;
+}
+
+/* Inline submit buttons inside form value cells (Update, refresh, ftype==6/7
+ * template selectors etc.) — only normalize height to match adjacent inputs.
+ * Color is handled by [value=] selectors above. */
+.s-form td input[type="submit"],
+.s-form td input[type="button"] {
+    height: 22px;
+    padding: 0 var(--s-space-2);
+    font-size: var(--s-fs-sm);
+    vertical-align: middle;
+    box-sizing: border-box;
+}
+
+/* Submit buttons inside list rows get the same height as form buttons.
+ * Color is handled by value-based selectors above. */
+.s-list__row td input[type="submit"],
+.s-list__row td input[type="button"] {
+    height: 20px;
+    padding: 0 var(--s-space-2);
+    font-size: var(--s-fs-sm);
+    vertical-align: middle;
+    box-sizing: border-box;
+}
+
+.s-acl__input {
+    vertical-align: middle;
+}
+
+/* The ACL "add new entry" block: top border on the CIDR row. */
+.s-form__multi tr:first-of-type > td {
+    border-top: 1px solid var(--s-border);
+}
+
+/* Intentionally-empty placeholder cell — grayed to signal "not applicable
+ * for this row". No name attribute so it never submits. */
+.s-acl__ph {
+    background: var(--s-bg);
+    border: 1px solid var(--s-border-subtle);
+    border-radius: var(--s-radius);
+    min-width: 20px;
+}
+
+
+.s-form__value--area {
+    background: var(--s-bg);
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: var(--s-fs-sm);
+    padding: var(--s-space-1) var(--s-space-2);
+}
+
+.s-form__template {
+    margin: 0;
+    font-size: var(--s-fs-sm);
+}
+
+
+/* ---- Login card -------------------------------------------------------
+ * The login, login-ok and logout pages use a centred card instead of
+ * the legacy nested table. The card picks up the environment colour via
+ * the header strip so the DEMO/PROD/DEV identity is visible even before
+ * the operator authenticates. */
+.s-login-wrap {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: var(--s-space-5) var(--s-space-3);
+    min-height: 50vh;
+}
+
+.s-login-card {
+    width: 100%;
+    max-width: 480px;
+    border: 1px solid var(--s-border);
+    border-radius: var(--s-radius-lg);
+    background: var(--s-surface);
+    box-shadow: var(--s-shadow);
+    overflow: hidden;
+}
+
+.s-login-card__head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--s-space-2) var(--s-space-3);
+    background: var(--s-env-color, var(--s-primary));
+    color: var(--s-env-fg, #fff);
+    font-weight: 600;
+    gap: var(--s-space-2);
+}
+
+.s-login-card__head img {
+    height: 36px;
+    width: auto;
+    vertical-align: middle;
+    margin-right: var(--s-space-2);
+    border: 0;
+}
+
+.s-login-card__body {
+    padding: var(--s-space-4);
+}
+
+.s-login-fields {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: var(--s-space-2) var(--s-space-3);
+    align-items: center;
+    margin: var(--s-space-3) 0;
+}
+
+.s-login-fields label {
+    font-weight: 500;
+    color: var(--s-muted);
+    white-space: nowrap;
+}
+
+.s-login-fields input {
+    width: 100%;
+    padding: 4px 8px;
+    border: 1px solid var(--s-border);
+    font: inherit;
+}
+
+/* Inline filter/action forms where a text input or select sits directly
+ * next to a submit button. Elements get explicit sizing so they align. */
+.s-inline-form {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--s-space-2);
+}
+
+.s-inline-form input[type="text"],
+.s-inline-form input[type="search"],
+.s-inline-form input[type="number"],
+.s-inline-form select {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 22px;
+    padding: 0 6px;
+    font: inherit;
+    font-size: var(--s-fs-sm);
+    color: var(--s-text);
+    background: var(--s-surface);
+    border: 1px solid var(--s-border);
+    box-sizing: border-box;
+    vertical-align: middle;
+}
+
+
+.s-login-fields input:focus {
+    outline: 2px solid var(--s-link);
+    outline-offset: 1px;
+}
+
+
+/* ---- Deployment theme settings form ----------------------------------- */
+.s-theme-form {
+    display: grid;
+    grid-template-columns: max-content 1fr auto;
+    gap: var(--s-space-2) var(--s-space-3);
+    align-items: center;
+    max-width: 560px;
+    margin: var(--s-space-3) 0;
+}
+
+.s-theme-form label {
+    font-weight: 500;
+    color: var(--s-muted);
+}
+
+.s-theme-form input[type="text"] {
+    padding: 5px 8px;
+    border: 1px solid var(--s-border);
+    border-radius: var(--s-radius);
+    font: inherit;
+    width: 100%;
+}
+
+.s-theme-form input[type="color"] {
+    height: 32px;
+    width: 40px;
+    border: 1px solid var(--s-border);
+    border-radius: var(--s-radius);
+    cursor: pointer;
+    padding: 2px;
+}
+
+.s-theme-form small,
+.s-theme-form__hint {
+    grid-column: 2 / -1;
+    font-size: var(--s-fs-sm);
+    color: var(--s-muted);
+}
+
+.s-theme-form__actions {
+    display: flex;
+    gap: var(--s-space-2);
+    margin-top: var(--s-space-2);
+}
+
+.s-theme-preview {
+    margin-top: var(--s-space-3);
+    max-width: 560px;
+    border: 1px solid var(--s-border);
+    overflow: hidden;
+}
+
+.s-theme-preview__bar {
+    padding: 6px 12px;
+    font-weight: 600;
+    font-size: 13px;
+    display: flex;
+    gap: var(--s-space-2);
+    align-items: center;
+}
+
+.s-theme-preview__server {
+    margin-left: auto;
+    font-size: var(--s-fs-sm);
+    opacity: 0.9;
+}
+
+.s-theme-preview__hint {
+    font-size: var(--s-fs-label);
+    color: var(--s-muted);
+    margin: 3px 0 0;
+    padding: 2px var(--s-space-2);
+}
+
+.s-theme-snippet {
+    margin-top: var(--s-space-3);
+    max-width: 560px;
+}
+.s-theme-snippet__header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--s-space-2);
+    margin-bottom: var(--s-space-1);
+}
+.s-theme-snippet__header label { color: var(--s-muted); font-size: var(--s-fs-sm); }
+.s-theme-snippet pre {
+    background: var(--s-bg);
+    border: 1px solid var(--s-border);
+    padding: var(--s-space-2) var(--s-space-3);
+    font-family: var(--s-font-data);
+    font-size: var(--s-fs-sm);
+    white-space: pre-wrap;
+    margin: 0;
+}
+
+
+/* Hosts: expired/reservation records warrant a colour cue. */
+.s-list .s-list__row[data-host-state="expired"] > td { background: color-mix(in srgb, var(--s-danger) 12%, var(--s-surface)); }
+.s-list .s-list__row[data-host-state="reservation"] > td { background: color-mix(in srgb, var(--s-info) 12%, var(--s-surface)); }
+
+
+/* ---- Active navigation states ----------------------------------------
+ * top_menu() and left_menu() add --active modifiers on the current
+ * section/sub so users know where they are without reading the URL. */
+.s-topbar__link--active {
+    background: transparent;
+    font-weight: 600;
+    border-bottom: 2px solid rgba(255, 255, 255, 0.85);
+    padding-bottom: 2px;
+}
+
+.s-sidebar__link--active {
+    color: var(--s-primary);
+    font-weight: 700;
+    background: color-mix(in srgb, var(--s-primary) 8%, var(--s-surface));
+    border-left: 3px solid var(--s-primary);
+    padding-left: calc(var(--s-space-2) - 3px);
+}
+
+.s-sidebar__link--active:hover {
+    background: color-mix(in srgb, var(--s-primary) 11%, var(--s-surface));
+}
+
+
+/* ---- Page headings ---------------------------------------------------
+ * The CGI emits bare h2/h3 via CGI.pm's h2()/h3() helpers inside
+ * .s-main. Give them a consistent colour and rhythm without touching
+ * individual call sites. */
+.s-main h2 {
+    margin: var(--s-space-2) 0 var(--s-space-2);
+    font-size: 17px;
+    letter-spacing: -0.02em;
+    color: var(--s-primary);
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+.s-main h3 {
+    margin: var(--s-space-2) 0 var(--s-space-1);
+    font-size: 14px;
+    letter-spacing: -0.01em;
+    color: var(--s-text);
+    font-weight: 700;
+    line-height: 1.3;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.s-main h4 {
+    margin: var(--s-space-2) 0 var(--s-space-1);
+    font-size: var(--s-fs-sm);
+    color: var(--s-muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+
+/* ---- Sidebar "Current selections" divider ----------------------------
+ * Visually separate the navigation list from the context summary panel
+ * below it so the sidebar reads as two distinct regions. */
+.s-sidebar__selection {
+    margin-top: var(--s-space-3);
+    padding-top: var(--s-space-3);
+    border-top: 1px solid var(--s-border);
+}
+
+.s-sidebar__selection .s-sidebar__heading {
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    color: var(--s-muted);
+    opacity: 0.7;
+}
+
+
+/* ---- Context bar ------------------------------------------------------
+ * Thin strip between topbar and the shell grid showing the active
+ * server / zone breadcrumb. Keeps the sidebar purely for navigation
+ * and removes the need to hunt for "where am I" context. */
+.s-context-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 32px;
+    padding: 0 var(--s-space-3);
+    background: var(--s-bg);
+    border-bottom: 1px solid var(--s-border);
+    font-size: var(--s-fs-sm);
+}
+
+.s-context-bar__crumb {
+    display: flex;
+    align-items: center;
+    gap: var(--s-space-1);
+    color: var(--s-muted);
+    font-family: var(--s-font-data);
+}
+
+.s-context-bar__label {
+    color: var(--s-muted);
+    font-size: var(--s-fs-sm);
+    font-weight: 400;
+}
+
+.s-context-bar__label::after {
+    content: ':';
+    margin-right: 3px;
+}
+
+.s-context-bar__segment {
+    color: var(--s-text);
+    font-weight: 600;
+    font-family: var(--s-font-data);
+}
+
+.s-context-bar__sep {
+    color: var(--s-border);
+    font-weight: 300;
+    font-size: 14px;
+    line-height: 1;
+    margin: 0 2px;
+}
+
+.s-context-bar__actions {
+    display: flex;
+    gap: var(--s-space-2);
+    align-items: center;
+}
+
+.s-ctx-hint {
+    margin-left: var(--s-space-2);
+}
+.s-ctx-hint__link {
+    color: var(--s-danger);
+    font-size: var(--s-fs-sm);
+    font-weight: 500;
+    text-decoration: none;
+}
+.s-ctx-hint__link:hover { text-decoration: underline; }
+
+
+/* Bare submit/reset inputs that appear as siblings of .s-form-sections
+ * (after form_magic tables) need top breathing room. The general sibling
+ * combinator covers Search/Clear and similar button pairs. */
+.s-form-sections ~ input[type="submit"],
+.s-form-sections ~ input[type="reset"],
+.s-form-outer ~ input[type="submit"],
+.s-form-outer ~ input[type="reset"] {
+    margin-top: var(--s-space-2);
+}
+
+/* ---- Global button normalization -------------------------------------
+ * CGI.pm emits bare <input type="submit"> throughout the app. Give all
+ * of them the .s-btn base treatment inside .s-main so forms look
+ * consistent without adding a class to every call site. The JS layer
+ * promotes the first submit in each form to .s-btn--primary. */
+.s-main input[type="submit"],
+.s-main input[type="reset"],
+.s-main input[type="button"],
+.s-main button {
+    -webkit-appearance: none;
+    appearance: none;
+    display: inline-flex;
+    align-items: center;
+    height: 22px;
+    padding: 0 var(--s-space-3);
+    border: 1px solid var(--s-border);
+    border-radius: var(--s-radius);
+    background: var(--s-surface);
+    color: var(--s-text);
+    font: inherit;
+    font-size: var(--s-fs-sm);
+    cursor: pointer;
+    box-sizing: border-box;
+    transition: background 100ms ease, border-color 100ms ease, color 100ms ease;
+    white-space: nowrap;
+}
+
+.s-main input[type="submit"]:hover,
+.s-main input[type="reset"]:hover,
+.s-main input[type="button"]:hover,
+.s-main button:hover {
+    background: var(--s-bg);
+    border-color: color-mix(in srgb, var(--s-primary) 50%, var(--s-border));
+    color: var(--s-primary);
+}
+
+.s-main input[type="submit"]:active,
+.s-main input[type="reset"]:active,
+.s-main input[type="button"]:active,
+.s-main button:active {
+    background: color-mix(in srgb, var(--s-primary) 8%, var(--s-surface));
+}
+
+.s-main input[type="submit"]:focus-visible,
+.s-main input[type="reset"]:focus-visible,
+.s-main button:focus-visible {
+    outline: 2px solid var(--s-link);
+    outline-offset: 2px;
+}
+
+/* Explicit class still works (Login, browser Search, dialog OK/Cancel). */
+.s-main input.s-btn--primary {
+    background: var(--s-primary);
+    border-color: var(--s-primary);
+    color: #fff;
+    font-weight: 600;
+}
+.s-main input.s-btn--primary:hover {
+    background: var(--s-primary-light);
+    border-color: var(--s-primary-light);
+    color: #fff;
+}
+
+/* Value-based selectors: higher specificity (0,3,1) than the base rule
+ * (0,2,1), so higher specificity (0,3,1) wins. Covers every CGI.pm submit() call
+ * that lacks a class — no JS promotion required. */
+
+/* Primary actions — save / confirm intent */
+.s-main input[type="submit"][value="Apply"],
+.s-main input[type="submit"][value="Create"],
+.s-main input[type="submit"][value^="Create "],
+.s-main input[type="submit"][value="Change password"],
+.s-main input[type="submit"][value="Submit for approval"],
+.s-main input[type="submit"][value="Continue"],
+.s-main input[type="submit"][value="Copy Zone"],
+.s-main input[type="submit"][value="Select"],
+.s-main input[type="submit"][value="Select server"],
+.s-main input[type="submit"][value="Show Hosts"],
+.s-main input[type="submit"][value="Search"],
+.s-main input[type="submit"][value="Go"],
+.s-main input[type="submit"][value="Update"] {
+    background: var(--s-primary);
+    border-color: var(--s-primary);
+    color: #fff;
+    font-weight: 600;
+}
+.s-main input[type="submit"][value="Apply"]:hover,
+.s-main input[type="submit"][value="Create"]:hover,
+.s-main input[type="submit"][value^="Create "]:hover,
+.s-main input[type="submit"][value="Change password"]:hover,
+.s-main input[type="submit"][value="Submit for approval"]:hover,
+.s-main input[type="submit"][value="Continue"]:hover,
+.s-main input[type="submit"][value="Copy Zone"]:hover,
+.s-main input[type="submit"][value="Select"]:hover,
+.s-main input[type="submit"][value="Select server"]:hover,
+.s-main input[type="submit"][value="Show Hosts"]:hover,
+.s-main input[type="submit"][value="Search"]:hover,
+.s-main input[type="submit"][value="Go"]:hover,
+.s-main input[type="submit"][value="Update"]:hover {
+    background: var(--s-primary-light);
+    border-color: var(--s-primary-light);
+    color: #fff;
+}
+
+/* Destructive actions */
+.s-main input[type="submit"][value="Delete"],
+.s-main input[type="submit"][value*="Delete"],
+.s-main input[type="submit"][value="Reject"],
+.s-main input[type="submit"][value="Remove"] {
+    background: var(--s-danger);
+    border-color: var(--s-danger);
+    color: #fff;
+    font-weight: 600;
+}
+.s-main input[type="submit"][value="Delete"]:hover,
+.s-main input[type="submit"][value*="Delete"]:hover,
+.s-main input[type="submit"][value="Reject"]:hover,
+.s-main input[type="submit"][value="Remove"]:hover {
+    background: color-mix(in srgb, var(--s-danger) 85%, black);
+    border-color: color-mix(in srgb, var(--s-danger) 85%, black);
+    color: #fff;
+}
+
+/* Approve */
+.s-main input[type="submit"][value="Approve"] {
+    background: var(--s-success);
+    border-color: var(--s-success);
+    color: #fff;
+    font-weight: 600;
+}
+.s-main input[type="submit"][value="Approve"]:hover {
+    background: color-mix(in srgb, var(--s-success) 85%, black);
+    border-color: color-mix(in srgb, var(--s-success) 85%, black);
+    color: #fff;
+}
+
+
+/* Consistent inline button group — gap replaces ad-hoc &nbsp; separators. */
+.s-btn-group {
+    display: inline-flex;
+    gap: var(--s-space-2);
+    align-items: center;
+    margin-top: var(--s-space-2);
+}
+
+/* Inline-form elements (text filter + Go button etc.): enforce identical
+ * height AFTER the global button rule (same specificity 0,3,1 but later
+ * in the file wins). Both input and submit get exactly 24px so they align. */
+.s-main .s-inline-form input[type="text"],
+.s-main .s-inline-form input[type="search"],
+.s-main .s-inline-form input[type="number"],
+.s-main .s-inline-form select,
+.s-main .s-inline-form input[type="submit"] {
+    height: 22px;
+    box-sizing: border-box;
+    vertical-align: middle;
+    line-height: 1;
+}
+
+/* Server selection: inline-flex column shrinks to the widest natural
+ * child (the select). Default align-items: stretch then makes the submit
+ * button match that width without any percentage-width tricks (those
+ * collapse under intrinsic sizing). Gap replaces the old margin-bottom
+ * so the button no longer feels glued to the dropdown. */
+.s-server-select {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--s-space-3);
+    max-width: 100%;
+}
+.s-main .s-server-select input[type="submit"] {
+    display: flex;
+    width: 100%;
+    justify-content: center;
+}
+
+/* Section separator replacing legacy <HR> — subtle bottom border, no height. */
+.s-section-sep {
+    border-bottom: 1px solid var(--s-border);
+    margin: var(--s-space-3) 0;
+}
+
+/* Boolean indicators — SVG background-image, no Unicode, no transform tricks.
+ * background-position:center handles alignment; block+margin:auto centers
+ * the box horizontally in the cell. */
+.s-bool {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: contain;
+    vertical-align: middle;
+}
+.s-list td:has(.s-bool) {
+    text-align: left;
+    vertical-align: middle;
+}
+
+.s-bool--yes {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpolyline points='1,6.5 4.5,10.5 11,1.5' stroke='%23198754' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+.s-bool--no {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cline x1='2' y1='2' x2='10' y2='10' stroke='%23556270' stroke-width='2' stroke-linecap='round'/%3E%3Cline x1='10' y1='2' x2='2' y2='10' stroke='%23556270' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+
+/* ---- Inline form annotations -----------------------------------------
+ * Validation errors and hint text appear inline inside form value cells.
+ * Both replace the legacy <FONT color="red"> / <FONT color="blue"> markup
+ * that form_magic() and display_form() previously emitted. */
+.s-form__error {
+    color: var(--s-danger);
+    font-size: var(--s-fs-sm);
+}
+
+.s-form__hint {
+    color: var(--s-muted);
+    font-size: var(--s-fs-sm);
+    font-style: italic;
+}
+
+/* Expiration badge rendered inside display_form() value cells. */
+.s-form__badge--danger {
+    display: inline;
+    padding: 1px 6px;
+    border-radius: var(--s-radius);
+    background: color-mix(in srgb, var(--s-danger) 12%, var(--s-surface));
+    color: color-mix(in srgb, var(--s-danger) 80%, black);
+    font-size: var(--s-fs-sm);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+
+/* ---- Inline status badges in list cells ------------------------------
+ * Used in the host search results table for nmap up/down and N/A
+ * indicators that formerly used <font color="..."> inline. */
+.s-badge--success { color: color-mix(in srgb, var(--s-success) 80%, black); font-weight: 500; }
+.s-badge--danger  { color: color-mix(in srgb, var(--s-danger)  80%, black); font-weight: 500; }
+.s-muted { color: var(--s-muted); }
+.s-badge--warning { color: color-mix(in srgb, var(--s-warning) 60%, black); font-weight: 500; }
+
+
+/* ---- Search results meta bar -----------------------------------------
+ * Thin strip above the host search results table showing active Zone,
+ * Net filter, and current page. Replaces the legacy bgcolor="" table. */
+.s-results-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--s-space-3);
+    padding: var(--s-space-1) var(--s-space-2);
+    margin-bottom: calc(-1 * var(--s-space-3));
+    font-size: var(--s-fs-sm);
+    color: var(--s-muted);
+    font-family: var(--s-font-data);
+}
+
+.s-results-bar__crumb { color: var(--s-text); }
+
+.s-results-bar__page {
+    margin-left: auto;
+    color: var(--s-muted);
+}
+
+
+/* ---- Action bar -------------------------------------------------------
+ * Flex strip for action buttons above or below content regions (host
+ * detail top bar, CSV download, etc.). Replaced legacy layout tables
+ * that used width/align attributes. */
+.s-action-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: var(--s-space-1) 0 var(--s-space-2);
+    gap: var(--s-space-2);
+    flex-wrap: wrap;
+}
+
+.s-action-bar__left  { display: flex; align-items: center; gap: var(--s-space-1); flex-wrap: wrap; }
+.s-action-bar__right { display: flex; align-items: center; gap: var(--s-space-1); flex-wrap: wrap; margin-left: auto; }
+
+/* Forms inside action bars are layout-transparent — margin: 0 and
+ * display: contents removes the form's own block box so the submit
+ * button becomes a direct flex item of the action bar. */
+.s-action-bar form {
+    display: contents;
+}
+
+
+/* ---- About page -------------------------------------------------------
+ * Centered card layout for the About/Credits page. */
+.s-about {
+    max-width: 560px;
+    margin: var(--s-space-4) auto;
+    padding: var(--s-space-4);
+    border: 1px solid var(--s-border);
+    border-radius: var(--s-radius-lg);
+    background: var(--s-surface);
+    text-align: center;
+}
+
+.s-about__hero {
+    margin-bottom: var(--s-space-3);
+}
+
+.s-about__logo {
+    border: 0;
+    max-width: 120px;
+    height: auto;
+    display: block;
+    margin: 0 auto var(--s-space-2);
+}
+
+.s-about__version {
+    color: var(--s-text);
+    font-weight: 600;
+    margin: 0 0 var(--s-space-1);
+}
+
+.s-about__tagline {
+    color: var(--s-muted);
+    font-size: var(--s-fs-sm);
+    margin: 0;
+}
+
+.s-about__divider {
+    border: 0;
+    border-top: 1px solid var(--s-border-subtle);
+    margin: var(--s-space-3) 0 var(--s-space-2);
+}
+
+.s-about h3 {
+    margin: 0 0 var(--s-space-1);
+    font-size: var(--s-fs-base);
+    color: var(--s-primary);
+    font-weight: 600;
+}
+
+.s-about p {
+    margin: 0;
+    font-size: var(--s-fs-sm);
+    color: var(--s-muted);
+    line-height: 1.6;
+}
+
+
+/* ---- Pagination -------------------------------------------------------
+ * prev/next navigation below host search results. */
+.s-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--s-space-2);
+    margin: var(--s-space-2) 0;
+    font-size: var(--s-fs-sm);
+}
+
+.s-pagination__link {
+    display: inline-block;
+    padding: 3px var(--s-space-2);
+    border: 1px solid var(--s-border);
+    border-radius: var(--s-radius);
+    color: var(--s-link);
+    text-decoration: none;
+    font-family: inherit;
+    transition: background 80ms;
+}
+
+.s-pagination__link:hover {
+    background: var(--s-bg);
+    border-color: var(--s-primary);
+    color: var(--s-primary);
+    text-decoration: none;
+}
+
+.s-pagination__link.is-disabled {
+    color: var(--s-muted);
+    border-color: var(--s-border-subtle);
+    cursor: default;
+    pointer-events: none;
+}
+
+
+/* ---- Net info panel --------------------------------------------------
+ * Two-column layout: left = net detail form + buttons, right = IP
+ * block usage visualization. Replaced a malformed nested-table layout. */
+.s-net-info {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: var(--s-space-3);
+    align-items: start;
+}
+
+@media (max-width: 1100px) {
+    .s-net-info { grid-template-columns: 1fr; }
+}
+
+
+/* ---- Content links ---------------------------------------------------
+ * Links inside .s-main (table cells, form values, breadcrumbs) use the
+ * link token. Underline on hover only so dense data tables don't feel
+ * cluttered with underlines everywhere. */
+.s-main a {
+    color: var(--s-link);
+    text-decoration: none;
+}
+
+.s-main a:hover {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.s-main a:focus-visible {
+    outline: 2px solid var(--s-link);
+    outline-offset: 2px;
+    border-radius: 0;
+}
+
+
+/* ---- Empty state -------------------------------------------------------
+ * Shown when a search returns zero results instead of a plain alert.
+ * Gives operators a clear signal without the red alert styling that
+ * implies something went wrong. */
+.s-empty-state {
+    padding: var(--s-space-5) var(--s-space-4);
+    text-align: center;
+    color: var(--s-muted);
+    border: 1px solid var(--s-border);
+    margin: var(--s-space-3) 0;
+}
+
+.s-empty-state__title {
+    margin: 0 0 var(--s-space-1);
+    font-size: var(--s-fs-lg);
+    font-weight: 600;
+    color: var(--s-primary);
+    letter-spacing: -0.01em;
+}
+
+.s-empty-state__hint {
+    margin: 0;
+    font-size: var(--s-fs-sm);
+    color: var(--s-muted);
+}
+
+
+/* ---- Inline code ------------------------------------------------------
+ * Monospace badge for technical identifiers in messages, labels, etc.
+ * Replaces _example_code() inline style= in Approvals.pm. */
+.s-code {
+    font-family: var(--s-font-data);
+    font-size: 0.9em;
+    background: color-mix(in srgb, var(--s-primary) 6%, var(--s-surface));
+    border: 1px solid var(--s-border);
+    padding: 1px 5px;
+    border-radius: 2px;
+}
+
+
