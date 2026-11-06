@@ -106,7 +106,7 @@ PROGS = sauron addgroup adduser deluser delgroup modhosts \
 	update-hosts export-vmps import-nets import-dhcp \
 	export-ip-list export-hosts export-by-group keygen \
 	addzone import-zone-comments compare-zones check-reverse \
-	import-catalog-zone \
+	import-catalog-zone acme-txt \
 	send-approval-reminders
 
 MODULES = Sauron/Util.pm Sauron/BackEnd.pm Sauron/CGIutil.pm \

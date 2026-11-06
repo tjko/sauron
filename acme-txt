@@ -1,0 +1,432 @@
+#!/usr/bin/perl -I/usr/local/sauron
+#
+# acme-txt - add/delete ACME DNS-01 challenge TXT records (certbot hooks)
+#
+# Copyright (c) 2026 CESNET, z.s.p.o.
+#
+# Manages TXT records named _acme-challenge.<name> in the zones given with
+# --zone, for use from certbot --manual-auth-hook / --manual-cleanup-hook.
+# Meant to run as an SSH forced command (--ssh), so the account on the other
+# side can only touch _acme-challenge TXT records in its own zone(s).
+#
+# The record is a TXT host (hosts.type=13). Its first value is kept in
+# hosts.cname_txt (as the web UI does); further values for the same name
+# (e.g. certificate for example.cz + *.example.cz) are kept in txt_entries
+# (type=2) of the same host. Both are written to the zone by 'sauron'.
+#
+# Only TXT hosts created by acme-txt for the same --user (hosts.cuser
+# 'acme-txt:<user>') are changed or deleted; a name used by any other host
+# or at/below a delegation is refused. Requests for one name are
+# serialized with a PostgreSQL advisory lock.
+#
+# New records expire (--expire). 'sauron' does not notice an expiration by
+# itself, so run 'acme-txt --server=<server> --cleanup' from cron: it
+# deletes expired acme-txt records, which marks their zones as changed.
+#
+# Exit codes: 0 ok, 1 usage error, 2 request refused, 3 database error.
+#
+require 5;
+use strict;
+use warnings;
+use Getopt::Long;
+use Sauron::DB;
+use Sauron::Util;
+use Sauron::BackEnd;
+use Sauron::Sauron;
+use Sauron::SetupIO;
+
+use constant {
+  EXIT_OK      => 0,
+  EXIT_USAGE   => 1,
+  EXIT_REFUSED => 2,
+  EXIT_DB      => 3,
+};
+
+my $PREFIX = '_acme-challenge';
+my $MAX_VALUES = 10;   # values per name
+my $MUSER = 'acme-txt';  # hosts.cuser/muser, 'acme-txt:<user>'
+
+# Validation value from certbot: base64url of a SHA-256 digest (43 chars).
+sub valid_acme_value($) {
+  my($val) = @_;
+  return (defined($val) && $val =~ /^[A-Za-z0-9_-]{43}$/ ? 1 : 0);
+}
+
+# Map a FQDN onto the longest matching allowed zone.
+# Returns (zone, relative domain) or () if the name is not allowed.
+sub match_acme_name($@) {
+  my($fqdn, @zones) = @_;
+  return () unless (defined($fqdn));
+  $fqdn = lc($fqdn);
+  $fqdn =~ s/\.$//;
+  return () unless ($fqdn =~ /^\Q$PREFIX\E(\.[a-z0-9_-]+)*\.[a-z0-9_-]+$/);
+  return () if ($fqdn =~ /\.\./);
+  return () if (length($fqdn) > 253);
+  return () if (grep { length($_) > 63 } split(/\./, $fqdn));
+
+  my($best, $rel);
+  for my $zone (@zones) {
+    my $z = lc($zone);
+    $z =~ s/\.$//;
+    next unless ($fqdn =~ /^(.+)\.\Q$z\E$/);
+    my $r = $1;
+    next unless ($r =~ /^\Q$PREFIX\E(\.|$)/);
+    if (!defined($best) || length($z) > length($best)) {
+      $best = $z;
+      $rel = $r;
+    }
+  }
+  return () unless (defined($best));
+  return ($best, $rel);
+}
+
+# Split a request ("add|del <fqdn> <value>") into its parts.
+sub parse_request(@) {
+  my(@args) = @_;
+  return () unless (@args == 3);
+  my($action, $fqdn, $value) = @args;
+  return () unless ($action =~ /^(add|del)$/);
+  return ($action, $fqdn, $value);
+}
+
+sub usage($) {
+  my($rc) = @_;
+  print STDERR
+    "syntax: $0 [OPTIONS] --server=<server> --zone=<zone> ",
+    "(add|del) <fqdn> <value>\n",
+    "        $0 [OPTIONS] --server=<server> --zone=<zone> --ssh\n",
+    "        $0 [OPTIONS] --server=<server> --cleanup\n\n",
+    "  --server=<name>   Sauron server\n",
+    "  --zone=<zone>     zone the caller may modify (repeatable)\n",
+    "  --ssh             read the request from SSH_ORIGINAL_COMMAND\n",
+    "  --cleanup         delete expired acme-txt records of the server\n",
+    "                    (run from cron, not over SSH)\n",
+    "  --ttl=<sec>       TTL of a new record (default 60, 0 = zone default)\n",
+    "  --expire=<sec>    expire a new record after <sec> seconds, so a\n",
+    "                    forgotten one is not published (default 86400,\n",
+    "                    0 = never)\n",
+    "  --user=<name>     user recorded in history (default: login name)\n",
+    "  --verbose\n\n",
+    "  <fqdn> must be _acme-challenge.<name> inside one of the zones,\n",
+    "  <value> is CERTBOT_VALIDATION.\n";
+  exit($rc);
+}
+
+sub refuse($) {
+  my($msg) = @_;
+  print STDERR "acme-txt: refused: $msg\n";
+  exit(EXIT_REFUSED);
+}
+
+sub db_fail($) {
+  my($msg) = @_;
+  my $err = db_lasterrormsg();
+  db_rollback();
+  print STDERR "acme-txt: database error: $msg", ($err ? ": $err" : ''), "\n";
+  exit(EXIT_DB);
+}
+
+sub db_ok($$) {
+  my($res, $msg) = @_;
+  db_fail($msg) unless (defined($res) && $res >= 0);
+}
+
+# Serialize all requests for one name; held until unlock or disconnect.
+sub lock_name($$) {
+  my($zoneid, $domain) = @_;
+  my @q;
+  db_query("SELECT pg_advisory_lock($zoneid,hashtext(" .
+	   db_encode_str($domain) . "))", \@q);
+  db_fail("lock") if (db_errormsg());
+}
+
+sub unlock_name($$) {
+  my($zoneid, $domain) = @_;
+  my @q;
+  db_query("SELECT pg_advisory_unlock($zoneid,hashtext(" .
+	   db_encode_str($domain) . "))", \@q);
+}
+
+# Mark a host as changed (so its zone is exported again); optionally set
+# other columns in the same statement.
+sub host_touch($;$) {
+  my($hostid, $set) = @_;
+  my $t = time;
+  db_ok(db_exec("UPDATE hosts SET mdate=$t, muser=" .
+		db_encode_str($MUSER) . ($set ? ", $set" : '') .
+		" WHERE id=$hostid"),
+	"update host");
+}
+
+sub history($$$) {
+  my($action, $info, $ref) = @_;
+  db_ok(update_history(-1, -1, 1, $action, $info, $ref), "history");
+}
+
+# Find the host with the name (any case) and refuse it unless it is a TXT
+# host created by acme-txt for the same user (not another type, not one
+# managed by hand or by another acme-txt key). Returns the row or ().
+sub find_own_host($$$) {
+  my($zoneid, $domain, $fqdn) = @_;
+  my @q;
+  db_query("SELECT id,type,cname_txt,expiration,cuser FROM hosts " .
+	   "WHERE zone=$zoneid AND lower(domain)=" . db_encode_str($domain),
+	   \@q);
+  db_fail("host lookup") if (db_errormsg());
+  return () if (@q < 1);
+  refuse("$fqdn exists more than once") if (@q > 1);
+  my($id, $type, $cname_txt, $expiration, $cuser) = @{$q[0]};
+  refuse("$fqdn exists and is not a TXT record") unless ($type == 13);
+  refuse("$fqdn is managed outside acme-txt")
+    unless (defined($cuser) && $cuser =~ /^acme-txt:/);
+  refuse("$fqdn was created by another acme-txt user")
+    unless ($cuser eq $MUSER);
+  return ($id, $cname_txt, $expiration);
+}
+
+# Refuse names at or below a delegation in the zone: 'sauron' leaves
+# such records out of the zone, so the challenge would never be published.
+sub check_delegation($$$) {
+  my($zoneid, $domain, $fqdn) = @_;
+  my @q;
+  db_query("SELECT lower(domain) FROM hosts WHERE zone=$zoneid AND type=2",
+	   \@q);
+  db_fail("delegation lookup") if (db_errormsg());
+  for my $row (@q) {
+    my $d = $$row[0];
+    next unless (defined($d) && $d ne '' && $d ne '@');
+    refuse("$fqdn is in delegated zone $d")
+      if ($domain eq $d || substr($domain, -length($d) - 1) eq ".$d");
+  }
+}
+
+# Delete a TXT host created by acme-txt and mark its zone as changed.
+# Unlike delete_host(), aliases pointing to the name are not deleted (they
+# may be records in other zones the caller has no rights to): static
+# aliases point to the name and work again after the next 'add', aliases
+# that reference the host id are turned into static aliases of the name,
+# so they do not reference a deleted host.
+sub delete_txt_host($$$$) {
+  my($id, $zoneid, $fqdn, $info) = @_;
+  my $t = time;
+  db_begin();
+  db_ok(db_exec("UPDATE hosts SET alias=-1, cname_txt=" .
+		db_encode_str("$fqdn.") . ", mdate=$t, muser=" .
+		db_encode_str($MUSER) . " WHERE type=4 AND alias=$id"),
+	"update aliases");
+  db_ok(db_exec("DELETE FROM txt_entries WHERE type=2 AND ref=$id"),
+	"delete txt");
+  db_ok(db_exec("DELETE FROM hosts WHERE id=$id AND type=13"), "delete host");
+  db_ok(db_exec("UPDATE zones SET rdate=$t WHERE id=$zoneid"), "update zone");
+  history('ACME: delete TXT', $info, $id);
+  db_commit() or db_fail("commit");
+}
+
+sub do_add($$$$$$$) {
+  my($zoneid, $domain, $fqdn, $value, $user, $ttl, $expire) = @_;
+  my $info = "domain: $fqdn, value: $value (user: $user)";
+  my $new_exp = ($expire > 0 ? time + $expire : 0);
+
+  my($id, $cname_txt) = find_own_host($zoneid, $domain, $fqdn);
+  check_delegation($zoneid, $domain, $fqdn);
+
+  unless ($id) {
+    my %host = (zone => $zoneid, type => 13, domain => $domain,
+		class => 'IN', alias => -1,
+		comment => "ACME challenge (acme-txt)",
+		txt_l => [['Text','Comments'],
+			  [0, $value, "ACME challenge (acme-txt)", 0]]);
+    $host{ttl} = $ttl if ($ttl > 0);
+    $host{expiration} = $new_exp if ($new_exp > 0);
+    my $hostid = add_host(\%host);
+    if ($hostid < 0) {
+      print STDERR "acme-txt: database error: add_host failed ($hostid)\n";
+      exit(EXIT_DB);
+    }
+    history('ACME: add TXT', $info, $hostid);
+    print "acme-txt: added TXT $fqdn\n";
+    return EXIT_OK;
+  }
+
+  my @t;
+  db_query("SELECT txt FROM txt_entries WHERE type=2 AND ref=$id", \@t);
+  db_fail("txt lookup") if (db_errormsg());
+  my @values = map { $$_[0] } @t;
+  unshift(@values, $cname_txt) if (defined($cname_txt) && $cname_txt ne '');
+  my $exists = (grep { $_ eq $value } @values) ? 1 : 0;
+
+  refuse("$fqdn already has $MAX_VALUES values")
+    if (!$exists && @values >= $MAX_VALUES);
+
+  # The expiration is set again from now (--expire=0 clears it), so a
+  # record that expired before cleanup removed it is published again;
+  # the zone is marked as changed by mdate.
+  my $set = "expiration=$new_exp";
+  db_begin();
+  if ($exists) {
+    # nothing to add
+  }
+  elsif (!defined($cname_txt) || $cname_txt eq '') {
+    $set .= ", cname_txt=" . db_encode_str($value);
+  }
+  else {
+    db_ok(db_exec("INSERT INTO txt_entries (type,ref,txt,comment) " .
+		  "VALUES (2,$id," . db_encode_str($value) .
+		  ",'ACME challenge (acme-txt)')"), "insert txt");
+  }
+  host_touch($id, $set);
+  history('ACME: add TXT', $info, $id) unless ($exists);
+  db_commit() or db_fail("commit");
+
+  print "acme-txt: ", ($exists ? "$fqdn already has this value\n" :
+		       "added TXT $fqdn\n");
+  return EXIT_OK;
+}
+
+sub do_del($$$$$) {
+  my($zoneid, $domain, $fqdn, $value, $user) = @_;
+  my @t;
+  my $info = "domain: $fqdn, value: $value (user: $user)";
+
+  my($id, $cname_txt) = find_own_host($zoneid, $domain, $fqdn);
+  unless ($id) {
+    print "acme-txt: $fqdn not found, nothing to delete\n";
+    return EXIT_OK;
+  }
+
+  db_query("SELECT id,txt FROM txt_entries WHERE type=2 AND ref=$id " .
+	   "ORDER BY id", \@t);
+  db_fail("txt lookup") if (db_errormsg());
+
+  my($match) = grep { $$_[1] eq $value } @t;
+  my $is_first = (defined($cname_txt) && $cname_txt eq $value) ? 1 : 0;
+
+  if (!$match && !$is_first) {
+    print "acme-txt: $fqdn has no such value, nothing to delete\n";
+    return EXIT_OK;
+  }
+  if (!$match && @t == 0) {
+    delete_txt_host($id, $zoneid, $fqdn, $info);
+  } else {
+    db_begin();
+    if ($match) {
+      db_ok(db_exec("DELETE FROM txt_entries WHERE id=$$match[0]"),
+	    "delete txt");
+    } else {
+      # promote the next value so the host keeps a value in cname_txt
+      db_ok(db_exec("UPDATE hosts SET cname_txt=" . db_encode_str($t[0][1]) .
+		    " WHERE id=$id"), "update host");
+      db_ok(db_exec("DELETE FROM txt_entries WHERE id=$t[0][0]"),
+	    "delete txt");
+    }
+    host_touch($id);
+    history('ACME: delete TXT', $info, $id);
+    db_commit() or db_fail("commit");
+  }
+  print "acme-txt: deleted TXT $fqdn\n";
+  return EXIT_OK;
+}
+
+# Delete expired acme-txt records of a server (run from cron).
+sub do_cleanup($$) {
+  my($serverid, $verbose) = @_;
+  my(@q, $count);
+  my $now = time;
+
+  db_query("SELECT h.id,h.zone,h.domain,z.name FROM hosts h, zones z " .
+	   "WHERE h.zone=z.id AND z.server=$serverid AND h.type=13 " .
+	   " AND h.cuser LIKE 'acme-txt:%' " .
+	   " AND h.expiration > 0 AND h.expiration < $now " .
+	   "ORDER BY z.name,h.domain", \@q);
+  db_fail("host lookup") if (db_errormsg());
+
+  $count = 0;
+  for my $row (@q) {
+    my($id, $zoneid, $domain, $zone) = @$row;
+    lock_name($zoneid, $domain);
+    my @c;
+    # re-check under the lock: an 'add' may have refreshed it meanwhile
+    db_query("SELECT id FROM hosts WHERE id=$id AND type=13 " .
+	     " AND expiration > 0 AND expiration < $now", \@c);
+    db_fail("host lookup") if (db_errormsg());
+    if (@c > 0) {
+      delete_txt_host($id, $zoneid, "$domain.$zone",
+		      "domain: $domain.$zone (expired)");
+      print "acme-txt: deleted expired TXT $domain.$zone\n" if ($verbose);
+      $count++;
+    }
+    unlock_name($zoneid, $domain);
+  }
+  print "acme-txt: $count expired record(s) deleted\n" if ($verbose);
+  return EXIT_OK;
+}
+
+sub main() {
+  my($opt_server, @opt_zones, $opt_ssh, $opt_user, $opt_verbose, $opt_help);
+  my $opt_cleanup;
+  my $opt_ttl = 60;
+  my $opt_expire = 86400;
+
+  GetOptions("server=s" => \$opt_server, "zone=s" => \@opt_zones,
+	     "ssh" => \$opt_ssh, "ttl=i" => \$opt_ttl,
+	     "expire=i" => \$opt_expire, "user=s" => \$opt_user,
+	     "cleanup" => \$opt_cleanup,
+	     "verbose" => \$opt_verbose, "help|h" => \$opt_help)
+    or usage(EXIT_USAGE);
+  usage(EXIT_OK) if ($opt_help);
+  usage(EXIT_USAGE) unless ($opt_server);
+
+  my $user = $opt_user || getlogin() || (getpwuid($<))[0] || 'acme-txt';
+  my($action, $fqdn, $value, $zone, $domain);
+
+  if ($opt_cleanup) {
+    usage(EXIT_USAGE) if ($opt_ssh || @opt_zones || @ARGV);
+  } else {
+    usage(EXIT_USAGE) unless (@opt_zones);
+    my @args;
+    if ($opt_ssh) {
+      usage(EXIT_USAGE) if (@ARGV);
+      @args = split(/\s+/, ($ENV{SSH_ORIGINAL_COMMAND} // ''));
+      shift(@args) if (@args && $args[0] eq '');
+    } else {
+      @args = @ARGV;
+    }
+    ($action, $fqdn, $value) = parse_request(@args);
+    usage(EXIT_USAGE) unless ($action);
+    refuse("invalid validation value") unless (valid_acme_value($value));
+    ($zone, $domain) = match_acme_name($fqdn, @opt_zones);
+    refuse("$fqdn is not $PREFIX.<name> in an allowed zone") unless ($zone);
+  }
+
+  set_encoding();
+  load_config();
+  unless (db_connect2()) {
+    print STDERR "acme-txt: database error: cannot connect\n";
+    exit(EXIT_DB);
+  }
+  $MUSER = "acme-txt:$user";
+  set_muser($MUSER);
+
+  my $serverid = get_server_id($opt_server);
+  refuse("cannot find server $opt_server") unless ($serverid > 0);
+  return do_cleanup($serverid, $opt_verbose) if ($opt_cleanup);
+
+  my $zoneid = get_zone_id($zone, $serverid);
+  refuse("cannot find zone $zone") unless ($zoneid > 0);
+
+  print "acme-txt: $action $fqdn (zone $zone, domain $domain)\n"
+    if ($opt_verbose);
+
+  lock_name($zoneid, $domain);
+  my $rc = ($action eq 'add' ?
+	    do_add($zoneid, $domain, $fqdn, $value, $user,
+		   $opt_ttl, $opt_expire) :
+	    do_del($zoneid, $domain, $fqdn, $value, $user));
+  unlock_name($zoneid, $domain);
+  return $rc;
+}
+
+exit(main()) unless (caller);
+
+1;
+# eof
