@@ -943,33 +943,37 @@ sub restricted_add_host($) {
     alert1("Invalid hostname: does not conform to your restrictions");
     return -101;
   }
-  if ($rec->{type} == 4 && check_perms('flags','CNAME',1)) {
-    alert1("You don't have permission to add CNAME Aliases");
-    return -104;
-  }
-  if ($rec->{type} == 7 && check_perms('flags','AREC',1)) {
-    alert1("You don't have permission to add AREC Aliases");
-    return -107;
-  }
-  if ($rec->{type} == 11 && check_perms('flags','SSHFP',1)) {
-    alert1("You don't have permission to add SSHFP records");
-    return -108;
-  }
-  if ($rec->{type} == 12 && check_perms('flags','TLSA',1)) {
-    alert1("You don't have permission to add TLSA records");
-    return -109;
-  }
-  if ($rec->{type} == 13 && check_perms('flags','TXT',1)) {
-    alert1("You don't have permission to add TXT records");
-    return -112;
-  }
-  if ($rec->{type} == 14 && check_perms('flags','NAPTR',1)) {
-    alert1("You don't have permission to add NAPTR records");
-    return -110;
-  }
-  if ($rec->{type} == 15 && check_perms('flags','CAA',1)) {
-    alert1("You don't have permission to add CAA records");
-    return -111;
+  # Privilege flags restrict only users without RWX on the zone
+  # (RWX => all record types), same as Edit/Delete in menu_handler.
+  if (check_perms('zone','RWX',1)) {
+    if ($rec->{type} == 4 && check_perms('flags','CNAME',1)) {
+      alert1("You don't have permission to add CNAME Aliases");
+      return -104;
+    }
+    if ($rec->{type} == 7 && check_perms('flags','AREC',1)) {
+      alert1("You don't have permission to add AREC Aliases");
+      return -107;
+    }
+    if ($rec->{type} == 11 && check_perms('flags','SSHFP',1)) {
+      alert1("You don't have permission to add SSHFP records");
+      return -108;
+    }
+    if ($rec->{type} == 12 && check_perms('flags','TLSA',1)) {
+      alert1("You don't have permission to add TLSA records");
+      return -109;
+    }
+    if ($rec->{type} == 13 && check_perms('flags','TXT',1)) {
+      alert1("You don't have permission to add TXT records");
+      return -112;
+    }
+    if ($rec->{type} == 14 && check_perms('flags','NAPTR',1)) {
+      alert1("You don't have permission to add NAPTR records");
+      return -110;
+    }
+    if ($rec->{type} == 15 && check_perms('flags','CAA',1)) {
+      alert1("You don't have permission to add CAA records");
+      return -111;
+    }
   }
 
   $required_error = _host_required_data_error($rec);
@@ -2614,13 +2618,9 @@ sub menu_handler {
     $newhostform = \%new_host_form;
     return if (check_perms('zone','RW'));
     if (check_perms('zone','RWX',1)) {
-      # User DOES NOT have RWX (RW-only user) - use restricted form for type=1
-      if ($type==1) {
-        $newhostform = \%restricted_new_host_form;
-      }
-    } else {
-      # User HAS RWX - check privilege flags
-      if ($type==1) { }
+      # User DOES NOT have RWX (RW-only user) - check privilege flags
+      # and use the restricted form for hosts. RWX users may add all types.
+      if ($type==1) { $newhostform = \%restricted_new_host_form; }
       elsif ($type==2) { return if check_perms('flags','DELEG'); }
       elsif ($type==3) { return if check_perms('flags','MX'); }
       elsif ($type==4) { return if check_perms('flags','SCNAME'); }
