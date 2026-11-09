@@ -168,6 +168,13 @@ use Data::Dumper;
     alert1("You are not authorized to modify this group") unless ($quiet);
     return 1;
   }
+  elsif ($type eq 'hostflag') {
+    # Record type privilege flags extend RW users, RWX on the zone
+    # allows all record types.
+    return 0 unless (chk_perms($state,'zone','RWX',1));
+    return chk_perms($state,'zone','RW',$quiet) ||
+           chk_perms($state,'flags',$rule,$quiet);
+  }
   elsif ($type eq 'flags') {
     return 0 if ($perms{flags}->{$rule});
     alert1("You are not authorized to add/modify: $rule") unless ($quiet);
