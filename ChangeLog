@@ -1,5 +1,16 @@
 0.9.0 (beta)
 
+	- Web UI: privilege flags (CNAME, AREC, MX, SRV, TXT, ...) extend
+	  users with RW permission on the zone again; RWX on the zone allows
+	  all record types, also when adding (as for editing and deleting)
+	  and in the Hosts menu. A user with RWX could not add a CNAME/AREC
+	  alias without the CNAME/AREC flag ("You don't have permission to
+	  add CNAME Aliases") nor MX, TXT etc. records, while an RW-only user
+	  could add records without the flags by opening the Add URL
+	  directly. Adding Delegations and Glue records still needs the
+	  DELEG/GLUE flag and host reservations the authorization level or
+	  the RESERV flag, also with RWX [svamberg]
+
 	- Add acme-txt, a tool to add and delete ACME DNS-01 challenge
 	  TXT records (_acme-challenge) from certbot hooks, run as an SSH
 	  forced command limited to given zones. Supports several values
