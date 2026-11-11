@@ -15,6 +15,219 @@ Sauron version		database version
 0.9.0			1.8
 
 
+DATABASE BACKEND MIGRATION (Pg.pm → DBI/DBD::Pg)
+
+Starting with Sauron 0.9.0, the default database backend has changed from
+the legacy Pg.pm module to the modern DBI/DBD::Pg backend. The Pg.pm backend
+is now DEPRECATED and should be migrated.
+
+Benefits of DBI/DBD::Pg:
+ - Better error handling and recovery
+ - Improved performance with modern PostgreSQL versions
+ - Better support for connection pooling and transactions
+ - More consistent behavior across different PostgreSQL versions
+ - Scheduled to be the only supported backend in Sauron 1.0
+
+To migrate from DB-Pg.pm to DB-DBI.pm:
+
+ Option A: Simple symlink replacement (if already installed)
+   1) cd /usr/local/sauron/Sauron (or your installation directory)
+   2) rm -f DB.pm
+   3) ln -sf DB-DBI.pm DB.pm
+   4) Test your installation: cd .. && ./status
+
+ Option B: Rebuild from source with DBI backend (recommended)
+   1) ./configure --with-DBI  (or just ./configure, DBI is default)
+   2) make
+   3) make install
+   4) Test: cd /usr/local/sauron && ./status
+
+ Option C: Remove and reinstall with proper backend
+   1) make clean
+   2) ./configure --with-DBI
+   3) make
+   4) make install
+
+Known compatibility issues:
+ - No known data loss issues when switching backends
+ - Both backends use identical PostgreSQL database schema
+ - Configuration strings remain the same (DB_DSN, DB_USER, etc.)
+ - Performance should be similar or better with DBI backend
+
+If you experience issues during migration:
+ 1) Check system logs for deprecation warnings
+ 2) Verify database connectivity: ./runsql "SELECT version();"
+ 3) Review Perl module dependencies (DBI, DBD::Pg)
+ 4) Consult documentation or file a bug report
+
+
+UTF-8 WEB INPUT/OUTPUT COMPATIBILITY (0.9.0)
+
+Sauron 0.9.0 now supports UTF-8 end-to-end in CGI/DBI path by default
+(DBI with pg_enable_utf8 and UTF-8 request handling when configured charset
+is UTF-8).
+
+Compatibility behavior:
+ - UTF-8 request handling is enabled only when configured CGI charset is UTF-8
+   (SAURON_CHARSET/BROWSER_CHARSET =~ /utf-?8/i).
+ - Legacy non-UTF-8 deployments keep previous behavior.
+
+Recommended configuration for new/updated deployments:
+ - SAURON_CHARSET = 'utf-8'
+ - BROWSER_CHARSET = 'utf-8'
+
+Detection helper (no DB changes):
+ - dbcheck --check=encoding --verbose --yes
+ - Optional custom character seed:
+   dbcheck --check=encoding --verbose --yes --mojibake-chars='ž,š,ť'
+   (you can also pass a plain string, e.g. --mojibake-chars='žšť')
+ - Optional target charset used for mojibake generation/repair:
+   dbcheck --check=encoding --verbose --yes --mojibake-charset='cp1250'
+
+Optional assisted repair (interactive, requires --commit):
+ - dbcheck --check=encoding --verbose --commit
+ - You can review/edit found rows before applying updates.
+
+If old data is already mojibake-corrupted (for example "Å¾luÅ¥ouÄ\x8DkÃ½"):
+ - Run a one-time repair only for affected rows, then verify manually.
+ - Example for zone comments (adjust WHERE to your dataset):
+
+   UPDATE zones
+      SET comment = convert_from(convert_to(comment,'LATIN1'),'UTF8')
+    WHERE comment LIKE '%Ã%';
+
+Always run a database backup before mass text repair.
+
+
+
+TSIG KEY NAME VALIDATION (RFC8945, 0.9.0)
+
+Sauron 0.9.0 enforces RFC8945-compliant TSIG key name validation. The new
+valid_tsig_keyname() validator replaces the previous valid_texthandle() and
+requires TSIG key names to follow DNS domain name rules:
+
+Validation rules:
+ - Allowed characters: alphanumeric (A-Z, a-z, 0-9), hyphens (-), 
+   underscores (_), and dots (.)
+ - Labels (parts between dots) must start with alphanumeric
+ - Labels cannot end with hyphen
+ - No consecutive dots
+ - Trailing dot is allowed (FQDN notation, e.g. "key.example.com.")
+ - Both relative names ("key1") and FQDNs ("key1.example.com") are accepted
+
+BREAKING CHANGE:
+If your database contains TSIG keys with names that violate these rules,
+the keygen utility will reject them after upgrade. Specifically:
+
+ - Names starting with underscore: "_key", "_transfer"
+ - Names ending with hyphen: "key-", "transfer-"
+
+Before upgrading, check for non-compliant key names:
+
+  sudo -u postgres -- psql sauron -P pager=off -c \
+    "SELECT id, name FROM keys WHERE type=1 AND protocol=2 AND (name ~ '^_' OR name ~ '-$');"
+
+If any keys are returned, you have two options:
+
+Option A: Rename the keys before upgrade
+  sudo -u postgres -- psql sauron -P pager=off -c \
+    "UPDATE keys SET name='renamed-key' WHERE id=<id>;"
+  
+  Then update any DNS server configurations that reference the old key name.
+
+Option B: Temporarily relax validation (not recommended)
+  Modify Sauron/Util.pm valid_tsig_keyname() to allow the problematic patterns,
+  then plan a migration to compliant names.
+
+Always backup your database before making changes to TSIG key names:
+
+  pg_dump sauron > sauron-backup-$(date +%Y%m%d).sql
+
+
+
+DATABASE FORMAT 1.7 -> 1.8 (0.9.0)
+
+The conversion script sql/dbconvert_1.7to1.8 creates new tables (SSHFP,
+TLSA, DS, NAPTR, CAA, catalog zones, TLS profiles, approval workflow).
+PostgreSQL makes the role that creates a table its owner, and the script
+intentionally does not change table ownership (no ALTER TABLE ... OWNER TO).
+The script MUST therefore be run as the role that owns all existing tables.
+In a standard installation this is the database user Sauron connects as
+(DB_USER in the config file, usually 'sauron'); do NOT run it as the
+postgres superuser then, or the new tables would be owned by postgres and
+Sauron would fail with "permission denied". (For installations where the
+tables are owned by another role and DB_USER only has GRANTs, see below.)
+
+The script checks this at the start and aborts with an error such as
+
+  invalid input syntax for type integer: "dbconvert_1.7to1.8 must be run
+  as the owner of all tables, not as postgres (table owners: sauron)"
+
+if the current user does not own all existing tables (or if public.zones
+does not exist, i.e. the wrong database was selected). Run the script as a
+single transaction that stops at the first error, so that a failed check
+or statement leaves the database unchanged.
+
+The DB_USER needs the CREATE privilege on schema public (granted when it
+owns the database, see 'ALTER DATABASE sauron OWNER TO sauron' in README).
+
+If your installation differs and the tables are owned by another role while
+Sauron connects as DB_USER through GRANTs (e.g. init/full-privileges.sql),
+run the script as the table owner (the check requires one owner of all
+tables) and afterwards grant DB_USER access to the new tables and their
+sequences, for example:
+
+	GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public
+	      TO sauron;
+	GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public
+	      TO sauron;
+
+ 1) Make backup of your database:
+
+	pg_dump sauron > sauron-backup-$(date +%Y%m%d).sql
+
+ 2) Check the owner of the existing tables (expected: one row, DB_USER):
+
+	psql sauron -c "SELECT tableowner, count(*) FROM pg_tables
+	                WHERE schemaname='public' GROUP BY 1;"
+
+ 3) Apply the script as DB_USER, using one of:
+
+    a) runsql (recommended; uses the DB_DSN/DB_USER/DB_PASSWORD from the
+       Sauron config file, runs in one transaction, stops on error):
+
+	cd /usr/local/sauron
+	./runsql sql/dbconvert_1.7to1.8
+
+    b) psql connecting as DB_USER:
+
+	psql -h localhost -U sauron -d sauron \
+	     -v ON_ERROR_STOP=1 --single-transaction \
+	     -f sql/dbconvert_1.7to1.8
+
+    c) psql as the postgres superuser, switching to DB_USER first:
+
+	sudo -u postgres psql -d sauron \
+	     -v ON_ERROR_STOP=1 --single-transaction \
+	     -c 'SET ROLE sauron' -f sql/dbconvert_1.7to1.8
+
+ 4) Verify that no table is owned by another user (expected: no rows):
+
+	psql sauron -c "SELECT tablename, tableowner FROM pg_tables
+	                WHERE schemaname='public' AND tableowner <> 'sauron';"
+
+    If some tables were created by a wrong user (e.g. by an earlier run
+    as postgres), fix them as the postgres superuser; sequences of SERIAL
+    columns follow their table:
+
+	ALTER TABLE <tablename> OWNER TO sauron;
+
+ 5) Check the database version (expected: 1.8):
+
+	psql sauron -c "SELECT value FROM settings WHERE setting='dbversion';"
+
+
+
 GENERAL UPGRADE PROCEDURE
 
  1) Make backup of your database!
@@ -25,8 +238,24 @@ GENERAL UPGRADE PROCEDURE
     For example script for converting from 1.0 to 1.1
     would be named as: dbconvert_1.0to1.1.sql
 
- 3) run upgrade scripts: psql sauron -f <filename>
-   
+ 3) run upgrade scripts as the role that owns the existing tables
+    (normally DB_USER, the database user Sauron connects as), not as the
+    postgres superuser.
+
+    SQL scripts (all dbconvert_* except dbconvert_1.6to1.7):
+
+	cd /usr/local/sauron && ./runsql sql/<filename>
+
+    or: psql -U <DB_USER> -v ON_ERROR_STOP=1 -1 -f <filename> sauron
+    (see also DATABASE FORMAT 1.7 -> 1.8 above)
+
+    Executable scripts (sql/dbconvert_1.6to1.7 is a Bash script,
+    sql/convertdb_1.0b2_1.0 a Perl script) are not SQL; do not pass them
+    to runsql or psql. Review them first (dbconvert_1.6to1.7 calls
+    'psql -U postgres' with /opt/sauron paths) and run them directly:
+
+	bash sql/dbconvert_1.6to1.7
+
  4) vacuum database: psql sauron -c 'VACUUM ANALYZE;'
     (running 'VACUUM FULL' might be good idea, too)
 

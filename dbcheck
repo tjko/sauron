@@ -17,6 +17,7 @@ use Sauron::SetupIO;
 use Pod::Usage;
 use File::Temp qw/ tempfile tempdir /;
 use Term::ReadLine;
+use Encode qw(encode decode find_encoding FB_CROAK);
 use open ':locale';
 use strict;
 use warnings;
@@ -30,7 +31,8 @@ my ($sid, $uid, @arr, %dbhash, @chks, %groups, $input, $inter, $rows, $more);
 my ($msg, @titles, %ids, $term, $expl);
 my $entire = "\nEntire transaction was rolled back - database was not changed";
 our ($opt_check, $opt_commit, $opt_groups, $opt_help,
-     $opt_man, $opt_user, $opt_verbose, $opt_yes);
+	$opt_man, $opt_mojibake_chars, $opt_mojibake_charset,
+	$opt_user, $opt_verbose, $opt_yes);
 
 # Pointers to subroutines.
 # 3rd column is:
@@ -47,6 +49,8 @@ my @funcs = (
     [ \&get_groups_h,         \&fix_groups_h,         2, 'hosts' ],
 
     [ \&get_base_group_dhcp,  \&generic_nofix,        3, 'hosts' ], # ** 2021-??-??
+    [ \&get_hosts_missing_values, \&generic_nofix,    3, 'hosts' ],
+	[ \&get_mojibake_encoding, \&fix_mojibake_encoding, 2, 'encoding' ],
 
     [ \&get_int_stat_aliases, \&fix_int_stat_aliases, 2, 'aliases' ],
     [ \&get_ext_stat_aliases, \&generic_nofix,        3, 'aliases' ],
@@ -67,7 +71,9 @@ my @funcs = (
 
 # ------------------------------------------------------------------------------
 # Get and check options.
-GetOptions("check:s", "commit", 'groups', "help", "man", "user=s", "verbose", 'yes') or exit;
+GetOptions("check:s", "commit", 'groups', "help", "man",
+		   "mojibake-chars:s", "mojibake-charset:s",
+		   "user=s", "verbose", 'yes') or exit;
 
 print "dbcheck - Sauron utility to check and fix the Sauron database.\n";
 
@@ -122,6 +128,12 @@ if ($opt_groups || $opt_check eq 'error') {
 
 # Some options to canonical format.
 $opt_commit = $opt_commit ? 1 : 0;
+# Optional: empty string intentionally means "use built-in default chars"
+# in parse_mojibake_chars().
+$opt_mojibake_chars = defined $opt_mojibake_chars ? $opt_mojibake_chars : '';
+$opt_mojibake_charset = $opt_mojibake_charset ? $opt_mojibake_charset : 'ISO-8859-1';
+fatal("Unknown --mojibake-charset '$opt_mojibake_charset'")
+	unless (find_encoding($opt_mojibake_charset));
 $opt_user = $opt_user ? $opt_user : '';
 $opt_verbose = $opt_verbose ? 1 : 0;
 $opt_yes = $opt_yes ? 1 : 0;
@@ -484,6 +496,197 @@ sub generic_nofix($) {
     return 0;
 }
 
+# Convert a user-provided list of local-language characters into a list of
+# UTF-8->Latin1 mojibake fragments that can be searched from DB text fields.
+sub parse_mojibake_chars($) {
+
+	my ($spec) = @_;
+	my (@chars, %seen);
+
+# Default Czech/Slovak-like diacritics if no explicit parameter was given.
+	if (!defined $spec || $spec eq '') {
+		@chars = map { chr($_) } (
+			0x00E1, 0x010D, 0x010F, 0x00E9, 0x011B, 0x00ED, 0x0148,
+			0x00F3, 0x0159, 0x0161, 0x0165, 0x00FA, 0x016F, 0x00FD,
+			0x017E, 0x00C1, 0x010C, 0x010E, 0x00C9, 0x011A, 0x00CD,
+			0x0147, 0x00D3, 0x0158, 0x0160, 0x0164, 0x00DA, 0x016E,
+			0x00DD, 0x017D
+		);
+	} elsif ($spec =~ /,/) {
+		@chars = split(/,/, $spec);
+		for my $i (0 .. $#chars) {
+			$chars[$i] =~ s/^\s+|\s+$//g;
+		}
+		@chars = grep { $_ ne '' } @chars;
+	} else {
+		@chars = split(//u, $spec);
+		@chars = grep { $_ ne '' } @chars;
+	}
+
+	@chars = grep { !$seen{$_}++ } @chars;
+	return @chars;
+}
+
+# Convert a mojibake value back to UTF-8 by encoding with configured charset
+# and decoding as UTF-8 bytes.
+sub repair_mojibake_value($) {
+
+	my ($val) = @_;
+	my ($octets, $fixed);
+
+	return $val unless defined $val;
+	return $val if $val eq '';
+
+	$octets = eval { encode($opt_mojibake_charset, $val, FB_CROAK) };
+	return $val unless defined $octets;
+
+	$fixed = eval { decode('UTF-8', $octets, FB_CROAK) };
+	return defined $fixed ? $fixed : $val;
+}
+
+# Find text values that contain typical mojibake fragments generated from a
+# list of chars (for example: 'ž' -> 'Å¾').
+sub get_mojibake_encoding($$$) {
+
+	my ($arr, $msg, $titles) = @_;
+	my ($sql, @cols, @rows, @idcol, %bad, @bad, $pattern, $seq, $table, $column,
+		$tq, $cq, $idexpr, $rowid, $val, $bad_part, $preview, $fixed,
+		$fixed_preview, $ind1, $ind2, $enc, $dec);
+
+	${$msg} = "possible mojibake values in text columns (charset $opt_mojibake_charset)";
+	@{$titles} = ('Id', 'Table.Column', 'Row Id', 'Pattern', 'Value', 'Repaired');
+
+	my @chars = parse_mojibake_chars($opt_mojibake_chars);
+
+	for $ind1 (0 .. $#chars) {
+		$enc = eval { encode('UTF-8', $chars[$ind1], FB_CROAK) };
+		next unless defined $enc;
+		$dec = eval { decode($opt_mojibake_charset, $enc, FB_CROAK) };
+		next unless defined $dec;
+		next if $dec eq $chars[$ind1];
+		$bad{$dec} = 1;
+	}
+	return 0 unless %bad;
+
+	@bad = sort { length($b) <=> length($a) } keys %bad;
+	$pattern = join('|', map { quotemeta($_) } @bad);
+
+	$sql = "select table_name, column_name from information_schema.columns " .
+		"where table_schema='public' and " .
+		"data_type = any (array['text','character varying','character']) " .
+		"order by table_name, ordinal_position;";
+	undef @cols;
+	db_query($sql, \@cols);
+	return 0 unless @cols;
+
+	$seq = 0;
+	for $ind1 (0 .. $#cols) {
+		($table, $column) = @{$cols[$ind1]}[0,1];
+
+		$tq = $table;
+		$tq =~ s/"/""/g;
+		$cq = $column;
+		$cq =~ s/"/""/g;
+
+		undef @idcol;
+		$sql = "select 1 from information_schema.columns " .
+			"where table_schema='public' and " .
+			"table_name=" . db_encode_str($table) . " and " .
+			"column_name='id' limit 1;";
+		db_query($sql, \@idcol);
+		$idexpr = @idcol ? '"id"::text' : "'-'";
+
+		undef @rows;
+		$sql = "select $idexpr, \"$cq\"::text " .
+			"from \"$tq\" " .
+			"where \"$cq\" is not null and " .
+			"\"$cq\"::text ~ " . db_encode_str($pattern) . " " .
+			"order by 1;";
+		db_query($sql, \@rows);
+		next unless @rows;
+
+		for $ind2 (0 .. $#rows) {
+			$rowid = defined $rows[$ind2][0] ? $rows[$ind2][0] : '-';
+			$val = defined $rows[$ind2][1] ? $rows[$ind2][1] : '';
+			$fixed = repair_mojibake_value($val);
+			next if ($fixed eq $val);
+
+			$bad_part = '';
+			for my $bp (@bad) {
+				if (index($val, $bp) >= 0) {
+					$bad_part = $bp;
+					last;
+				}
+			}
+
+			$preview = $val;
+			$preview =~ s/\r?\n/ /g;
+			$preview =~ s/\s{2,}/ /g;
+			if (length($preview) > 120) {
+				$preview = substr($preview, 0, 117) . '...';
+			}
+
+			$fixed_preview = $fixed;
+			$fixed_preview =~ s/\r?\n/ /g;
+			$fixed_preview =~ s/\s{2,}/ /g;
+			if (length($fixed_preview) > 120) {
+				$fixed_preview = substr($fixed_preview, 0, 117) . '...';
+			}
+
+			push @{$arr}, [ ++$seq, "$table.$column", $rowid, $bad_part, $preview,
+							$fixed_preview, $table, $column, $rowid, $fixed ];
+		}
+	}
+
+	return @{$arr} || 0;
+}
+
+# Apply mojibake repair for items selected by get_mojibake_encoding.
+sub fix_mojibake_encoding($) {
+
+	my ($arr) = @_;
+	my ($ind1, $table, $column, $rowid, $new_value, $tq, $cq, $sql, $res,
+		$count, $skip);
+
+	for $ind1 (0 .. $#{$arr}) {
+# Skip items marked as keepers.
+		next if (${$arr}[$ind1][0] eq 'N');
+
+		($table, $column, $rowid, $new_value) =
+			@{${$arr}[$ind1]}[6, 7, 8, 9];
+
+# Only rows with numeric id can be safely updated.
+		unless (defined $rowid && $rowid =~ /^\d+$/) {
+			$skip++;
+			next;
+		}
+
+		$tq = $table;
+		$tq =~ s/"/""/g;
+		$cq = $column;
+		$cq =~ s/"/""/g;
+
+		$sql = "update \"$tq\" set \"$cq\"=" . db_encode_str($new_value) .
+			" where id=$rowid;";
+		$res = db_exec($sql);
+		if ($res < 0) {
+			db_rollback();
+			fatal("Error $res while updating mojibake value in $table.$column (id=$rowid)");
+		}
+		$count++;
+	}
+
+	if ($opt_commit) {
+		print "Updated $count mojibake values\n";
+	} else {
+		print "Would have updated $count mojibake values\n";
+	}
+	if ($skip) {
+		print "Skipped $skip rows without numeric id\n";
+	}
+	return $count || 0;
+}
+
 # Update a column in a table to remove erroneous references.
 sub generic_update($$$) {
 
@@ -685,6 +888,42 @@ sub fix_base_group_dhcp($) {
 # - generic_insert to add subgroup memberships to group_entries
 # - generic_update to set base group in hosts to -1
 
+}
+
+# Get hosts with missing required values for their record type.
+sub get_hosts_missing_values($$$) {
+
+	my ($arr, $msg, $titles) = @_;
+	my ($sql, $ind1, $id, $fqdn, $err);
+	my (%host, %host_types, @hosts);
+
+	${$msg} = 'host records missing required values for their type';
+	@{$titles} = ('Host Id', 'Host', 'Type', 'Missing value');
+
+	%host_types = get_host_types();
+
+	$sql = "select h.id, h.domain || '.' || z.name " .
+	"from hosts h, zones z " .
+	"where h.zone = z.id and " .
+	"h.type = any ( array[ 1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 101 ] ) " .
+	"order by 2;";
+
+	undef @hosts;
+	db_query($sql, \@hosts);
+	return 0 if (!@hosts);
+
+	for $ind1 (0 .. $#hosts) {
+	$id = $hosts[$ind1][0];
+	$fqdn = $hosts[$ind1][1];
+	undef %host;
+	next if (get_host($id, \%host) < 0);
+	$err = Sauron::BackEnd::host_required_data_error(\%host);
+	next if ($err eq '');
+	push @{$arr}, [ $id, $fqdn, ($host_types{$host{type}} || $host{type}), $err ];
+	}
+
+	return 0 if (!@{$arr});
+	return $#{$arr} + 1;
 }
 
 # ------------------------------------------------------------------------------
@@ -1350,6 +1589,18 @@ No checks are done, no matter what other options were given.
 
 Shows this information.
 
+=item --mojibake-chars=<chars-or-comma-list>
+
+Used by C<--check=encoding> to generate expected mojibake fragments from given
+characters and search all public text columns for these fragments. You can pass
+either a plain character string (e.g. C<žšť>) or a comma-separated list
+(e.g. C<ž,š,ť>). If omitted, a default Czech/Slovak diacritics set is used.
+
+=item --mojibake-charset=<encoding>
+
+Charset used to generate and repair mojibake fragments in C<--check=encoding>.
+Default is C<ISO-8859-1>. Example values: C<ISO-8859-1>, C<cp1250>.
+
 =item --user=<username>
 
 Your login username. Used to write Sauron history. Must be known to Sauron.
@@ -1407,6 +1658,16 @@ dbcheck --commit --yes
 
 Safe default checks and fixes only. Summary report. Fixes committed to the
 database, no questions asked.
+
+dbcheck --check=encoding --verbose --mojibake-chars=ž,š,ť
+
+Search for probable mojibake based on listed diacritics. Reports matching rows;
+does not modify database.
+
+dbcheck --check=encoding --verbose --commit --mojibake-chars=ž,š,ť
+
+Search and offer interactive repair of matching mojibake rows. Use with care
+and always keep a recent database backup.
 
 =head1 AUTHORS
 

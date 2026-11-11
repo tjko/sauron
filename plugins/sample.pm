@@ -51,8 +51,11 @@ sub menu_handler {
 	   "GROUP BY s.name",\@data);
 
     print h4("Hosts (aliases, etc.) by server"),
-          "<table border=1>",Tr(th("Server"),th("Hosts"));
-    for $i (0..$#data) { print Tr(td($data[$i][0]),td($data[$i][1])); }
+          '<table class="s-list" cellspacing="1">',
+          '<tr class="s-list__head">', th("Server"), th("Hosts"), '</tr>';
+    for $i (0..$#data) {
+        print '<tr class="s-list__row">', td($data[$i][0]), td($data[$i][1]), '</tr>';
+    }
     print "</table>";
 
 
@@ -62,8 +65,11 @@ sub menu_handler {
 	     "GROUP BY s.name",\@data);
 
     print h4("A records by server"),
-          "<table border=1>",Tr(th("Server"),th("A records"));
-    for $i (0..$#data) { print Tr(td($data[$i][0]),td($data[$i][1])); }
+          '<table class="s-list" cellspacing="1">',
+          '<tr class="s-list__head">', th("Server"), th("A records"), '</tr>';
+    for $i (0..$#data) {
+        print '<tr class="s-list__row">', td($data[$i][0]), td($data[$i][1]), '</tr>';
+    }
     print "</table>";
   }
 

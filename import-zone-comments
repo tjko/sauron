@@ -97,8 +97,8 @@ my $grammar = <<'GRAMMAR';
 {
     # Global variables used by the parser during processing
     my $zone        = { records => [] };
-    my $prev_owner  = '';
-    my $origin      = '';        # last $ORIGIN (for @)
+    my $prev_owner  = '@';     # Default owner for records without explicit owner (zone apex)
+    my $origin      = '';      # last $ORIGIN (for @)
 
     sub _push { push @{ $zone->{records} }, $_[0] }
 }
@@ -148,6 +148,7 @@ directive:
 origin_directive:
         /\$ORIGIN/ domain'.' comment(?) {
             $origin = $item[2]->{name} . '.';
+            $prev_owner = $origin;  # Update default owner for records without explicit owner
             my $rec = {
                 type      => 'directive',
                 directive => 'ORIGIN',
@@ -177,10 +178,60 @@ rr_line:
         rr ws(?) eol                { $return = $item[1] }
 
 rr:
-        owner(?) ttl(?) class(?) type rdata ws(?) comment(?) {
-            # If there is no explicit owner, use the previous one
-            my $owner = $item[1][0];
-            $owner = $prev_owner unless $owner;
+        # Case 1: Record WITHOUT owner - starts with TTL (number CLASS? TYPE RDATA) - MUST BE FIRST!
+        number class(?) type rdata ws(?) comment(?) {
+            my $owner = $prev_owner;
+
+            my $rec = {
+                type    => 'rr',
+                owner   => $owner,
+                ttl     => $item[1],
+                class   => $item[2][0] ? $item[2][0] : 'IN',
+                rtype   => $item[3],
+                rdata   => $item[4],
+                comment => $item[6][0] ? $item[6][0] : undef,
+                line_nr => $thisline,
+            };
+            _push($rec);
+            $return = $rec;
+        }
+     |  # Case 2: Record WITHOUT owner - starts with CLASS only (CLASS TYPE RDATA)
+        class type rdata ws(?) comment(?) {
+            my $owner = $prev_owner;
+
+            my $rec = {
+                type    => 'rr',
+                owner   => $owner,
+                ttl     => undef,
+                class   => $item[1],
+                rtype   => $item[2],
+                rdata   => $item[3],
+                comment => $item[5][0] ? $item[5][0] : undef,
+                line_nr => $thisline,
+            };
+            _push($rec);
+            $return = $rec;
+        }
+     |  # Case 3: Record WITHOUT owner - starts directly with TYPE (TYPE RDATA)
+        type rdata ws(?) comment(?) {
+            my $owner = $prev_owner;
+
+            my $rec = {
+                type    => 'rr',
+                owner   => $owner,
+                ttl     => undef,
+                class   => 'IN',
+                rtype   => $item[1],
+                rdata   => $item[2],
+                comment => $item[4][0] ? $item[4][0] : undef,
+                line_nr => $thisline,
+            };
+            _push($rec);
+            $return = $rec;
+        }
+     |  # Case 4: Record WITH explicit owner (hostname TTL? CLASS? TYPE RDATA) - MUST BE LAST!
+        ownername ttl(?) class(?) type rdata ws(?) comment(?) {
+            my $owner = $item[1];
             $prev_owner = $owner if $owner;
 
             my $rec = {
@@ -200,16 +251,14 @@ rr:
 
 # ---------------------------  TOKENS -----------------------
 owner:
-        ownername ...type_exists  {
+        ownername {
             my $val = $item[1];
             # list of allowed classes – same as CLASS
             my %classes = map { $_ => 1 } qw( IN CH HS );
-            if ( $classes{$val} ) {
-                # The class was assigned instead of the owner -> we will reject it.
+            if ( defined $val && $classes{$val} ) {
+                # The class was assigned instead of the owner -> reject
                 $::RD_HINT && warn "owner '$val' looks like a CLASS – rejected\n";
-                # we return undef and thus "reject"
                 $return = undef;
-                # (alternatively, you can use $parser->reject; or die)
             }
             else {
                 $return = $val;
@@ -269,7 +318,7 @@ caa_rdata:
             };
         }
 
-caa_tag:    /issue|issuewild|iodef|issuemail/
+caa_tag:    /[A-Za-z0-9]+/
 
 # ---- TXT ---------------------------------------------------
 txt_rdata:
@@ -286,7 +335,14 @@ name:       /[A-Za-z0-9\-_]+(?:\.[A-Za-z0-9\-_]+)*/   { $return = $item[1] }
 ownername:  name'.'     { $return = $item[1] }
       |     '*.'name    { $return = $item[1] }
       |     '*.'name'.' { $return = $item[1] }
-      |     name        { $return = $item[1] }
+      |     name        { 
+          # Reject pure numeric values (they are TTLs, not hostnames)
+          if ( $item[1] =~ /^\d+$/ ) {
+              $return = undef;
+          } else {
+              $return = $item[1];
+          }
+      }
 
 domain:     name
 
@@ -529,7 +585,7 @@ sub comment_soa($) {
 # import_comments
 # ---------------
 sub import_comments($$$) {
-  my ($data, $server, $zone) = shift @_;
+  my ($data, $server, $zone) = @_;
   my ($rec, $res, $ret, $sql, $comment, $blcomment);
 
   #print "$data\n";
@@ -552,7 +608,11 @@ sub import_comments($$$) {
     
     next unless ($$rec{comment} or $blcomment); # blokovy ani radkovy komentar
 
-    #print "$i: $$rec{type} $$rec{owner} -> $$rec{class} -> $$rec{rtype}\n"; 
+    # Skip records without owner (safety check)
+    if (!$$rec{owner}) {
+        next;
+    }
+
     $comment = db_encode_str($$rec{comment} ? $$rec{comment} : $blcomment);
     
     if ($$rec{rtype} =~ /^(A|AAAA)$/ and $$rec{owner}) {
@@ -567,6 +627,21 @@ sub import_comments($$$) {
       print "db_exec: $sql\n" if $opt_verbose;
       db_exec($sql) unless $opt_noop;
     }
+    elsif ($$rec{rtype} eq 'MX' and $$rec{owner}) {
+      my ($mx_pref, $mx_exchange) = split /\s+/, $$rec{rdata};
+      my $host_id = get_host_id($zoneid, $$rec{owner});
+      $sql = qq{
+          UPDATE mx_entries
+             SET comment = $comment
+           WHERE ref  = '$host_id'
+             AND type = '2'
+             AND pri  = '$mx_pref'
+             AND mx   = '$mx_exchange'
+             AND (comment IS NULL OR comment = '')
+      };
+      db_exec($sql) unless $opt_noop;
+      print "db_exec: $sql\n" if $opt_verbose;
+    }
     elsif ($$rec{rtype} eq 'CNAME' and $$rec{owner}) {
       $sql = qq{
           UPDATE hosts
@@ -579,7 +654,7 @@ sub import_comments($$$) {
       db_exec($sql) unless $opt_noop;
       print "db_exec: $sql\n" if $opt_verbose;
     }
-    elsif ($$rec{rtype} eq 'TXT' and $$rec{owner} =~ /\w+/) {
+    elsif ($$rec{rtype} eq 'TXT' and ($$rec{owner} eq '@' or $$rec{owner} =~ /\w+/)) {
       # TXT in zone entries 
       $sql = qq{
           UPDATE txt_entries
@@ -620,6 +695,41 @@ sub import_comments($$$) {
       db_exec($sql) unless $opt_noop;
       print "db_exec: $sql\n" if $opt_verbose;
     }
+    elsif ($$rec{rtype} eq 'TLSA' and $$rec{owner}) {
+      my ($tlsa_usage, $tlsa_selector, $tlsa_mt, $tlsa_data) = split /\s+/, $$rec{rdata};
+      my $host_id = get_host_id($zoneid, $$rec{owner});
+      $sql = qq{
+        UPDATE tlsa_entries
+           SET comment     = $comment
+         WHERE ref         = '$host_id'
+           AND usage       = '$tlsa_usage'
+           AND selector    = '$tlsa_selector'
+           AND matching_type = '$tlsa_mt'
+           AND association_data = '$tlsa_data'::bytea
+           AND (comment IS NULL OR comment = '')
+      };
+      db_exec($sql) unless $opt_noop;
+      print "db_exec: $sql\n" if $opt_verbose;
+    }
+    elsif ($$rec{rtype} eq 'NAPTR' and $$rec{owner}) {
+      my ($naptr_order, $naptr_preference, $naptr_flags, $naptr_service, $naptr_regexp, $naptr_replacement) = split /\s+/, $$rec{rdata};
+      $naptr_flags =~ tr/a-z/A-Z/;  # flags are case-insensitive, but we store them in uppercase
+      my $host_id = get_host_id($zoneid, $$rec{owner});
+      $sql = qq{
+        UPDATE naptr_entries
+           SET comment     = $comment
+         WHERE ref         = '$host_id'
+           AND order_val   = '$naptr_order'
+           AND preference  = '$naptr_preference'
+           AND flags       = '$naptr_flags'
+           AND service     = '$naptr_service'
+           AND regexp      = '$naptr_regexp'
+           AND replacement = '$naptr_replacement'
+           AND (comment IS NULL OR comment = '')
+      };
+      db_exec($sql) unless $opt_noop;
+      print "db_exec: $sql\n" if $opt_verbose;
+    }
     elsif ($$rec{rtype} eq 'DS' and $$rec{owner}) {
       my ($ds_key_tag,$ds_algorithm,$ds_digest_type,$ds_digest) = split /\s+/, $$rec{rdata};
       my $host_id = get_host_id($zoneid, $$rec{owner});
@@ -654,13 +764,28 @@ sub import_comments($$$) {
       print "db_exec: $sql\n" if $opt_verbose;
     }
     elsif ($$rec{rtype} eq 'CAA') {
-      my ($caa_flags, $caa_tag, $caa_value) = split /\s+/, $$rec{rdata};
+      my $owner = $$rec{owner};
+      $owner = '@' if (defined $owner && lc($owner) eq lc($zonename . '.'));
+      my ($caa_flags, $caa_tag, $caa_value);
+      if (ref($$rec{rdata}) eq 'HASH') {
+        $caa_flags = $$rec{rdata}->{flags};
+        $caa_tag = $$rec{rdata}->{tag};
+        $caa_value = $$rec{rdata}->{value};
+      } else {
+        ($caa_flags, $caa_tag, $caa_value) = split /\s+/, $$rec{rdata}, 3;
+      }
+      $caa_value =~ s/^"(.*)"$/$1/ if defined $caa_value;
+      my $host_id = get_host_id($zoneid, $owner);
+      $caa_tag = db_encode_str($caa_tag);
+      $caa_value = db_encode_str($caa_value);
       $sql = qq{
-        UPDATE txt_entries
+        UPDATE caa_entries
            SET comment = $comment
-         WHERE ref     = '$zoneid'
-           AND txt     like '% CAA %$caa_flags %$caa_tag %$caa_value'
-           AND type     = '12'
+         WHERE ref     = '$host_id'
+           AND type    = '1'
+           AND flags   = '$caa_flags'
+           AND tag     = $caa_tag
+           AND value   = $caa_value
            AND (comment IS NULL OR comment = '')
       };
       db_exec($sql) unless $opt_noop;

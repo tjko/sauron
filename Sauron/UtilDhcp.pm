@@ -20,6 +20,17 @@ $VERSION = '$Id:$ ';
 
 my $debug = 0;
 
+sub _init_data_refs($) {
+  my ($data) = @_;
+
+  $$data{GLOBAL} = [] unless (defined $$data{GLOBAL} && ref($$data{GLOBAL}) eq 'ARRAY');
+  foreach my $key ('shared-network','subnet','subnet6','group','class','subclass','pool','pool6','host') {
+    $$data{$key} = {} unless (defined $$data{$key} && ref($$data{$key}) eq 'HASH');
+  }
+
+  return 0;
+}
+
 # parse dhcpd.conf file, build hash of all entries in the file
 #
 sub process_dhcpdconf($$$) {
@@ -64,8 +75,11 @@ sub process_dhcpdconf($$$) {
 
   close($fh);
 
+  _init_data_refs($data);
+
   return 0;
 }
+
 
 sub process_line($$$$) {
   my($line,$data,$state,$v6) = @_;
