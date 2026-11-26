@@ -20,6 +20,9 @@ export LC_ALL="${LC_ALL:-C.UTF-8}"
 : "${SAURON_ADMIN_NAME:=Sauron Admin}"
 : "${SAURON_SERVER_ID:=docker}"
 : "${SAURON_ENV_NAME:=DEV}"
+: "${SAURON_PLUGINS:=}"
+# optional demo/training data loaded after DB init (currently: "lab")
+: "${SAURON_SEED:=}"
 
 export PGPASSWORD="$SAURON_DB_PASSWORD"
 export PGHOST="$SAURON_DB_HOST"
@@ -58,6 +61,7 @@ write_config() {
 \$SAURON_CHARSET = 'utf-8';
 \$SAURON_ENV_NAME = "${SAURON_ENV_NAME}";
 \$SAURON_TOPMENU_BGCOLOR = "#0d6efd";
+\$SAURON_PLUGINS = '$(perl_squote "$SAURON_PLUGINS")';
 
 1;
 EOF
@@ -156,6 +160,20 @@ init_db() {
   fi
 }
 
+seed_db() {
+  case "$SAURON_SEED" in
+    "") return 0 ;;
+    lab)
+      log "Loading training lab data"
+      "$SAURON_HOME/lab/seed.sh"
+      ;;
+    *)
+      log "ERROR: unknown SAURON_SEED '$SAURON_SEED'"
+      return 1
+      ;;
+  esac
+}
+
 start_apache() {
   log "Starting Apache (foreground)"
   # apache2ctl loads /etc/apache2/envvars itself; avoid sourcing under
@@ -172,6 +190,9 @@ if db_is_initialized; then
 else
   init_db || exit 1
 fi
+# runs on every start: a no-op once the data is loaded, an error (reset
+# needed) after an interrupted seed
+seed_db || exit 1
 
 # Allow custom command (e.g. compose run sauron ./status)
 if [ "$#" -gt 0 ] && [ "$1" != "apache2" ] && [ "$1" != "apachectl" ]; then

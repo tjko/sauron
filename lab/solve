@@ -1,0 +1,178 @@
+#!/usr/bin/perl -I/usr/local/sauron
+#
+# solve - reference solution of the Sauron training lab
+#
+# Completes the lab tasks through the same back-end functions the web UI
+# uses (Sauron::BackEnd). Used by the automated test (t/33-lab.t) to prove
+# that every task can be completed and checked, and by trainers to see one
+# way of solving a task. Do not run it on the participants' lab, it spoils
+# the exercise.
+#
+#   solve [--task=ID ...] [--server=NAME]
+#
+use strict;
+use warnings;
+use FindBin;
+use Getopt::Long;
+use Sauron::DB;
+use Sauron::Util;
+use Sauron::BackEnd;
+use Sauron::Sauron;
+
+my %opt = (server => 'lab');
+GetOptions(\%opt, 'help|h', 'server=s', 'task=s@') or exit(2);
+if ($opt{help}) {
+  print "syntax: $0 [--task=ID ...] [--server=NAME]\n";
+  exit(0);
+}
+
+# values must match tasks.pl
+my $Z      = 'lab.example';
+my $ACME   = 'lab-acme-Xy3Fq9';
+my $GOOGLE = 'google-site-verification=lab-verify-0123456789';
+my $DMARC  = 'v=DMARC1; p=none; rua=mailto:dmarc@lab.example';
+my $DKIM   = 'v=DKIM1; k=rsa; p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDlabKEY';
+my @DS     = (12345, 13, 2, '3f1a6c3e9b2d4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f90');
+
+load_config();
+db_connect();
+set_muser('lab-solve');
+
+my $sid = get_server_id($opt{server});
+die "server '$opt{server}' not found\n" unless $sid > 0;
+my $zid = get_zone_id($Z, $sid);
+die "zone $Z not found\n" unless $zid > 0;
+
+sub ok($$) {
+  my ($res, $what) = @_;
+  die "$what failed (result $res): " . (db_lasterrormsg() // '') . "\n"
+    if !defined $res || $res < 0;
+  return $res;
+}
+
+sub host_id($;$) {
+  my ($domain, $zone) = @_;
+  my $id = get_host_id($zone // $zid, $domain);
+  die "host $domain not found\n" unless $id > 0;
+  return $id;
+}
+
+sub host($;$) {
+  my %h;
+  ok(get_host(host_id($_[0], $_[1]), \%h), "get_host $_[0]");
+  return \%h;
+}
+
+# rows of add_host()/add_zone() lists: [0, values...]
+sub rows { return [ map { [0, @$_] } @_ ]; }
+
+# list row marked for insert by update_host()/update_zone()
+sub add_row($@) { my ($list, @v) = @_; push @$list, [0, @v, 2]; }
+
+my %SOLVE = (
+  U1 => sub {
+    ok(add_host({ zone => $zid, type => 1, domain => 'web1',
+                  comment => 'RT#100001 web server',
+                  huser => 'Jan Novak',
+                  ip => rows(['192.0.2.160', 't', 't']) }), 'add web1');
+  },
+  U2 => sub {
+    ok(add_host({ zone => $zid, type => 4, domain => 'www',
+                  alias => host_id('web1') }), 'add alias www');
+  },
+  U3 => sub {
+    my $h = host('db1');
+    for my $r (@{$h->{ip}}[1 .. $#{$h->{ip}}]) {
+      next unless $r->[1] eq '192.0.2.140';
+      $r->[1] = '192.0.2.145';
+      $r->[4] = 1;
+    }
+    ok(update_host($h), 'update db1');
+  },
+  U4 => sub {
+    my $h = host('phishingintel');
+    $h->{domain} = 'phishingindex';
+    ok(update_host($h), 'rename phishingintel');
+  },
+  U5 => sub {
+    # delete_host() removes the CNAME aliases of the host too
+    ok(delete_host(host_id('old-graylog')), 'delete old-graylog');
+  },
+  A1 => sub {
+    my $h = host('web1');
+    add_row($h->{ip}, '2001:db8:10:1::160', 't', 't');
+    ok(update_host($h), 'add IPv6 to web1');
+  },
+  A2 => sub {
+    ok(add_host({ zone => $zid, type => 13, domain => '_acme-challenge.web1',
+                  txt_l => [['Text', 'Comments'], [0, $ACME, '', 2]] }),
+       'add ACME TXT');
+  },
+  U6 => sub {
+    my $ip = get_free_ip_by_net($sid, '192.0.2.128/25', '', '', 0);
+    die "no free IP: $ip\n" unless is_cidr($ip);
+    ok(add_host({ zone => $zid, type => 1, domain => 'backup1', huser => 'Jan Novak',
+                  ip => rows([$ip, 't', 't']) }), 'add backup1');
+  },
+  A3 => sub {
+    my %z;
+    ok(get_zone($zid, \%z), 'get_zone');
+    add_row($z{txt}, $GOOGLE, '');
+    add_row($z{caa}, 0, 'issue', 'letsencrypt.org', '');
+    ok(update_zone(\%z), 'update zone');
+  },
+  A4 => sub {
+    my $h = host('monitoring');
+    $h->{ttl} = 600;
+    ok(update_host($h), 'update monitoring');
+  },
+  A5 => sub {
+    my $s = "shop.$Z";
+    my $id = ok(add_zone({ server => $sid, name => $s, type => 'M',
+                           reverse => 'f',
+                           ns  => rows(["ns1.$Z.", ''], ["ns2.$Z.", '']),
+                           mx  => rows([10, "mail.$Z.", '']),
+                           txt => rows(['v=spf1 mx -all', '']) }), 'add zone');
+    for ([_dmarc => $DMARC], ['selector1._domainkey' => $DKIM]) {
+      ok(add_host({ zone => $id, type => 13, domain => $_->[0],
+                    txt_l => [['Text', 'Comments'], [0, $_->[1], '', 2]] }),
+         "add $_->[0]");
+    }
+  },
+  A6 => sub {
+    ok(add_host({ zone => $zid, type => 2, domain => 'team',
+                  ns_l => rows(["ns1.team.$Z.", '']),
+                  ds_l => rows([@DS, '']) }), 'add delegation');
+    ok(add_host({ zone => $zid, type => 6, domain => 'ns1.team',
+                  ip => rows(['198.51.100.60', 'f', 't']) }), 'add glue');
+  },
+  A7 => sub {
+    ok(add_net({ server => $sid, net => '198.51.100.128/26', netname => 'vms',
+                 name => 'Virtual machines', subnet => 't', dummy => 'f',
+                 no_dhcp => 't' }), 'add net');
+    # privileges have no back-end function; use the CLI as an admin would
+    my $out = `"$main::PROG_DIR/modgroup" lab-users --add=net,$opt{server}+198.51.100.128/26 2>&1`;
+    die "modgroup failed: $out\n" unless $out =~ /successfully inserted/;
+  },
+  D1 => sub {
+    ok(add_host({ zone => $zid, type => 1, domain => 'pc-carol',
+                  ether => '00163E000022',
+                  ip => rows(['192.0.2.22', 't', 't']) }), 'add pc-carol');
+  },
+  D2 => sub {
+    my $h = host('pc-bob');
+    $h->{ether} = '00163E000099';
+    ok(update_host($h), 'update pc-bob');
+  },
+);
+
+# order matters: U2, A1 and A2 need web1 from U1
+my @order = qw(U1 U2 U3 U4 U5 U6 A1 A2 A3 A4 A5 A6 A7 D1 D2);
+if ($opt{task}) {
+  my %want = map { uc($_) => 1 } map { split /,/ } @{$opt{task}};
+  @order = grep { $want{$_} } @order;
+}
+for my $id (@order) {
+  print "solving $id\n";
+  $SOLVE{$id}->();
+}

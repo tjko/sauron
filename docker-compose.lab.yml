@@ -1,0 +1,25 @@
+# Sauron training lab: Sauron with fictitious data, users and checked tasks.
+#
+# Usage:
+#   docker compose -p sauron-lab -f docker-compose.yml -f docker-compose.lab.yml up -d --build
+#
+# Web UI:  http://localhost:8081/cgi-bin/sauron.cgi
+# Login:   admin / admin (superuser), user / user (restricted user)
+# Tasks:   lab/tasks.en.md, lab/tasks.cs.md; menu "Lab tasks" in the web UI
+# Check:   docker compose -p sauron-lab ... exec sauron /usr/local/sauron/lab/lab-check
+# Reset:   docker compose -p sauron-lab ... down -v   (then up again)
+#
+# Separate project name and port, so it can run next to the dev stack.
+
+services:
+  db:
+    ports: !reset []
+
+  sauron:
+    image: sauron:lab
+    ports: !override
+      - "${SAURON_LAB_PORT:-8081}:80"
+    environment:
+      SAURON_SEED: lab
+      SAURON_PLUGINS: lab
+      SAURON_ENV_NAME: LAB
