@@ -588,7 +588,8 @@ sub cidr2arpa($) {
         }
 # This takes the zone above if it's not exactly on a nibble.
         my $first_nibble_index = $len ? 32 - (int($len / 4)) : 0;
-        return join '.', @result[ $first_nibble_index .. $#result ], 'ip6', 'arpa.';
+        # no trailing dot, same as for IPv4 (callers add it where needed)
+        return join '.', @result[ $first_nibble_index .. $#result ], 'ip6', 'arpa';
     }
 
 # This didn't work correctly in this context.

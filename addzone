@@ -21,7 +21,8 @@ my $user = (getpwuid($<))[0];
 set_muser($user);
 
 our ($opt_reverse, $opt_type, $opt_help);
-my $result = GetOptions("help|h", "reverse", "type=s");
+our @opt_ns;
+my $result = GetOptions("help|h", "reverse", "type=s", "ns=s" => \@opt_ns);
 
 if ($opt_help || @ARGV < 1 || $result < 1) {
   print "syntax: $0 <server> <zone> [options]\n\n",
@@ -31,6 +32,8 @@ if ($opt_help || @ARGV < 1 || $result < 1) {
         "\t--reverse\t adding as reverse zone\n",
         "\t--type\t\t type of zone: Master, Forward, Hint, Slave (default 'M')\n",
         "\t\t\t used first letter: M = Master (case sensitive)\n",
+        "\t--ns=<name>\t name server of the zone (repeat for more,\n",
+        "\t\t\t relative names are relative to the zone)\n",
   print "\n" if ($opt_help);
   exit(0);
 }
@@ -52,6 +55,11 @@ my %data = ();
 $data{server} = $serverid;
 $data{name} = $zone;
 $data{type} = $opt_type;
+# NS records of the zone: rows [id, ns, comment] as from the web UI
+for my $ns (@opt_ns) {
+  fatal("invalid name server '$ns'") unless (valid_domainname($ns));
+}
+$data{ns} = [ map { [ undef, $_, '' ] } @opt_ns ];
 
 if ($opt_reverse == 1) {
   $data{reverse} = 't';

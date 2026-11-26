@@ -1332,7 +1332,9 @@ sub form_magic($$$) {
 	}
       }
       my $selection = param($p1);
-      if ($rec->{preselectnet} && $selection eq 'MANUAL') {
+      # Copy preselects the network of the copied host; otherwise keep the
+      # user's choice (also <Manual IP> after a re-submit, e.g. SubGroups Add)
+      if ($rec->{preselectnet} && $selection eq 'MANUAL' && $data->{preselectnet}) {
 	  $selection = $data->{preselectnet};
       }
       print td({-class=>'s-form__label'},

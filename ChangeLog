@@ -1,5 +1,19 @@
 0.9.0 (beta)
 
+	- Web UI: Add host keeps the <Manual IP> choice of Subnet when the
+	  form is submitted by another button (e.g. Add in SubGroups); it
+	  switched to the first network [svamberg]
+
+	- addzone: new option --ns to set name servers of the zone (a new
+	  zone was generated with 'NS invalid.') [svamberg]
+
+	- addzone/cidr2arpa(): IPv6 reverse zones given as CIDR are stored
+	  without a trailing dot, as IPv4 ones (0.1.0.0.8.b.d.0.1.0.0.2.ip6.arpa,
+	  not ...ip6.arpa.). Zones created before keep their name [svamberg]
+
+	- moduser/modgroup: privilege flags TXT and CAA can be added
+	  (--add="flag,TXT"), they were rejected [svamberg]
+
 	- Add a training lab: Sauron with a fictitious organisation, accounts
 	  admin/admin and user/user and 15 everyday DNS/DHCP tasks (hosts,
 	  aliases, renames, TXT/ACME, CAA, TTL, zones with MX/SPF/DKIM/DMARC,

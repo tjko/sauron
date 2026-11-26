@@ -161,6 +161,8 @@ subtest 'cidr2arpa' => sub {
     is(cidr2arpa('10.0.0.0/8'), '10.in-addr.arpa', 'class A');
     is(cidr2arpa('192.168.0.0/16'), '168.192.in-addr.arpa', 'class B');
     is(cidr2arpa('192.168.1.0/24'), '1.168.192.in-addr.arpa', 'class C');
+    is(cidr2arpa('2001:db8:10::/48'), '0.1.0.0.8.b.d.0.1.0.0.2.ip6.arpa', 'IPv6 /48, no trailing dot');
+    is(cidr2arpa('2001:db8::/32'), '8.b.d.0.1.0.0.2.ip6.arpa', 'IPv6 /32');
 };
 
 # =========================================================================
