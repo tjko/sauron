@@ -319,8 +319,6 @@ unless ($menu) {
   $menu='servers' unless ($serverid > 0);
 }
 
-init_plugins($SAURON_PLUGINS);
-
 if ($pathinfo ne '') {
   logout(1) if ($pathinfo eq '/logout'); # **** 2020-09-16 TVu
   # Frameset URLs from very old bookmarks land at the script root.
@@ -345,6 +343,9 @@ unless (is_superuser()) {
 } else {
   $perms{alevel}=999 if (is_superuser());
 }
+
+# after %perms: plugins check the user's authorization level ($ALEVEL)
+init_plugins($SAURON_PLUGINS);
 
 
 
@@ -916,8 +917,10 @@ sub init_plugins($) {
       $ret = do "$file";
       if ($@) {
 	logmsg("notice","parse error in plugin info: $file");
+	next;
       } elsif (not $ret) {
 	logmsg("notice", "failed to process plugin info: $file");
+	next;
       }
 # Check authorization level of user and plugin. TVu
       next unless (!check_perms('level', $ALEVEL, 1));
