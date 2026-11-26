@@ -521,11 +521,14 @@ my %restricted_host_form = (
   {ftype=>1, tag=>'domain', name=>'Hostname', type=>'domain', maxlen=>400,
    conv=>'L', len=>64},
   {ftype=>4, tag=>'fqdn', name=>'FQDN', title=>'Fully Qualified Domain Name'}, # ****
-  # RW users may add and remove addresses (IPv4 and IPv6) as well; every
-  # address is still checked against the allowed ranges on submit, only
-  # duplicate IPs need RWX.
-  {ftype=>5, tag=>'ip', name=>'IP address', no_allowdup=>1, len=>39,
-   iff=>['type','([16]|101)']},
+  # RW users may add and remove addresses of a host (IPv4 and IPv6); every
+  # address is still checked against the allowed ranges on submit and
+  # duplicate IPs need RWX. Forward/reverse flags stay as they are (new
+  # addresses get both). Glue records keep the fully restricted list.
+  {ftype=>5, tag=>'ip', name=>'IP address', no_allowdup=>1, fixed_flags=>1,
+   len=>39, iff=>['type','(1|101)']},
+  {ftype=>5, tag=>'ip', name=>'IP address', restricted_mode=>1, len=>39,
+   iff=>['type','6']},
 
 # {ftype=>1, tag=>'cname_txt', name=>'Static alias for', type=>'domain',
 #  len=>64, maxlen=>400, iff=>['type','4'], iff2=>['alias','-1']}, # maxlen added by TVu.
@@ -1812,6 +1815,7 @@ sub menu_handler {
 
 	  if ($host{type}==1 || $host{type}==101) {
 	    for $i (1..($#{$host{ip}})) {
+	      next if (($host{ip}[$i][4] // 0) == -1); # address being deleted
 	      #print "<p>check $i, $old_ips[$i], $host{ip}[$i][1]";
 	      if (check_perms('ip',$host{ip}[$i][1],1)) {
 		alert2("Invalid IP number: outside allowed range(s) " .

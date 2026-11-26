@@ -2271,6 +2271,16 @@ sub add_zone($) {
       $rec->{reversenet}=$new_net;
   }
 
+  # the same zone may be stored with a trailing dot (IPv6 reverse zones
+  # created from a CIDR before cidr2arpa() dropped it)
+  if ($rec->{server} =~ /^\d+$/ && defined $rec->{name}) {
+    my @q;
+    db_query("SELECT id FROM zones WHERE server=$rec->{server} AND " .
+	     "rtrim(lower(name),'.')=rtrim(lower(" . db_encode_str($rec->{name}) .
+	     "),'.')", \@q);
+    return -201 if (@q > 0);
+  }
+
   db_begin();
   $res = add_record('zones',$rec);
   if ($res < 0) { db_rollback(); return -1; }

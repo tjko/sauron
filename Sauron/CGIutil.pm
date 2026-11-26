@@ -1395,11 +1395,26 @@ sub form_magic($$$) {
 	        td((param($n) eq 'on' ? 'on':'off'));
 	}
 	else {
-	  $n=$p2."_3";
-	  print td(checkbox(-label=>' A',-name=>$n,-checked=>scalar(param($n)))) if ip_is_ipv4(scalar(param($p2 . "_1")));
-	  print td(checkbox(-label=>' AAAA',-name=>$n,-checked=>scalar(param($n)))) if ip_is_ipv6(scalar(param($p2 . "_1")));
-	  $n=$p2."_2";
-	  print td(checkbox(-label=>' PTR',-name=>$n,-checked=>scalar(param($n))));
+	  if ($rec->{fixed_flags}) {
+	    # forward/reverse shown, not editable (kept in hidden fields)
+	    for $n ($p2."_3", $p2."_2") {
+	      print hidden(-name=>$n,-value=>scalar(param($n))),
+		    td((param($n) eq 'on' ? 'on':'off'));
+	    }
+	  } else {
+	    my $ip1 = scalar(param($p2 . "_1"));
+	    $n=$p2."_3";
+	    if (ip_is_ipv4($ip1)) {
+	      print td(checkbox(-label=>' A',-name=>$n,-checked=>scalar(param($n))));
+	    } elsif (ip_is_ipv6($ip1)) {
+	      print td(checkbox(-label=>' AAAA',-name=>$n,-checked=>scalar(param($n))));
+	    } else {
+	      # no valid address yet: keep the flag until it is corrected
+	      print hidden(-name=>$n,-value=>scalar(param($n))),td('');
+	    }
+	    $n=$p2."_2";
+	    print td(checkbox(-label=>' PTR',-name=>$n,-checked=>scalar(param($n))));
+	  }
 
 	  print td(checkbox(-label=>' Delete',
 			    -name=>$p2."_del",-checked=>scalar(param($p2."_del")) )),

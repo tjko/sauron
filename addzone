@@ -24,7 +24,7 @@ our ($opt_reverse, $opt_type, $opt_help);
 our @opt_ns;
 my $result = GetOptions("help|h", "reverse", "type=s", "ns=s" => \@opt_ns);
 
-if ($opt_help || @ARGV < 1 || $result < 1) {
+if ($opt_help || @ARGV < 2 || $result < 1) {
   print "syntax: $0 <server> <zone> [options]\n\n",
         "\t<server>\t target server\n",
         "\t<zone>\t\t you can use CIDR for reverse domain\n",
@@ -33,9 +33,9 @@ if ($opt_help || @ARGV < 1 || $result < 1) {
         "\t--type\t\t type of zone: Master, Forward, Hint, Slave (default 'M')\n",
         "\t\t\t used first letter: M = Master (case sensitive)\n",
         "\t--ns=<name>\t name server of the zone (repeat for more,\n",
-        "\t\t\t relative names are relative to the zone)\n",
+        "\t\t\t relative names are relative to the zone)\n";
   print "\n" if ($opt_help);
-  exit(0);
+  exit($opt_help ? 0 : 1);
 }
 
 db_connect();
@@ -56,6 +56,7 @@ $data{server} = $serverid;
 $data{name} = $zone;
 $data{type} = $opt_type;
 # NS records of the zone: rows [id, ns, comment] as from the web UI
+fatal("--ns is only for Master zones") if (@opt_ns && $opt_type ne 'M');
 for my $ns (@opt_ns) {
   fatal("invalid name server '$ns'") unless (valid_domainname($ns));
 }
@@ -76,6 +77,7 @@ my $zoneid=get_zone_id($data{name},$data{server});
 fatal("zone '$zone' exists") if ($zoneid > 0);
 
 my $res=add_zone(\%data);
+fatal("zone '$data{name}' exists") if $res == -201;
 fatal("Adding Zone record failed! Result code=$res") if $res < 0;
 
 print "Zone '$data{name}' was added.\n";
