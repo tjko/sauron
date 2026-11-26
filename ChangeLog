@@ -1,5 +1,11 @@
 0.9.0 (beta)
 
+	- Fix CGI plugins never being loaded: init_plugins() read the
+	  plugin definition ($NAME, $MENU, ...) into lexical variables that
+	  'do FILE' cannot set; empty menu entries are separators again.
+	  Plugins listed in $SAURON_PLUGINS now really become active, check
+	  the setting before upgrading [svamberg]
+
 	- Web UI: privilege flags (CNAME, AREC, MX, SRV, TXT, ...) extend
 	  users with RW permission on the zone again; RWX on the zone allows
 	  all record types, also when adding (as for editing and deleting)

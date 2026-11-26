@@ -903,12 +903,15 @@ sub left_menu($) {
 sub init_plugins($) {
   my($plugins) = @_;
   my(@plugs) = split(/,/,$plugins);
-  my($ALEVEL, $j, $MENU, $MENUDATA, $ret, $i, $file, $file2, $NAME);
+  my($j, $ret, $i, $file, $file2);
+  # Set by the plugin definition file ('do $file' cannot see lexicals).
+  our($ALEVEL, $MENU, $MENUDATA, $NAME);
 
   for $i (0..$#plugs) {
     $file="$PROG_DIR/plugins/$plugs[$i].conf";
     $file2="$PROG_DIR/plugins/$plugs[$i].pm";
     if (-r $file) {
+      local($ALEVEL, $MENU, $MENUDATA, $NAME);
       $ALEVEL = 0; # Default required authorization level to use plugin.
       $ret = do "$file";
       if ($@) {
@@ -920,7 +923,8 @@ sub init_plugins($) {
       next unless (!check_perms('level', $ALEVEL, 1));
       # add commands defined by plugin into appropriate menu...
       for $j (0..$#{$MENUDATA}) {
-	push @{$menuhash{$MENU}}, [$$MENUDATA[$j][0],$$MENUDATA[$j][1]];
+	# an empty entry is a separator: keep it empty for left_menu
+	push @{$menuhash{$MENU}}, (@{$$MENUDATA[$j]} ? [$$MENUDATA[$j][0],$$MENUDATA[$j][1]] : []);
 
 	# add hook for command (if necessary)...
 #	if ($$MENUDATA[$j][2]) {
