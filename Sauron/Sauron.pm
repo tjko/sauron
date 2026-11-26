@@ -93,7 +93,7 @@ sub set_defaults() {
   $main::SAURON_DNSNAME_CHECK_LEVEL = 999; # 2020-10-12 TVu
   $main::SAURON_TEMP_LOCK = 0;             # 2020-10-13 TVu
   $main::SAURON_REMOVE_WHITESPACE = 0;     # 2020-10-13 TVu
-  $main::TTL_MIN_SEC = 0;                  # 2021-02-11 TVu; 0 = no lower limit
+  $main::TTL_MIN_SEC = 60;                 # 2021-02-11 TVu
   $main::TTL_MAX_SEC = 86400;              # 2021-02-11 TVu
 
   $main::SAURON_BASE_URL = '';

@@ -8,9 +8,10 @@
 	  newly added address has the forward (A/AAAA) and reverse (PTR)
 	  record checked, also after correcting an invalid address [svamberg]
 
-	- TTL_MIN_SEC defaults to 0 (no lower limit) instead of 600, so the
-	  TTL can be lowered e.g. to 300 before a migration; set it in the
-	  config to keep a minimum [svamberg]
+	- TTL_MIN_SEC defaults to 60 instead of 600, so the TTL of a host can
+	  be lowered e.g. to 300 or 60 before a migration; the limit applies
+	  in the web UI to all users. Set it in the config to change it
+	  [svamberg]
 
 	- Web UI: Add host keeps the <Manual IP> choice of Subnet when the
 	  form is submitted by another button (e.g. Add in SubGroups); it

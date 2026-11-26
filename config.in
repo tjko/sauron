@@ -109,11 +109,12 @@ $DB_PASSWORD = "bar";
 #
 # $SAURON_DNSNAME_CHECK_MODE = 0;
 
-# limits for the TTL a user may set on a host record (seconds); the TTL
-# is optional, an empty value uses the zone's default. Defaults: no lower
-# limit (0), at most one day.
+# limits for the TTL of a host record in the web UI (seconds), for all
+# users including superusers; an empty TTL uses the zone's default.
+# Defaults: at least one minute (allows e.g. 300 or 60 before a migration,
+# catches 0 and typos), at most one day.
 #
-# $TTL_MIN_SEC = 0;
+# $TTL_MIN_SEC = 60;
 # $TTL_MAX_SEC = 86400;
 
 # User authentication mode:
