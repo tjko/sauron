@@ -1358,6 +1358,9 @@ sub form_magic($$$) {
       if (param($p1."_add") ne '') {
 	$a=$a+1;
 	param($p1."_count",$a);
+	# a new address gets the forward (A/AAAA) and reverse (PTR) record
+	param($p1."_".$a."_2",'on');
+	param($p1."_".$a."_3",'on');
       }
       $a=0 if (!$a || $a < 0);
       #if ($a > 50) { $a = 50; }
@@ -1365,7 +1368,8 @@ sub form_magic($$$) {
       print td('IP'),td('Forward'),td('Reverse');
       print td("(",
 	       checkbox(-label=>'allow duplicate IPs',name=>$p1."_allowdup",
-			-checked=>'0'),")")  unless ($rec->{restricted_mode});
+			-checked=>'0'),")")
+	unless ($rec->{restricted_mode} || $rec->{no_allowdup});
       print "</TR>";
 
       for $j (1..$a) {

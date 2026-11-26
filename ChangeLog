@@ -1,5 +1,15 @@
 0.9.0 (beta)
 
+	- Web UI: users with RW permission (restricted host form) may add and
+	  remove IP addresses of a host, e.g. an IPv6 address next to IPv4;
+	  every address is still checked against the user's networks and
+	  duplicate IPs still need RWX. A newly added address has the
+	  forward (A/AAAA) and reverse (PTR) record checked [svamberg]
+
+	- TTL_MIN_SEC defaults to 0 (no lower limit) instead of 600, so the
+	  TTL can be lowered e.g. to 300 before a migration; set it in the
+	  config to keep a minimum [svamberg]
+
 	- Web UI: Add host keeps the <Manual IP> choice of Subnet when the
 	  form is submitted by another button (e.g. Add in SubGroups); it
 	  switched to the first network [svamberg]

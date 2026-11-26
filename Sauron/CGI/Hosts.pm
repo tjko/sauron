@@ -521,7 +521,10 @@ my %restricted_host_form = (
   {ftype=>1, tag=>'domain', name=>'Hostname', type=>'domain', maxlen=>400,
    conv=>'L', len=>64},
   {ftype=>4, tag=>'fqdn', name=>'FQDN', title=>'Fully Qualified Domain Name'}, # ****
-  {ftype=>5, tag=>'ip', name=>'IP address', restricted_mode=>1, len=>39,
+  # RW users may add and remove addresses (IPv4 and IPv6) as well; every
+  # address is still checked against the allowed ranges on submit, only
+  # duplicate IPs need RWX.
+  {ftype=>5, tag=>'ip', name=>'IP address', no_allowdup=>1, len=>39,
    iff=>['type','([16]|101)']},
 
 # {ftype=>1, tag=>'cname_txt', name=>'Static alias for', type=>'domain',
