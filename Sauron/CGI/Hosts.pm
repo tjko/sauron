@@ -523,7 +523,8 @@ my %restricted_host_form = (
   {ftype=>4, tag=>'fqdn', name=>'FQDN', title=>'Fully Qualified Domain Name'}, # ****
   # RW users may add and remove addresses of a host (IPv4 and IPv6); every
   # address is still checked against the allowed ranges on submit and
-  # duplicate IPs need RWX. Forward/reverse flags stay as they are (new
+  # duplicate IPs need RWX (no_allowdup is reset per user in the edit
+  # handler). Forward/reverse flags stay as they are (new
   # addresses get both). Glue records keep the fully restricted list.
   {ftype=>5, tag=>'ip', name=>'IP address', no_allowdup=>1, fixed_flags=>1,
    len=>39, iff=>['type','(1|101)']},
@@ -1768,6 +1769,13 @@ sub menu_handler {
     # my $hform=(check_perms('zone','RW',1) || check_perms('flags','SRV') ?
     my $hform=(check_perms('zone','RW',1) || check_perms('flags','SRV',1) ? # 2020-10-19 TVu
 	       \%restricted_host_form : \%host_form);
+
+    # Duplicate IPs are allowed with RWX on the zone (checked on submit),
+    # so offer the choice also in the restricted form.
+    my $no_allowdup = (check_perms('zone','RWX',1) ? 1 : 0);
+    for my $item (@{$restricted_host_form{data}}) {
+      $item->{no_allowdup} = $no_allowdup if (exists $item->{no_allowdup});
+    }
 
     # An ordinary user can't edit TTL if superuser has set a value, which is outside limits.
     # TVu 2021-02-15

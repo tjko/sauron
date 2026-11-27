@@ -6,7 +6,9 @@
 	  the ones being deleted) and duplicate IPs still need RWX. Their
 	  forward/reverse flags stay read-only, glue records unchanged. A
 	  newly added address has the forward (A/AAAA) and reverse (PTR)
-	  record checked, also after correcting an invalid address [svamberg]
+	  record checked, also after correcting an invalid address. Users
+	  with RWX on the zone who get this form (no SRV flag) can choose
+	  'allow duplicate IPs' there, as when adding a host [svamberg]
 
 	- TTL_MIN_SEC defaults to 60 instead of 600, so the TTL of a host can
 	  be lowered e.g. to 300 or 60 before a migration; the limit applies
