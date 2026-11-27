@@ -281,6 +281,15 @@ jobs:
         run: prove -lv t/31-acme-txt.t
         shell: bash
 
+      - name: Run training lab tests (TAP)
+        env:
+          PERL5LIB: "/usr/local/sauron:${{ github.workspace }}"
+          SAURON_TEST_DSN: "dbi:Pg:dbname=sauron_test;host=postgres"
+          SAURON_INSTALL_DIR: /usr/local/sauron
+          PGDATABASE: ${{ env.POSTGRES_DB }}
+        run: prove -lv t/33-lab.t
+        shell: bash
+
       - name: Dump DB for artifacts
         if: always()
         run: |

@@ -319,8 +319,6 @@ unless ($menu) {
   $menu='servers' unless ($serverid > 0);
 }
 
-init_plugins($SAURON_PLUGINS);
-
 if ($pathinfo ne '') {
   logout(1) if ($pathinfo eq '/logout'); # **** 2020-09-16 TVu
   # Frameset URLs from very old bookmarks land at the script root.
@@ -345,6 +343,9 @@ unless (is_superuser()) {
 } else {
   $perms{alevel}=999 if (is_superuser());
 }
+
+# after %perms: plugins check the user's authorization level ($ALEVEL)
+init_plugins($SAURON_PLUGINS);
 
 
 
@@ -903,24 +904,30 @@ sub left_menu($) {
 sub init_plugins($) {
   my($plugins) = @_;
   my(@plugs) = split(/,/,$plugins);
-  my($ALEVEL, $j, $MENU, $MENUDATA, $ret, $i, $file, $file2, $NAME);
+  my($j, $ret, $i, $file, $file2);
+  # Set by the plugin definition file ('do $file' cannot see lexicals).
+  our($ALEVEL, $MENU, $MENUDATA, $NAME);
 
   for $i (0..$#plugs) {
     $file="$PROG_DIR/plugins/$plugs[$i].conf";
     $file2="$PROG_DIR/plugins/$plugs[$i].pm";
     if (-r $file) {
+      local($ALEVEL, $MENU, $MENUDATA, $NAME);
       $ALEVEL = 0; # Default required authorization level to use plugin.
       $ret = do "$file";
       if ($@) {
 	logmsg("notice","parse error in plugin info: $file");
+	next;
       } elsif (not $ret) {
 	logmsg("notice", "failed to process plugin info: $file");
+	next;
       }
 # Check authorization level of user and plugin. TVu
       next unless (!check_perms('level', $ALEVEL, 1));
       # add commands defined by plugin into appropriate menu...
       for $j (0..$#{$MENUDATA}) {
-	push @{$menuhash{$MENU}}, [$$MENUDATA[$j][0],$$MENUDATA[$j][1]];
+	# an empty entry is a separator: keep it empty for left_menu
+	push @{$menuhash{$MENU}}, (@{$$MENUDATA[$j]} ? [$$MENUDATA[$j][0],$$MENUDATA[$j][1]] : []);
 
 	# add hook for command (if necessary)...
 #	if ($$MENUDATA[$j][2]) {
