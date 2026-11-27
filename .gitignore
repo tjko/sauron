@@ -27,5 +27,13 @@ config.h
 doc/tables.html
 doc/tables.sgml
 
+# dot files
+.*
+
+# don't ignore (yourself, github, ...)
+!.gitignore
+!.github/
+!.dockerignore
+
 
 # eof

@@ -7,9 +7,9 @@
 /* virtual table; generic fields for most of the tables */
 CREATE TABLE pokemon ( 
        cdate	   TIMESTAMP DEFAULT CURRENT_TIMESTAMP, /* creation date */
-       cuser	   CHAR(32) DEFAULT 'unknown',   /* creating user */
+       cuser	   TEXT DEFAULT 'unknown',   /* creating user */
        mdate	   TIMESTAMP DEFAULT CURRENT_TIMESTAMP, /* modification date */
-       muser	   CHAR(32) DEFAULT 'unknown', /* last changed by this user */
+       muser	   TEXT DEFAULT 'unknown', /* last changed by this user */
        expiration  TIMESTAMP
 );
 
@@ -48,8 +48,10 @@ CREATE TABLE zones ( /* zone table; contains zones */
 
        active	   BOOL DEFAULT true,
        dummy	   BOOL DEFAULT false,
+       catalog_only BOOL DEFAULT false,
        type	   CHAR(1) NOT NULL, /* (H)int, (M)aster, (S)lave, 
-				        (F)orward, ... */
+				        (F)orward, (C)atalog,
+					(A)ggregate catalog */
        reverse	   BOOL DEFAULT false, /* true for reverse (arpa) zones */
        noreverse   BOOL DEFAULT false, /* if true, zone not used in reverse
 				          map generation */
@@ -257,6 +259,16 @@ CREATE TABLE txt_entries (
 	type        INT4 NOT NULL, /* 1=zone,2=host */
         ref         INT4 NOT NULL ,/* ptr to table speciefied by type field */
 	txt	    TEXT,
+        comment     TEXT
+);
+
+CREATE TABLE caa_entries (
+        id	    SERIAL PRIMARY KEY,
+        type        INT4 NOT NULL, /* 1=host */
+        ref         INT4 NOT NULL, /* ptr to table speciefied by type field */
+        flags       INT4 NOT NULL CHECK (flags >= 0 AND flags <= 255),
+        tag         TEXT NOT NULL CHECK (tag ~ '^[A-Za-z0-9]+$'),
+        value       TEXT NOT NULL,
         comment     TEXT
 );
 

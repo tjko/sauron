@@ -6,7 +6,8 @@
 #
 package Sauron::CGI::ACLs;
 require Exporter;
-use CGI qw/:standard *table -utf8/;
+use CGI qw/:standard *table/;
+use HTML::Entities;
 use Sauron::DB;
 use Sauron::CGIutil;
 use Sauron::BackEnd;
@@ -24,7 +25,10 @@ $VERSION = '$Id:$ ';
 
 
 my %key_algorithm_hash = (0=>'Reserved', 1=>'RSA/MD5',2=>'Diffie-Hellman',
-			  3=>'DSA',4=>'ECC',157=>'HMAC MD5');
+			  3=>'DSA',4=>'ECC',
+			  157=>'HMAC-MD5', 158=>'HMAC-SHA1',
+			  159=>'HMAC-SHA256', 160=>'HMAC-SHA384',
+			  161=>'HMAC-SHA512');
 
 
 my %acl_form=(
@@ -41,13 +45,59 @@ my %acl_form=(
 );
 
 
+# TLS profile form (DNS Zone Transfer over TLS, XoT, RFC 9103)
+my %tls_yn_enum = (D=>'Default', Y=>'Yes', N=>'No');
+
+my %tls_form=(
+ data=>[
+  {ftype=>0, name=>'TLS Profile (DNS Zone Transfer over TLS, RFC 9103)'},
+  {ftype=>1, tag=>'name', name=>'Name', type=>'texthandle', len=>25, empty=>0,
+   extrainfo=>"Profile name. 'ephemeral' and 'none' are reserved built-in " .
+              "BIND objects and cannot be used here"},
+  {ftype=>4, tag=>'id', name=>'ID'},
+  {ftype=>1, tag=>'cert_file', name=>'cert-file', type=>'filepath', len=>70,
+   maxlen=>255, empty=>1, whitesp=>'P'},
+  {ftype=>1, tag=>'key_file', name=>'key-file', type=>'filepath', len=>70,
+   maxlen=>255, empty=>1, whitesp=>'P'},
+  {ftype=>1, tag=>'ca_file', name=>'ca-file (peer verification)',
+   type=>'filepath', len=>70, maxlen=>255, empty=>1, whitesp=>'P'},
+  {ftype=>1, tag=>'dhparam_file', name=>'dhparam-file', type=>'filepath',
+   len=>70, maxlen=>255, empty=>1, whitesp=>'P'},
+  {ftype=>1, tag=>'protocols', name=>'protocols', type=>'tlsprotocols',
+   len=>30, empty=>1, whitesp=>'P',
+   extrainfo=>'Allowed: TLSv1.2, TLSv1.3 (space separated). ' .
+              'Empty = BIND default'},
+  {ftype=>1, tag=>'ciphers', name=>'ciphers', type=>'tlsciphers', len=>50,
+   maxlen=>255, empty=>1, whitesp=>'P',
+   extrainfo=>"OpenSSL cipher list for TLSv1.2 (TLSv1.3 suites are not " .
+              "configurable in BIND), e.g. HIGH:!aNULL:!MD5:!RC4 or " .
+              "ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384. " .
+              "List names on the DNS server: openssl ciphers -v 'HIGH:!aNULL' " .
+              "(see man 1ssl ciphers, docs/dns-over-tls.txt). Empty = BIND default"},
+  {ftype=>3, tag=>'prefer_server_ciphers', name=>'prefer-server-ciphers',
+   type=>'enum', conv=>'U', enum=>\%tls_yn_enum},
+  {ftype=>3, tag=>'session_tickets', name=>'session-tickets',
+   type=>'enum', conv=>'U', enum=>\%tls_yn_enum},
+  {ftype=>1, tag=>'remote_hostname', name=>'remote-hostname (outgoing auth)',
+   type=>'tlshostname', len=>40, empty=>1, whitesp=>'P',
+   extrainfo=>'Fully qualified host name expected in the peer certificate, ' .
+              'e.g. ns1.example.com (strict XoT, use together with ca-file)'},
+  {ftype=>1, tag=>'comment', name=>'Comment', type=>'text', len=>60,
+   empty=>1, whitesp=>'P'},
+  {ftype=>0, name=>'Record info', no_edit=>1},
+  {ftype=>4, name=>'Record created', tag=>'cdate_str', no_edit=>1},
+  {ftype=>4, name=>'Last modified', tag=>'mdate_str', no_edit=>1}
+ ]
+);
+
+
 
 sub show_acl_record($$) {
     my($id,$url) = @_;
     my(%acl);
     
     if (get_acl($id,\%acl)) {
-	print h2("Cannot get ACL record (id=$id)!");
+	alert1("Cannot get ACL record (id=$id).");
 	return;
     }
 
@@ -65,7 +115,7 @@ sub browse_acls($$$) {
     db_query("SELECT id,name,comment,server FROM acls " .
 	     "WHERE server=$serverid OR server=-1 ORDER BY server,id;",\@q);
     if (@q < 1) {
-	print h2("No ACLs found!");
+	warning1("No ACLs found.");
 	return;
     }
 
@@ -86,7 +136,7 @@ sub browse_keys($$$) {
     db_query("SELECT id,name,algorithm,keysize,mode,comment,cdate,mdate " .
 	     "FROM keys WHERE type=1 AND ref=$serverid ORDER BY name;",\@q);
     if (@q < 1) {
-	print h2("No Keys found!");
+	warning1("No Keys found.");
 	return;
     }
 
@@ -111,6 +161,42 @@ sub browse_keys($$$) {
 
 }
 
+sub show_tls_record($$) {
+    my($id,$url) = @_;
+    my(%tls);
+
+    if (get_tls_profile($id,\%tls)) {
+	alert1("Cannot get TLS profile record (id=$id).");
+	return;
+    }
+
+    display_form(\%tls,\%tls_form);
+    print p,start_form(-method=>'GET',-action=>$url),
+          hidden('menu','acls'), hidden('tls_id',$id),
+          submit(-name=>'sub',-value=>'Edit'),"  ",
+          submit(-name=>'sub',-value=>'Delete'), end_form;
+}
+
+sub browse_tls($$$) {
+    my($serverid,$server,$url) = @_;
+    my($i,@q,@list);
+
+    db_query("SELECT id,name,cert_file,protocols,comment FROM tls_profiles " .
+	     "WHERE type=1 AND ref=$serverid ORDER BY name;",\@q);
+    if (@q < 1) {
+	warning1("No TLS profiles found.");
+	return;
+    }
+
+    for $i (0..$#q) {
+	my $name = "<a href=\"$url$q[$i][0]\">$q[$i][1]</a>";
+	push @list, [$name,$q[$i][2],$q[$i][3],$q[$i][4]];
+    }
+    print h3("TLS profiles for server: $server");
+    display_list(['Name','cert-file','protocols','Comment'],\@list,0);
+    print "<br>";
+}
+
 
 # ACLs menu
 #
@@ -129,12 +215,71 @@ sub menu_handler {
 
   my $sub=param('sub');
   my $id=param('acl_id');
+  my $tls_id=param('tls_id');
 
   unless ($serverid > 0) {
-    print h2("Server not selected!");
+    alert1("Server not selected.");
     return;
   }
   return if (check_perms('server','R'));
+
+
+  # --- TLS profiles (DNS Zone Transfer over TLS, XoT, RFC 9103) ---
+  if ($sub eq 'addtls') {
+      return if (check_perms('superuser',''));
+
+      $data{ref}=$serverid;
+      $data{type}=1;
+      $res=add_magic('addtls','TLS Profile','acls',\%tls_form,
+		     \&add_tls_profile,\%data);
+      show_tls_record($res,$selfurl) if ($res > 0);
+      return;
+  }
+  elsif ($sub eq 'Edit' && $tls_id > 0) {
+      return if (check_perms('superuser',''));
+      $res=edit_magic('tls','TLS Profile','acls',\%tls_form,
+		      \&get_tls_profile,\&update_tls_profile,$tls_id);
+      browse_tls($serverid,$server,"$selfurl?menu=acls&tls_id=")
+	  if ($res == -1);
+      show_tls_record($tls_id,$selfurl) if ($res > 0);
+      return;
+  }
+  elsif ($sub eq 'Delete' && $tls_id > 0) {
+      return if (check_perms('superuser',''));
+      my %tls;
+      if (get_tls_profile($tls_id,\%tls)) {
+	  alert1("Cannot get TLS profile (id=$tls_id).");
+	  return;
+      }
+      if (param('tls_cancel')) {
+	  alert1("TLS profile not removed.");
+	  show_tls_record($tls_id,$selfurl);
+	  return;
+      }
+      my @refs=get_tls_profile_refs($tls{ref},$tls{name});
+      if (@refs > 0) {
+	  alert1("TLS profile \"$tls{name}\" is in use and cannot be removed:");
+	  print ul(li([map { encode_entities($_) } @refs]));
+	  show_tls_record($tls_id,$selfurl);
+	  return;
+      }
+      if (param('tls_confirm')) {
+	  if (delete_tls_profile($tls_id) < 0) {
+	      alert1("TLS profile delete failed!");
+	      return;
+	  }
+	  success1("TLS profile successfully removed.");
+	  return;
+      }
+      print p,"Delete TLS profile \"$tls{name}\"?",
+	    start_form(-method=>'GET',-action=>$selfurl),
+	    hidden('menu','acls'),hidden('sub','Delete'),
+	    hidden('tls_id',$tls_id),p,
+	    submit(-name=>'tls_confirm',-value=>'Delete'),"  ",
+	    submit(-name=>'tls_cancel',-value=>'Cancel'),end_form;
+      display_form(\%tls,\%tls_form);
+      return;
+  }
 
 
 
@@ -165,12 +310,12 @@ sub menu_handler {
       return if (check_perms('superuser',''));
       my %acl;
       if (get_acl($id,\%acl)) {
-	  print h2("Cannot get group (id=$id)");
+	  alert1("Cannot get group (id=$id).");
 	  return;
       }
      
       if (param('acl_cancel')) {
-	  print h2("ACL not removed");
+	  alert1("ACL not removed.");
 	  show_acl_record($id,$selfurl);
 	  return;
       }
@@ -187,7 +332,7 @@ sub menu_handler {
 	      alert1("ACL delete failed!");
 	      return;
 	  }
-	  print h2("ACL successfully removed.");
+	  success1("ACL successfully removed.");
 	  return;
       }
       
@@ -214,6 +359,16 @@ sub menu_handler {
   
   if ($sub eq 'keys') {
       browse_keys($serverid,$server,'');
+      return;
+  }
+
+  if ($sub eq 'tls') {
+      browse_tls($serverid,$server,"$selfurl?menu=acls&tls_id=");
+      return;
+  }
+
+  if ($tls_id > 0) {
+      show_tls_record($tls_id,$selfurl);
       return;
   }
 

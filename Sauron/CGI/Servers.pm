@@ -6,7 +6,7 @@
 #
 package Sauron::CGI::Servers;
 require Exporter;
-use CGI qw/:standard *table -utf8/;
+use CGI qw/:standard *table/;
 use Sauron::CGIutil;
 use Sauron::BackEnd;
 use Sauron::Sauron;
@@ -103,6 +103,32 @@ my %server_form = (
   {ftype=>12, tag=>'listen_on_v6', name=>'Listen-on-v6', whitesp=>['','','','','','P'],
    iff=>['named_flags_ac','0']},
 
+  {ftype=>0, name=>'DNS Zone Transfer over TLS (XoT, RFC 9103)'},
+  {ftype=>1, tag=>'tls_listen_profile', name=>'TLS listener profile',
+   type=>'tlsref', len=>25, empty=>1, whitesp=>'P',
+   definfo=>['','No TLS listener'],
+   extrainfo=>"TLS profile name; enables listen-on ... tls for XoT. " .
+              "Use 'ephemeral' for a built-in self-signed cert (no files)"},
+  {ftype=>1, tag=>'tls_listen_port', name=>'TLS listener port',
+   type=>'port', len=>5, empty=>1, definfo=>['853','Default (853)']},
+  {ftype=>1, tag=>'tls_default_profile', name=>'Default zone TLS profile',
+   type=>'tlsref', len=>25, empty=>1, whitesp=>'P',
+   definfo=>['','None'],
+   extrainfo=>"Default TLS profile name for zones that do not set their own " .
+              "(or 'ephemeral')"},
+
+  {ftype=>0, name=>'DNS over HTTPS (DoH, RFC 8484)'},
+  {ftype=>1, tag=>'doh_profile', name=>'DoH TLS profile',
+   type=>'tlsref', len=>25, empty=>1, whitesp=>'P',
+   definfo=>['','DoH disabled'],
+   extrainfo=>"TLS profile name; enables listen-on ... tls ... http for DoH. " .
+              "Use 'ephemeral' (self-signed) or 'none' (plaintext behind proxy)"},
+  {ftype=>1, tag=>'doh_port', name=>'DoH listener port',
+   type=>'port', len=>5, empty=>1, definfo=>['443','Default (443)']},
+  {ftype=>1, tag=>'doh_endpoint', name=>'DoH endpoint path',
+   type=>'urlpath', len=>25, empty=>1, whitesp=>'P',
+   definfo=>['/dns-query','Default (/dns-query, BIND built-in http default)']},
+
 
   {ftype=>0, name=>'Access control'},
   {ftype=>3, tag=>'named_flags_ac', name=>'Use access control from master',
@@ -161,15 +187,12 @@ my %server_form = (
   {ftype=>3, tag=>'dhcp_flags_ad', name=>'auto-domainnames',
    type=>'enum', enum=>{0=>'No',1=>'Yes'}, iff=>['masterserver','-1']},
 # Local DHCP settings 2020-07-20 TVu
-  {ftype=>2, tag=>'dhcp_l', name=>'Local DHCP Settings', type=>['text','text'],
-   fields=>2, len=>[50,20], maxlen=>[200,20], empty=>[0,1],
-   extrainfo => 'Private configuration for this DHCP server only',
-   whitesp=>['N','P'], elabels=>['dhcptab line','comment']}, # , iff=>['masterserver','-1']
-  {ftype=>2, tag=>'dhcp', name=>'Global DHCP Settings', type=>['text','text'],
-   fields=>2, len=>[50,20], maxlen=>[200,20], empty=>[0,1],
-   whitesp=>['N','P'], elabels=>['dhcptab line','comment'], iff=>['masterserver','-1']},
+  dhcp_field('dhcp_l','Local DHCP Settings',4, label=>'dhcptab line',
+	     extrainfo=>'Private configuration for this DHCP server only'),
+  dhcp_field('dhcp','Global DHCP Settings',4, label=>'dhcptab line',
+	     iff=>['masterserver','-1']),
   {ftype=>0,
-   name=>'DHCP Failover Settings &mdash; (considered obsolete - use Local DHCP feature instead)'},
+   name=>'DHCP Failover Settings (ISC failover, KEA High Availability)'},
   {ftype=>3, tag=>'dhcp_flags_fo', name=>'Enable failover protocol',
    type=>'enum', enum=>{0=>'No',1=>'Yes'}, iff=>['masterserver','-1']},
   {ftype=>1, tag=>'df_port', name=>'Port number', type=>'int', len=>5,
@@ -184,20 +207,22 @@ my %server_form = (
    iff=>['masterserver','-1']},
   {ftype=>1, tag=>'df_loadbalmax', name=>'Load balance max (seconds)',
    type=>'int', len=>5, iff=>['masterserver','-1']},
+  {ftype=>1, tag=>'kea_ha_port', name=>'KEA HA listener port', type=>'int',
+   len=>5, iff=>['masterserver','-1'],
+   extrainfo=>'KEA uses the High Availability hook: port of its HTTP listener; ' .
+     'split 0 or 255 = hot-standby, otherwise load-balancing'},
 
   {ftype=>0, name=>'DHCP6 Settings'},
   {ftype=>3, tag=>'dhcp_flags_ad6', name=>'auto-domainnames',
-   type=>'enum', enum=>{0=>'No',1=>'Yes'}, iff=>['masterserver','-1']},
+   type=>'enum', enum=>{0=>'No',1=>'Yes'}, iff=>['masterserver','-1'],
+   extrainfo=>'not used yet: DHCPv6 output follows the DHCP auto-domainnames setting'},
 # Local DHCP settings 2020-07-20 TVu
-  {ftype=>2, tag=>'dhcp6_l', name=>'Local DHCP Settings', type=>['text','text'],
-   whitesp=>['N','P'], fields=>2, len=>[50,20], maxlen=>[200,20], empty=>[0,1],
-   extrainfo => 'Private configuration for this DHCP server only',
-   elabels=>['dhcptab line','comment']}, # , iff=>['masterserver','-1']
-  {ftype=>2, tag=>'dhcp6', name=>'Global DHCP Settings', type=>['text','text'],
-   whitesp=>['N','P'], fields=>2, len=>[50,20], maxlen=>[200,20], empty=>[0,1],
-   elabels=>['dhcptab line','comment'], iff=>['masterserver','-1']},
+  dhcp_field('dhcp6_l','Local DHCP Settings',6, label=>'dhcptab line',
+	     extrainfo=>'Private configuration for this DHCP server only'),
+  dhcp_field('dhcp6','Global DHCP Settings',6, label=>'dhcptab line',
+	     iff=>['masterserver','-1']),
   {ftype=>0,
-   name=>'DHCP6 Failover Settings &mdash; (considered obsolete - use Local DHCP feature instead)'},
+   name=>'DHCP6 Failover Settings (KEA High Availability only, ISC DHCPv6 has no failover)'},
   {ftype=>3, tag=>'dhcp_flags_fo6', name=>'Enable failover protocol',
    type=>'enum', enum=>{0=>'No',1=>'Yes'}, iff=>['masterserver','-1']},
   {ftype=>1, tag=>'df_port6', name=>'Port number', type=>'int', len=>5,
@@ -212,17 +237,14 @@ my %server_form = (
    iff=>['masterserver','-1']},
   {ftype=>1, tag=>'df_loadbalmax6', name=>'Load balance max (seconds)',
    type=>'int', len=>5, iff=>['masterserver','-1']},
+  {ftype=>1, tag=>'kea_ha_port6', name=>'KEA HA listener port', type=>'int',
+   len=>5, iff=>['masterserver','-1']},
 
 
   {ftype=>0, name=>'Record info', no_edit=>1},
   {ftype=>4, name=>'Record created', tag=>'cdate_str', no_edit=>1},
   {ftype=>4, name=>'Last modified', tag=>'mdate_str', no_edit=>1}
  ]
-# bgcolor=>'#eeeebf',
-# border=>'0',
-# width=>'100%',
-# nwidth=>'30%',
-# heading_bg=>'#aaaaff'
 );
 
 my %master_servers;
@@ -265,9 +287,10 @@ sub select_server($$)
     start_form(-method=>'POST',-action=>$selfurl),
     hidden('menu','servers'),p,
     "Available servers:",p,
-    scrolling_list(-width=>'100%',-name=>'server_list',-size=>'10',-values=>\@l,-labels=>\%srec),
-    br,
+    '<div class="s-server-select">',
+    scrolling_list(-name=>'server_list',-size=>'10',-values=>\@l,-labels=>\%srec),
     submit(-name=>'server_select_submit',-value=>'Select server'),
+    '</div>',
     end_form;
 
   return 0;
@@ -281,7 +304,7 @@ sub display_new_server($$$$)
 
   #display selected server info
   unless ($serverid > 0) {
-    print h3("Cannot select server!"),p;
+    alert1('Cannot select server.');
     select_server($state,$perms);
     return 1;
   }
@@ -305,6 +328,17 @@ sub display_new_server($$$$)
     save_state($scookie,$state);
   }
 
+  # Display action bar with History button (similar to hosts/zones)
+  my $selfurl = $state->{selfurl};
+  if (!check_perms('level',$main::ALEVEL_HISTORY,1)) {
+    print '<div class="s-action-bar"><div class="s-action-bar__right">',
+          start_form(-method=>'POST',-action=>$selfurl,-class=>'s-inline-form'),
+          hidden('menu','servers'),hidden('sub','History'),
+          submit(-name=>'sub',-value=>'History'),' ',
+          end_form,
+          '</div></div>';
+  }
+
   display_form(\%serv,\%server_form); # display server record
   return 0;
 }
@@ -325,7 +359,8 @@ sub menu_handler {
 
   my($res,%data,%serv,%srec,@l,$server);
 
-  if ($serverid && check_perms('server','R')) {
+  # Do not redirect for History action
+  if ($serverid && check_perms('server','R') && $sub ne 'History') {
     select_server($state,$perms);
     return;
   }
@@ -351,10 +386,12 @@ sub menu_handler {
     return if (check_perms('superuser',''));
 
     if (param('srvdel_submit') ne '') {
-      if (delete_server($serverid) < 0) {
-	print h2("Cannot delete server!");
+      if (($res=delete_server($serverid)) < 0) {
+	alert1($res == -101 ?
+	       "Cannot delete server: delete its slave servers first." :
+	       "Cannot delete server.");
       } else {
-	print h2('Server deleted successfully!');
+	success1('Server deleted successfully.');
 	$state->{'zone'}=''; $state->{'zoneid'}=-1;
 	$state->{'server'}=''; $state->{'serverid'}=-1;
 	save_state($scookie,$state);
@@ -384,8 +421,27 @@ sub menu_handler {
 
   $serverid=param('server_list') if (param('server_list'));
 
-  if ($serverid && $sub ne 'select') {
+  # Do not redirect for History action
+  if ($serverid && $sub ne 'select' && $sub ne 'History') {
     display_new_server($state,$perms,$serverid,$scookie);
+    return;
+  }
+
+  # Handle History sub-action
+  if ($sub eq 'History') {
+    return if (check_perms('level',$main::ALEVEL_HISTORY));
+    unless ($serverid > 0) {
+      select_server($state,$perms);
+      return;
+    }
+    my %server_data;
+    get_server($serverid,\%server_data);
+    my $server_name = $server_data{name} || '';
+    print "History for server record: $serverid ($server_name):<br>";
+    my @q;
+    get_history_server($serverid,\@q);
+    unshift @q, [$server_data{cdate},'CREATE','server created',$server_data{cuser}];
+    display_list(['Date','Action','Info','By'],\@q,0);
     return;
   }
 

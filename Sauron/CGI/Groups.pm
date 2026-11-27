@@ -6,7 +6,7 @@
 #
 package Sauron::CGI::Groups;
 require Exporter;
-use CGI qw/:standard *table -utf8/;
+use CGI qw/:standard *table/;
 use Sauron::DB;
 use Sauron::CGIutil;
 use Sauron::BackEnd;
@@ -41,12 +41,8 @@ my %group_form=(
    len=>3, empty=>0},
   {ftype=>1, tag=>'comment', name=>'Comment', type=>'text', len=>60,
    empty=>1, whitesp=>'P'},
-  {ftype=>2, tag=>'dhcp', name=>'DHCP entries', whitesp=>['N','P'],
-   type=>['text','text'], fields=>2, maxlen=>[200,20],
-   len=>[50,20], empty=>[0,1], elabels=>['DHCP','comment']},
-  {ftype=>2, tag=>'dhcp6', name=>'DHCPv6 entries', whitesp=>['N','P'],
-   type=>['text','text'], fields=>2, maxlen=>[200,20],
-   len=>[50,20], empty=>[0,1], elabels=>['DHCP','comment']},
+  dhcp_field('dhcp','DHCP entries',4),
+  dhcp_field('dhcp6','DHCPv6 entries',6),
   {ftype=>2, tag=>'printer', name=>'PRINTER entries',
    type=>['text','text'], fields=>2, len=>[40,20], empty=>[0,1],
    elabels=>['PRINTER','comment'], iff=>['type','[1]']},
@@ -102,7 +98,7 @@ sub show_group_record($$$)
   return 1 if ($id <= 0);
 
   if (get_group($id,\%group)) {
-    print h2("Cannot get group record (id=$id)!");
+    alert1("Cannot get group record (id=$id).");
     return;
   }
   display_form(\%group,\%group_form);
@@ -128,7 +124,10 @@ sub browse_groups($$)
   db_query("SELECT id,name,comment,type,alevel FROM groups " .
 	   "WHERE server=$serverid ORDER BY name;",\@q);
   if (@q < 1) {
-    print h2("No groups found!");
+    print '<div class="s-empty-state">',
+          '<p class="s-empty-state__title">No groups found</p>',
+          '<p class="s-empty-state__hint">No groups are defined for this server.</p>',
+          '</div>';
     return;
   }
 
@@ -159,7 +158,7 @@ sub menu_handler {
   my $id=param('grp_id');
 
   unless ($serverid > 0) {
-    print h2("Server not selected!");
+    alert1("Server not selected.");
     return;
   }
   return if (check_perms('server','R'));
@@ -167,7 +166,7 @@ sub menu_handler {
   get_vmps_list($serverid,\%vmps_list_hash,\@vmps_list_lst);
 
   if ($sub eq 'add') {
-    $data{type}=1; $data{alevel}=0; $data{dhcp}=[]; $data{printer}=[];
+    $data{type}=1; $data{alevel}=0; $data{dhcp}=[]; $data{dhcp6}=[]; $data{printer}=[];
     $data{server}=$serverid;
     $res=add_magic('add','Group','groups',\%group_form,
 		   \&restricted_add_group,\%data);
@@ -184,20 +183,19 @@ sub menu_handler {
   }
   elsif ($sub eq 'Delete') {
     if (get_group($id,\%group)) {
-      print h2("Cannot get group (id=$id)");
+      alert1("Cannot get group (id=$id).");
       return;
     }
     return if (check_perms('grpmask',$group{name}));
     if (param('grp_cancel')) {
-      print h2('Group not removed');
+      alert1('Group not removed.');
       show_group_record($state,$perms,$id);
       return;
     }
     elsif (param('grp_confirm')) {
-      $new_id=param('grp_new');
+      $new_id=int(param('grp_new'));
       if ($new_id eq $id) {
-	print h2("Cannot change host records to point to the group " .
-		 "being deleted!");
+	alert1("Cannot change host records to point to the group being deleted.");
 	show_group_record($state,$perms,$id);
 	return;
       }
@@ -207,7 +205,7 @@ sub menu_handler {
       db_begin();
 # Update hosts, moving them to a new group or not.
       if (db_exec("UPDATE hosts SET grp = $new_id WHERE grp = $id;") < 0) {
-	print h2('Cannot update hosts pointing to this group!');
+	alert1('Cannot update hosts pointing to this group.');
 	db_rollback();
 	return;
       }
@@ -215,13 +213,13 @@ sub menu_handler {
 # Update may create two kinds of duplicates, which are deleted next.
       if ($new_id > 0) {
 	  if (db_exec("UPDATE group_entries SET grp = $new_id WHERE grp = $id;") < 0) {
-	      print h2('Cannot update group_entries (subgroups) pointing to this group!');
+	      alert1('Cannot update group_entries (subgroups) pointing to this group.');
 	      db_rollback();
 	      return;
 	  }
       } else {
 	  if (db_exec("delete from group_entries WHERE grp = $id or grp = -1;") < 0) {
-	      print h2('Cannot delete group_entries (subgroups) pointing to this group!');
+	      alert1('Cannot delete group_entries (subgroups) pointing to this group.');
 	      db_rollback();
 	      return;
 	  }
@@ -231,7 +229,7 @@ sub menu_handler {
       if (db_exec('DELETE FROM group_entries WHERE id IN (SELECT id ' .
 		  'FROM (SELECT id, ROW_NUMBER() OVER (partition BY host, grp ORDER BY id) AS rnum ' .
 		  'FROM group_entries) t WHERE t.rnum > 1);') < 0) {
-	print h2('Error removing duplicates (1)!');
+	alert1('Error removing duplicates (1).');
 	db_rollback();
 	return;
       }
@@ -239,15 +237,14 @@ sub menu_handler {
       if (db_exec('delete from group_entries where id in ' .
 		  '(select ge.id from group_entries ge, hosts h ' .
 		  'where h.grp = ge.grp and h.id = ge.host);') < 0) {
-	print h2('Error removing duplicates (2)!');
+	alert1('Error removing duplicates (2).');
 	db_rollback();
 	return;
       }
       db_ignore_begin_and_commit(1);
       my $del_err;
       if (($del_err = delete_group($id)) < 0) {
-	print "<FONT color=\"red\">",h1("Group delete failed! $del_err"),
-	        "</FONT>";
+	alert1("Group delete failed! $del_err");
 	db_ignore_begin_and_commit(0);
 	db_rollback();
 	return;
@@ -255,7 +252,7 @@ sub menu_handler {
       db_ignore_begin_and_commit(0);
       db_commit();
 
-      print h2("Group successfully deleted.");
+      success1("Group successfully deleted.");
       return;
     }
 

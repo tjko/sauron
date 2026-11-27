@@ -1,0 +1,390 @@
+#!/usr/bin/perl -I/usr/local/sauron
+#
+# lab-check - check the tasks of the Sauron training lab
+#
+# The checks look at the result, not at the way it was reached: the zones and
+# dhcpd.conf are generated into a temporary directory exactly as they would
+# be deployed (sauron --bind/--dhcp --keep-pending --noupdateserial, so the
+# check changes nothing in the database: PENDING markers and zone serials
+# stay as they are), parsed, and compared with the expected records.
+# A few tasks also look into the database (comments, networks, privileges).
+#
+# Tasks are defined in tasks.pl next to this script. Task descriptions for
+# the participants are in tasks.en.md / tasks.cs.md.
+#
+use strict;
+use warnings;
+use utf8;
+use FindBin;
+use Getopt::Long;
+use File::Temp qw(tempdir);
+use JSON::PP;
+use Net::DNS;
+use Net::DNS::ZoneFile;
+use Net::IP;
+use Socket qw(inet_pton AF_INET AF_INET6);
+use Sauron::DB;
+use Sauron::Util;
+use Sauron::Sauron;
+
+binmode(STDOUT, ':encoding(UTF-8)');
+
+my %opt = (server => 'lab');
+GetOptions(\%opt, 'help|h', 'server=s', 'lang=s', 'json', 'tap', 'list',
+           'task=s@', 'role=s', 'verbose|v')
+  or usage(2);
+usage(0) if $opt{help};
+
+sub usage {
+  print <<"EOF";
+syntax: $0 [options]
+
+  --task=ID     check only this task (repeatable), e.g. --task=U1
+  --role=ROLE   check only tasks of this role (user|admin|dhcp)
+  --list        list tasks without checking them
+  --lang=cs|en  language of task titles and messages (default: from \$LANG)
+  --json        machine readable output (used by the web UI plugin)
+  --tap         TAP output (used by the automated tests)
+  --server=NAME Sauron server holding the lab data (default: lab)
+  --verbose     show output of the zone generator
+EOF
+  exit($_[0]);
+}
+
+our $LANG = $opt{lang} // (($ENV{LANG} // '') =~ /^cs/ ? 'cs' : 'en');
+$LANG = 'en' unless $LANG =~ /^(cs|en)$/;
+
+my %MSG = (
+  missing   => { en => 'missing record: %s',
+                 cs => 'chybí záznam: %s' },
+  unexpected=> { en => 'record should not exist: %s',
+                 cs => 'záznam nemá existovat: %s' },
+  ttl       => { en => 'TTL of %s is %s, expected %s',
+                 cs => 'TTL záznamu %s je %s, očekáváno %s' },
+  gen_fail  => { en => 'generating the configuration failed: %s',
+                 cs => 'generování konfigurace selhalo: %s' },
+  none      => { en => 'no record: %s', cs => 'žádný záznam: %s' },
+  no_other  => { en => 'no other records: %s', cs => 'žádné další záznamy: %s' },
+  ttl_is    => { en => '%s has TTL %s', cs => '%s má TTL %s' },
+  elsewhere => { en => '(the same record exists as %s; is the right zone selected and the name typed relative to it?)',
+                 cs => '(stejný záznam existuje jako %s; je vybraná správná zóna a jméno zadané relativně k ní?)' },
+  pass      => { en => 'done', cs => 'splněno' },
+  fail      => { en => 'not done yet', cs => 'zatím nesplněno' },
+  summary   => { en => '%d of %d tasks done', cs => 'splněno %d z %d úkolů' },
+);
+
+sub msg { my ($key, @args) = @_; return sprintf($MSG{$key}{$LANG}, @args); }
+
+###########################################################################
+# data sources (generated lazily, once per run)
+
+my ($ZONES, $DHCPD);
+my %GEN_ERROR;  # mode (bind|dhcp) => error message
+our %USED;      # modes the task being checked used
+my $TMPDIR = tempdir('sauron-lab-XXXXXX', TMPDIR => 1, CLEANUP => 1);
+
+sub generate($) {
+  my ($mode) = @_;
+  my $dir = "$TMPDIR/$mode";
+  mkdir $dir;
+  my $sauron = "$main::PROG_DIR/sauron";
+  $sauron = "$FindBin::Bin/../sauron" unless -x $sauron;
+  my $out = `"$sauron" --$mode --keep-pending --noupdateserial "$opt{server}" "$dir" 2>&1`;
+  print STDERR $out if $opt{verbose};
+  if ($? != 0) {
+    (my $err = $out) =~ s/\s+$//;
+    $err = (split /\n/, $err)[-1] // "exit code " . ($? >> 8);
+    $GEN_ERROR{$mode} = msg('gen_fail', "sauron --$mode: $err");
+    return undef;
+  }
+  return $dir;
+}
+
+# %$ZONES: lc(owner) => { TYPE => [ Net::DNS::RR, ... ] }
+sub zones() {
+  $USED{bind} = 1;
+  return $ZONES if $ZONES;
+  $ZONES = {};
+  my $dir = generate('bind') or return $ZONES;
+  for my $file (glob("$dir/*.zone")) {
+    my @rrs = eval { Net::DNS::ZoneFile->new($file)->read };
+    if ($@) { $GEN_ERROR{bind} = msg('gen_fail', "$file: $@"); next; }
+    for my $rr (@rrs) {
+      push @{$ZONES->{lc $rr->owner}{$rr->type}}, $rr;
+    }
+  }
+  return $ZONES;
+}
+
+sub dhcpd() {
+  $USED{dhcp} = 1;
+  return $DHCPD if defined $DHCPD;
+  $DHCPD = '';
+  my $dir = generate('dhcp') or return $DHCPD;
+  if (open(my $fh, '<', "$dir/dhcpd.conf")) {
+    local $/; $DHCPD = <$fh>; close($fh);
+  }
+  return $DHCPD;
+}
+
+###########################################################################
+# helpers for tasks.pl
+
+our @FAIL;      # failure messages of the task being checked
+our @ITEMS;     # checked points of the task: { ok => bool, text => ... }
+
+# item(OK, TEXT [, FAILURE]): record one checked point; TEXT describes what
+# is checked, FAILURE (default TEXT) explains a failure
+sub item {
+  my ($ok, $text, $failure) = @_;
+  push @ITEMS, { ok => ($ok ? JSON::PP::true : JSON::PP::false), text => $text,
+                (!$ok && defined $failure && $failure ne $text ? (detail => $failure) : ()) };
+  push @FAIL, ($failure // $text) unless $ok;
+  return $ok;
+}
+
+# check(CONDITION, TEXT): a point checked by tasks.pl itself
+sub check($$) { my ($cond, $text) = @_; return item($cond, $text); }
+
+# fail(TEXT...): failed points
+sub fail { item(0, $_) for @_; }
+
+sub fqdn($) { my $n = lc(shift); $n =~ s/\.$//; return $n; }
+
+# canonical rdata for comparisons
+sub norm_rdata($$) {
+  my ($type, $value) = @_;
+  return $value if $type eq 'TXT';
+  return inet_pton($type eq 'A' ? AF_INET : AF_INET6, $value)
+    if $type eq 'A' || $type eq 'AAAA';
+  (my $s = lc $value) =~ s/\.(?=\s|$)//g;   # trailing dots of names
+  $s =~ s/"//g if $type eq 'CAA';           # value may or may not be quoted
+  $s =~ s/\s+/ /g;
+  return $s;
+}
+
+sub rdata($) {
+  my ($rr) = @_;
+  my $t = $rr->type;
+  return join('', $rr->txtdata) if $t eq 'TXT';
+  return inet_pton($t eq 'A' ? AF_INET : AF_INET6, $rr->address)
+    if $t eq 'A' || $t eq 'AAAA';
+  return norm_rdata($t, $rr->rdstring);
+}
+
+
+sub show($$$) {
+  my ($name, $type, $value) = @_;
+  $value = qq("$value") if $type eq 'TXT' && defined $value;
+  return join(' ', fqdn($name) . '.', $type, defined $value ? $value : ());
+}
+
+# records NAME TYPE (list of Net::DNS::RR)
+sub rrs($$) {
+  my ($name, $type) = @_;
+  return @{ zones()->{fqdn($name)}{$type} // [] };
+}
+
+sub has_rr($$$) {
+  my ($name, $type, $value) = @_;
+  my $want = norm_rdata($type, $value);
+  return grep { rdata($_) eq $want } rrs($name, $type);
+}
+
+# owners of records TYPE VALUE with the same first label as NAME but in
+# another domain: a record added in a wrong zone or with the zone name typed
+# twice (_dmarc.shop.shop.lab.example instead of _dmarc.shop.lab.example)
+sub elsewhere($$$) {
+  my ($name, $type, $value) = @_;
+  my $want = norm_rdata($type, $value);
+  my $z = zones();
+  my ($label) = split /\./, fqdn($name);
+  my @found = sort grep {
+    $_ ne fqdn($name) && (split /\./)[0] eq $label &&
+    grep { rdata($_) eq $want } @{$z->{$_}{$type} // []}
+  } keys %$z;
+  return map { "$_." } @found;
+}
+
+# expect_rr(NAME, TYPE, VALUE): the record must exist
+sub expect_rr($$$) {
+  my ($name, $type, $value) = @_;
+  my $ok = has_rr($name, $type, $value);
+  my $failure = msg('missing', show($name, $type, $value));
+  if (!$ok and my @else = elsewhere($name, $type, $value)) {
+    $failure .= ' ' . msg('elsewhere', join(', ', @else[0 .. ($#else > 2 ? 2 : $#else)]));
+  }
+  item($ok, show($name, $type, $value), $failure);
+}
+
+# expect_no_rr(NAME, TYPE [, VALUE]): no such record (any value if omitted)
+sub expect_no_rr($$;$) {
+  my ($name, $type, $value) = @_;
+  my @bad = defined $value
+    ? (has_rr($name, $type, $value) ? (show($name, $type, $value)) : ())
+    : map { $_->plain } rrs($name, $type);
+  item(!@bad, msg('none', show($name, $type, $value)),
+       join('; ', map { msg('unexpected', $_) } @bad));
+}
+
+# expect_no_name(NAME): no records at all with this owner name
+sub expect_no_name($) {
+  my ($name) = @_;
+  my $recs = zones()->{fqdn($name)} // {};
+  my @bad = map { $_->plain } map { @$_ } values %$recs;
+  item(!@bad, msg('none', fqdn($name) . '.'),
+       join('; ', map { msg('unexpected', $_) } @bad));
+}
+
+# expect_only_rr(NAME, TYPE, VALUE...): exactly these records
+sub expect_only_rr($$@) {
+  my ($name, $type, @values) = @_;
+  my %want = map { norm_rdata($type, $_) => 1 } @values;
+  my $found = grep { has_rr($name, $type, $_) } @values;
+  expect_rr($name, $type, $_) for @values;
+  my @bad = map { $_->plain } grep { !$want{rdata($_)} } rrs($name, $type);
+  # without any expected record the point would pass trivially
+  return unless @bad || $found;
+  item(!@bad, msg('no_other', show($name, $type, undef)),
+       join('; ', map { msg('unexpected', $_) } @bad));
+}
+
+sub expect_ttl($$$) {
+  my ($name, $type, $ttl) = @_;
+  my @r = rrs($name, $type);
+  my $text = msg('ttl_is', show($name, $type, undef), $ttl);
+  return item(0, $text, msg('missing', show($name, $type, undef))) unless @r;
+  my @bad = grep { $_->ttl != $ttl } @r;
+  item(!@bad, $text,
+       join('; ', map { msg('ttl', show($name, $type, undef), $_->ttl, $ttl) } @bad));
+}
+
+# reverse name of an IP address (without the trailing dot)
+sub ptr_name($) {
+  my $ip = Net::IP->new(shift) or return '';
+  return fqdn($ip->reverse_ip);
+}
+
+# expect_ptr(IP, NAME): reverse record IP -> NAME
+sub expect_ptr($$) {
+  my ($ip, $name) = @_;
+  expect_rr(ptr_name($ip), 'PTR', fqdn($name));
+}
+
+sub expect_no_ptr($) { expect_no_rr(ptr_name(shift), 'PTR'); }
+
+
+# t(en => '...', cs => '...'): message in the current language
+sub t { my %m = @_; return $m{$LANG} // $m{en}; }
+
+# database helpers
+sub db_rows($) { my @q; db_query($_[0], \@q); return @q; }
+sub db_one($) { my @q = db_rows($_[0]); return @q ? $q[0][0] : undef; }
+sub sq($) { return db_encode_str($_[0]); }
+
+sub server_id() {
+  return db_one("SELECT id FROM servers WHERE name=" . sq($opt{server}));
+}
+
+# host record (hashref of hosts columns) by FQDN, undef if not found
+sub host_by_name($) {
+  my $fqdn = fqdn(shift);
+  my $sid = server_id() // return undef;
+  my @q = db_rows("SELECT h.id, h.type, h.comment, h.info, h.ether, h.ttl " .
+                  "FROM hosts h JOIN zones z ON z.id = h.zone " .
+                  "WHERE z.server = $sid AND h.domain || '.' || z.name = " .
+                  sq($fqdn) . " ORDER BY h.id");
+  return undef unless @q;
+  my %h; @h{qw(id type comment info ether ttl)} = @{$q[0]};
+  return \%h;
+}
+
+# the lab accounts: members of the group lab-users (the lab user, see
+# SAURON_LAB_USER in seed.sh) and the first superuser
+our $LAB_GROUP = 'lab-users';
+sub lab_users() {
+  return map { $_->[0] } db_rows(
+    "SELECT u.username FROM users u, user_rights r, user_groups g " .
+    "WHERE r.type=2 AND r.ref=u.id AND r.rtype=0 AND r.rref=g.id " .
+    "AND g.name=" . sq($LAB_GROUP) . " ORDER BY u.id");
+}
+sub lab_admin() {
+  return db_one("SELECT username FROM users WHERE superuser ORDER BY id LIMIT 1");
+}
+
+sub dhcp_host_block($) {
+  my ($name) = @_;
+  my $conf = dhcpd();
+  return $1 if $conf =~ /^\s*host\s+\Q$name\E(?:\.\S+)?\s*\{(.*?)\}/ms;
+  return undef;
+}
+
+###########################################################################
+# main
+
+load_config();
+db_connect() or die "cannot connect to the database\n";
+
+our @TASKS;
+my $taskfile = "$FindBin::Bin/tasks.pl";
+@TASKS = do $taskfile;
+die "cannot load $taskfile: " . ($@ || $! || 'no tasks') . "\n" unless @TASKS;
+
+my @tasks = @TASKS;
+if ($opt{task}) {
+  my %want = map { uc($_) => 1 } map { split /,/ } @{$opt{task}};
+  @tasks = grep { $want{uc $_->{id}} } @tasks;
+}
+@tasks = grep { $_->{role} eq $opt{role} } @tasks if $opt{role};
+die "no such task\n" unless @tasks;
+
+my @results;
+for my $task (@tasks) {
+  my %r = (id => $task->{id}, role => $task->{role},
+           title => $task->{title}{$LANG} // $task->{title}{en});
+  unless ($opt{list}) {
+    local @FAIL;
+    local @ITEMS;
+    local %USED;
+    eval { $task->{check}->(); 1 } or item(0, "internal error: $@");
+    # a failed generation explains the failures of the tasks that used it
+    for my $err (map { $GEN_ERROR{$_} } grep { $GEN_ERROR{$_} } sort keys %USED) {
+      unshift @FAIL, $err;
+      unshift @ITEMS, { ok => JSON::PP::false, text => $err };
+    }
+    $r{checks} = [ @ITEMS ];
+    $r{ok} = @FAIL ? JSON::PP::false : JSON::PP::true;
+    $r{messages} = [ @FAIL ];
+  }
+  push @results, \%r;
+}
+
+my $done = grep { $_->{ok} } @results;
+
+if ($opt{json}) {
+  print JSON::PP->new->canonical->pretty->encode(
+    { lang => $LANG, server => $opt{server}, done => $done + 0,
+      total => scalar(@results), tasks => \@results,
+      accounts => { user => (lab_users())[0] // '', dhcp => (lab_users())[0] // '',
+                    admin => lab_admin() // '' } });
+} elsif ($opt{tap}) {
+  printf "1..%d\n", scalar @results;
+  my $n = 0;
+  for my $r (@results) {
+    $n++;
+    printf "%s %d - %s %s\n", ($r->{ok} ? 'ok' : 'not ok'), $n, $r->{id}, $r->{title};
+    print "# $_\n" for @{$r->{messages} // []};
+  }
+} else {
+  for my $r (@results) {
+    if ($opt{list}) {
+      printf "%-4s %-6s %s\n", $r->{id}, $r->{role}, $r->{title};
+      next;
+    }
+    printf "%s %-4s %s\n", ($r->{ok} ? '[x]' : '[ ]'), $r->{id}, $r->{title};
+    print "         - $_\n" for @{$r->{messages}};
+  }
+  printf "\n%s\n", msg('summary', $done, scalar @results) unless $opt{list};
+}
+
+exit(($opt{list} || $done == @results) ? 0 : 1);

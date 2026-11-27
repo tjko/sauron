@@ -29,6 +29,7 @@ CREATE TABLE hosts (
 					12=tlsa entry,
 					13=txt entry,
 					14=naptr entry,
+                                   15=caa entry,
 					101=host reservation
 					*/
        

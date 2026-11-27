@@ -1,0 +1,276 @@
+import-blocklist - Import Blocked Domains from CSV to RPZ Zones
+===============================================================
+
+SYNOPSIS
+--------
+  import-blocklist --config <file> --source <name> [options]
+  import-blocklist --config <file> --all [options]
+
+DESCRIPTION
+-----------
+This script imports blocked domains from external CSV sources (e.g., government
+blocklists) into Sauron-managed RPZ (Response Policy Zone) zones.
+
+Key features:
+  * Configurable CSV column mapping
+  * Automatic filtering by removal date (date_removed)
+  * Support for multiple sources from single or multiple CSV files
+  * Incremental updates (add/modify/delete)
+  * Dry-run mode for testing changes
+
+OPTIONS
+-------
+  --config <path>           Configuration file path (required)
+  --source <name>           Source name from configuration to process
+  --all                     Process all sources defined in configuration
+  --zone <zone>             Override target zone from configuration
+  --dry-run                 Show what would be done without making changes
+  --verbose, -v             Show detailed progress information (repeat: -vvv)
+  --keep-expired            Do not remove entries marked as expired in CSV
+
+  Safety options (protect against data loss):
+  --max-changes-percent <n> Maximum percentage of changes allowed relative to
+                            existing records (default: 25). Set to 0 to disable.
+                            Useful for detecting corrupted source data.
+  --max-delete <n>          Maximum number of DELETE operations allowed
+                            (default: 1000). Set to 0 to disable.
+                            Protects against accidental mass deletions.
+  --confirm-above <n>       Require interactive confirmation if total changes
+                            exceed this number. Only works in interactive mode
+                            (TTY). Set to 0 to disable.
+
+  --help, -h                Show this help message
+
+CONFIGURATION FILE
+------------------
+The configuration file is in JSON format and defines:
+
+  * Sources with CSV file paths and column mappings
+  * Filters for selecting relevant entries
+  * Target zone and CNAME targets for each source
+  * Global settings
+
+Example configuration:
+
+{
+  "sources": [
+    {
+      "name": "mfcr-hazardy",
+      "description": "Ministry of Finance - unauthorized gambling",
+      "csv_file": "/root/dns/blocking_lists.csv",
+      "csv_columns": {
+        "domain": "URL",
+        "date_added": "DATUM_ZAPISU",
+        "date_removed": "DATUM_VYMAZU",
+        "source": "ZDROJ",
+        "dataset": "NAZEV_DATOVE_SADY"
+      },
+      "filters": {
+        "source_regex": "Ministerstvo financí",
+        "dataset_regex": "nepovolených internetových her"
+      },
+      "zone": "rpz.cesnet.cz",
+      "cname_target": "*.poker.cesnet.cz.",
+      "txt_info_prefix": "Gambling sites"
+    }
+  ],
+  "global_settings": {
+    "remove_expired": true,
+    "log_level": "info"
+  }
+}
+
+TXT RECORD MAPPING
+------------------
+The optional txt_columns map lets you define additional TXT records per host.
+Use the TXT owner label as the key exactly as it should appear in DNS.
+For blocklist metadata this is usually an underscored label (for example
+`_info`, `_legal`, `_sha256sum`). The value is the CSV column name.
+
+Example:
+
+  "txt_columns": {
+    "_info": "generated:info",
+    "_legal": "legal",
+    "_sha256sum": "sha256sum"
+  }
+
+Supported generated values:
+  * generated:info       - Uses the blocklist info string from the host
+  * generated:date_added - Formats the import date as D.M.YYYY
+  * generated:date_removed - Formats the removal date as D.M.YYYY
+  * generated:source     - Uses the CSV source column
+  * generated:dataset    - Uses the CSV dataset column
+
+Wildcard helper hosts (*.domain) are still created when wildcard=1 is present
+in CSV, but they do not receive TXT records. This keeps named-checkzone happy.
+
+CSV STRUCTURE
+-------------
+Expected CSV file format:
+
+  URL,DATUM_ZAPISU,DATUM_VYMAZU,ZDROJ,NAZEV_DATOVE_SADY
+  1xbet.com,2017-07-26,,Ministerstvo financí,Seznam nepovolených her
+  kamagra-eshop.cz,2022-03-10,2023-09-14,SUKL,Nelegální léky
+
+Columns:
+  URL             - Domain or URL of the blocked site
+  DATUM_ZAPISU    - Date added to the list (YYYY-MM-DD)
+  DATUM_VYMAZU    - Date removed from the list (empty = still active)
+  ZDROJ           - Organization that added the entry
+  NAZEV_DATOVE_SADY - Description of the dataset/list
+
+How the script processes data:
+  1. Extracts domain from URL column (removes http://, www., paths)
+  2. Checks DATUM_VYMAZU - if filled and in the past, entry is ignored
+     (or deleted from DB if it existed)
+  3. Applies filters from configuration (source_regex, dataset_regex)
+  4. Validates domain format
+  5. Creates or updates record in database
+
+DATABASE
+--------
+The script stores data in existing Sauron tables:
+
+  hosts:
+    - domain     : blocked domain
+    - type       : 4 (alias/CNAME)
+    - cname_txt  : target domain (e.g., *.poker.cesnet.cz.)
+    - comment    : "blocklist:{source}:{organization}"
+    - info       : text information for TXT record
+
+  txt_entries:
+    - type       : 2 (host)
+    - ref        : ID from hosts table
+    - txt        : formatted text with information
+
+Example DNS records created:
+  blocked-domain.com    IN  CNAME  *.poker.cesnet.cz.
+  _info.blocked-domain.com  IN  TXT  "pub: 26.7.2017 source: Ministry of Finance"
+
+EXAMPLES
+--------
+
+# Process single source
+./import-blocklist --config blocklist.conf --source mfcr-hazardy
+
+# Process all sources with dry-run
+./import-blocklist --config blocklist.conf --all --dry-run
+
+# Verbose output for single source
+./import-blocklist --config blocklist.conf --source sukl-leciva -vv
+
+# Keep expired entries (don't delete them)
+./import-blocklist --config blocklist.conf --source mfcr-hazardy --keep-expired
+
+# Limit changes to 10% (stricter than default 25%)
+./import-blocklist --config blocklist.conf --all --max-changes-percent=10
+
+# Allow up to 5000 deletions (higher than default 1000)
+./import-blocklist --config blocklist.conf --all --max-delete=5000
+
+# Require confirmation for more than 100 changes
+./import-blocklist --config blocklist.conf --all --confirm-above=100
+
+# Disable all safety checks (use with caution!)
+./import-blocklist --config blocklist.conf --all --max-changes-percent=0 --max-delete=0
+
+# Safe workflow: first check with dry-run, then apply
+./import-blocklist --config blocklist.conf --all --dry-run
+./import-blocklist --config blocklist.conf --all
+
+CRON AUTOMATION
+---------------
+Example cron job for daily updates:
+
+# Update all blocklists daily at 6:00 AM
+0 6 * * * /opt/sauron/import-blocklist --config /etc/sauron/blocklist.conf --all >> /var/log/sauron/blocklist.log 2>&1
+
+For weekly updates:
+0 3 * * 0 /opt/sauron/import-blocklist --config /etc/sauron/blocklist.conf --all >> /var/log/sauron/blocklist.log 2>&1
+
+TROUBLESHOOTING
+---------------
+
+"Zone not found"
+  The target RPZ zone must be created in Sauron beforehand. Use the
+  web interface or addzone command to create the zone.
+
+"Cannot read CSV file"
+  Check the file path in configuration and read permissions.
+
+"Invalid domain name"
+  Some URLs in CSV may contain characters invalid for DNS domains.
+  These entries are skipped.
+
+"Failed to add/update/delete"
+  Check database connection and user permissions.
+
+"Changes exceed maximum allowed percentage!"
+  The script detected that changes would affect more than the allowed
+  percentage of existing records. This may indicate:
+  - Corrupted or empty source CSV file
+  - Wrong filter configuration
+  - Legitimate large-scale changes
+  
+  Review the changes with --dry-run first. If the changes are expected,
+  use --max-changes-percent=0 to override the check.
+
+"Too many deletions detected!"
+  The script detected more DELETE operations than allowed. This protects
+  against accidental mass deletions. Review the source data and consider
+  increasing --max-delete if the deletions are expected.
+
+SAFETY FEATURES
+---------------
+The script includes built-in safety features to prevent accidental data loss:
+
+1. Percentage limit (--max-changes-percent)
+   - By default, limits changes to 25% of existing records
+   - Helps detect corrupted or empty source files
+   - Set to 0 to disable
+
+2. Delete limit (--max-delete)
+   - By default, allows maximum 1000 deletions
+   - Protects against mass deletion accidents
+   - Set to 0 to disable
+
+3. Interactive confirmation (--confirm-above)
+   - Prompts for confirmation when changes exceed threshold
+   - Only works in interactive (TTY) sessions
+   - Useful for catching unexpected large changes
+
+Recommended workflow:
+  1. Always run with --dry-run first to preview changes
+  2. Review the changes summary
+  3. Run without --dry-run to apply changes
+  4. Keep default safety limits unless you have specific requirements
+
+FILES
+-----
+  /opt/sauron/import-blocklist    Main script
+  /opt/sauron/blocklist.conf      Configuration file
+  /var/log/sauron/blocklist.log   Log file (if redirected)
+
+CHANGE HISTORY
+--------------
+Version 1.1 (2026) - Safety features added
+  * Added --max-changes-percent option (default 25%)
+  * Added --max-delete option (default 1000)
+  * Added --confirm-above option for interactive confirmation
+  * Improved change reporting with counts and percentages
+
+Version 1.0 (2026) - Initial release
+  * CSV import support with configurable mapping
+  * Filtering by removal date
+  * Incremental updates
+  * Multiple sources support
+
+AUTHORS
+-------
+Created for the Sauron project based on requirements for integration
+of external blocklists from Ministry of Finance and other organizations.
+
+SEE ALSO
+--------
+import-zone(1), sauron(1), addzone(1), export-hosts(1)

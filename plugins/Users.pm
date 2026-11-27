@@ -119,23 +119,20 @@ sub menu_handler {
 	       "left outer join servers s on u.server = s.id " .
 	       "left outer join user_rights ur on u.id = ur.ref and ur.type = 2 and ur.rtype = 6 " .
 	       "order by u.username;", \@q);
-      print "<TABLE bgcolor=\"#ccccff\" cellspacing=1 " .
-	  " cellpadding=1 border=0>",
-	  "<TR bgcolor=\"#aaaaff\">",
-	  th("Username"),th("Name"),th('Flags'),th("Zone"),
-	  th("Server"),"</TR>\n";
+      print '<table class="s-list" cellspacing="1">',
+	    '<tr class="s-list__head">',
+	    th("Username"), th("Name"), th('Flags'), th("Zone"),
+	    th("Server"), "</tr>\n";
       for $i (0..$#q) {
-	  my $trcolor = '#eeeeee';
-	  $trcolor = '#ffffcc' if ($i % 2 == 0);
 	  $status = get_user_status($q[$i][7]);
-	  print "<TR bgcolor='$trcolor'>",
-	  td("<a href=\"$selfurl?menu=login&user_id=$q[$i][0]\">$q[$i][0]</a>"),
-	  td($q[$i][1]), td($status),
-	  td($q[$i][4]),td($q[$i][5]),"\n";
+	  print '<tr class="s-list__row">',
+		td("<a href=\"$selfurl?menu=login&user_id=$q[$i][0]\">$q[$i][0]</a>"),
+		td($q[$i][1]), td($status),
+		td($q[$i][4]), td($q[$i][5]), "\n";
       }
-      print "</TABLE>\n";
-      print '<BR>Flags:<BR>E = Expired<BR>L = Locked<BR>S = Superuser<BR>' .
-	  "Digit(s) = Authorization level (default 0)<BR>&nbsp;\n";
+      print "</table>\n";
+      print '<p>Flags: E = Expired, L = Locked, S = Superuser, ',
+	    "Digit(s) = Authorization level (default 0)</p>\n";
 
   } elsif ($sub eq 'Pl_Users_Groups') {
 
@@ -168,18 +165,15 @@ sub menu_handler {
       db_query("select name, comment " .
 	       "from user_groups " .
 	       "order by name;", \@q);
-      print "<TABLE bgcolor=\"#ccccff\" cellspacing=1 " .
-	  " cellpadding=1 border=0>",
-	  "<TR bgcolor=\"#aaaaff\">",
-	  th("Group name"),th("Comment"),"</TR>\n";
+      print '<table class="s-list" cellspacing="1">',
+	    '<tr class="s-list__head">',
+	    th("Group name"), th("Comment"), "</tr>\n";
       for $i (0..$#q) {
-	  my $trcolor = '#eeeeee';
-	  $trcolor = '#ffffcc' if ($i % 2 == 0);
-	  print "<TR bgcolor='$trcolor'>", td("<a href=\"$selfurl?" .
-		"menu=login&sub=Pl_Users_Show_group&group_id=$q[$i][0]\">$q[$i][0]</a>"),
-	        td($q[$i][1]), "\n";
+	  print '<tr class="s-list__row">',
+		td("<a href=\"$selfurl?menu=login&sub=Pl_Users_Show_group&group_id=$q[$i][0]\">$q[$i][0]</a>"),
+		td($q[$i][1]), "\n";
       }
-      print "</TABLE>\n";
+      print "</table>\n";
 
   }
 

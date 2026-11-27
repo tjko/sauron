@@ -1,0 +1,45 @@
+; lab.example - fictitious training zone for the Sauron lab
+; Addresses come from documentation ranges (RFC 5737, RFC 3849).
+
+$TTL 3600
+$ORIGIN lab.example.
+
+@               IN  SOA   ns1.lab.example. hostmaster.lab.example. (
+                          2026010101 ; serial
+                          3600       ; refresh
+                          900        ; retry
+                          1209600    ; expire
+                          3600 )     ; minimum
+
+                IN  NS    ns1.lab.example.
+                IN  NS    ns2.lab.example.
+                IN  MX    10 mail.lab.example.
+                IN  TXT   "v=spf1 mx -all"
+
+; --- network infrastructure (192.0.2.0/24, 198.51.100.0/24) ---------------
+gw-office       IN  A     192.0.2.1
+gw-servers      IN  A     192.0.2.129
+ns1             IN  A     192.0.2.130
+                IN  AAAA  2001:db8:10:1::53
+ns2             IN  A     198.51.100.53
+mail            IN  A     192.0.2.131
+                IN  AAAA  2001:db8:10:1::25
+
+; --- servers (192.0.2.128/25, 2001:db8:10:1::/64) ------------------------
+db1             IN  A     192.0.2.140
+phishingintel   IN  A     192.0.2.141
+pi              IN  CNAME phishingintel
+old-graylog     IN  A     192.0.2.150
+logs            IN  CNAME old-graylog
+monitoring      IN  A     192.0.2.142
+                IN  AAAA  2001:db8:10:1::142
+wiki            IN  A     192.0.2.143
+
+; --- office (192.0.2.0/25) ------------------------------------------------
+pc-alice        IN  A     192.0.2.20
+pc-bob          IN  A     192.0.2.21
+printer-1       IN  A     192.0.2.30
+
+; --- DMZ (198.51.100.0/24) ------------------------------------------------
+intranet        IN  A     198.51.100.10
+vpn             IN  A     198.51.100.20

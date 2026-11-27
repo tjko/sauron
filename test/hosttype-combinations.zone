@@ -1,0 +1,189 @@
+; Test zone for hosttype combinations
+; $Id$
+; This zone tests all possible hosttype values in import-zone
+
+$TTL 3600
+
+$ORIGIN testhosttype.example.com.
+
+; SOA and NS records for the zone
+@       IN      SOA     ns1.testhosttype.example.com. admin.testhosttype.example.com. (
+                        2024010101      ; serial
+                        3600            ; refresh
+                        1800            ; retry
+                        604800          ; expire
+                        86400           ; minimum
+                        )
+
+; Zone NS records
+@       IN      NS      ns1.testhosttype.example.com.
+@       IN      NS      ns2.testhosttype.example.com.
+
+; Zone MX records
+@       IN      MX      10 mail.testhosttype.example.com.
+
+; Zone TXT records
+@       IN      TXT     "Test zone for hosttype combinations"
+
+; =========================================================================
+; HOSTTYPE 1 - Regular host with A record only
+; =========================================================================
+host-type1-a      IN      A       192.0.2.1
+
+; HOSTTYPE 1 - Regular host with AAAA record only
+host-type1-aaaa   IN      AAAA    2001:db8::1
+
+; HOSTTYPE 1 - Regular host with both A and AAAA records
+host-type1-both   IN      A       192.0.2.2
+                  IN      AAAA    2001:db8::2
+
+; HOSTTYPE 1 - Host with A record and MX (IP takes priority)
+host-type1-mx     IN      A       192.0.2.3
+                  IN      MX      10 mail.testhosttype.example.com.
+
+; HOSTTYPE 1 - Host with A record and TXT (IP takes priority)
+host-type1-txt    IN      A       192.0.2.4
+                  IN      TXT     "has IP and TXT"
+
+; HOSTTYPE 1 - Host with A record and SRV (IP takes priority per new logic)
+host-type1-srv    IN      A       192.0.2.5
+                  IN      SRV     10 10 80 http.testhosttype.example.com.
+
+; HOSTTYPE 1 - Host with A record and TLSA (IP takes priority)
+host-type1-tlsa   IN      A       192.0.2.6
+                  IN      TLSA    3 0 1 d2a8539ec8e0f5c74a7b7d23e1f7f8c9b0a1d2e3f4c5b6a7d8e9f0a1b2c3d4e5
+
+; HOSTTYPE 1 - Host with A record and NAPTR (IP takes priority) - service must be non-empty
+host-type1-naptr  IN      A       192.0.2.7
+                  IN      NAPTR   100 10 "" "http" "" uri:testhosttype.example.com.
+
+; HOSTTYPE 1 - Host with A record and CAA (IP takes priority)
+host-type1-caa    IN      A       192.0.2.8
+                  IN      CAA     0 issue "letsencrypt.org"
+
+; HOSTTYPE 1 - Host with AAAA and MX (IP takes priority)
+host-type1-aaaa-mx  IN    AAAA    2001:db8::3
+                    IN    MX      10 mail.testhosttype.example.com.
+
+; =========================================================================
+; HOSTTYPE 2 - Delegation/glue records (NS without @ hostname)
+; =========================================================================
+; Subdomain delegation with glue records
+subdomain         IN      NS      ns1.subdomain.testhosttype.example.com.
+                  IN      NS      ns2.subdomain.testhosttype.example.com.
+
+; Glue records for subdomain delegation
+ns1.subdomain     IN      A       192.0.2.10
+ns2.subdomain     IN      A       192.0.2.11
+
+; Another delegation
+delegated         IN      NS      ns1.delegated.testhosttype.example.com.
+ns1.delegated     IN      A       192.0.2.12
+
+; =========================================================================
+; HOSTTYPE 3 - MX only (no IP, no NS)
+; =========================================================================
+host-type3-mxonly         IN      MX      10 mail1.testhosttype.example.com.
+host-type3-mxonly-multi   IN      MX      10 mail1.testhosttype.example.com.
+                          IN      MX      20 mail2.testhosttype.example.com.
+
+; =========================================================================
+; HOSTTYPE 8 - SRV records only (no IP)
+; =========================================================================
+; Standard SRV service records
+_sip._tcp         IN      SRV     10 60 5060 sipserver.testhosttype.example.com.
+_xmpp._tcp        IN      SRV     5 0 5222 xmppserver.testhosttype.example.com.
+_http._tcp        IN      SRV     1 1 80 webserver.testhosttype.example.com.
+
+; =========================================================================
+; HOSTTYPE 12 - TLSA records only (no IP)
+; =========================================================================
+; TLSA for HTTPS
+_443._tcp.www     IN      TLSA    3 0 1 a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2
+
+; TLSA for SMTP
+_25._tcp.mail     IN      TLSA    3 1 1 c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4
+
+; =========================================================================
+; HOSTTYPE 13 - TXT records only (no IP)
+; =========================================================================
+host-type13-txt-single    IN      TXT     "single text record"
+host-type13-txt-multi     IN      TXT     "first text"
+                          IN      TXT     "second text"
+host-type13-txt-spf       IN      TXT     "v=spf1 mx -all"
+host-type13-txt-dkim      IN      TXT     "v=DKIM1; k=rsa; p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQ"
+
+; =========================================================================
+; HOSTTYPE 14 - NAPTR records only (no IP)
+; =========================================================================
+; NAPTR for SIP
+host-type14-naptr-sip     IN      NAPTR   100 10 "" "SIP+D2U" "!^.*$!sip:customer-service@example.com!" _sip._udp.testhosttype.example.com.
+
+; NAPTR for HTTP
+host-type14-naptr-http    IN      NAPTR   100 10 "" "http" "" www.testhosttype.example.com.
+
+; NAPTR with empty flags (terminal) - but service or regexp must be non-empty
+host-type14-naptr-empty   IN      NAPTR   50 5 "" "uri" "" uri:testhosttype.example.com.
+
+; =========================================================================
+; HOSTTYPE 15 - CAA records only (no IP)
+; =========================================================================
+host-type15-caa-single    IN      CAA     0 issue "letsencrypt.org"
+host-type15-caa-multi     IN      CAA     0 issue "digicert.com"
+                          IN      CAA     0 issuewild ";"
+
+; =========================================================================
+; Complex combinations - testing priority order
+; =========================================================================
+; SRV + TXT (SRV should win, hosttype=8)
+host-combo-srv-txt        IN      SRV     10 10 443 secure.testhosttype.example.com.
+                          IN      TXT     "service endpoint"
+
+; TLSA + TXT (TLSA should win, hosttype=12)
+host-combo-tlsa-txt       IN      TLSA    3 0 1 e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6
+                          IN      TXT     "tls certificate info"
+
+; NAPTR + TXT (NAPTR should win, hosttype=14) - service must be non-empty
+host-combo-naptr-txt      IN      NAPTR   10 10 "" "http" "" target.testhosttype.example.com.
+                          IN      TXT     "naptr service"
+
+; CAA + TXT (CAA should win, hosttype=15)
+host-combo-caa-txt        IN      CAA     0 issuewild "comodo.com"
+                          IN      TXT     "caa policy"
+
+; MX + TXT (MX should win, hosttype=3)
+host-combo-mx-txt         IN      MX      10 backup.testhosttype.example.com.
+                          IN      TXT     "backup mx"
+
+; TXT + CAA (both present, but neither gives IP - TXT first in priority = hosttype=13)
+; Actually based on our logic, CAA is checked after TXT, so if has_txt && !has_ip => 13
+; But then has_caa && !has_ip => 15 would overwrite. Let me check the logic again...
+; In our if/elsif chain: TXT is checked before CAA, so first match wins
+; So TXT-only gets 13, but if both TXT and CAA exist, TXT check comes first
+
+; =========================================================================
+; CNAME records (should be skipped in main loop, handled separately)
+; =========================================================================
+alias-type4-www         IN      CNAME   host-type1-both
+alias-type4-mail        IN      CNAME   host-type3-mxonly
+
+; =========================================================================
+; Zone nameservers (A records for ns1, ns2)
+; =========================================================================
+ns1         IN      A       192.0.2.53
+ns2         IN      A       192.0.2.54
+mail        IN      A       192.0.2.55
+
+; Additional infrastructure
+mail1       IN      A       192.0.2.56
+mail2       IN      A       192.0.2.57
+sipserver   IN      A       192.0.2.58
+xmppserver  IN      A       192.0.2.59
+webserver   IN      A       192.0.2.60
+http        IN      A       192.0.2.61
+www         IN      A       192.0.2.62
+target      IN      A       192.0.2.63
+secure      IN      A       192.0.2.64
+uri         IN      A       192.0.2.65
+
+; eof

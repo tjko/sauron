@@ -1,8 +1,11 @@
 Sauron v.0.9.0beta - DNS/DHCP Management System
 ==================
 
-DBI (DBD::Pg) is now the default database access method, but Pg can still
-be used by specifying --with-Pg option to configure script.
+DBI (DBD::Pg) is now the default and RECOMMENDED database access method.
+
+NOTE: The legacy Pg.pm backend (DB-Pg.pm) is DEPRECATED and will be removed 
+in a future version. If you are currently using --with-Pg, please migrate to 
+the default DBI backend. See README.upgrade for migration instructions.
 
 
 UPGRADE
@@ -13,10 +16,13 @@ REQUIREMENTS
 	- ISC dhcpd v3 or later [at least 4.4.3 recommended] (optional)
 	- Perl 5 or better [at least 5.36 recommended]
 		- CGI module
-		- DBD::Pg (and DBI) module (or Pg module)
+		- DBI + DBD::Pg module (REQUIRED - default backend)
+    - JSON module (required by import-blocklist)
+		- Pg module (DEPRECATED - only if using --with-Pg)
 		- Net::DNS module
 		- Net::IP module
 		- Net::Netmask module
+                - NetAddr::IP module
 		- Digest::MD5 module
 		- Digest::HMAC module
 		- Digest::SHA1 module
@@ -25,6 +31,8 @@ REQUIREMENTS
 		- Text::Table
                 - Parse::RecDescent # only for import-zone-comments
                 - HTML::Entities
+		- Net::SSLeay module (optional; validates TLS cipher lists
+		  in the web UI, without it only allowed characters are checked)
  	- PostgresSQL [15.10 or newer  recommended]
 	  (or add support to your favorite db yourself :)
 	- www-server (Apache or any other www-server with CGI support)
@@ -95,11 +103,85 @@ INSTALLATION
 	Copy images under icons/ directory to sauron/icons/ directory
 	under your web server root directory (or just make a symbolic link)
 
-  9) now you can use the web interface to create a server and zones, or
-     you can import existing named/dhcpd configurations using
-     import/iport-dhcp utilities. Or you can try out the demo database
+    9) now you can use the web interface to create a server and zones, or
+      you can import existing named/dhcpd/KEA configurations using
+      import/import-dhcp utilities. Or you can try out the demo database
      that can be found under test/ directory in source tree.
 
+
+
+DOCKER
+------
+  Quick way to run Sauron (app + Apache + PostgreSQL) without installing
+  dependencies on the host. Requires Docker and Docker Compose v2.
+
+  Default stack is aimed at development and evaluation (known demo
+  credentials). Do not expose it to untrusted networks without changing
+  passwords and tightening publish ports.
+
+  Quick start:
+
+	docker compose up -d
+
+  First start builds the image, starts PostgreSQL, creates the schema
+  (createtables), imports root hints and OUI data, creates an admin
+  account, then serves the CGI UI. Schema is initially empty.
+
+  Web UI:     http://localhost:8080/cgi-bin/sauron.cgi
+  Login:      admin / admin
+  DB (host):  localhost:5433  (user/password/database: sauron)
+
+  Stop / start / wipe:
+
+	docker compose stop
+	docker compose start
+	docker compose down          # keep database volume
+	docker compose down -v       # DELETE database volume (full re-init)
+
+  Host-side database access:
+
+	psql -h localhost -p 5433 -U sauron -d sauron
+
+  CLI tools inside the app container (after stack is up):
+
+	docker compose exec sauron ./status
+	docker compose exec sauron ./adduser --help
+	docker compose exec sauron ./import --help
+
+  Custom credentials (env or a .env file next to docker-compose.yml):
+
+	SAURON_DB_PASSWORD=secret
+	SAURON_ADMIN_USER=admin
+	SAURON_ADMIN_PASSWORD=secret
+	SAURON_ADMIN_EMAIL=you@example.com
+
+  The db service's POSTGRES_* values are derived from the corresponding
+  SAURON_DB_* variables (e.g. POSTGRES_PASSWORD always follows
+  SAURON_DB_PASSWORD).
+
+  Rebuild after Dockerfile / system-package / entrypoint changes:
+
+	docker compose up -d --build
+
+  Live code mounts (no rebuild for Perl/CGI/icon edits):
+
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+
+  The dev overlay bind-mounts ./Sauron, ./cgi, and ./icons into the
+  container, and exposes DB-DBI.pm as Sauron/DB.pm automatically, so no
+  host-side symlink is required. Rebuild is still required when the
+  Dockerfile, OS packages, or docker/entrypoint.sh change.
+
+  Production-oriented notes:
+	- Change all default passwords; prefer not publishing DB port 5433
+	- Put TLS termination on a reverse proxy in front of port 8080
+	- Schema upgrades (sql/dbconvert_*) are NOT applied automatically;
+	  follow README.upgrade on existing data volumes
+	- Image layout: multi-stage Debian trixie-slim build, Apache in the
+	  app image, official postgres:15.10 as a separate service
+
+  Files: Dockerfile, docker-compose.yml, docker-compose.dev.yml,
+  docker/entrypoint.sh, docker/apache/sauron.conf, .dockerignore
 
 
 COMMANDS
@@ -144,7 +226,8 @@ COMMANDS
    new server and related zones into Sauron.
 
  import-dhcp
-   Utility for updating existing server using dhcpd configuration; 
+   Utility for updating existing server using ISC dhcpd or KEA JSON
+  DHCP configuration;
    adds Ethernet addressess for hosts and to builds network map for
    the server.
 
@@ -191,10 +274,19 @@ COMMANDS
 
 
 
+ADDITIONAL DOCUMENTATION
+	doc/manual.sgml                 Full manual
+	docs/tsig-key-management.txt    TSIG key management (keygen)
+	docs/dns-over-tls.txt           DNS over TLS: XoT (RFC 9103), DoT and
+	                                DoH (RFC 8484); TLS profiles, ephemeral
+	                                certificates, certificate handling
+
+
 SUGGESTED READING
 	RFC: 952,953,974,1032,1034,1035,1123,1912
+	RFC: 9103 (XoT), 7858 (DoT), 8484 (DoH)
 
 
 --
-Timo <tjko@iki.fi>			        
+Timo <tjko@iki.fi>
 

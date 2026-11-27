@@ -66,7 +66,7 @@ while ($filename=$ARGV[0]) {
 
     if (/(^.*?;)/) {
       $last=$1;
-      $cmd .= $last;
+      $cmd .= " $last";  # lines are joined with a space
       $cmd =~ s/^\s+//;
       unless ($cmd =~ /^\s*$/) {
 	print "command: '$cmd'\n" if ($opt_verbose);
@@ -82,7 +82,7 @@ while ($filename=$ARGV[0]) {
 
     #print "   $_\n" if ($opt_verbose);
     s/\s+/ /g;
-    $cmd .= $_;
+    $cmd .= " $_";
   }
 
   close(FILE);

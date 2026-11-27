@@ -25,9 +25,12 @@ AC_ARG_WITH(DBI, [  --with-DBI              use DBI module (default) ],
           echo "foo: $withval"
         ])
 
-AC_ARG_WITH(Pg, [  --with-Pg               use Pg module instead of default DBI (DBD::Pg) ],
+AC_ARG_WITH(Pg, [  --with-Pg               use Pg module instead of default DBI (DBD::Pg) [DEPRECATED] ],
 	[ if test $withval = yes; then
-            PERL_DB_BACKEND="DB-Pg.pm" 
+            PERL_DB_BACKEND="DB-Pg.pm"
+            echo "WARNING: Pg.pm backend is DEPRECATED since Sauron 0.9.0"
+            echo "WARNING: Please migrate to DBI backend (default)."
+            echo "WARNING: Pg.pm backend will be removed in a future version."
           fi
           echo "foo: $withval"
         ])
@@ -67,6 +70,14 @@ AC_SUBST(PERL_DB_BACKEND)
 echo "------------------------------------------------------------"
 echo "Selected Perl Database backend: $PERL_DB_BACKEND"
 echo "------------------------------------------------------------"
+
+test "$PERL_DB_BACKEND" = "DB-Pg.pm" && cat <<'EOF'
+
+WARNING: DB-Pg.pm (legacy Pg.pm backend) is DEPRECATED!
+WARNING: Please consider migrating to DB-DBI.pm (DBI/DBD::Pg).
+WARNING: Support for Pg.pm backend will be removed in future versions.
+
+EOF
 
 
 AC_OUTPUT(Makefile)
