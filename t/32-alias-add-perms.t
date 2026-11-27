@@ -8,6 +8,8 @@
 # - the Hosts 'Add' handler (sub=add&type=N) requires the type's flag from
 #   RW users; Delegations, Glue records and reservations need the flag
 #   (or authorization level) also with RWX.
+# - the restricted host edit form (users without the SRV flag) offers
+#   'allow duplicate IPs' only with RWX, which the submit check requires.
 #
 # Skipped unless SAURON_TEST_DSN is set:
 #   SAURON_TEST_DSN="dbi:Pg:dbname=sauron_test" prove -lv t/32-alias-add-perms.t
@@ -165,6 +167,28 @@ subtest "check_perms('hostflag')" => sub {
     is(Sauron::CGI::Utils::check_perms('hostflag', 'MX', 1), 0, 'RW+flag: allowed');
     set_perms('R', { MX => 1 });
     is(Sauron::CGI::Utils::check_perms('hostflag', 'MX', 1), 1, 'R+flag: denied');
+};
+
+subtest 'Restricted edit form: allow duplicate IPs only with RWX' => sub {
+    my $edit_form = sub {
+        CGI::delete_all();
+        CGI::param('menu', 'hosts');
+        CGI::param('sub', 'Edit');
+        CGI::param('h_id', $hostid);
+        return capture(sub {
+            Sauron::CGI::Hosts::menu_handler(\%state, \%perms) });
+    };
+    set_perms('RW', {});
+    $out = $edit_form->();
+    like($out, qr/restricted edit/, 'RW: restricted form shown');
+    unlike($out, qr/allow duplicate IPs/, 'RW: no allow duplicate IPs');
+    set_perms('RWX', {});
+    $out = $edit_form->();
+    like($out, qr/restricted edit/, 'RWX without SRV: restricted form shown');
+    like($out, qr/allow duplicate IPs/, 'RWX: allow duplicate IPs offered');
+    set_perms('RW', {});
+    unlike($edit_form->(), qr/allow duplicate IPs/,
+           'RW after RWX request: still hidden');
 };
 
 cleanup();

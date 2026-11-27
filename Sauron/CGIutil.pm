@@ -1332,7 +1332,9 @@ sub form_magic($$$) {
 	}
       }
       my $selection = param($p1);
-      if ($rec->{preselectnet} && $selection eq 'MANUAL') {
+      # Copy preselects the network of the copied host; otherwise keep the
+      # user's choice (also <Manual IP> after a re-submit, e.g. SubGroups Add)
+      if ($rec->{preselectnet} && $selection eq 'MANUAL' && $data->{preselectnet}) {
 	  $selection = $data->{preselectnet};
       }
       print td({-class=>'s-form__label'},
@@ -1356,6 +1358,9 @@ sub form_magic($$$) {
       if (param($p1."_add") ne '') {
 	$a=$a+1;
 	param($p1."_count",$a);
+	# a new address gets the forward (A/AAAA) and reverse (PTR) record
+	param($p1."_".$a."_2",'on');
+	param($p1."_".$a."_3",'on');
       }
       $a=0 if (!$a || $a < 0);
       #if ($a > 50) { $a = 50; }
@@ -1363,7 +1368,8 @@ sub form_magic($$$) {
       print td('IP'),td('Forward'),td('Reverse');
       print td("(",
 	       checkbox(-label=>'allow duplicate IPs',name=>$p1."_allowdup",
-			-checked=>'0'),")")  unless ($rec->{restricted_mode});
+			-checked=>'0'),")")
+	unless ($rec->{restricted_mode} || $rec->{no_allowdup});
       print "</TR>";
 
       for $j (1..$a) {
@@ -1389,11 +1395,26 @@ sub form_magic($$$) {
 	        td((param($n) eq 'on' ? 'on':'off'));
 	}
 	else {
-	  $n=$p2."_3";
-	  print td(checkbox(-label=>' A',-name=>$n,-checked=>scalar(param($n)))) if ip_is_ipv4(scalar(param($p2 . "_1")));
-	  print td(checkbox(-label=>' AAAA',-name=>$n,-checked=>scalar(param($n)))) if ip_is_ipv6(scalar(param($p2 . "_1")));
-	  $n=$p2."_2";
-	  print td(checkbox(-label=>' PTR',-name=>$n,-checked=>scalar(param($n))));
+	  if ($rec->{fixed_flags}) {
+	    # forward/reverse shown, not editable (kept in hidden fields)
+	    for $n ($p2."_3", $p2."_2") {
+	      print hidden(-name=>$n,-value=>scalar(param($n))),
+		    td((param($n) eq 'on' ? 'on':'off'));
+	    }
+	  } else {
+	    my $ip1 = scalar(param($p2 . "_1"));
+	    $n=$p2."_3";
+	    if (ip_is_ipv4($ip1)) {
+	      print td(checkbox(-label=>' A',-name=>$n,-checked=>scalar(param($n))));
+	    } elsif (ip_is_ipv6($ip1)) {
+	      print td(checkbox(-label=>' AAAA',-name=>$n,-checked=>scalar(param($n))));
+	    } else {
+	      # no valid address yet: keep the flag until it is corrected
+	      print hidden(-name=>$n,-value=>scalar(param($n))),td('');
+	    }
+	    $n=$p2."_2";
+	    print td(checkbox(-label=>' PTR',-name=>$n,-checked=>scalar(param($n))));
+	  }
 
 	  print td(checkbox(-label=>' Delete',
 			    -name=>$p2."_del",-checked=>scalar(param($p2."_del")) )),

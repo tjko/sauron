@@ -626,7 +626,9 @@ sub menu_handler {
 	}
 
 	$res=add_zone(\%data);
-	if ($res < 0) {
+	if ($res == -201) {
+	  alert1("Zone $data{name} already exists.");
+	} elsif ($res < 0) {
 	  alert1("Adding Zone record failed! (result code=$res)");
 	} else {
 	  param('selected_zone',$data{name});

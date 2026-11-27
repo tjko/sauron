@@ -1,5 +1,36 @@
 0.9.0 (beta)
 
+	- Web UI: users with RW permission (restricted host form) may add and
+	  remove IP addresses of a host, e.g. an IPv6 address next to IPv4;
+	  every address is still checked against the user's networks (not
+	  the ones being deleted) and duplicate IPs still need RWX. Their
+	  forward/reverse flags stay read-only, glue records unchanged. A
+	  newly added address has the forward (A/AAAA) and reverse (PTR)
+	  record checked, also after correcting an invalid address. Users
+	  with RWX on the zone who get this form (no SRV flag) can choose
+	  'allow duplicate IPs' there, as when adding a host [svamberg]
+
+	- TTL_MIN_SEC defaults to 60 instead of 600, so the TTL of a host can
+	  be lowered e.g. to 300 or 60 before a migration; the limit applies
+	  in the web UI to all users. Set it in the config to change it
+	  [svamberg]
+
+	- Web UI: Add host keeps the <Manual IP> choice of Subnet when the
+	  form is submitted by another button (e.g. Add in SubGroups); it
+	  switched to the first network [svamberg]
+
+	- addzone: new option --ns to set name servers of a Master zone (a
+	  new zone was generated with 'NS invalid.'); a usage error prints
+	  the help and exits with status 1 [svamberg]
+
+	- addzone/cidr2arpa(): IPv6 reverse zones given as CIDR are stored
+	  without a trailing dot, as IPv4 ones (0.1.0.0.8.b.d.0.1.0.0.2.ip6.arpa,
+	  not ...ip6.arpa.). Zones created before keep their name; adding
+	  a zone that exists with or without the trailing dot fails [svamberg]
+
+	- moduser/modgroup: privilege flags TXT and CAA can be added
+	  (--add="flag,TXT"), they were rejected [svamberg]
+
 	- Add a training lab: Sauron with a fictitious organisation, accounts
 	  admin/admin and user/user and 15 everyday DNS/DHCP tasks (hosts,
 	  aliases, renames, TXT/ACME, CAA, TTL, zones with MX/SPF/DKIM/DMARC,
